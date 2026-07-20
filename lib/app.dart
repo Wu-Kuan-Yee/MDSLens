@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'models/app_state.dart';
+import 'services/theme_channel.dart';
 import 'theme/mdsscope_theme.dart';
 import 'pages/main_page.dart';
 
@@ -10,18 +11,19 @@ class MdsScopeApp extends StatefulWidget {
 }
 
 class _MdsScopeAppState extends State<MdsScopeApp> {
+  bool _sysDark = false;
+
   @override void initState() {
     super.initState();
-    WidgetsBinding.instance.platformDispatcher.onPlatformBrightnessChanged = () {
-      if (mounted) setState(() {});
-    };
+    ThemeChannel.init();
+    ThemeChannel.isDark().then((d) { if (mounted && d != _sysDark) setState(() => _sysDark = d); });
+    ThemeChannel.onThemeChanged.listen((d) { if (mounted && d != _sysDark) setState(() => _sysDark = d); });
   }
 
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
-    final sysDark = WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
-    final mode = app.themeMode == 0 ? ThemeMode.light : app.themeMode == 1 ? ThemeMode.dark : sysDark ? ThemeMode.dark : ThemeMode.light;
+    final mode = app.themeMode == 0 ? ThemeMode.light : app.themeMode == 1 ? ThemeMode.dark : _sysDark ? ThemeMode.dark : ThemeMode.light;
     return MaterialApp(title: 'MdsScope', debugShowCheckedModeBanner: false,
       theme: MdsScopeTheme.light, darkTheme: MdsScopeTheme.dark, themeMode: mode, home: MainPage());
   }

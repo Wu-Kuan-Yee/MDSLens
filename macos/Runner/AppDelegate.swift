@@ -10,4 +10,10 @@ class AppDelegate: FlutterAppDelegate {
   override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
     return true
   }
+
+  override func applicationDidFinishLaunching(_ notification: Notification) {
+    if let controller = mainFlutterWindow?.contentViewController as? FlutterViewController {
+      SystemThemeHandler.register(with: controller)
+    }
+  }
 }
