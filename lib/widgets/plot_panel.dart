@@ -32,6 +32,9 @@ class _PlotPanelState extends State<PlotPanel> {
   bool _shiftHeld = false;
   bool _midPanning = false;
   Offset? _lastMidPanPos;
+  bool _inRubberBand = false;
+  Offset? _rubberBandStart;
+  Rect? _rubberBandRect;
 
   @override
   Widget build(BuildContext context) {
@@ -62,7 +65,7 @@ class _PlotPanelState extends State<PlotPanel> {
       onTap: widget.onTap,
       onScaleUpdate: (details) {
         final mode = context.read<AppState>().interactionMode;
-        if (mode != 0 || _midPanning) return; // View mode only; mid-button handled separately
+        if (mode != 0 || _midPanning || _inRubberBand) return;
         setState(() {
           if (_viewMinX.isNaN) _initViewToData(plot);
           final box = context.findRenderObject() as RenderBox?;
@@ -89,6 +92,7 @@ class _PlotPanelState extends State<PlotPanel> {
         });
       },
       onSecondaryTapUp: (details) => _showContextMenu(context, details.globalPosition),
+      onLongPressStart: (details) => _showContextMenu(context, details.globalPosition),
       child: Focus(
         onKeyEvent: _handlePlotKey,
         child: Listener(
@@ -115,7 +119,24 @@ class _PlotPanelState extends State<PlotPanel> {
               Expanded(
                 child: bars.isEmpty
                     ? Center(child: Text(plot.series.any((s) => s?.error != null && s!.error!.isNotEmpty) ? 'Error' : 'No data', style: TextStyle(color: Colors.grey, fontSize: 10)))
-                    : _buildChart(bars, plot, theme),
+                    : Stack(children: [
+                        _buildChart(bars, plot, theme),
+                        if (_inRubberBand && _rubberBandRect != null)
+                          Positioned(
+                            left: _rubberBandRect!.left,
+                            top: _rubberBandRect!.top,
+                            width: _rubberBandRect!.width,
+                            height: _rubberBandRect!.height,
+                            child: IgnorePointer(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: const Color(0x180000FF),
+                                  border: Border.all(color: const Color(0xFF0000FF), width: 1),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ]),
               ),
               Padding(padding: const EdgeInsets.only(bottom: 2), child: Text(plot.xLabel, style: TextStyle(fontSize: 9, color: theme.colorScheme.onSurface.withValues(alpha: 0.7)))),
             ]),
@@ -258,13 +279,28 @@ class _PlotPanelState extends State<PlotPanel> {
     if (app.interactionMode != 0) return;
     final isMid = event.buttons & kMiddleMouseButton != 0;
     final isShiftLeft = _shiftHeld && event.buttons & kPrimaryMouseButton != 0;
-    if (isMid || isShiftLeft) {
+    final isMouseLeft = event.kind == PointerDeviceKind.mouse &&
+        event.buttons & kPrimaryMouseButton != 0 && !_shiftHeld;
+    if (isMouseLeft) {
+      // Left mouse drag → rubber band zoom (original behaviour)
+      _inRubberBand = true;
+      _rubberBandStart = event.localPosition;
+      _rubberBandRect = Rect.fromPoints(event.localPosition, event.localPosition);
+    } else if (isMid || isShiftLeft) {
+      // Middle button or Shift+left → pan
       _midPanning = true;
       _lastMidPanPos = event.localPosition;
     }
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
+    if (_inRubberBand && _rubberBandStart != null) {
+      // Update rubber band rectangle
+      setState(() {
+        _rubberBandRect = Rect.fromPoints(_rubberBandStart!, event.localPosition);
+      });
+      return;
+    }
     if (!_midPanning || _lastMidPanPos == null) return;
     final app = context.read<AppState>();
     final plot = app.plots[widget.plotIdx];
@@ -285,14 +321,49 @@ class _PlotPanelState extends State<PlotPanel> {
   }
 
   void _handlePointerUp(PointerUpEvent event) {
+    if (_inRubberBand && _rubberBandRect != null &&
+        (event.buttons & kPrimaryMouseButton) == 0) {
+      final r = _rubberBandRect!;
+      final app = context.read<AppState>();
+      final plot = app.plots[widget.plotIdx];
+      setState(() {
+        _inRubberBand = false;
+        _rubberBandStart = null;
+        _rubberBandRect = null;
+        if (r.width > 8 && r.height > 8) {
+          // Zoom to rubber band region
+          if (_viewMinX.isNaN) _initViewToData(plot);
+          final box = context.findRenderObject() as RenderBox?;
+          if (box != null && box.size.width > 0 && box.size.height > 0) {
+            final view = Rect.fromLTRB(_viewMinX, _viewMaxY, _viewMaxX, _viewMinY);
+            final p1 = _pixelToData(Offset(r.left, r.top), view, box.size);
+            final p2 = _pixelToData(Offset(r.right, r.bottom), view, box.size);
+            _viewMinX = p1.dx < p2.dx ? p1.dx : p2.dx;
+            _viewMaxX = p1.dx > p2.dx ? p1.dx : p2.dx;
+            _viewMinY = p1.dy < p2.dy ? p1.dy : p2.dy;
+            _viewMaxY = p1.dy > p2.dy ? p1.dy : p2.dy;
+          }
+        }
+      });
+      return;
+    }
     _midPanning = false;
     _lastMidPanPos = null;
+  }
+
+  Offset _pixelToData(Offset pixel, Rect view, Size size) {
+    final x = view.left + (pixel.dx / size.width) * (view.right - view.left);
+    final y = view.top - (pixel.dy / size.height) * (view.bottom - view.top);
+    return Offset(x, y);
   }
 
   void _resetView() {
     _viewMinX = double.nan; _viewMaxX = double.nan;
     _viewMinY = double.nan; _viewMaxY = double.nan;
     _localCrosshairY = null;
+    _inRubberBand = false;
+    _rubberBandStart = null;
+    _rubberBandRect = null;
   }
 
   void _showContextMenu(BuildContext ctx, Offset globalPosition) {
