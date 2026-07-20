@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/app_state.dart';
+import '../../services/rust_bridge.dart';
 
 class LoginDialog extends StatelessWidget {
   const LoginDialog({super.key});
@@ -48,7 +49,7 @@ class LoginDialog extends StatelessWidget {
             }
             setState(() { loading = true; error = ''; });
             try {
-              final token = await _login(url, user, pass);
+              final token = await _login(url, user, pass, app);
               app.setLoginApiUrl(url);
               app.setLoginUser(user);
               app.setLoginPass(pass);
@@ -65,8 +66,24 @@ class LoginDialog extends StatelessWidget {
     );
   }
 
-  static Future<String> _login(String apiUrl, String user, String pass) async {
-    final url = '${apiUrl.replaceAll(RegExp(r'/$'), '')}/login';
+  static Future<String> _login(String apiUrl, String user, String pass, AppState app) async {
+    // Route through SSH tunnel if SSH is configured
+    String effectiveUrl = apiUrl;
+    if (app.sshHost.isNotEmpty && app.sshPort > 0) {
+      try {
+        final settings = jsonEncode({
+          'host': app.sshHost, 'port': app.sshPort,
+          'user': app.sshUser, 'password': app.sshPass,
+          'identity_file': app.sshIdentity,
+        });
+        final resp = RustBridge.instance.prepareUrl(apiUrl, settings);
+        if (resp.startsWith('http') && !resp.contains('"error"')) {
+          effectiveUrl = resp;
+        }
+      } catch (_) {}
+    }
+
+    final url = '${effectiveUrl.replaceAll(RegExp(r'/$'), '')}/login';
     final uri = Uri.parse(url);
     final body = jsonEncode({'userName': user, 'password': pass});
     final client = HttpClient();

@@ -66,7 +66,7 @@ class SshDialog extends StatelessWidget {
             setState(() { testing = true; result = ''; });
             try {
               final settingsJson = '{"host":"${hostCtrl.text}","port":${int.tryParse(portCtrl.text)??22},"user":"${userCtrl.text}","password":"${passCtrl.text}","identity_file":"${keyCtrl.text}"}';
-              final resp = RustBridge.instance.sshTest(settingsJson);
+              final resp = RustBridge.instance.sshT(settingsJson);
               final json = _tryJson(resp);
               if (json is Map && json['ok'] == true) {
                 setState(() { testing = false; result = 'ok'; });

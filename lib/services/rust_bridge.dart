@@ -10,6 +10,7 @@ class RustBridge {
   final String Function(String, String) writeEnv;
   final String Function(String, String, String) reqLogin;
   final String Function(String, String) fetchS;
+  final String Function(String, String) prepareUrl;
   final String Function(String) sshT;
   final String Function(String, String) fetchSig;
 
@@ -18,6 +19,7 @@ class RustBridge {
         writeEnv = _wrap2(_lib, 'mds_write_environment'),
         reqLogin = _wrap3(_lib, 'mds_request_login'),
         fetchS = _wrap2(_lib, 'mds_fetch_shot'),
+        prepareUrl = _wrap2(_lib, 'mds_prepare_url'),
         sshT = _wrap1(_lib, 'mds_ssh_test'),
         fetchSig = _wrap2(_lib, 'mds_fetch_signals');
 
