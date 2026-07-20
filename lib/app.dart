@@ -10,14 +10,14 @@ class MdsScopeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
-    final mode = app.themeMode == 0 ? ThemeMode.light : app.themeMode == 1 ? ThemeMode.dark : ThemeMode.system;
+    final mode = switch (app.themeMode) { 0 => ThemeMode.light, 1 => ThemeMode.dark, _ => ThemeMode.system };
     return MaterialApp(
       title: 'MdsScope',
       debugShowCheckedModeBanner: false,
       theme: MdsScopeTheme.light,
       darkTheme: MdsScopeTheme.dark,
       themeMode: mode,
-      home: const MainPage(),
+      home: MainPage(),
     );
   }
 }

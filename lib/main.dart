@@ -7,7 +7,7 @@ void main() {
   runApp(
     ChangeNotifierProvider(
       create: (_) => AppState(),
-      child: const MdsScopeApp(),
+      child: MdsScopeApp(),
     ),
   );
 }
