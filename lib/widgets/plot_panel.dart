@@ -97,7 +97,7 @@ class _PlotPanelState extends State<PlotPanel> {
     final textColor = theme.colorScheme.onSurface.withValues(alpha: 0.6);
     final cx = context.read<AppState>().crosshairX;
     return Padding(
-      padding: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.only(right: 28),
       child: LineChart(
         LineChartData(
         lineBarsData: bars,
@@ -117,7 +117,7 @@ class _PlotPanelState extends State<PlotPanel> {
             sideTitles: SideTitles(showTitles: true, reservedSize: 50, interval: null, getTitlesWidget: (v, _) => _axisLabel(v, textColor)),
           ),
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: AxisTitles(axisNameSize: 0, sideTitles: SideTitles(showTitles: false, reservedSize: 8)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false, reservedSize: 28)),
         ),
         borderData: FlBorderData(show: true, border: Border.all(color: theme.dividerColor.withValues(alpha: 0.3), width: 0.5)),
         lineTouchData: LineTouchData(enabled: true,
