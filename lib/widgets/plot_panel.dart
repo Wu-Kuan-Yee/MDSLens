@@ -25,6 +25,7 @@ class PlotPanel extends StatefulWidget {
 class _PlotPanelState extends State<PlotPanel> {
   // ignore: prefer_final_fields
   double _viewMinX = double.nan, _viewMaxX = double.nan, _viewMinY = double.nan, _viewMaxY = double.nan;
+  double? _touchX, _touchY;
 
   @override
   Widget build(BuildContext context) {
@@ -110,13 +111,24 @@ class _PlotPanelState extends State<PlotPanel> {
         ),
         borderData: FlBorderData(show: true, border: Border.all(color: theme.dividerColor.withValues(alpha: 0.3), width: 0.5)),
         lineTouchData: LineTouchData(enabled: true,
+          touchCallback: (event, response) {
+            if (response?.lineBarSpots != null && response!.lineBarSpots!.isNotEmpty) {
+              final spot = response.lineBarSpots!.first;
+              setState(() { _touchX = spot.x; _touchY = spot.y; });
+            }
+          },
+          handleBuiltInTouches: false,
           touchTooltipData: LineTouchTooltipData(
             getTooltipColor: (_) => theme.colorScheme.inverseSurface,
             getTooltipItems: (spots) => spots.map((s) => LineTooltipItem(
-              '${s.x.toStringAsFixed(6)}\n${s.y.toStringAsFixed(4)}',
+              'x=${s.x.toStringAsFixed(6)}\ny=${s.y.toStringAsFixed(4)}',
               TextStyle(fontSize: 9, color: theme.colorScheme.onInverseSurface, fontFamily: 'monospace'),
             )).toList(),
           ),
+        ),
+        extraLinesData: ExtraLinesData(
+          verticalLines: _touchX != null ? [VerticalLine(x: _touchX!, color: const Color(0xFFFF00FF), strokeWidth: 1)] : [],
+          horizontalLines: _touchY != null ? [HorizontalLine(y: _touchY!, color: const Color(0xFFFF00FF), strokeWidth: 1)] : [],
         ),
         minX: _viewMinX.isNaN ? null : _viewMinX,
         maxX: _viewMaxX.isNaN ? null : _viewMaxX,
