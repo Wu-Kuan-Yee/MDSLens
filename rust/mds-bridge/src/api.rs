@@ -66,6 +66,7 @@ pub struct FrbSshSettings {
     pub user: String,
     pub password: String,
     pub identity_file: String,
+    pub mode: i32, // 0=Disabled, 1=Auto, 2=Always
 }
 
 
@@ -146,7 +147,7 @@ impl FrbLayoutConfig {
 impl FrbSshSettings {
     pub fn into_rust(self) -> mds_ssh::settings::SshSettings {
         mds_ssh::settings::SshSettings {
-            mode: mds_core::types::SshMode::Always,
+            mode: match self.mode { 1 => mds_core::types::SshMode::Auto, 2 => mds_core::types::SshMode::Always, _ => mds_core::types::SshMode::Disabled },
             host: self.host, port: self.port, user: self.user,
             password: self.password, identity_file: self.identity_file,
         }

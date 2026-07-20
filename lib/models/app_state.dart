@@ -4,6 +4,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/rust_bridge.dart';
+import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import '../services/rust_bridge.dart';
 
 class AppState extends ChangeNotifier {
   // Config
@@ -196,8 +199,17 @@ class AppState extends ChangeNotifier {
   Future<void> fetchLatestShot() async {
     _status = 'Fetching latest shot...'; notifyListeners();
     try {
-      final apiUrl = _loginApiUrl.replaceAll(RegExp(r'/$'), '');
-      final uri = Uri.parse('$apiUrl/treeShot');
+      String apiUrl = _loginApiUrl;
+      // Route through SSH if configured
+      if (_sshHost.isNotEmpty) {
+        try {
+          final settings = jsonEncode({'host': _sshHost, 'port': _sshPort, 'user': _sshUser, 'password': _sshPass, 'identity_file': _sshIdentity, 'mode': _sshMode});
+          final resp = RustBridge.instance.prepareUrl(_loginApiUrl, settings);
+          if (resp.startsWith('http') && !resp.contains('"error"')) apiUrl = resp;
+        } catch (_) {}
+      }
+      final base = apiUrl.replaceAll(RegExp(r'/$'), '');
+      final uri = Uri.parse('$base/treeShot');
       final client = HttpClient();
       try {
         final req = await client.postUrl(uri);
