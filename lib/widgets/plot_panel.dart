@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:file_picker/file_picker.dart';
 import '../models/app_state.dart';
 
 const _colors = [
@@ -240,9 +243,40 @@ class _PlotPanelState extends State<PlotPanel> {
           _resetView();
           app.clearCrosshair();
           break;
-        // 'max', 'export', 'setup': placeholders for future
+        case 'export':
+          _exportCsv(app);
+          break;
+        // 'max', 'setup': placeholders for future
       }
     });
+  }
+
+  Future<void> _exportCsv(AppState app) async {
+    final plot = app.plots[widget.plotIdx];
+    final buf = StringBuffer();
+    buf.writeln('# MdsScope Export — ${plot.title.isNotEmpty ? plot.title : "Panel ${widget.plotIdx + 1}"}');
+    for (var i = 0; i < plot.series.length; i++) {
+      final s = plot.series[i];
+      if (s?.points == null || s!.points!.isEmpty) continue;
+      if (plot.series.length > 1) buf.writeln('# Series $i');
+      buf.writeln('x, y');
+      for (final p in s.points!) {
+        buf.writeln('${p[0]}, ${p[1]}');
+      }
+      buf.writeln();
+    }
+    if (buf.length == 0) return;
+    try {
+      final path = await FilePicker.platform.saveFile(
+        fileName: '${plot.title.isNotEmpty ? plot.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_') : "export"}.csv',
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+      );
+      if (path != null) {
+        await File(path).writeAsString(buf.toString());
+        app.setStatus('Exported to ${path.split('/').last}');
+      }
+    } catch (e) { app.setStatus('Export error: $e'); }
   }
 
   void _initViewToData(PlotData plot) {
