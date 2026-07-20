@@ -146,9 +146,9 @@ impl FrbLayoutConfig {
 impl FrbSshSettings {
     pub fn into_rust(self) -> mds_ssh::settings::SshSettings {
         mds_ssh::settings::SshSettings {
+            mode: mds_core::types::SshMode::Always,
             host: self.host, port: self.port, user: self.user,
             password: self.password, identity_file: self.identity_file,
-            ..Default::default()
         }
     }
 }
