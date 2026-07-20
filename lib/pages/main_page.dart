@@ -53,14 +53,21 @@ class MainPage extends StatelessWidget {
   static void _stepCrosshair(AppState app, int dir) {
     final cx = app.crosshairX;
     if (cx == null) return;
-    // Find a data series to determine step size
+    // Find data series, binary-search nearest sample, step to adjacent
     for (final plot in app.plots) {
       for (final s in plot.series) {
         if (s?.points == null || s!.points!.length < 2) continue;
         final pts = s.points!;
-        // Step by average point spacing
-        final step = (pts.last[0] - pts.first[0]) / pts.length * 10;
-        app.setCrosshair(cx + dir * step.abs());
+        // Binary search for nearest index
+        var lo = 0; var hi = pts.length - 1;
+        while (lo < hi) {
+          final mid = (lo + hi) ~/ 2;
+          if (pts[mid][0] < cx) { lo = mid + 1; } else { hi = mid; }
+        }
+        if (lo > 0 && (cx - pts[lo - 1][0]).abs() < (pts[lo][0] - cx).abs()) lo--;
+        // Step to adjacent sample
+        final next = (lo + dir).clamp(0, pts.length - 1);
+        app.setCrosshair(pts[next][0]);
         return;
       }
     }

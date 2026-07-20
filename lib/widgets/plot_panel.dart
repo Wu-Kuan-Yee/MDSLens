@@ -29,6 +29,7 @@ class PlotPanel extends StatefulWidget {
 }
 
 class _PlotPanelState extends State<PlotPanel> {
+  final _chartAreaKey = GlobalKey();
   double _viewMinX = double.nan, _viewMaxX = double.nan, _viewMinY = double.nan, _viewMaxY = double.nan;
   double? _localCrosshairY;
   int _lastResetId = -1;
@@ -71,30 +72,47 @@ class _PlotPanelState extends State<PlotPanel> {
     }
 
     return GestureDetector(
-      onTap: () {
+      onTapDown: (details) {
         widget.onTap?.call();
         final a = context.read<AppState>();
-        if (a.interactionMode == 1 && a.pointLocked) a.pointLocked = false;
+        if (a.interactionMode == 1 && a.pointLocked) {
+          a.pointLocked = false;
+          // Immediately set crosshair at tap position
+          final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
+          if (chartBox != null && chartBox.size.width > 0 && _viewMinX.isFinite) {
+            final globalFocal = (context.findRenderObject() as RenderBox?)?.localToGlobal(details.localPosition);
+            final cp = globalFocal != null ? _chartLocalPos(globalFocal) : details.localPosition;
+            if (cp != null) {
+              final x = _viewMinX + (cp.dx / chartBox.size.width) * (_viewMaxX - _viewMinX);
+              a.setCrosshair(x);
+            }
+          }
+        }
       },
       onScaleUpdate: (details) {
         final mode = context.read<AppState>().interactionMode;
         if (mode != 0 || _midPanning || _inRubberBand) return;
+        final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
+        if (chartBox == null || chartBox.size.width <= 0 || chartBox.size.height <= 0) return;
         setState(() {
           if (_viewMinX.isNaN) _initViewToData(plot);
-          final box = context.findRenderObject() as RenderBox?;
-          final w = box?.size.width ?? 0;
-          final h = box?.size.height ?? 0;
-          if (details.scale != 1.0 && w > 0 && h > 0) {
-            // Pinch zoom around focal point
+          final w = chartBox.size.width;
+          final h = chartBox.size.height;
+          if (details.scale != 1.0) {
+            // Pinch zoom: convert focal point from GestureDetector local to chart local
+            final globalFocal = (context.findRenderObject() as RenderBox?)?.localToGlobal(details.focalPoint);
+            final chartPos = globalFocal != null ? _chartLocalPos(globalFocal) : null;
+            final fx = chartPos?.dx ?? details.focalPoint.dx;
+            final fy = chartPos?.dy ?? details.focalPoint.dy;
             final factor = 1.0 / details.scale;
-            final cx = _viewMinX + (details.focalPoint.dx / w) * (_viewMaxX - _viewMinX);
-            final cy = _viewMaxY - (details.focalPoint.dy / h) * (_viewMaxY - _viewMinY);
+            final cx = _viewMinX + (fx / w) * (_viewMaxX - _viewMinX);
+            final cy = _viewMaxY - (fy / h) * (_viewMaxY - _viewMinY);
             _viewMinX = cx - (cx - _viewMinX) * factor;
             _viewMaxX = cx + (_viewMaxX - cx) * factor;
             _viewMinY = cy - (cy - _viewMinY) * factor;
             _viewMaxY = cy + (_viewMaxY - cy) * factor;
-          } else if (w > 0 && h > 0) {
-            // One-finger drag pan
+          } else {
+            // One-finger drag pan (delta is already in correct proportion)
             final xScale = (_viewMaxX - _viewMinX) / w;
             final yScale = (_viewMaxY - _viewMinY) / h;
             _viewMinX -= details.focalPointDelta.dx * xScale;
@@ -130,7 +148,7 @@ class _PlotPanelState extends State<PlotPanel> {
               Expanded(
                 child: bars.isEmpty
                     ? Center(child: Text(plot.series.any((s) => s?.error != null && s!.error!.isNotEmpty) ? 'Error' : 'No data', style: TextStyle(color: Colors.grey, fontSize: 10)))
-                    : Stack(children: [
+                    : Stack(key: _chartAreaKey, children: [
                         _buildChart(bars, plot, theme),
                         if (_inRubberBand && _rubberBandRect != null)
                           Positioned(
@@ -254,19 +272,27 @@ class _PlotPanelState extends State<PlotPanel> {
     return lo;
   }
 
+  Offset? _chartLocalPos(Offset globalPos) {
+    final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
+    if (chartBox == null) return null;
+    try { return chartBox.globalToLocal(globalPos); } catch (_) { return null; }
+  }
+
   void _handleScrollWheel(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
     final app = context.read<AppState>();
     if (app.interactionMode != 0) return;
     final plot = app.plots[widget.plotIdx];
+    final chartPos = _chartLocalPos(event.position);
+    if (chartPos == null) return;
     setState(() {
       if (_viewMinX.isNaN) _initViewToData(plot);
-      final box = context.findRenderObject() as RenderBox?;
-      if (box == null || box.size.width <= 0 || box.size.height <= 0) return;
+      final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
+      if (chartBox == null || chartBox.size.width <= 0 || chartBox.size.height <= 0) return;
       final steps = event.scrollDelta.dy / 53.0;
       final factor = math.pow(1.22, -steps);
-      final cx = _viewMinX + (event.localPosition.dx / box.size.width) * (_viewMaxX - _viewMinX);
-      final cy = _viewMaxY - (event.localPosition.dy / box.size.height) * (_viewMaxY - _viewMinY);
+      final cx = _viewMinX + (chartPos.dx / chartBox.size.width) * (_viewMaxX - _viewMinX);
+      final cy = _viewMaxY - (chartPos.dy / chartBox.size.height) * (_viewMaxY - _viewMinY);
       _viewMinX = cx - (cx - _viewMinX) * factor;
       _viewMaxX = cx + (_viewMaxX - cx) * factor;
       _viewMinY = cy - (cy - _viewMinY) * factor;
@@ -282,41 +308,42 @@ class _PlotPanelState extends State<PlotPanel> {
     final isMouseLeft = event.kind == PointerDeviceKind.mouse &&
         (event.buttons & kPrimaryMouseButton) != 0 && !app.shiftHeld;
     if (isMouseLeft) {
-      // Left mouse drag → rubber band zoom (original behaviour)
+      final cp = _chartLocalPos(event.position);
+      if (cp == null) return;
       _inRubberBand = true;
-      _rubberBandStart = event.localPosition;
-      _rubberBandRect = Rect.fromPoints(event.localPosition, event.localPosition);
+      _rubberBandStart = cp;
+      _rubberBandRect = Rect.fromPoints(cp, cp);
     } else if (isMid || isShiftLeft) {
-      // Middle button or Shift+left → pan
       _midPanning = true;
-      _lastMidPanPos = event.localPosition;
+      _lastMidPanPos = _chartLocalPos(event.position);
     }
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
     if (_inRubberBand && _rubberBandStart != null) {
-      // Update rubber band rectangle
-      setState(() {
-        _rubberBandRect = Rect.fromPoints(_rubberBandStart!, event.localPosition);
-      });
+      final cp = _chartLocalPos(event.position);
+      if (cp == null) return;
+      setState(() { _rubberBandRect = Rect.fromPoints(_rubberBandStart!, cp); });
       return;
     }
     if (!_midPanning || _lastMidPanPos == null) return;
+    final cp = _chartLocalPos(event.position);
+    if (cp == null) return;
     final app = context.read<AppState>();
     final plot = app.plots[widget.plotIdx];
+    final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
+    if (chartBox == null || chartBox.size.width <= 0 || chartBox.size.height <= 0) return;
     setState(() {
       if (_viewMinX.isNaN) _initViewToData(plot);
-      final box = context.findRenderObject() as RenderBox?;
-      if (box == null || box.size.width <= 0 || box.size.height <= 0) return;
-      final dx = event.localPosition.dx - _lastMidPanPos!.dx;
-      final dy = event.localPosition.dy - _lastMidPanPos!.dy;
-      final xScale = (_viewMaxX - _viewMinX) / box.size.width;
-      final yScale = (_viewMaxY - _viewMinY) / box.size.height;
+      final dx = cp.dx - _lastMidPanPos!.dx;
+      final dy = cp.dy - _lastMidPanPos!.dy;
+      final xScale = (_viewMaxX - _viewMinX) / chartBox.size.width;
+      final yScale = (_viewMaxY - _viewMinY) / chartBox.size.height;
       _viewMinX -= dx * xScale;
       _viewMaxX -= dx * xScale;
       _viewMinY += dy * yScale;
       _viewMaxY += dy * yScale;
-      _lastMidPanPos = event.localPosition;
+      _lastMidPanPos = cp;
     });
   }
 
@@ -326,35 +353,32 @@ class _PlotPanelState extends State<PlotPanel> {
       final r = _rubberBandRect!;
       final app = context.read<AppState>();
       final plot = app.plots[widget.plotIdx];
+      final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
       setState(() {
         _inRubberBand = false;
         _rubberBandStart = null;
         _rubberBandRect = null;
-        if (r.width > 8 && r.height > 8) {
-          // Zoom to rubber band region
+        if (r.width > 8 && r.height > 8 && chartBox != null &&
+            chartBox.size.width > 0 && chartBox.size.height > 0) {
           if (_viewMinX.isNaN) _initViewToData(plot);
-          final box = context.findRenderObject() as RenderBox?;
-          if (box != null && box.size.width > 0 && box.size.height > 0) {
-            final p1 = _pixelToData(Offset(r.left, r.top), box.size);
-            final p2 = _pixelToData(Offset(r.right, r.bottom), box.size);
-            _viewMinX = p1.dx < p2.dx ? p1.dx : p2.dx;
-            _viewMaxX = p1.dx > p2.dx ? p1.dx : p2.dx;
-            _viewMinY = p1.dy < p2.dy ? p1.dy : p2.dy;
-            _viewMaxY = p1.dy > p2.dy ? p1.dy : p2.dy;
-          }
+          final fx1 = r.left / chartBox.size.width;
+          final fy1 = r.top / chartBox.size.height;
+          final fx2 = r.right / chartBox.size.width;
+          final fy2 = r.bottom / chartBox.size.height;
+          final x1 = _viewMinX + fx1 * (_viewMaxX - _viewMinX);
+          final y1 = _viewMaxY - fy1 * (_viewMaxY - _viewMinY);
+          final x2 = _viewMinX + fx2 * (_viewMaxX - _viewMinX);
+          final y2 = _viewMaxY - fy2 * (_viewMaxY - _viewMinY);
+          _viewMinX = x1 < x2 ? x1 : x2;
+          _viewMaxX = x1 > x2 ? x1 : x2;
+          _viewMinY = y1 < y2 ? y1 : y2;
+          _viewMaxY = y1 > y2 ? y1 : y2;
         }
       });
       return;
     }
     _midPanning = false;
     _lastMidPanPos = null;
-  }
-
-  Offset _pixelToData(Offset pixel, Size size) {
-    // Pixel Y=0 = top of widget = max data Y. Y increases downward on screen.
-    final x = _viewMinX + (pixel.dx / size.width) * (_viewMaxX - _viewMinX);
-    final y = _viewMaxY - (pixel.dy / size.height) * (_viewMaxY - _viewMinY);
-    return Offset(x, y);
   }
 
   void _resetView() {
