@@ -33,7 +33,7 @@ class SshDialog extends StatelessWidget {
           if (!testing && result.isNotEmpty && result != 'ok') SelectableText('Error: $result', style: const TextStyle(fontSize: 13, color: Colors.red)),
           const SizedBox(height: 8),
           DropdownButtonFormField<int>(
-            value: mode,
+            initialValue: mode,
             decoration: const InputDecoration(labelText: 'Mode'),
             items: const [
               DropdownMenuItem(value: 0, child: Text('Disabled')),

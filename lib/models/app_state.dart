@@ -11,7 +11,7 @@ class AppState extends ChangeNotifier {
   List<List<Map<String, dynamic>>> get columns => _columns;
 
   // Plots
-  List<PlotData> _plots = [];
+  final List<PlotData> _plots = [];
   List<PlotData> get plots => _plots;
   int selectedCol = -1, selectedRow = -1;
   double? crosshairX;
@@ -288,7 +288,7 @@ class AppState extends ChangeNotifier {
   dynamic _findShot(dynamic d) {
     if (d is Map) { for (final k in ['shot','shotNo','treeShot']) { var v = d[k]; if (v is int && v >= 1000) return v; if (v is String) { var p = int.tryParse(v); if (p != null && p >= 1000) return p; }} for (final v in d.values) { var r = _findShot(v); if (r != null) return r; }}
     else if (d is List) { for (final v in d) { var r = _findShot(v); if (r != null) return r; }}
-    else if (d is int && d >= 1000) return d;
+    else if (d is int && d >= 1000) { return d; }
     else if (d is String) { var p = int.tryParse(d); if (p != null && p >= 1000) return p; }
     return null;
   }
