@@ -55,15 +55,43 @@ class _PlotPanelState extends State<PlotPanel> {
     return GestureDetector(
       onTap: widget.onTap,
       onScaleUpdate: (details) {
+        final mode = context.read<AppState>().interactionMode;
+        if (mode == 1) return; // Point mode: crosshair only, no zoom/pan
         setState(() {
           final sf = details.scale;
-          if (sf != 1.0) {
-            // Zoom
-          } else if (details.focalPointDelta.dx != 0 || details.focalPointDelta.dy != 0) {
-            // Pan
+          if (mode == 0 && sf != 1.0) {
+            // Zoom: scale viewport around focal point
+            if (_viewMinX.isNaN) _initViewToData(plot);
+            final factor = 1.0 / sf;
+            final box = context.findRenderObject() as RenderBox?;
+            double cx, cy;
+            if (box != null && box.size.width > 0 && box.size.height > 0) {
+              cx = _viewMinX + (details.focalPoint.dx / box.size.width) * (_viewMaxX - _viewMinX);
+              cy = _viewMaxY - (details.focalPoint.dy / box.size.height) * (_viewMaxY - _viewMinY);
+            } else {
+              cx = (_viewMinX + _viewMaxX) / 2;
+              cy = (_viewMinY + _viewMaxY) / 2;
+            }
+            _viewMinX = cx - (cx - _viewMinX) * factor;
+            _viewMaxX = cx + (_viewMaxX - cx) * factor;
+            _viewMinY = cy - (cy - _viewMinY) * factor;
+            _viewMaxY = cy + (_viewMaxY - cy) * factor;
+          } else if (mode == 2 && (details.focalPointDelta.dx != 0 || details.focalPointDelta.dy != 0)) {
+            // Pan: translate viewport by pixel delta
+            if (_viewMinX.isNaN) _initViewToData(plot);
+            final box = context.findRenderObject() as RenderBox?;
+            if (box != null && box.size.width > 0 && box.size.height > 0) {
+              final xScale = (_viewMaxX - _viewMinX) / box.size.width;
+              final yScale = (_viewMaxY - _viewMinY) / box.size.height;
+              _viewMinX -= details.focalPointDelta.dx * xScale;
+              _viewMaxX -= details.focalPointDelta.dx * xScale;
+              _viewMinY += details.focalPointDelta.dy * yScale;
+              _viewMaxY += details.focalPointDelta.dy * yScale;
+            }
           }
         });
       },
+      onSecondaryTapUp: (details) => _showContextMenu(context, details.globalPosition),
       child: Padding(
         padding: const EdgeInsets.all(2),
         child: ClipRRect(
@@ -123,6 +151,7 @@ class _PlotPanelState extends State<PlotPanel> {
         lineTouchData: LineTouchData(enabled: true,
           touchCallback: (event, response) {
             final a = context.read<AppState>();
+            if (a.interactionMode != 1) return; // Only in Point mode
             if (response?.lineBarSpots != null && response!.lineBarSpots!.isNotEmpty) {
               final spot = response.lineBarSpots!.first;
               a.setCrosshair(spot.x);
@@ -185,6 +214,62 @@ class _PlotPanelState extends State<PlotPanel> {
     while (lo < hi) { final mid = (lo + hi) ~/ 2; if (spots[mid].x < x) { lo = mid + 1; } else { hi = mid; } }
     if (lo > 0 && (lo >= spots.length || (x - spots[lo-1].x).abs() < (spots[lo].x - x).abs())) return lo - 1;
     return lo;
+  }
+
+  void _resetView() {
+    _viewMinX = double.nan; _viewMaxX = double.nan;
+    _viewMinY = double.nan; _viewMaxY = double.nan;
+    _localCrosshairY = null;
+  }
+
+  void _showContextMenu(BuildContext ctx, Offset globalPosition) {
+    final app = ctx.read<AppState>();
+    showMenu<String>(
+      context: ctx,
+      position: RelativeRect.fromLTRB(globalPosition.dx, globalPosition.dy, globalPosition.dx, globalPosition.dy),
+      items: const [
+        PopupMenuItem(value: 'max', child: Text('Max')),
+        PopupMenuItem(value: 'reset', child: Text('Reset View')),
+        PopupMenuItem(value: 'export', child: Text('Export Data')),
+        PopupMenuItem(value: 'setup', child: Text('Panel Setup')),
+      ],
+    ).then((value) {
+      if (value == null) return;
+      switch (value) {
+        case 'reset':
+          _resetView();
+          app.clearCrosshair();
+          break;
+        // 'max', 'export', 'setup': placeholders for future
+      }
+    });
+  }
+
+  void _initViewToData(PlotData plot) {
+    final bounds = _computeDataBounds(plot);
+    if (bounds != null) {
+      _viewMinX = bounds[0]; _viewMaxX = bounds[1];
+      _viewMinY = bounds[2]; _viewMaxY = bounds[3];
+    }
+  }
+
+  List<double>? _computeDataBounds(PlotData plot) {
+    double? minX, maxX, minY, maxY;
+    for (final s in plot.series) {
+      if (s?.points == null || s!.points!.isEmpty) continue;
+      for (final p in s.points!) {
+        final x = p[0], y = p[1];
+        if (!x.isFinite || !y.isFinite) continue;
+        if (minX == null || x < minX) minX = x;
+        if (maxX == null || x > maxX) maxX = x;
+        if (minY == null || y < minY) minY = y;
+        if (maxY == null || y > maxY) maxY = y;
+      }
+    }
+    if (minX == null) return null;
+    final xPad = (maxX! - minX) * 0.02;
+    final yPad = (maxY! - minY!) * 0.02;
+    return [minX - xPad, maxX + xPad, minY - yPad, maxY + yPad];
   }
 
   List<List<double>> _decimate(List<List<double>> points, int maxPoints) {
