@@ -63,7 +63,11 @@ class AppState extends ChangeNotifier {
 
   int _interactionMode = 0;
   int get interactionMode => _interactionMode;
-  set interactionMode(int v) { _interactionMode = v; notifyListeners(); }
+  set interactionMode(int v) {
+    _interactionMode = v;
+    if (v != 1) clearCrosshair(); // Auto-clear when leaving Point mode
+    notifyListeners();
+  }
 
   // Theme
   int _themeMode = 2;

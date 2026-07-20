@@ -46,6 +46,9 @@ class _PlotPanelState extends State<PlotPanel> {
       _lastResetId = app.viewResetId;
       _resetView();
     }
+    if (app.crosshairX == null && _localCrosshairY != null) {
+      _localCrosshairY = null;
+    }
     if (widget.plotIdx >= app.plots.length) return const SizedBox();
 
     final plot = app.plots[widget.plotIdx];
@@ -283,10 +286,10 @@ class _PlotPanelState extends State<PlotPanel> {
   void _handlePointerDown(PointerDownEvent event) {
     final app = context.read<AppState>();
     if (app.interactionMode != 0) return;
-    final isMid = event.buttons & kMiddleMouseButton != 0;
-    final isShiftLeft = _shiftHeld && event.buttons & kPrimaryMouseButton != 0;
+    final isMid = (event.buttons & kMiddleMouseButton) != 0;
+    final isShiftLeft = _shiftHeld && (event.buttons & kPrimaryMouseButton) != 0;
     final isMouseLeft = event.kind == PointerDeviceKind.mouse &&
-        event.buttons & kPrimaryMouseButton != 0 && !_shiftHeld;
+        (event.buttons & kPrimaryMouseButton) != 0 && !_shiftHeld;
     if (isMouseLeft) {
       // Left mouse drag → rubber band zoom (original behaviour)
       _inRubberBand = true;
@@ -328,7 +331,7 @@ class _PlotPanelState extends State<PlotPanel> {
 
   void _handlePointerUp(PointerUpEvent event) {
     if (_inRubberBand && _rubberBandRect != null &&
-        (event.buttons & kPrimaryMouseButton) == 0) {
+        ((event.buttons & kPrimaryMouseButton) == 0)) {
       final r = _rubberBandRect!;
       final app = context.read<AppState>();
       final plot = app.plots[widget.plotIdx];
@@ -341,9 +344,8 @@ class _PlotPanelState extends State<PlotPanel> {
           if (_viewMinX.isNaN) _initViewToData(plot);
           final box = context.findRenderObject() as RenderBox?;
           if (box != null && box.size.width > 0 && box.size.height > 0) {
-            final view = Rect.fromLTRB(_viewMinX, _viewMaxY, _viewMaxX, _viewMinY);
-            final p1 = _pixelToData(Offset(r.left, r.top), view, box.size);
-            final p2 = _pixelToData(Offset(r.right, r.bottom), view, box.size);
+            final p1 = _pixelToData(Offset(r.left, r.top), box.size);
+            final p2 = _pixelToData(Offset(r.right, r.bottom), box.size);
             _viewMinX = p1.dx < p2.dx ? p1.dx : p2.dx;
             _viewMaxX = p1.dx > p2.dx ? p1.dx : p2.dx;
             _viewMinY = p1.dy < p2.dy ? p1.dy : p2.dy;
@@ -357,9 +359,10 @@ class _PlotPanelState extends State<PlotPanel> {
     _lastMidPanPos = null;
   }
 
-  Offset _pixelToData(Offset pixel, Rect view, Size size) {
-    final x = view.left + (pixel.dx / size.width) * (view.right - view.left);
-    final y = view.top - (pixel.dy / size.height) * (view.bottom - view.top);
+  Offset _pixelToData(Offset pixel, Size size) {
+    // Pixel Y=0 = top of widget = max data Y. Y increases downward on screen.
+    final x = _viewMinX + (pixel.dx / size.width) * (_viewMaxX - _viewMinX);
+    final y = _viewMaxY - (pixel.dy / size.height) * (_viewMaxY - _viewMinY);
     return Offset(x, y);
   }
 

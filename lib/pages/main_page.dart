@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -12,8 +14,8 @@ class MainPage extends StatelessWidget {
     final app = context.watch<AppState>();
     return CallbackShortcuts(
       bindings: {
-        const SingleActivator(LogicalKeyboardKey.keyZ, control: true): () => app.interactionMode = 0,
-        const SingleActivator(LogicalKeyboardKey.keyP, control: true): () => app.interactionMode = 1,
+        SingleActivator(LogicalKeyboardKey.keyZ, control: !Platform.isMacOS, meta: Platform.isMacOS): () => app.interactionMode = 0,
+        SingleActivator(LogicalKeyboardKey.keyP, control: !Platform.isMacOS, meta: Platform.isMacOS): () => app.interactionMode = 1,
         SingleActivator(LogicalKeyboardKey.escape): () { app.clearCrosshair(); },
         SingleActivator(LogicalKeyboardKey.arrowLeft): () => _stepCrosshair(app, -1),
         SingleActivator(LogicalKeyboardKey.arrowRight): () => _stepCrosshair(app, 1),
