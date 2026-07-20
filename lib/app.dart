@@ -13,7 +13,7 @@ class MdsScopeApp extends StatefulWidget {
 class _MdsScopeAppState extends State<MdsScopeApp> {
   bool _sysDark = false;
 
-  @override void initState() { super.initState(); _sysDark = _readPlatform(); _checkSysTheme(); }
+  @override void initState() { super.initState(); _sysDark = _readPlatform(); WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) _checkSysTheme(); }); }
   bool _readPlatform() => WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
   void _checkSysTheme() async {
     try {
