@@ -25,6 +25,7 @@ class PlotPanel extends StatefulWidget {
 class _PlotPanelState extends State<PlotPanel> {
   // ignore: prefer_final_fields
   double _viewMinX = double.nan, _viewMaxX = double.nan, _viewMinY = double.nan, _viewMaxY = double.nan;
+  double? _localCrosshairY;
 
   @override
   Widget build(BuildContext context) {
@@ -114,7 +115,9 @@ class _PlotPanelState extends State<PlotPanel> {
           touchCallback: (event, response) {
             final a = context.read<AppState>();
             if (response?.lineBarSpots != null && response!.lineBarSpots!.isNotEmpty) {
-              a.setCrosshair(response.lineBarSpots!.first.x);
+              final spot = response.lineBarSpots!.first;
+              a.setCrosshair(spot.x);
+              setState(() { _localCrosshairY = spot.y; });
             }
           },
           handleBuiltInTouches: false,
@@ -127,8 +130,8 @@ class _PlotPanelState extends State<PlotPanel> {
           ),
         ),
         extraLinesData: ExtraLinesData(
-          verticalLines: cx != null ? [VerticalLine(x: cx, color: const Color(0xFFFF00FF), strokeWidth: 1)] : [],
-          horizontalLines: [],
+          verticalLines: cx != null ? [VerticalLine(x: cx, color: const Color(0xFFFF00FF), strokeWidth: 1, label: _crosshairLabel(bars, cx))] : [],
+          horizontalLines: _localCrosshairY != null ? [HorizontalLine(y: _localCrosshairY!, color: const Color(0xFFFF00FF), strokeWidth: 1)] : [],
         ),
         minX: _viewMinX.isNaN ? null : _viewMinX,
         maxX: _viewMaxX.isNaN ? null : _viewMaxX,
@@ -151,6 +154,20 @@ class _PlotPanelState extends State<PlotPanel> {
       text = value.toStringAsFixed(3);
     }
     return Padding(padding: const EdgeInsets.only(top: 2), child: Text(text, style: TextStyle(fontSize: 8, color: color)));
+  }
+
+  VerticalLineLabel? _crosshairLabel(List<LineChartBarData> bars, double? cx) {
+    if (cx == null || bars.isEmpty) return null;
+    final parts = <String>[];
+    for (final bar in bars) {
+      if (bar.spots.isEmpty) continue;
+      final idx = _nearest(bar.spots, cx);
+      parts.add('${bar.spots[idx].y.toStringAsFixed(4)}');
+    }
+    if (parts.isEmpty) return null;
+    return VerticalLineLabel(show: true,
+      labelResolver: (_) => parts.join('\n'),
+      style: const TextStyle(fontSize: 9, color: Color(0xFFFF00FF)));
   }
 
   int _nearest(List<FlSpot> spots, double x) {
