@@ -46,7 +46,17 @@ class ToolbarWidget extends StatelessWidget {
           const SizedBox(height: 2),
           Row(children: [
             Text('Shot:', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface)),
-            const SizedBox(width: 4),
+            const SizedBox(width: 2),
+            if (app.shotHistory.isNotEmpty)
+              PopupMenuButton<String>(
+                padding: EdgeInsets.zero,
+                iconSize: 14,
+                icon: Icon(Icons.arrow_drop_down, size: 14, color: theme.colorScheme.onSurface),
+                tooltip: 'Shot history',
+                onSelected: (v) { app.shotText = v; app.startRefresh(); },
+                itemBuilder: (_) => app.shotHistory.map((s) => PopupMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 12)))).toList(),
+              ),
+            const SizedBox(width: 2),
             SizedBox(
               width: 80,
               child: TextField(

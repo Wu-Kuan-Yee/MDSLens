@@ -27,6 +27,16 @@ class AppState extends ChangeNotifier {
   TextEditingController get shotCtrl => _shotCtrl;
   set shotText(String v) { _shotText = v; _shotCtrl.text = v; notifyListeners(); }
 
+  // Shot history (last 20)
+  final List<String> _shotHistory = [];
+  List<String> get shotHistory => _shotHistory;
+  void _addToHistory(String shot) {
+    if (shot.isEmpty) return;
+    _shotHistory.remove(shot);
+    _shotHistory.insert(0, shot);
+    if (_shotHistory.length > 20) _shotHistory.removeLast();
+  }
+
   AppState() {
     _shotCtrl.addListener(() {
       if (_shotCtrl.text != _shotText) { _shotText = _shotCtrl.text; notifyListeners(); }
@@ -193,6 +203,7 @@ class AppState extends ChangeNotifier {
 
   void startRefresh() {
     if (_columns.isEmpty) return;
+    _addToHistory(_shotText);
     _fetching = true; _status = 'Fetching...'; notifyListeners();
     Future.microtask(() {
       try {
