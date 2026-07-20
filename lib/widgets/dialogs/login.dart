@@ -49,11 +49,12 @@ class LoginDialog extends StatelessWidget {
             }
             setState(() { loading = true; error = ''; });
             try {
-              final token = await _login(url, user, pass, app);
+              final (token, usedSsh) = await _login(url, user, pass, app);
               app.setLoginApiUrl(url);
               app.setLoginUser(user);
               app.setLoginPass(pass);
               app.setLoggedIn(true, token);
+              app.setSshConnected(usedSsh);
               if (ctx.mounted) Navigator.pop(ctx);
               app.setStatus('Logged in as $user');
               app.fetchLatestShot();
@@ -66,9 +67,10 @@ class LoginDialog extends StatelessWidget {
     );
   }
 
-  static Future<String> _login(String apiUrl, String user, String pass, AppState app) async {
+  static Future<(String, bool)> _login(String apiUrl, String user, String pass, AppState app) async {
     // Route through SSH tunnel if SSH is configured
     String effectiveUrl = apiUrl;
+    bool usedSsh = false;
     if (app.sshMode > 0 && app.sshHost.isNotEmpty) {
       try {
         final settings = jsonEncode({
@@ -80,7 +82,8 @@ class LoginDialog extends StatelessWidget {
         final resp = RustBridge.instance.prepareUrl(apiUrl, settings);
         if (resp.startsWith('http') && !resp.contains('"error"')) {
           effectiveUrl = resp;
-          await Future.delayed(const Duration(milliseconds: 200)); // Give relay thread time to start
+          usedSsh = true;
+          await Future.delayed(const Duration(milliseconds: 200));
         } else {
           throw 'SSH prepare failed: $resp';
         }
@@ -103,7 +106,7 @@ class LoginDialog extends StatelessWidget {
       final code = json['code'];
       if (code == '20000' || code == 20000) {
         final token = json['data']?['token'];
-        if (token != null) return token.toString();
+        if (token != null) return (token.toString(), usedSsh);
         throw 'no token';
       }
       throw json['msg']?.toString() ?? 'unknown error';

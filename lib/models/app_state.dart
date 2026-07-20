@@ -72,7 +72,7 @@ class AppState extends ChangeNotifier {
 
   // SSH
   String _sshHost = ''; String get sshHost => _sshHost;
-  int _sshMode = 0; int get sshMode => _sshMode; set sshMode(int v) { _sshMode = v; notifyListeners(); }
+  int _sshMode = 1; int get sshMode => _sshMode; set sshMode(int v) { _sshMode = v; notifyListeners(); }
   int _sshPort = 22; int get sshPort => _sshPort;
   String _sshUser = ''; String get sshUser => _sshUser;
   String _sshPass = ''; String get sshPass => _sshPass;
