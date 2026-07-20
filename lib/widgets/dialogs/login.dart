@@ -79,8 +79,13 @@ class LoginDialog extends StatelessWidget {
         final resp = RustBridge.instance.prepareUrl(apiUrl, settings);
         if (resp.startsWith('http') && !resp.contains('"error"')) {
           effectiveUrl = resp;
+          await Future.delayed(const Duration(milliseconds: 200)); // Give relay thread time to start
+        } else {
+          throw 'SSH prepare failed: $resp';
         }
-      } catch (_) {}
+      } catch (e) {
+        throw 'SSH: $e';
+      }
     }
 
     final url = '${effectiveUrl.replaceAll(RegExp(r'/$'), '')}/login';
