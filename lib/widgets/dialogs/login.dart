@@ -75,7 +75,7 @@ class LoginDialog extends StatelessWidget {
           'host': app.sshHost, 'port': app.sshPort,
           'user': app.sshUser, 'password': app.sshPass,
           'identity_file': app.sshIdentity,
-          'mode': app.sshMode,
+          'mode': 2,
         });
         final resp = RustBridge.instance.prepareUrl(apiUrl, settings);
         if (resp.startsWith('http') && !resp.contains('"error"')) {

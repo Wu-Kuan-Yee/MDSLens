@@ -60,6 +60,7 @@ pub struct FrbLoadedSignal {
 
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct FrbSshSettings {
     pub host: String,
     pub port: u16,
