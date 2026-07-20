@@ -60,7 +60,10 @@ pub extern "C" fn mds_fetch_shot(api_url: *const c_char, token: *const c_char) -
 
 #[no_mangle]
 pub extern "C" fn mds_ssh_test(settings_json: *const c_char) -> *mut c_char {
-    let settings: a::FrbSshSettings = serde_json::from_str(&to_rust(settings_json)).unwrap_or_default();
+    let settings: a::FrbSshSettings = match serde_json::from_str(&to_rust(settings_json)) {
+        Ok(s) => s,
+        Err(e) => return ffi_string!(format!("{{\"error\":\"JSON: {}\"}}", e)),
+    };
     match a::ssh_test(settings) {
         Ok(()) => ffi_string!("{\"ok\":true}"),
         Err(e) => ffi_string!(format!("{{\"error\":\"{}\"}}", e)),
@@ -76,15 +79,20 @@ pub extern "C" fn mds_fetch_signals(config_json: *const c_char, mode_json: *cons
 
 #[no_mangle]
 pub extern "C" fn mds_prepare_url(url: *const c_char, settings_json: *const c_char) -> *mut c_char {
-    let settings: a::FrbSshSettings = serde_json::from_str(&to_rust(settings_json)).unwrap_or_default();
+    let settings_json = to_rust(settings_json);
+    let settings: a::FrbSshSettings = match serde_json::from_str(&settings_json) {
+        Ok(s) => s,
+        Err(e) => return ffi_string!(format!("{{\"error\":\"JSON parse: {} — {}\"}}", e, settings_json)),
+    };
+    if settings.host.is_empty() {
+        return ffi_string!("{\"error\":\"SSH host is empty\"}");
+    }
     let mut mgr = mds_ssh::tunnel::SshTunnelManager::new();
     mgr.reload_settings(settings.into_rust());
     let result = match mgr.prepare_url(&to_rust(url)) {
         Ok(tunneled) => tunneled,
         Err(e) => format!("{{\"error\":\"{}\"}}", e),
     };
-    // Leak the manager — it must outlive this FFI call to keep tunnels alive
-    // (matches C++ behavior where SshTunnelManager is a singleton)
     std::mem::forget(mgr);
     ffi_string!(result)
 }

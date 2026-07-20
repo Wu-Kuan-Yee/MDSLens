@@ -201,7 +201,7 @@ class AppState extends ChangeNotifier {
     try {
       String apiUrl = _loginApiUrl;
       // Route through SSH if configured
-      if (_sshHost.isNotEmpty) {
+      if (_sshMode > 0 && _sshHost.isNotEmpty) {
         try {
           final settings = jsonEncode({'host': _sshHost, 'port': _sshPort, 'user': _sshUser, 'password': _sshPass, 'identity_file': _sshIdentity, 'mode': _sshMode});
           final resp = RustBridge.instance.prepareUrl(_loginApiUrl, settings);

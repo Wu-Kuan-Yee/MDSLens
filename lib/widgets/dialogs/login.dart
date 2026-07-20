@@ -69,7 +69,7 @@ class LoginDialog extends StatelessWidget {
   static Future<String> _login(String apiUrl, String user, String pass, AppState app) async {
     // Route through SSH tunnel if SSH is configured
     String effectiveUrl = apiUrl;
-    if (app.sshHost.isNotEmpty && app.sshPort > 0) {
+    if (app.sshMode > 0 && app.sshHost.isNotEmpty) {
       try {
         final settings = jsonEncode({
           'host': app.sshHost, 'port': app.sshPort,
