@@ -59,38 +59,29 @@ class _PlotPanelState extends State<PlotPanel> {
       onTap: widget.onTap,
       onScaleUpdate: (details) {
         final mode = context.read<AppState>().interactionMode;
-        if (mode == 1) return; // Point mode: crosshair only, no zoom/pan
+        if (mode != 0) return; // View mode only: pan + zoom combined
         setState(() {
-          final sf = details.scale;
-          if (mode == 0 && sf != 1.0) {
-            // Zoom: scale viewport around focal point
-            if (_viewMinX.isNaN) _initViewToData(plot);
-            final factor = 1.0 / sf;
-            final box = context.findRenderObject() as RenderBox?;
-            double cx, cy;
-            if (box != null && box.size.width > 0 && box.size.height > 0) {
-              cx = _viewMinX + (details.focalPoint.dx / box.size.width) * (_viewMaxX - _viewMinX);
-              cy = _viewMaxY - (details.focalPoint.dy / box.size.height) * (_viewMaxY - _viewMinY);
-            } else {
-              cx = (_viewMinX + _viewMaxX) / 2;
-              cy = (_viewMinY + _viewMaxY) / 2;
-            }
+          if (_viewMinX.isNaN) _initViewToData(plot);
+          final box = context.findRenderObject() as RenderBox?;
+          final w = box?.size.width ?? 0;
+          final h = box?.size.height ?? 0;
+          if (details.scale != 1.0 && w > 0 && h > 0) {
+            // Pinch zoom around focal point
+            final factor = 1.0 / details.scale;
+            final cx = _viewMinX + (details.focalPoint.dx / w) * (_viewMaxX - _viewMinX);
+            final cy = _viewMaxY - (details.focalPoint.dy / h) * (_viewMaxY - _viewMinY);
             _viewMinX = cx - (cx - _viewMinX) * factor;
             _viewMaxX = cx + (_viewMaxX - cx) * factor;
             _viewMinY = cy - (cy - _viewMinY) * factor;
             _viewMaxY = cy + (_viewMaxY - cy) * factor;
-          } else if (mode == 2 && (details.focalPointDelta.dx != 0 || details.focalPointDelta.dy != 0)) {
-            // Pan: translate viewport by pixel delta
-            if (_viewMinX.isNaN) _initViewToData(plot);
-            final box = context.findRenderObject() as RenderBox?;
-            if (box != null && box.size.width > 0 && box.size.height > 0) {
-              final xScale = (_viewMaxX - _viewMinX) / box.size.width;
-              final yScale = (_viewMaxY - _viewMinY) / box.size.height;
-              _viewMinX -= details.focalPointDelta.dx * xScale;
-              _viewMaxX -= details.focalPointDelta.dx * xScale;
-              _viewMinY += details.focalPointDelta.dy * yScale;
-              _viewMaxY += details.focalPointDelta.dy * yScale;
-            }
+          } else if (w > 0 && h > 0) {
+            // One-finger drag pan
+            final xScale = (_viewMaxX - _viewMinX) / w;
+            final yScale = (_viewMaxY - _viewMinY) / h;
+            _viewMinX -= details.focalPointDelta.dx * xScale;
+            _viewMaxX -= details.focalPointDelta.dx * xScale;
+            _viewMinY += details.focalPointDelta.dy * yScale;
+            _viewMaxY += details.focalPointDelta.dy * yScale;
           }
         });
       },
