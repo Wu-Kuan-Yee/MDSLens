@@ -79,10 +79,14 @@ pub extern "C" fn mds_prepare_url(url: *const c_char, settings_json: *const c_ch
     let settings: a::FrbSshSettings = serde_json::from_str(&to_rust(settings_json)).unwrap_or_default();
     let mut mgr = mds_ssh::tunnel::SshTunnelManager::new();
     mgr.reload_settings(settings.into_rust());
-    match mgr.prepare_url(&to_rust(url)) {
-        Ok(tunneled) => ffi_string!(tunneled),
-        Err(e) => ffi_string!(format!("{{\"error\":\"{}\"}}", e)),
-    }
+    let result = match mgr.prepare_url(&to_rust(url)) {
+        Ok(tunneled) => tunneled,
+        Err(e) => format!("{{\"error\":\"{}\"}}", e),
+    };
+    // Leak the manager — it must outlive this FFI call to keep tunnels alive
+    // (matches C++ behavior where SshTunnelManager is a singleton)
+    std::mem::forget(mgr);
+    ffi_string!(result)
 }
 
 #[no_mangle]
