@@ -313,7 +313,7 @@ mod tests {
     fn test_ssh_settings_into_rust() {
         let frb = FrbSshSettings {
             host: "host".into(), port: 22, user: "user".into(),
-            password: "pass".into(), identity_file: "".into(),
+            password: "pass".into(), identity_file: "".into(), mode: 1,
         };
         let rust = frb.into_rust();
         assert_eq!(rust.host, "host");
