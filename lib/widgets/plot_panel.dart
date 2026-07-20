@@ -115,6 +115,8 @@ class _PlotPanelState extends State<PlotPanel> {
             if (response?.lineBarSpots != null && response!.lineBarSpots!.isNotEmpty) {
               final spot = response.lineBarSpots!.first;
               setState(() { _touchX = spot.x; _touchY = spot.y; });
+            } else {
+              setState(() { _touchX = null; _touchY = null; });
             }
           },
           handleBuiltInTouches: false,
