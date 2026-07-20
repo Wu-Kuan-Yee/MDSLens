@@ -172,7 +172,18 @@ class AppState extends ChangeNotifier {
         }
         _fetching = false;
         final loaded = _plots.where((p) => p.series.any((s) => s?.points != null && s!.points!.isNotEmpty)).length;
-        _status = 'Shot $_shotText: ${firstErr ?? "$loaded panels with data"}';
+        // Show X range of first signal with data for debugging
+        var xInfo = '';
+        for (final p in _plots) {
+          for (final s in p.series) {
+            if (s != null && s.points != null && s.points!.isNotEmpty) {
+              xInfo = ' [X: ${s.points!.first[0].toStringAsFixed(3)}..${s.points!.last[0].toStringAsFixed(3)}]';
+              break;
+            }
+          }
+          if (xInfo.isNotEmpty) break;
+        }
+        _status = 'Shot $_shotText: ${firstErr ?? "$loaded panels with data"}$xInfo';
       } catch (e) { _fetching = false; _status = 'Error: $e'; }
       notifyListeners();
     });
