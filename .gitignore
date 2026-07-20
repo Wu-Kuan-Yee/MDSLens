@@ -1,0 +1,10 @@
+build/
+.dart_tool/
+.packages
+*.iml
+.idea/
+.vscode/
+*.swp
+.DS_Store
+rust/target/
+pubspec.lock

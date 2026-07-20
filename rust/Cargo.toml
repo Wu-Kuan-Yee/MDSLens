@@ -1,0 +1,11 @@
+[workspace]
+resolver = "2"
+members = ["mds-bridge"]
+
+[workspace.dependencies]
+mds-core = { path = "../../mdsscope-rs/mds-core" }
+mds-ip = { path = "../../mdsscope-rs/mds-ip" }
+mds-ssh = { path = "../../mdsscope-rs/mds-ssh" }
+mds-auth = { path = "../../mdsscope-rs/mds-auth" }
+flutter_rust_bridge = "2"
+tokio = { version = "1", features = ["full"] }

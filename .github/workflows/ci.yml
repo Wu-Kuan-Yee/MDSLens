@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  rust-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --manifest-path rust/mds-bridge/Cargo.toml
+      - run: cargo test --manifest-path ../mdsscope-rs/Cargo.toml -p mds-core -p mds-ip -p mds-auth
+
+  flutter-analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - run: flutter analyze
+
+  flutter-build:
+    needs: [rust-test, flutter-analyze]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            target: macos
+          - os: ubuntu-latest
+            target: linux
+          - os: windows-latest
+            target: windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - run: flutter pub get
+      - run: cargo build --release --manifest-path rust/mds-bridge/Cargo.toml
+      - run: flutter build ${{ matrix.target }} --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mdsscope-${{ matrix.target }}
+          path: build/${{ matrix.target }}/**/Bundle/

@@ -1,0 +1,3 @@
+rust_input: crate::api
+rust_root: rust/mds-bridge/
+dart_output: lib/services/bridge.dart
