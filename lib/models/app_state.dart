@@ -129,18 +129,66 @@ class AppState extends ChangeNotifier {
   void openFile() async {
     try {
       final r = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['toml','webscp']);
-      if (r != null && r.files.single.path != null) {
-        _status = 'Loading...'; notifyListeners();
-        // TODO: call Rust parse_environment
+      if (r == null || r.files.single.path == null) return;
+      final path = r.files.single.path!;
+      _status = 'Loading $path...'; notifyListeners();
+      final raw = RustBridge.instance.parseEnv(path);
+      if (raw.isEmpty) { _status = 'Empty result from parser'; notifyListeners(); return; }
+      final json = jsonDecode(raw);
+      if (json is! Map || json['columns'] is! List) {
+        _status = 'Invalid config format'; notifyListeners(); return;
       }
-    } catch (_) {}
+      final cols = (json['columns'] as List).map((col) {
+        return (col as List).map((panel) {
+          final m = Map<String, dynamic>.from(panel as Map);
+          m['extraction_points'] ??= 2000;
+          m['grid'] ??= true;
+          // Keep signal_specs as-is (List<Map>)
+          return m;
+        }).toList();
+      }).toList();
+      if (cols.isEmpty || cols.every((c) => c.isEmpty)) {
+        _status = 'No panels found in config'; notifyListeners(); return;
+      }
+      _columns = cols;
+      _plots.clear();
+      for (final col in _columns) {
+        for (final panel in col) {
+          final sigCount = (panel['signal_specs'] as List?)?.length ?? 1;
+          _plots.add(PlotData(
+            title: panel['title']?.toString() ?? '',
+            xLabel: panel['x_label']?.toString() ?? 's',
+            yLabel: panel['y_label']?.toString() ?? 'a.u.',
+            series: List.filled(sigCount > 0 ? sigCount : 1, null),
+          ));
+        }
+      }
+      _status = 'Loaded: ${path.split('/').last} (${_columns.length} cols, ${_plots.length} panels)'; notifyListeners();
+      // Auto-refresh if logged in
+      if (_shotText.isNotEmpty && _loggedIn) startRefresh();
+    } catch (e) { _status = 'Open error: $e'; notifyListeners(); }
   }
 
   void saveFile() async {
     try {
       final r = await FilePicker.platform.saveFile(fileName: 'config.toml', type: FileType.custom, allowedExtensions: ['toml']);
-      if (r != null) { _status = 'Saved'; notifyListeners(); }
-    } catch (_) {}
+      if (r == null) return;
+      // Serialize _columns to FrbLayoutConfig JSON
+      final cols = _columns.map((col) => col.map((panel) {
+        final m = Map<String, dynamic>.from(panel);
+        // Remove internal keys not part of FrbPlotSpec
+        m.remove('shot');
+        return m;
+      }).toList()).toList();
+      final configJson = jsonEncode({'columns': cols});
+      final result = RustBridge.instance.writeEnv(configJson, r);
+      final resMap = jsonDecode(result);
+      if (resMap is Map && resMap['ok'] == true) {
+        _status = 'Saved to ${r.split('/').last}'; notifyListeners();
+      } else {
+        _status = 'Save error: ${resMap is Map ? resMap['error'] ?? result : result}'; notifyListeners();
+      }
+    } catch (e) { _status = 'Save error: $e'; notifyListeners(); }
   }
 
   void startRefresh() {
