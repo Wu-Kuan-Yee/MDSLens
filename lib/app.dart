@@ -17,18 +17,17 @@ class _MdsScopeAppState extends State<MdsScopeApp> {
   bool _readPlatform() => WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
   void _checkSysTheme() async {
     try {
-      final r = await Process.run('defaults', ['read', '-g', 'AppleInterfaceStyle']);
-      final d = r.stdout.toString().trim().toLowerCase() == 'dark';
+      final r = Process.runSync('defaults', ['read', '-g', 'AppleInterfaceStyle']);
+      final out = r.stdout.toString().trim();
+      final dark = out.toLowerCase() == 'dark';
       if (!mounted) return;
-      final pd = _readPlatform();
-      final dark = d || pd;
       if (dark != _sysDark) setState(() => _sysDark = dark);
-    } catch (_) {
+      context.read<AppState>().setStatus('Auto: defaults="$out" dark=$dark');
+    } catch (e) {
       if (!mounted) return;
-      final pd = _readPlatform();
-      if (pd != _sysDark) setState(() => _sysDark = pd);
+      context.read<AppState>().setStatus('Auto err: $e');
     }
-    Future.delayed(const Duration(seconds: 1), () { if (mounted) _checkSysTheme(); });
+    Future.delayed(const Duration(seconds: 2), () { if (mounted) _checkSysTheme(); });
   }
 
   @override
