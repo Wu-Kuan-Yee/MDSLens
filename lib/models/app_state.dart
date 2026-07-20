@@ -172,16 +172,17 @@ class AppState extends ChangeNotifier {
         }
         _fetching = false;
         final loaded = _plots.where((p) => p.series.any((s) => s?.points != null && s!.points!.isNotEmpty)).length;
-        // Show X range of first signal with data for debugging
+        // Debug: show timebase and X range
         var xInfo = '';
-        for (final p in _plots) {
-          for (final s in p.series) {
-            if (s != null && s.points != null && s.points!.isNotEmpty) {
-              xInfo = ' [X: ${s.points!.first[0].toStringAsFixed(3)}..${s.points!.last[0].toStringAsFixed(3)}]';
+        for (final sig in json) {
+          if (sig is Map) {
+            final s = sig['series'];
+            if (s is Map && s['points'] is List && (s['points'] as List).isNotEmpty) {
+              final pts = s['points'] as List;
+              xInfo = ' [X:${(pts.first as List)[0]}-${(pts.last as List)[0]} tb:start=${s['uniform_start']} step=${s['uniform_step']}]';
               break;
             }
           }
-          if (xInfo.isNotEmpty) break;
         }
         _status = 'Shot $_shotText: ${firstErr ?? "$loaded panels with data"}$xInfo';
       } catch (e) { _fetching = false; _status = 'Error: $e'; }
