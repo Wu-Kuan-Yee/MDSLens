@@ -158,7 +158,7 @@ class _PlotPanelState extends State<PlotPanel> {
 
   VerticalLineLabel? _crosshairLabel(List<LineChartBarData> bars, double? cx) {
     if (cx == null || bars.isEmpty) return null;
-    final parts = <String>[];
+    final parts = <String>['x=${cx.toStringAsFixed(6)}'];
     for (final bar in bars) {
       if (bar.spots.isEmpty) continue;
       final idx = _nearest(bar.spots, cx);
