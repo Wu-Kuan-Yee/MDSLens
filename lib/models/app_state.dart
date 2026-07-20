@@ -61,11 +61,19 @@ class AppState extends ChangeNotifier {
   int get dataMode => _dataMode;
   set dataMode(int v) { _dataMode = v; notifyListeners(); }
 
+  // Point mode: Esc locks crosshair in place; next click unlocks
+  bool _pointLocked = false;
+  bool get pointLocked => _pointLocked;
+  set pointLocked(bool v) { _pointLocked = v; notifyListeners(); }
+
+  // Shift key state for Shift+drag pan
+  bool shiftHeld = false;
+
   int _interactionMode = 0;
   int get interactionMode => _interactionMode;
   set interactionMode(int v) {
     _interactionMode = v;
-    if (v != 1) clearCrosshair(); // Auto-clear when leaving Point mode
+    if (v != 1) { pointLocked = false; clearCrosshair(); }
     notifyListeners();
   }
 

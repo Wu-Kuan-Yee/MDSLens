@@ -16,7 +16,9 @@ class MainPage extends StatelessWidget {
       bindings: {
         SingleActivator(LogicalKeyboardKey.keyZ, control: !Platform.isMacOS, meta: Platform.isMacOS): () => app.interactionMode = 0,
         SingleActivator(LogicalKeyboardKey.keyP, control: !Platform.isMacOS, meta: Platform.isMacOS): () => app.interactionMode = 1,
-        SingleActivator(LogicalKeyboardKey.escape): () { app.clearCrosshair(); },
+        SingleActivator(LogicalKeyboardKey.escape): () {
+          if (app.interactionMode == 1 && app.crosshairX != null) app.pointLocked = true;
+        },
         SingleActivator(LogicalKeyboardKey.arrowLeft): () => _stepCrosshair(app, -1),
         SingleActivator(LogicalKeyboardKey.arrowRight): () => _stepCrosshair(app, 1),
       },

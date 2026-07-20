@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'models/app_state.dart';
 import 'services/theme_channel.dart';
@@ -22,6 +23,16 @@ class _MdsScopeAppState extends State<MdsScopeApp> {
     // Universal platform brightness listener (macOS fallback, Linux/Windows primary)
     WidgetsBinding.instance.platformDispatcher.onPlatformBrightnessChanged = _onBrightnessChanged;
     WidgetsBinding.instance.addPostFrameCallback((_) => _onBrightnessChanged());
+    // Global Shift key tracking for Shift+drag pan
+    HardwareKeyboard.instance.addHandler(_onAppKey);
+  }
+
+  bool _onAppKey(KeyEvent event) {
+    if (event.logicalKey == LogicalKeyboardKey.shiftLeft ||
+        event.logicalKey == LogicalKeyboardKey.shiftRight) {
+      context.read<AppState>().shiftHeld = event is KeyDownEvent;
+    }
+    return false; // Don't absorb key events
   }
 
   void _onBrightnessChanged() {

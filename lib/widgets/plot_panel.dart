@@ -32,7 +32,6 @@ class _PlotPanelState extends State<PlotPanel> {
   double _viewMinX = double.nan, _viewMaxX = double.nan, _viewMinY = double.nan, _viewMaxY = double.nan;
   double? _localCrosshairY;
   int _lastResetId = -1;
-  bool _shiftHeld = false;
   bool _midPanning = false;
   Offset? _lastMidPanPos;
   bool _inRubberBand = false;
@@ -72,7 +71,11 @@ class _PlotPanelState extends State<PlotPanel> {
     }
 
     return GestureDetector(
-      onTap: widget.onTap,
+      onTap: () {
+        widget.onTap?.call();
+        final a = context.read<AppState>();
+        if (a.interactionMode == 1 && a.pointLocked) a.pointLocked = false;
+      },
       onScaleUpdate: (details) {
         final mode = context.read<AppState>().interactionMode;
         if (mode != 0 || _midPanning || _inRubberBand) return;
@@ -103,14 +106,12 @@ class _PlotPanelState extends State<PlotPanel> {
       },
       onSecondaryTapUp: (details) => _showContextMenu(context, details.globalPosition),
       onLongPressStart: (details) => _showContextMenu(context, details.globalPosition),
-      child: Focus(
-        onKeyEvent: _handlePlotKey,
-        child: Listener(
-          onPointerSignal: _handleScrollWheel,
-          onPointerDown: _handlePointerDown,
-          onPointerMove: _handlePointerMove,
-          onPointerUp: _handlePointerUp,
-          child: Padding(
+      child: Listener(
+        onPointerSignal: _handleScrollWheel,
+        onPointerDown: _handlePointerDown,
+        onPointerMove: _handlePointerMove,
+        onPointerUp: _handlePointerUp,
+        child: Padding(
             padding: const EdgeInsets.all(2),
             child: ClipRRect(
           borderRadius: BorderRadius.circular(4),
@@ -154,7 +155,6 @@ class _PlotPanelState extends State<PlotPanel> {
         ),
         ),
       ),
-    ),
     );
   }
 
@@ -188,7 +188,8 @@ class _PlotPanelState extends State<PlotPanel> {
         lineTouchData: LineTouchData(enabled: true,
           touchCallback: (event, response) {
             final a = context.read<AppState>();
-            if (a.interactionMode != 1) return; // Only in Point mode
+            if (a.interactionMode != 1) return;
+            if (a.pointLocked) return; // Esc locked: don't follow mouse
             if (response?.lineBarSpots != null && response!.lineBarSpots!.isNotEmpty) {
               final spot = response.lineBarSpots!.first;
               a.setCrosshair(spot.x);
@@ -253,16 +254,6 @@ class _PlotPanelState extends State<PlotPanel> {
     return lo;
   }
 
-  KeyEventResult _handlePlotKey(FocusNode node, KeyEvent event) {
-    final pressed = event is KeyDownEvent;
-    if (event.logicalKey == LogicalKeyboardKey.shiftLeft ||
-        event.logicalKey == LogicalKeyboardKey.shiftRight) {
-      _shiftHeld = pressed;
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
-
   void _handleScrollWheel(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
     final app = context.read<AppState>();
@@ -287,9 +278,9 @@ class _PlotPanelState extends State<PlotPanel> {
     final app = context.read<AppState>();
     if (app.interactionMode != 0) return;
     final isMid = (event.buttons & kMiddleMouseButton) != 0;
-    final isShiftLeft = _shiftHeld && (event.buttons & kPrimaryMouseButton) != 0;
+    final isShiftLeft = app.shiftHeld && (event.buttons & kPrimaryMouseButton) != 0;
     final isMouseLeft = event.kind == PointerDeviceKind.mouse &&
-        (event.buttons & kPrimaryMouseButton) != 0 && !_shiftHeld;
+        (event.buttons & kPrimaryMouseButton) != 0 && !app.shiftHeld;
     if (isMouseLeft) {
       // Left mouse drag → rubber band zoom (original behaviour)
       _inRubberBand = true;
