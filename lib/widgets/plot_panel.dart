@@ -25,7 +25,6 @@ class PlotPanel extends StatefulWidget {
 class _PlotPanelState extends State<PlotPanel> {
   // ignore: prefer_final_fields
   double _viewMinX = double.nan, _viewMaxX = double.nan, _viewMinY = double.nan, _viewMaxY = double.nan;
-  double? _touchX, _touchY;
 
   @override
   Widget build(BuildContext context) {
@@ -95,6 +94,7 @@ class _PlotPanelState extends State<PlotPanel> {
 
   Widget _buildChart(List<LineChartBarData> bars, PlotData plot, ThemeData theme) {
     final textColor = theme.colorScheme.onSurface.withValues(alpha: 0.6);
+    final cx = context.read<AppState>().crosshairX;
     return LineChart(
       duration: Duration.zero,
       LineChartData(
@@ -112,11 +112,9 @@ class _PlotPanelState extends State<PlotPanel> {
         borderData: FlBorderData(show: true, border: Border.all(color: theme.dividerColor.withValues(alpha: 0.3), width: 0.5)),
         lineTouchData: LineTouchData(enabled: true,
           touchCallback: (event, response) {
+            final a = context.read<AppState>();
             if (response?.lineBarSpots != null && response!.lineBarSpots!.isNotEmpty) {
-              final spot = response.lineBarSpots!.first;
-              setState(() { _touchX = spot.x; _touchY = spot.y; });
-            } else {
-              setState(() { _touchX = null; _touchY = null; });
+              a.setCrosshair(response.lineBarSpots!.first.x);
             }
           },
           handleBuiltInTouches: false,
@@ -129,8 +127,8 @@ class _PlotPanelState extends State<PlotPanel> {
           ),
         ),
         extraLinesData: ExtraLinesData(
-          verticalLines: _touchX != null ? [VerticalLine(x: _touchX!, color: const Color(0xFFFF00FF), strokeWidth: 1)] : [],
-          horizontalLines: _touchY != null ? [HorizontalLine(y: _touchY!, color: const Color(0xFFFF00FF), strokeWidth: 1)] : [],
+          verticalLines: cx != null ? [VerticalLine(x: cx, color: const Color(0xFFFF00FF), strokeWidth: 1)] : [],
+          horizontalLines: [],
         ),
         minX: _viewMinX.isNaN ? null : _viewMinX,
         maxX: _viewMaxX.isNaN ? null : _viewMaxX,
@@ -153,6 +151,13 @@ class _PlotPanelState extends State<PlotPanel> {
       text = value.toStringAsFixed(3);
     }
     return Padding(padding: const EdgeInsets.only(top: 2), child: Text(text, style: TextStyle(fontSize: 8, color: color)));
+  }
+
+  int _nearest(List<FlSpot> spots, double x) {
+    var lo = 0; var hi = spots.length - 1;
+    while (lo < hi) { final mid = (lo + hi) ~/ 2; if (spots[mid].x < x) { lo = mid + 1; } else { hi = mid; } }
+    if (lo > 0 && (lo >= spots.length || (x - spots[lo-1].x).abs() < (spots[lo].x - x).abs())) return lo - 1;
+    return lo;
   }
 
   List<List<double>> _decimate(List<List<double>> points, int maxPoints) {

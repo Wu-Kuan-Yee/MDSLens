@@ -14,6 +14,11 @@ class AppState extends ChangeNotifier {
   List<PlotData> _plots = [];
   List<PlotData> get plots => _plots;
   int selectedCol = -1, selectedRow = -1;
+  double? crosshairX;
+  final List<({String name, double y})> crosshairReadout = [];
+
+  void setCrosshair(double x) { crosshairX = x; notifyListeners(); }
+  void clearCrosshair() { crosshairX = null; crosshairReadout.clear(); notifyListeners(); }
 
   // Shot
   String _shotText = '';

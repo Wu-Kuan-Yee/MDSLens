@@ -24,7 +24,10 @@ class MainPage extends StatelessWidget {
             child: Row(children: [
               if (app.fetching) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
               const SizedBox(width: 8),
-              Expanded(child: SelectableText(app.status, style: const TextStyle(fontSize: 12))),
+              if (app.crosshairX != null && app.crosshairReadout.isNotEmpty)
+                SelectableText('x=${app.crosshairX!.toStringAsFixed(4)}  ${app.crosshairReadout.map((e) => '${e.name}:${e.y.toStringAsFixed(4)}').join('  ')}', style: const TextStyle(fontSize: 11))
+              else
+                Expanded(child: SelectableText(app.status, style: const TextStyle(fontSize: 12))),
             ]),
           ),
         ],
