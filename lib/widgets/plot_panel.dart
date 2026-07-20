@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -26,9 +27,11 @@ class PlotPanel extends StatefulWidget {
 }
 
 class _PlotPanelState extends State<PlotPanel> {
-  // ignore: prefer_final_fields
   double _viewMinX = double.nan, _viewMaxX = double.nan, _viewMinY = double.nan, _viewMaxY = double.nan;
   double? _localCrosshairY;
+  bool _shiftHeld = false;
+  bool _midPanning = false;
+  Offset? _lastMidPanPos;
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +62,7 @@ class _PlotPanelState extends State<PlotPanel> {
       onTap: widget.onTap,
       onScaleUpdate: (details) {
         final mode = context.read<AppState>().interactionMode;
-        if (mode != 0) return; // View mode only: pan + zoom combined
+        if (mode != 0 || _midPanning) return; // View mode only; mid-button handled separately
         setState(() {
           if (_viewMinX.isNaN) _initViewToData(plot);
           final box = context.findRenderObject() as RenderBox?;
@@ -86,9 +89,16 @@ class _PlotPanelState extends State<PlotPanel> {
         });
       },
       onSecondaryTapUp: (details) => _showContextMenu(context, details.globalPosition),
-      child: Padding(
-        padding: const EdgeInsets.all(2),
-        child: ClipRRect(
+      child: Focus(
+        onKeyEvent: _handlePlotKey,
+        child: Listener(
+          onPointerSignal: _handleScrollWheel,
+          onPointerDown: _handlePointerDown,
+          onPointerMove: _handlePointerMove,
+          onPointerUp: _handlePointerUp,
+          child: Padding(
+            padding: const EdgeInsets.all(2),
+            child: ClipRRect(
           borderRadius: BorderRadius.circular(4),
           child: Container(
             decoration: BoxDecoration(
@@ -109,6 +119,9 @@ class _PlotPanelState extends State<PlotPanel> {
               ),
               Padding(padding: const EdgeInsets.only(bottom: 2), child: Text(plot.xLabel, style: TextStyle(fontSize: 9, color: theme.colorScheme.onSurface.withValues(alpha: 0.7)))),
             ]),
+          ),
+        ),
+            ),
           ),
         ),
       ),
@@ -208,6 +221,72 @@ class _PlotPanelState extends State<PlotPanel> {
     while (lo < hi) { final mid = (lo + hi) ~/ 2; if (spots[mid].x < x) { lo = mid + 1; } else { hi = mid; } }
     if (lo > 0 && (lo >= spots.length || (x - spots[lo-1].x).abs() < (spots[lo].x - x).abs())) return lo - 1;
     return lo;
+  }
+
+  KeyEventResult _handlePlotKey(FocusNode node, KeyEvent event) {
+    final pressed = event is KeyDownEvent;
+    if (event.logicalKey == LogicalKeyboardKey.shiftLeft ||
+        event.logicalKey == LogicalKeyboardKey.shiftRight) {
+      _shiftHeld = pressed;
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _handleScrollWheel(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+    final app = context.read<AppState>();
+    if (app.interactionMode != 0) return;
+    final plot = app.plots[widget.plotIdx];
+    setState(() {
+      if (_viewMinX.isNaN) _initViewToData(plot);
+      final box = context.findRenderObject() as RenderBox?;
+      if (box == null || box.size.width <= 0 || box.size.height <= 0) return;
+      final steps = event.scrollDelta.dy / 53.0;
+      final factor = math.pow(1.22, -steps);
+      final cx = _viewMinX + (event.localPosition.dx / box.size.width) * (_viewMaxX - _viewMinX);
+      final cy = _viewMaxY - (event.localPosition.dy / box.size.height) * (_viewMaxY - _viewMinY);
+      _viewMinX = cx - (cx - _viewMinX) * factor;
+      _viewMaxX = cx + (_viewMaxX - cx) * factor;
+      _viewMinY = cy - (cy - _viewMinY) * factor;
+      _viewMaxY = cy + (_viewMaxY - cy) * factor;
+    });
+  }
+
+  void _handlePointerDown(PointerDownEvent event) {
+    final app = context.read<AppState>();
+    if (app.interactionMode != 0) return;
+    final isMid = event.buttons & kMiddleMouseButton != 0;
+    final isShiftLeft = _shiftHeld && event.buttons & kPrimaryMouseButton != 0;
+    if (isMid || isShiftLeft) {
+      _midPanning = true;
+      _lastMidPanPos = event.localPosition;
+    }
+  }
+
+  void _handlePointerMove(PointerMoveEvent event) {
+    if (!_midPanning || _lastMidPanPos == null) return;
+    final app = context.read<AppState>();
+    final plot = app.plots[widget.plotIdx];
+    setState(() {
+      if (_viewMinX.isNaN) _initViewToData(plot);
+      final box = context.findRenderObject() as RenderBox?;
+      if (box == null || box.size.width <= 0 || box.size.height <= 0) return;
+      final dx = event.localPosition.dx - _lastMidPanPos!.dx;
+      final dy = event.localPosition.dy - _lastMidPanPos!.dy;
+      final xScale = (_viewMaxX - _viewMinX) / box.size.width;
+      final yScale = (_viewMaxY - _viewMinY) / box.size.height;
+      _viewMinX -= dx * xScale;
+      _viewMaxX -= dx * xScale;
+      _viewMinY += dy * yScale;
+      _viewMaxY += dy * yScale;
+      _lastMidPanPos = event.localPosition;
+    });
+  }
+
+  void _handlePointerUp(PointerUpEvent event) {
+    _midPanning = false;
+    _lastMidPanPos = null;
   }
 
   void _resetView() {
