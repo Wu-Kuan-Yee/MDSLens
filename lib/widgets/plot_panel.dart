@@ -96,9 +96,10 @@ class _PlotPanelState extends State<PlotPanel> {
   Widget _buildChart(List<LineChartBarData> bars, PlotData plot, ThemeData theme) {
     final textColor = theme.colorScheme.onSurface.withValues(alpha: 0.6);
     final cx = context.read<AppState>().crosshairX;
-    return LineChart(
-      duration: Duration.zero,
-      LineChartData(
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: LineChart(
+        LineChartData(
         lineBarsData: bars,
         gridData: FlGridData(show: true, drawVerticalLine: true, drawHorizontalLine: true,
           getDrawingHorizontalLine: (v) => FlLine(color: theme.dividerColor.withValues(alpha: 0.15), strokeWidth: 0.5),
@@ -146,6 +147,7 @@ class _PlotPanelState extends State<PlotPanel> {
         minY: _viewMinY.isNaN ? null : _viewMinY,
         maxY: _viewMaxY.isNaN ? null : _viewMaxY,
       ),
+    ),
     );
   }
 
