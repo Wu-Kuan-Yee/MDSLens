@@ -15,9 +15,10 @@ class _MdsScopeAppState extends State<MdsScopeApp> {
 
   @override void initState() {
     super.initState();
+    _sysDark = WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
     ThemeChannel.init();
-    ThemeChannel.isDark().then((d) { if (mounted && d != _sysDark) setState(() => _sysDark = d); });
-    ThemeChannel.onThemeChanged.listen((d) { if (mounted && d != _sysDark) setState(() => _sysDark = d); });
+    ThemeChannel.isDark().then((d) { if (mounted) setState(() => _sysDark = d); });
+    ThemeChannel.onThemeChanged.listen((d) { if (mounted) setState(() => _sysDark = d); });
   }
 
   @override
