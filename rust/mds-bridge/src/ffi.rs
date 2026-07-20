@@ -78,6 +78,13 @@ pub extern "C" fn mds_fetch_signals(config_json: *const c_char, mode_json: *cons
 }
 
 #[no_mangle]
+pub extern "C" fn mds_fetch_signals_ssh(config_json: *const c_char, mode_json: *const c_char, ssh_settings_json: *const c_char) -> *mut c_char {
+    let mode: i32 = to_rust(mode_json).parse().unwrap_or(0);
+    let results = a::fetch_signals_ssh(to_rust(config_json), mode, to_rust(ssh_settings_json));
+    ffi_string!(serde_json::to_string(&results).unwrap_or_default())
+}
+
+#[no_mangle]
 pub extern "C" fn mds_prepare_url(url: *const c_char, settings_json: *const c_char) -> *mut c_char {
     let settings_json = to_rust(settings_json);
     let settings: a::FrbSshSettings = match serde_json::from_str(&settings_json) {

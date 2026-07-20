@@ -195,6 +195,27 @@ pub fn ssh_test(settings: FrbSshSettings) -> Result<(), String> {
 
 
 pub fn fetch_signals(config_json: String, mode: i32) -> Vec<FrbLoadedSignal> {
+    fetch_signals_inner(config_json, mode, None)
+}
+
+/// Fetch signals with SSH tunneling. If ssh_settings_json is non-empty and has a
+/// non-empty host, tunnels are created before fetch and kept alive via forget.
+pub fn fetch_signals_ssh(config_json: String, mode: i32, ssh_settings_json: String) -> Vec<FrbLoadedSignal> {
+    let ssh_settings: Option<FrbSshSettings> = if ssh_settings_json.is_empty() {
+        None
+    } else {
+        match serde_json::from_str(&ssh_settings_json) {
+            Ok(s) => Some(s),
+            Err(e) => return vec![FrbLoadedSignal {
+                column: 0, row: 0, signal: 0, shot: "".into(),
+                series: FrbSignalSeries { error: format!("SSH settings parse: {}", e), ..Default::default() },
+            }],
+        }
+    };
+    fetch_signals_inner(config_json, mode, ssh_settings)
+}
+
+fn fetch_signals_inner(config_json: String, mode: i32, ssh_settings: Option<FrbSshSettings>) -> Vec<FrbLoadedSignal> {
     let config: FrbLayoutConfig = match serde_json::from_str(&config_json) {
         Ok(c) => c,
         Err(e) => return vec![FrbLoadedSignal {
@@ -203,7 +224,7 @@ pub fn fetch_signals(config_json: String, mode: i32) -> Vec<FrbLoadedSignal> {
         }],
     };
     let read_mode = match mode { 1 => mds_core::types::DataReadMode::Medium, 2 => mds_core::types::DataReadMode::Full, _ => mds_core::types::DataReadMode::Thin };
-    let rust_config = config.into_rust();
+    let mut rust_config = config.into_rust();
 
     // Verify config was parsed correctly
     let total_signals: usize = rust_config.columns.iter()
@@ -216,10 +237,41 @@ pub fn fetch_signals(config_json: String, mode: i32) -> Vec<FrbLoadedSignal> {
             series: FrbSignalSeries { error: "No signals in config".into(), ..Default::default() },
         }];
     }
+
+    // Set up SSH tunnels if configured
+    let _tunnel_mgr: Option<mds_ssh::tunnel::SshTunnelManager> = if let Some(ssh) = ssh_settings {
+        if !ssh.host.is_empty() && ssh.mode > 0 {
+            let mut mgr = mds_ssh::tunnel::SshTunnelManager::new();
+            mgr.reload_settings(ssh.into_rust());
+            match mgr.prepare_layout(&mut rust_config) {
+                Ok(rewrote) => {
+                    if rewrote { eprintln!("[mds-bridge] SSH tunnels created for data fetch"); }
+                    Some(mgr)
+                }
+                Err(e) => {
+                    // Tunnel setup failed, log but continue with direct connection
+                    eprintln!("[mds-bridge] SSH tunnel setup failed (will try direct): {}", e);
+                    Some(mgr) // Keep mgr alive to avoid dropping active tunnels
+                }
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let callback: mds_ip::pipeline::SignalCallback = Box::new(|_| {});
-    mds_ip::pipeline::fetch_all(&rust_config, read_mode, &callback, &cancel)
-        .into_iter().map(FrbLoadedSignal::from).collect()
+    let results: Vec<FrbLoadedSignal> = mds_ip::pipeline::fetch_all(&rust_config, read_mode, &callback, &cancel)
+        .into_iter().map(FrbLoadedSignal::from).collect();
+
+    // Keep tunnel manager alive — relay threads hold the tunnels open
+    if let Some(mgr) = _tunnel_mgr {
+        std::mem::forget(mgr);
+    }
+
+    results
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────

@@ -155,7 +155,10 @@ class AppState extends ChangeNotifier {
           m['grid'] ??= true;
           return m;
         }).toList()).toList();
-        final raw = RustBridge.instance.fetchSig(jsonEncode({'columns': cols}), _dataMode.toString());
+        final sshSettings = _sshMode > 0 && _sshHost.isNotEmpty
+            ? jsonEncode({'host': _sshHost, 'port': _sshPort, 'user': _sshUser, 'password': _sshPass, 'identity_file': _sshIdentity, 'mode': _sshMode})
+            : '';
+        final raw = RustBridge.instance.fetchSigSsh(jsonEncode({'columns': cols}), _dataMode.toString(), sshSettings);
         if (raw.isEmpty) { _fetching = false; _status = 'Empty raw from Rust'; notifyListeners(); return; }
         final json = jsonDecode(raw);
         if (json is! List) { _fetching = false; _status = 'Type: ${json.runtimeType} — ${raw.length > 300 ? raw.substring(0,300) : raw}'; notifyListeners(); return; }

@@ -13,6 +13,7 @@ class RustBridge {
   final String Function(String, String) prepareUrl;
   final String Function(String) sshT;
   final String Function(String, String) fetchSig;
+  final String Function(String, String, String) fetchSigSsh;
 
   RustBridge._(this._lib)
       : parseEnv = _wrap1(_lib, 'mds_parse_environment'),
@@ -21,7 +22,8 @@ class RustBridge {
         fetchS = _wrap2(_lib, 'mds_fetch_shot'),
         prepareUrl = _wrap2(_lib, 'mds_prepare_url'),
         sshT = _wrap1(_lib, 'mds_ssh_test'),
-        fetchSig = _wrap2(_lib, 'mds_fetch_signals');
+        fetchSig = _wrap2(_lib, 'mds_fetch_signals'),
+        fetchSigSsh = _wrap3(_lib, 'mds_fetch_signals_ssh');
 
   static RustBridge get instance => _i ??= RustBridge._(_openLib());
 
