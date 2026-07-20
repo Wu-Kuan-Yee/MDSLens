@@ -4,9 +4,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/rust_bridge.dart';
-import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
-import '../services/rust_bridge.dart';
 
 class AppState extends ChangeNotifier {
   // Config
@@ -116,7 +113,6 @@ class AppState extends ChangeNotifier {
     _plots.clear();
     for (var i = 0; i < 6; i++) {
       final col = i < 3 ? 0 : 1;
-      final row = i < 3 ? i : i - 3;
       final (title, y) = panels[i];
       _columns[col].add({
         'title': title, 'x_label': 's', 'y_label': 'a.u.',
