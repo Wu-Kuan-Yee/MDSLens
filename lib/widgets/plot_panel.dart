@@ -124,7 +124,7 @@ class _PlotPanelState extends State<PlotPanel> {
           touchTooltipData: LineTouchTooltipData(
             getTooltipColor: (_) => theme.colorScheme.inverseSurface,
             getTooltipItems: (spots) => spots.map((s) => LineTooltipItem(
-              'x=${s.x.toStringAsFixed(6)}\ny=${s.y.toStringAsFixed(4)}',
+              '${s.x.toStringAsFixed(3)}, ${s.y.toStringAsFixed(4)}',
               TextStyle(fontSize: 9, color: theme.colorScheme.onInverseSurface, fontFamily: 'monospace'),
             )).toList(),
           ),
@@ -162,7 +162,7 @@ class _PlotPanelState extends State<PlotPanel> {
     for (final bar in bars) {
       if (bar.spots.isEmpty) continue;
       final idx = _nearest(bar.spots, cx);
-      parts.add('${cx.toStringAsFixed(6)}, ${bar.spots[idx].y.toStringAsFixed(4)}');
+      parts.add('${cx.toStringAsFixed(3)}, ${bar.spots[idx].y.toStringAsFixed(4)}');
     }
     if (parts.isEmpty) return null;
     return VerticalLineLabel(show: true,
