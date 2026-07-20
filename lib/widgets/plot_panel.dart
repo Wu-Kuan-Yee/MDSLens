@@ -108,12 +108,12 @@ class _PlotPanelState extends State<PlotPanel> {
           bottomTitles: AxisTitles(
             axisNameWidget: Padding(padding: const EdgeInsets.only(top: 2), child: Text(plot.xLabel, style: TextStyle(fontSize: 9, color: textColor))),
             axisNameSize: 14,
-            sideTitles: SideTitles(showTitles: true, reservedSize: 20, interval: null, getTitlesWidget: (v, _) => _axisLabel(v, textColor, isX: true)),
+            sideTitles: SideTitles(showTitles: true, reservedSize: 20, interval: null, getTitlesWidget: (v, _) => _axisLabel(v, textColor)),
           ),
           leftTitles: AxisTitles(
             axisNameWidget: Padding(padding: const EdgeInsets.only(bottom: 2), child: Text(plot.yLabel, style: TextStyle(fontSize: 9, color: textColor))),
             axisNameSize: 14,
-            sideTitles: SideTitles(showTitles: true, reservedSize: 50, interval: null, getTitlesWidget: (v, _) => _axisLabel(v, textColor, isX: false)),
+            sideTitles: SideTitles(showTitles: true, reservedSize: 50, interval: null, getTitlesWidget: (v, _) => _axisLabel(v, textColor)),
           ),
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -149,21 +149,19 @@ class _PlotPanelState extends State<PlotPanel> {
     );
   }
 
-  Widget _axisLabel(double value, Color color, {bool isX = true}) {
-    final abs = value.abs();
-    String text;
-    if (abs >= 1000 || (abs > 0 && abs < 0.001)) {
-      text = value.toStringAsExponential(1);
-    } else if (isX) {
-      text = value.toStringAsFixed(1); // X axis: 1 decimal for seconds
-    } else if (abs >= 100) {
-      text = value.toStringAsFixed(0);
-    } else if (abs >= 10) {
-      text = value.toStringAsFixed(1);
-    } else {
-      text = value.toStringAsFixed(3);
-    }
-    return Padding(padding: const EdgeInsets.only(top: 2), child: Text(text, style: TextStyle(fontSize: 8, color: color)));
+  Widget _axisLabel(double value, Color color) {
+    return Padding(padding: const EdgeInsets.only(top: 2), child: Text(_fmtAxis(value), style: TextStyle(fontSize: 8, color: color)));
+  }
+
+  String _fmtAxis(double v) {
+    final abs = v.abs();
+    if (!abs.isFinite) return '';
+    if (abs >= 1000 || (abs > 0 && abs < 0.001)) return v.toStringAsExponential(1);
+    if (abs >= 100) return v.toStringAsFixed(0);
+    if (abs >= 10) return v.toStringAsFixed(1);
+    // Adaptive: 3 decimals then strip trailing zeros for natural precision
+    final s = v.toStringAsFixed(3);
+    return s.contains('.') ? s.replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '') : s;
   }
 
   VerticalLineLabel? _crosshairLabel(List<LineChartBarData> bars, double? cx) {
