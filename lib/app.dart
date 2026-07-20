@@ -12,7 +12,7 @@ class MdsScopeApp extends StatefulWidget {
 class _MdsScopeAppState extends State<MdsScopeApp> {
   @override void initState() {
     super.initState();
-    PlatformDispatcher.instance.onPlatformBrightnessChanged = () {
+    WidgetsBinding.instance.platformDispatcher.onPlatformBrightnessChanged = () {
       if (mounted) setState(() {});
     };
   }
@@ -20,12 +20,9 @@ class _MdsScopeAppState extends State<MdsScopeApp> {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
-    final sysDark = PlatformDispatcher.instance.platformBrightness == Brightness.dark;
+    final sysDark = WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
     final mode = app.themeMode == 0 ? ThemeMode.light : app.themeMode == 1 ? ThemeMode.dark : sysDark ? ThemeMode.dark : ThemeMode.light;
-    return MaterialApp(
-      title: 'MdsScope', debugShowCheckedModeBanner: false,
-      theme: MdsScopeTheme.light, darkTheme: MdsScopeTheme.dark, themeMode: mode,
-      home: MainPage(),
-    );
+    return MaterialApp(title: 'MdsScope', debugShowCheckedModeBanner: false,
+      theme: MdsScopeTheme.light, darkTheme: MdsScopeTheme.dark, themeMode: mode, home: MainPage());
   }
 }
