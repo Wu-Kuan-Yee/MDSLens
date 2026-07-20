@@ -22,10 +22,7 @@ class _MdsScopeAppState extends State<MdsScopeApp> {
       final dark = out.toLowerCase() == 'dark';
       if (!mounted) return;
       if (dark != _sysDark) setState(() => _sysDark = dark);
-      context.read<AppState>().setStatus('Auto: defaults="$out" dark=$dark');
-    } catch (e) {
-      if (!mounted) return;
-      context.read<AppState>().setStatus('Auto err: $e');
+    } catch (_) {
     }
     Future.delayed(const Duration(seconds: 2), () { if (mounted) _checkSysTheme(); });
   }
