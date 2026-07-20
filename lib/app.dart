@@ -19,13 +19,15 @@ class _MdsScopeAppState extends State<MdsScopeApp> {
     ThemeChannel.init();
     ThemeChannel.isDark().then((d) { if (mounted) setState(() => _sysDark = d); });
     ThemeChannel.onThemeChanged.listen((d) { if (mounted) setState(() => _sysDark = d); });
-    // Also check platform brightness as backup
-    final pd = WidgetsBinding.instance.platformDispatcher.platformBrightness;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && pd == Brightness.dark && !_sysDark) {
-        setState(() => _sysDark = true);
-      }
-    });
+    // Universal platform brightness listener (macOS fallback, Linux/Windows primary)
+    WidgetsBinding.instance.platformDispatcher.onPlatformBrightnessChanged = _onBrightnessChanged;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onBrightnessChanged());
+  }
+
+  void _onBrightnessChanged() {
+    if (!mounted) return;
+    final isDark = WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
+    if (isDark != _sysDark) setState(() => _sysDark = isDark);
   }
 
   @override
