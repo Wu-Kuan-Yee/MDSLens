@@ -86,6 +86,10 @@ class AppState extends ChangeNotifier {
   String _sshIdentity = ''; String get sshIdentity => _sshIdentity;
   bool _sshConnected = false; bool get sshConnected => _sshConnected;
 
+  // View reset — incremented on each Refresh/Apply to reset zoom/pan
+  int _viewResetId = 0;
+  int get viewResetId => _viewResetId;
+
   // Fetch
   bool _fetching = false; bool get fetching => _fetching;
   String _status = 'Ready'; String get status => _status;
@@ -204,6 +208,7 @@ class AppState extends ChangeNotifier {
   void startRefresh() {
     if (_columns.isEmpty) return;
     _addToHistory(_shotText);
+    _viewResetId++; // Signal all panels to reset zoom/pan
     _fetching = true; _status = 'Fetching...'; notifyListeners();
     Future.microtask(() {
       try {

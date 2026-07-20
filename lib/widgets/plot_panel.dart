@@ -31,6 +31,7 @@ class PlotPanel extends StatefulWidget {
 class _PlotPanelState extends State<PlotPanel> {
   double _viewMinX = double.nan, _viewMaxX = double.nan, _viewMinY = double.nan, _viewMaxY = double.nan;
   double? _localCrosshairY;
+  int _lastResetId = -1;
   bool _shiftHeld = false;
   bool _midPanning = false;
   Offset? _lastMidPanPos;
@@ -41,6 +42,10 @@ class _PlotPanelState extends State<PlotPanel> {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
+    if (app.viewResetId != _lastResetId) {
+      _lastResetId = app.viewResetId;
+      _resetView();
+    }
     if (widget.plotIdx >= app.plots.length) return const SizedBox();
 
     final plot = app.plots[widget.plotIdx];
