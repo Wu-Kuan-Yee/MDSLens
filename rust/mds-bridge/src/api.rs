@@ -100,8 +100,7 @@ impl From<mds_core::types::LayoutConfig> for FrbLayoutConfig {
 
 impl From<mds_core::types::SignalSeries> for FrbSignalSeries {
     fn from(s: mds_core::types::SignalSeries) -> Self {
-        let mut points: Vec<Vec<f64>> = s.points.into_iter().map(|p| p.to_vec()).collect();
-        // Expand uniform data to explicit points so Dart gets proper X coords in seconds
+        let mut points: Vec<Vec<f64>> = s.points.iter().map(|p| p.to_vec()).collect();
         if points.is_empty() && s.has_uniform_data() {
             let n = s.uniform_y.len();
             points.reserve(n);
