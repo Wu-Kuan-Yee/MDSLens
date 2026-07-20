@@ -116,7 +116,7 @@ class _PlotPanelState extends State<PlotPanel> {
             sideTitles: SideTitles(showTitles: true, reservedSize: 50, interval: null, getTitlesWidget: (v, _) => _axisLabel(v, textColor)),
           ),
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: AxisTitles(axisNameSize: 0, sideTitles: SideTitles(showTitles: false, reservedSize: 8)),
         ),
         borderData: FlBorderData(show: true, border: Border.all(color: theme.dividerColor.withValues(alpha: 0.3), width: 0.5)),
         lineTouchData: LineTouchData(enabled: true,
