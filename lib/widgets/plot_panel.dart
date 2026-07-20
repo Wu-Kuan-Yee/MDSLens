@@ -105,8 +105,16 @@ class _PlotPanelState extends State<PlotPanel> {
           getDrawingVerticalLine: (v) => FlLine(color: theme.dividerColor.withValues(alpha: 0.15), strokeWidth: 0.5),
         ),
         titlesData: FlTitlesData(
-          bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 20, interval: null, getTitlesWidget: (v, _) => _axisLabel(v, textColor))),
-          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 42, interval: null, getTitlesWidget: (v, _) => _axisLabel(v, textColor))),
+          bottomTitles: AxisTitles(
+            axisNameWidget: Padding(padding: const EdgeInsets.only(top: 2), child: Text(plot.xLabel, style: TextStyle(fontSize: 9, color: textColor))),
+            axisNameSize: 14,
+            sideTitles: SideTitles(showTitles: true, reservedSize: 20, interval: null, getTitlesWidget: (v, _) => _axisLabel(v, textColor, isX: true)),
+          ),
+          leftTitles: AxisTitles(
+            axisNameWidget: Padding(padding: const EdgeInsets.only(bottom: 2), child: Text(plot.yLabel, style: TextStyle(fontSize: 9, color: textColor))),
+            axisNameSize: 14,
+            sideTitles: SideTitles(showTitles: true, reservedSize: 50, interval: null, getTitlesWidget: (v, _) => _axisLabel(v, textColor, isX: false)),
+          ),
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
@@ -141,11 +149,13 @@ class _PlotPanelState extends State<PlotPanel> {
     );
   }
 
-  Widget _axisLabel(double value, Color color) {
+  Widget _axisLabel(double value, Color color, {bool isX = true}) {
     final abs = value.abs();
     String text;
     if (abs >= 1000 || (abs > 0 && abs < 0.001)) {
       text = value.toStringAsExponential(1);
+    } else if (isX) {
+      text = value.toStringAsFixed(1); // X axis: 1 decimal for seconds
     } else if (abs >= 100) {
       text = value.toStringAsFixed(0);
     } else if (abs >= 10) {
