@@ -72,7 +72,7 @@ class ToolbarWidget extends StatelessWidget {
             _btn(context, 'Next', () { final s = int.tryParse(app.shotText); if (s != null) { app.shotText = (s + 1).toString(); app.startRefresh(); } }),
             _btn(context, 'Latest', () async => app.fetchLatestShot()),
             const SizedBox(width: 8),
-            _modeBtn(context, 'View', app.interactionMode == 0, () => app.interactionMode = 0),
+            _modeBtn(context, 'Zoom/Move', app.interactionMode == 0, () => app.interactionMode = 0),
             _modeBtn(context, 'Point', app.interactionMode == 1, () => app.interactionMode = 1),
           ]),
         ],
