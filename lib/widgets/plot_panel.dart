@@ -961,18 +961,18 @@ class _ColorPicker extends StatelessWidget {
 
   void _pickColor(Offset pos, StateSetter setSt, void Function(Color) setColor) {
     if (pos.dx < 0 || pos.dy < 0 || pos.dx > 280 || pos.dy > 180) return;
-    final hue = (pos.dx / 280 * 360).clamp(0, 359);
-    final val = (1.0 - pos.dy / 180).clamp(0, 1);
+    final hue = (pos.dx / 280 * 360).clamp(0.0, 359.0);
+    final val = (1.0 - pos.dy / 180).clamp(0.0, 1.0);
     setSt(() => setColor(HSVColor.fromAHSV(1, hue, 1, val).toColor()));
   }
 }
 
 class _HsvPainter extends CustomPainter {
   @override void paint(Canvas canvas, Size size) {
-    for (var x = 0; x < size.width; x++) {
-      final hue = (x / size.width * 360).toDouble();
-      final paint = Paint()..shader = LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [HSVColor.fromAHSV(1, hue, 1, 1).toColor(), Colors.black]).createShader(Rect.fromLTWH(x, 0, 1, size.height));
-      canvas.drawRect(Rect.fromLTWH(x, 0, 1, size.height), paint);
+    for (var x = 0.0; x < size.width; x += 1.0) {
+      final hue = (x / size.width * 360);
+      final paint = Paint()..shader = LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [HSVColor.fromAHSV(1.0, hue, 1.0, 1.0).toColor(), Colors.black]).createShader(Rect.fromLTWH(x, 0, 1.0, size.height));
+      canvas.drawRect(Rect.fromLTWH(x, 0, 1.0, size.height), paint);
     }
   }
   @override bool shouldRepaint(_) => false;
