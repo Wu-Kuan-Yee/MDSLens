@@ -59,11 +59,6 @@ class _PlotPanelState extends State<PlotPanel> {
     final panel = _findPanel(app);
     final theme = Theme.of(context);
 
-    // Initialise view from data bounds on first render
-    if (_viewMinX.isNaN && plot.series.any((s) => s?.points != null && s!.points!.isNotEmpty)) {
-      _initViewToData(plot, panel);
-    }
-
     // Build line bars with MinMax decimation
     final bars = <LineChartBarData>[];
     final sigSpecs = (panel['signal_specs'] as List?)?.cast<Map>() ?? [];
@@ -233,6 +228,7 @@ class _PlotPanelState extends State<PlotPanel> {
                 clipper: _RectClipper(plotRect),
                 child: LineChart(
                   LineChartData(
+                clipData: const FlClipData.all(),
                 lineBarsData: bars,
                 gridData: FlGridData(show: showGrid, drawVerticalLine: showGrid, drawHorizontalLine: showGrid,
                   getDrawingHorizontalLine: (v) => FlLine(color: theme.dividerColor.withValues(alpha: 0.15), strokeWidth: 0.5),
