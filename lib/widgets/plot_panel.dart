@@ -896,6 +896,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
   }
 
   void _addRowFromSignal(Map<String, dynamic>? s, int i) {
+    final defaultRate = context.read<AppState>().dataMode;
     _rows.add(_DSRow(
       shot: TextEditingController(text: s?['shot']?.toString() ?? widget.defaultShot),
       y: TextEditingController(text: s?['y_expr']?.toString() ?? ''),
@@ -903,7 +904,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
       server: TextEditingController(text: s?['server_ip']?.toString() ?? '202.127.204.12'),
     )..hidden = s?['hidden'] == true
      ..colorIdx = i % _presetColors.length
-     ..readMode = (s?['read_mode'] as int?) ?? 0);
+     ..readMode = (s?['read_mode'] as int?) ?? defaultRate);
     if (s != null && s['color_name'] != null) {
       final hex = s['color_name'].toString().replaceFirst('#', '');
       final c = int.tryParse(hex, radix: 16);
@@ -929,7 +930,10 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
           final treeCtrl = TextEditingController(text: last?.tree.text ?? 'pcs_east');
           final yCtrl = TextEditingController();
           final serverCtrl = TextEditingController(text: last?.server.text ?? '202.127.204.12');
-          final newRow = _DSRow(shot: shotCtrl, y: yCtrl, tree: treeCtrl, server: serverCtrl)..colorIdx = _rows.length % _presetColors.length;
+          final defaultRate = context.read<AppState>().dataMode;
+          final newRow = _DSRow(shot: shotCtrl, y: yCtrl, tree: treeCtrl, server: serverCtrl)
+            ..colorIdx = _rows.length % _presetColors.length
+            ..readMode = defaultRate;
           setState(() { _rows.add(newRow); });
           _updateSignalOptions(newRow);
         } : null),

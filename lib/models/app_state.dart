@@ -296,8 +296,24 @@ class AppState extends ChangeNotifier {
     } catch (e) { _status = 'Save error: $e'; notifyListeners(); }
   }
 
+  void _clearCustomReadModes() {
+    for (final col in _columns) {
+      for (final p in col) {
+        final sigs = p['signal_specs'] as List?;
+        if (sigs != null) {
+          for (final s in sigs) {
+            if (s is Map) {
+              s.remove('read_mode');
+            }
+          }
+        }
+      }
+    }
+  }
+
   void startRefresh() {
     if (_columns.isEmpty) return;
+    _clearCustomReadModes();
     if (_shotCtrl.text.trim().isNotEmpty) {
       _shotText = _shotCtrl.text.trim();
     }
@@ -308,6 +324,7 @@ class AppState extends ChangeNotifier {
 
   void startRefreshPreserveView() {
     if (_columns.isEmpty) return;
+    _clearCustomReadModes();
     if (_shotCtrl.text.trim().isNotEmpty) {
       _shotText = _shotCtrl.text.trim();
     }
