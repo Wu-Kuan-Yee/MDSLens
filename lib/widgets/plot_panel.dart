@@ -952,7 +952,7 @@ class _ColorPicker extends StatelessWidget {
     final current = row.customColor ?? Color(_DataSourceDialogState._presetColors[row.colorIdx % _DataSourceDialogState._presetColors.length]);
     return GestureDetector(
       onTap: () => _showColorDialog(ctx, current),
-      child: Padding(padding: const EdgeInsets.only(top: 14), child: Container(width: 22, height: 22, decoration: BoxDecoration(color: current, border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(3)))),
+      child: Container(width: 22, height: 22, decoration: BoxDecoration(color: current, border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(3))),
     );
   }
 
