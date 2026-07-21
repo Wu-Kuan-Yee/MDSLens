@@ -760,6 +760,8 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
       _treeNames = treeText.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
     } catch (_) { _treeNames = ['pcs_east']; }
     _indexLoaded = true;
+    // Load initial signal options for each row
+    for (final r in _rows) { _updateSignalOptions(r); }
     if (mounted) setState(() {});
   }
 
@@ -821,7 +823,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               SizedBox(width: 60, child: TextField(controller: _rows[i].shot, decoration: const InputDecoration(labelText: 'Shot', isDense: true), style: const TextStyle(fontSize: 12))),
               const SizedBox(width: 4),
-              SizedBox(width: 90, child: _AutocompleteField(controller: _rows[i].tree, options: _treeNames, label: 'Tree', onChanged: () => setState(() {}))),
+              SizedBox(width: 90, child: _AutocompleteField(controller: _rows[i].tree, options: _treeNames, label: 'Tree', onChanged: () { _updateSignalOptions(_rows[i]); setState(() {}); })),
               const SizedBox(width: 4),
               Expanded(child: _AutocompleteField(controller: _rows[i].y, options: _rows[i]._signalOptions, label: 'Signal', onChanged: () { _updateSignalOptions(_rows[i]); })),
               const SizedBox(width: 4),

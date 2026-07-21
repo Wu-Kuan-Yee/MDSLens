@@ -14,6 +14,7 @@ pub struct FrbSignalSpec {
     pub server_ip: String,
     pub color_name: String,
     pub hidden: bool,
+    pub read_mode: i32, // 0=Thin, 1=Medium, 2=Full (per-signal override)
 }
 
 
@@ -84,7 +85,7 @@ pub struct FrbShotInfo {
 
 impl From<mds_core::types::SignalSpec> for FrbSignalSpec {
     fn from(s: mds_core::types::SignalSpec) -> Self {
-        Self { shot: s.shot, y_expr: s.y_expr, x_expr: s.x_expr, experiment: s.experiment, server_ip: s.server_ip, color_name: s.color_name, hidden: s.hidden }
+        Self { shot: s.shot, y_expr: s.y_expr, x_expr: s.x_expr, experiment: s.experiment, server_ip: s.server_ip, color_name: s.color_name, hidden: s.hidden, read_mode: s.read_mode.map_or(0, |m| match m { mds_core::types::DataReadMode::Medium => 1, mds_core::types::DataReadMode::Full => 2, _ => 0 }) }
     }
 }
 
@@ -135,7 +136,9 @@ impl FrbLayoutConfig {
                     signal_specs: p.signal_specs.into_iter().map(|s| mds_core::types::SignalSpec {
                         shot: s.shot, y_expr: s.y_expr, x_expr: s.x_expr,
                         experiment: s.experiment, server_ip: s.server_ip,
-                        color_name: s.color_name, hidden: s.hidden, ..Default::default()
+                        color_name: s.color_name, hidden: s.hidden,
+                        read_mode: match s.read_mode { 1 => Some(mds_core::types::DataReadMode::Medium), 2 => Some(mds_core::types::DataReadMode::Full), _ => None },
+                        ..Default::default()
                     }).collect(),
                     ..Default::default()
                 }).collect()
