@@ -22,7 +22,7 @@ class ToolbarWidget extends StatelessWidget {
     final time = app.shotInfoTime.isNotEmpty ? app.shotInfoTime : (app.fetching ? '...' : '--');
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       color: theme.colorScheme.surfaceContainerHighest,
       child: Column(
         children: [
@@ -69,35 +69,35 @@ class ToolbarWidget extends StatelessWidget {
             const SizedBox(width: 4),
             _sshBtn(context, app),
           ]),
-          const SizedBox(height: 2),
+          const SizedBox(height: 6),
           Row(children: [
-            Text('Shot:', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface)),
-            const SizedBox(width: 2),
+            Text('Shot:', style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurface)),
+            const SizedBox(width: 4),
             if (app.shotHistory.isNotEmpty)
               PopupMenuButton<String>(
                 padding: EdgeInsets.zero,
-                iconSize: 14,
-                icon: Icon(Icons.arrow_drop_down, size: 14, color: theme.colorScheme.onSurface),
+                iconSize: 16,
+                icon: Icon(Icons.arrow_drop_down, size: 16, color: theme.colorScheme.onSurface),
                 tooltip: 'Shot history',
                 onSelected: (v) { app.shotText = v; app.startRefresh(); },
-                itemBuilder: (_) => app.shotHistory.map((s) => PopupMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 12)))).toList(),
+                itemBuilder: (_) => app.shotHistory.map((s) => PopupMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 13)))).toList(),
               ),
-            const SizedBox(width: 2),
+            const SizedBox(width: 4),
             SizedBox(
-              width: 80,
+              width: 95,
               child: TextField(
                 controller: app.shotCtrl,
-                style: const TextStyle(fontSize: 12),
-                decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 2), border: OutlineInputBorder()),
+                style: const TextStyle(fontSize: 13),
+                decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8), border: OutlineInputBorder()),
                 onSubmitted: (_) => app.startRefresh(),
               ),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 6),
             _btn(context, 'Apply', () => app.startRefresh()),
             _btn(context, 'Prev', () { final cur = app.shotCtrl.text.trim().isNotEmpty ? app.shotCtrl.text.trim() : app.shotText; final s = int.tryParse(cur); if (s != null) { app.shotText = (s - 1).toString(); app.startRefresh(); } }),
             _btn(context, 'Next', () { final cur = app.shotCtrl.text.trim().isNotEmpty ? app.shotCtrl.text.trim() : app.shotText; final s = int.tryParse(cur); if (s != null) { app.shotText = (s + 1).toString(); app.startRefresh(); } }),
             _btn(context, 'Latest', () async => app.fetchLatestShot()),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             _modeBtn(context, 'Zoom/Move', app.interactionMode == 0, () => app.interactionMode = 0),
             _modeBtn(context, 'Point', app.interactionMode == 1, () => app.interactionMode = 1),
           ]),
@@ -364,23 +364,23 @@ class ToolbarWidget extends StatelessWidget {
   }
 
   Widget _btn(BuildContext ctx, String label, VoidCallback onTap) {
-    return Padding(padding: const EdgeInsets.symmetric(horizontal: 2),
+    return Padding(padding: const EdgeInsets.symmetric(horizontal: 3),
       child: ElevatedButton(onPressed: onTap,
-        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: const TextStyle(fontSize: 12)),
+        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
         child: Text(label)));
   }
 
   Widget _modeBtn(BuildContext ctx, String label, bool active, VoidCallback onTap) {
-    return Padding(padding: const EdgeInsets.symmetric(horizontal: 2),
+    return Padding(padding: const EdgeInsets.symmetric(horizontal: 3),
       child: OutlinedButton(onPressed: onTap,
-        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 12, fontWeight: active ? FontWeight.bold : FontWeight.normal), backgroundColor: active ? Theme.of(ctx).colorScheme.primaryContainer : null),
+        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 13, fontWeight: active ? FontWeight.bold : FontWeight.w500), backgroundColor: active ? Theme.of(ctx).colorScheme.primaryContainer : null),
         child: Text(label)));
   }
 
   Widget _sshBtn(BuildContext ctx, AppState app) {
-    return Padding(padding: const EdgeInsets.symmetric(horizontal: 2),
+    return Padding(padding: const EdgeInsets.symmetric(horizontal: 3),
       child: ElevatedButton(onPressed: () => SshDialog.show(ctx),
-        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 12, color: app.sshConnected ? Colors.green : null)),
+        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 13, color: app.sshConnected ? Colors.green : null)),
         child: const Text('SSH')));
   }
 
@@ -394,9 +394,9 @@ class ToolbarWidget extends StatelessWidget {
 
   Widget _themeBtn(BuildContext ctx, String label, bool active, VoidCallback onTap) {
     final theme = Theme.of(ctx);
-    return Padding(padding: const EdgeInsets.symmetric(horizontal: 1),
+    return Padding(padding: const EdgeInsets.symmetric(horizontal: 2),
       child: OutlinedButton(onPressed: onTap,
-        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 11, fontWeight: active ? FontWeight.bold : FontWeight.normal, color: active ? theme.colorScheme.onPrimaryContainer : theme.colorScheme.onSurface), backgroundColor: active ? theme.colorScheme.primaryContainer : null),
+        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 12, fontWeight: active ? FontWeight.bold : FontWeight.normal, color: active ? theme.colorScheme.onPrimaryContainer : theme.colorScheme.onSurface), backgroundColor: active ? theme.colorScheme.primaryContainer : null),
         child: Text(label)));
   }
 }
