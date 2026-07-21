@@ -43,12 +43,12 @@ class _MdsScopeAppState extends State<MdsScopeApp> {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
-    final mode = app.themeMode == 0
-        ? ThemeMode.light
+    final isDark = app.themeMode == 0
+        ? false
         : app.themeMode == 1
-            ? ThemeMode.dark
-            : ThemeMode.system;
+            ? true
+            : (WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark || _sysDark);
     return MaterialApp(title: 'MdsScope', debugShowCheckedModeBanner: false,
-      theme: MdsScopeTheme.light, darkTheme: MdsScopeTheme.dark, themeMode: mode, home: const MainPage());
+      theme: MdsScopeTheme.light, darkTheme: MdsScopeTheme.dark, themeMode: isDark ? ThemeMode.dark : ThemeMode.light, home: const MainPage());
   }
 }

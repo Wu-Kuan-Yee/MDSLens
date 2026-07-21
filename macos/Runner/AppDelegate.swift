@@ -34,8 +34,15 @@ class AppDelegate: FlutterAppDelegate {
   }
 
   func isDarkMode() -> Bool {
-    let name = NSApp.effectiveAppearance.name
-    if name == .darkAqua || name == .vibrantDark { return true }
-    return name.rawValue.lowercased().contains("dark")
+    if #available(macOS 10.14, *) {
+      let appearance = NSApp.effectiveAppearance
+      if let match = appearance.bestMatch(from: [.aqua, .darkAqua]), match == .darkAqua {
+        return true
+      }
+    }
+    if let style = UserDefaults.standard.string(forKey: "AppleInterfaceStyle"), style.caseInsensitiveCompare("dark") == .orderedSame {
+      return true
+    }
+    return false
   }
 }
