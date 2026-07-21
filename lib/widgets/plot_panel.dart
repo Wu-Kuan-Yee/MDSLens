@@ -36,6 +36,7 @@ class _PlotPanelState extends State<PlotPanel> {
   int _lastResetId = -1;
   bool _midPanning = false;
   Offset? _lastMidPanPos;
+  Offset? _cursorPos;
   bool _inRubberBand = false;
   Offset? _rubberBandStart;
   Rect? _rubberBandRect;
@@ -127,7 +128,7 @@ class _PlotPanelState extends State<PlotPanel> {
         key: _listenerKey,
         onPointerSignal: _handleScrollWheel,
         onPointerDown: _handlePointerDown,
-        onPointerMove: _handlePointerMove,
+        onPointerMove: (e) { _cursorPos = e.localPosition; _handlePointerMove(e); },
         onPointerUp: _handlePointerUp,
         child: Padding(
             padding: const EdgeInsets.all(2),
@@ -310,14 +311,13 @@ class _PlotPanelState extends State<PlotPanel> {
     final plot = app.plots[widget.plotIdx];
     setState(() {
       if (_viewMinX.isNaN) _initViewToData(plot);
-      final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
-      if (chartBox == null || chartBox.size.width <= 0 || chartBox.size.height <= 0) return;
-      final chartPos = chartBox.globalToLocal(event.position);
-      if (chartPos.dx < 0 || chartPos.dy < 0 || chartPos.dx > chartBox.size.width || chartPos.dy > chartBox.size.height) return;
+      final lb = _listenerBox;
+      if (lb == null || lb.size.width <= 0 || lb.size.height <= 0) return;
+      final pos = _cursorPos ?? event.localPosition;
       final steps = event.scrollDelta.dy / 53.0;
       final factor = math.pow(1.22, -steps);
-      final cx = _pxToDataX(chartPos.dx, chartBox.size.width);
-      final cy = _pxToDataY(chartPos.dy, chartBox.size.height);
+      final cx = _pxToDataX(pos.dx, lb.size.width);
+      final cy = _pxToDataY(pos.dy, lb.size.height);
       _viewMinX = cx - (cx - _viewMinX) * factor;
       _viewMaxX = cx + (_viewMaxX - cx) * factor;
       _viewMinY = cy - (cy - _viewMinY) * factor;
@@ -374,24 +374,19 @@ class _PlotPanelState extends State<PlotPanel> {
       final r = _rubberBandRect!;
       final app = context.read<AppState>();
       final plot = app.plots[widget.plotIdx];
-      final lb = _listenerBox;
       final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
       setState(() {
         _inRubberBand = false;
         _rubberBandStart = null;
         _rubberBandRect = null;
-        if (r.width > 8 && r.height > 8 && lb != null && chartBox != null &&
-            lb.size.width > 0 && lb.size.height > 0) {
+        if (r.width > 8 && r.height > 8 && chartBox != null &&
+            chartBox.size.width > 0 && chartBox.size.height > 0) {
           if (_viewMinX.isNaN) _initViewToData(plot);
-          // Convert chart-local rubber band corners to listener-local
-          final gtl = chartBox.localToGlobal(r.topLeft);
-          final gbr = chartBox.localToGlobal(r.bottomRight);
-          final ptl = lb.globalToLocal(gtl);
-          final pbr = lb.globalToLocal(gbr);
-          final x1 = _pxToDataX(ptl.dx, lb.size.width);
-          final y1 = _pxToDataY(ptl.dy, lb.size.height);
-          final x2 = _pxToDataX(pbr.dx, lb.size.width);
-          final y2 = _pxToDataY(pbr.dy, lb.size.height);
+          // Rubber band rect is already in chart-local coords
+          final x1 = _pxToDataX(r.left, chartBox.size.width);
+          final y1 = _pxToDataY(r.top, chartBox.size.height);
+          final x2 = _pxToDataX(r.right, chartBox.size.width);
+          final y2 = _pxToDataY(r.bottom, chartBox.size.height);
           _viewMinX = x1 < x2 ? x1 : x2;
           _viewMaxX = x1 > x2 ? x1 : x2;
           _viewMinY = y1 < y2 ? y1 : y2;
@@ -825,7 +820,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
           _rows.add(_DSRow(shot: shotCtrl, y: yCtrl, tree: treeCtrl, server: serverCtrl)..colorIdx = _rows.length % _presetColors.length);
         }) : null),
       ]),
-      content: SingleChildScrollView(scrollDirection: Axis.horizontal, child: SizedBox(width: 780, child: SingleChildScrollView(
+      content: SizedBox(width: 700, height: 400, child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Row(children: [
             SizedBox(width: 62, child: Text('Shot', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4),
