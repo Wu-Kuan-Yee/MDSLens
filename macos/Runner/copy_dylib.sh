@@ -1,7 +1,7 @@
 #!/bin/sh
 # Copy libmds_bridge.dylib into the app bundle Frameworks
-RELEASE="$SRCROOT/../../rust/target/release/libmds_bridge.dylib"
-DEBUG="$SRCROOT/../../rust/target/debug/libmds_bridge.dylib"
+RELEASE="$SRCROOT/../rust/target/release/libmds_bridge.dylib"
+DEBUG="$SRCROOT/../rust/target/debug/libmds_bridge.dylib"
 DYLIB=""
 if [ "$CONFIGURATION" = "Release" ] && [ -f "$RELEASE" ]; then
   DYLIB="$RELEASE"
