@@ -107,18 +107,14 @@ class _PlotPanelState extends State<PlotPanel> {
           if (_viewMinX.isNaN) _initViewToData(plot);
           if (details.scale != 1.0) {
             final factor = 1.0 / details.scale;
-            final lb = _listenerBox;
-            if (lb != null) {
-              final localF = lb.globalToLocal(details.focalPoint);
-              final cx = _pxToDataX(localF.dx);
-              final cy = _pxToDataY(localF.dy);
-              if (cx.isFinite && cy.isFinite) {
-                _viewMinX = cx - (cx - _viewMinX) * factor;
-                _viewMaxX = cx + (_viewMaxX - cx) * factor;
-                _viewMinY = cy - (cy - _viewMinY) * factor;
-                _viewMaxY = cy + (_viewMaxY - cy) * factor;
-              }
-            }
+            // C++ uses pinchGesture->centerPoint() / event->position() — both widget-local
+            final localF = details.localFocalPoint;
+            final cx = _pxToDataX(localF.dx);
+            final cy = _pxToDataY(localF.dy);
+            _viewMinX = cx - (cx - _viewMinX) * factor;
+            _viewMaxX = cx + (_viewMaxX - cx) * factor;
+            _viewMinY = cy - (cy - _viewMinY) * factor;
+            _viewMaxY = cy + (_viewMaxY - cy) * factor;
           } else {
             final lb = _listenerBox;
             final cb = _chartBox;
@@ -589,7 +585,7 @@ class _PlotPanelState extends State<PlotPanel> {
     showDialog(
       context: ctx,
       builder: (ctx) => _DataSourceDialog(signals: sigs, defaultShot: defaultShot, onSave: () { panel['signal_specs'] = sigs; _rebuildPlots(app); }),
-    ).then((_) { app.startRefreshPreserveView(); });
+    ).then((_) { app.startRefresh(); });
   }
 
   void _rebuildPlots(AppState app) {
