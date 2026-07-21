@@ -238,13 +238,17 @@ class AppState extends ChangeNotifier {
   void startRefresh() {
     if (_columns.isEmpty) return;
     _addToHistory(_shotText);
-    _viewResetId++; // Signal all panels to reset zoom/pan
-    _fetching = true; _status = 'Fetching...'; notifyListeners();
+    _viewResetId++;
+    _doFetch();
+  }
 
   void startRefreshPreserveView() {
     if (_columns.isEmpty) return;
     _addToHistory(_shotText);
-    // No _viewResetId increment — preserve zoom/pan state
+    _doFetch();
+  }
+
+  void _doFetch() {
     _fetching = true; _status = 'Fetching...'; notifyListeners();
     Future.microtask(() {
       try {
