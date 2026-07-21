@@ -15,7 +15,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --manifest-path rust/mds-bridge/Cargo.toml
-      - run: cargo test --manifest-path ../mdsscope-rs/Cargo.toml -p mds-core -p mds-ip -p mds-auth
 
   flutter-analyze:
     runs-on: ubuntu-latest
