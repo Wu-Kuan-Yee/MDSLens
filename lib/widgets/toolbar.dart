@@ -366,21 +366,21 @@ class ToolbarWidget extends StatelessWidget {
   Widget _btn(BuildContext ctx, String label, VoidCallback onTap) {
     return Padding(padding: const EdgeInsets.symmetric(horizontal: 3),
       child: ElevatedButton(onPressed: onTap,
-        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+        style: ElevatedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)), padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
         child: Text(label)));
   }
 
   Widget _modeBtn(BuildContext ctx, String label, bool active, VoidCallback onTap) {
     return Padding(padding: const EdgeInsets.symmetric(horizontal: 3),
       child: OutlinedButton(onPressed: onTap,
-        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 13, fontWeight: active ? FontWeight.bold : FontWeight.w500), backgroundColor: active ? Theme.of(ctx).colorScheme.primaryContainer : null),
+        style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)), padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 13, fontWeight: active ? FontWeight.bold : FontWeight.w500), backgroundColor: active ? Theme.of(ctx).colorScheme.primaryContainer : null),
         child: Text(label)));
   }
 
   Widget _sshBtn(BuildContext ctx, AppState app) {
     return Padding(padding: const EdgeInsets.symmetric(horizontal: 3),
       child: ElevatedButton(onPressed: () => SshDialog.show(ctx),
-        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 13, color: app.sshConnected ? Colors.green : null)),
+        style: ElevatedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)), padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 13, color: app.sshConnected ? Colors.green : null)),
         child: const Text('SSH')));
   }
 
@@ -396,7 +396,7 @@ class ToolbarWidget extends StatelessWidget {
     final theme = Theme.of(ctx);
     return Padding(padding: const EdgeInsets.symmetric(horizontal: 2),
       child: OutlinedButton(onPressed: onTap,
-        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 12, fontWeight: active ? FontWeight.bold : FontWeight.normal, color: active ? theme.colorScheme.onPrimaryContainer : theme.colorScheme.onSurface), backgroundColor: active ? theme.colorScheme.primaryContainer : null),
+        style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)), padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 12, fontWeight: active ? FontWeight.bold : FontWeight.normal, color: active ? theme.colorScheme.onPrimaryContainer : theme.colorScheme.onSurface), backgroundColor: active ? theme.colorScheme.primaryContainer : null),
         child: Text(label)));
   }
 }
