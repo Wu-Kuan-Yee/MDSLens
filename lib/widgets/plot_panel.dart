@@ -151,8 +151,6 @@ class _PlotPanelState extends State<PlotPanel> {
               borderRadius: BorderRadius.circular(4),
             ),
             child: Column(children: [
-              if (plot.title.isNotEmpty)
-                Padding(padding: const EdgeInsets.only(top: 2), child: Text(plot.title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: theme.colorScheme.onSurface))),
               Expanded(
                 child: bars.isEmpty
                     ? Center(child: Text(plot.series.any((s) => s?.error != null && s!.error!.isNotEmpty) ? 'Error' : 'No data', style: TextStyle(color: Colors.grey, fontSize: 10)))
@@ -228,6 +226,8 @@ class _PlotPanelState extends State<PlotPanel> {
 
           return Stack(
             children: [
+              if (plot.title.isNotEmpty)
+                Positioned(left: gridLeft, right: 0, top: gridTop + 2, child: Center(child: Text(plot.title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: textColor)))),
               LineChart(
                 LineChartData(
                 lineBarsData: bars,
