@@ -445,6 +445,6 @@ class PlotData {
 
 class SeriesData {
   List<List<double>>? points;
-  final String? error;
+  String? error;
   SeriesData({this.points, this.error});
 }
