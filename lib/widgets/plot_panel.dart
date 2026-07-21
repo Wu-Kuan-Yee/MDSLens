@@ -885,7 +885,7 @@ class _AutocompleteField extends StatelessWidget {
     optionsBuilder: (v) => options.where((o) => o.toLowerCase().contains(v.text.toLowerCase())).take(20).toList(),
     onSelected: (v) { controller.text = v; onChanged?.call(); },
     fieldViewBuilder: (ctx, ctrl, node, onSubmitted) => TextField(controller: controller, focusNode: node, decoration: InputDecoration(labelText: label, isDense: true), style: const TextStyle(fontSize: 12), onChanged: (_) { controller.selection = TextSelection.collapsed(offset: controller.text.length); }),
-    optionsViewBuilder: (ctx, onSelected, opts) => Align(alignment: Alignment.topLeft, child: Material(elevation: 4, child: ConstrainedBox(constraints: const BoxConstraints(maxHeight: 200, maxWidth: 250), child: ListView.builder(padding: EdgeInsets.zero, shrinkWrap: true, itemCount: opts.length, itemBuilder: (ctx, i) => ListTile(dense: true, title: Text(opts[i], style: const TextStyle(fontSize: 12)), onTap: () => onSelected(opts[i])))))),
+    optionsViewBuilder: (ctx, onSelected, opts) { final list = opts.toList(); return Align(alignment: Alignment.topLeft, child: Material(elevation: 4, child: ConstrainedBox(constraints: const BoxConstraints(maxHeight: 200, maxWidth: 250), child: ListView.builder(padding: EdgeInsets.zero, shrinkWrap: true, itemCount: list.length, itemBuilder: (ctx, i) => ListTile(dense: true, title: Text(list[i], style: const TextStyle(fontSize: 12)), onTap: () => onSelected(list[i])))))); },
   );
 }
 
