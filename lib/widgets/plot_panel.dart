@@ -107,25 +107,18 @@ class _PlotPanelState extends State<PlotPanel> {
           if (_viewMinX.isNaN) _initViewToData(plot);
           if (details.scale != 1.0) {
             final factor = 1.0 / details.scale;
-            final chartBox = _chartBox;
-            double cx, cy;
-            if (chartBox != null) {
-              final localF = chartBox.globalToLocal(details.focalPoint);
-              final gw = chartBox.size.width - 50;
-              final gh = chartBox.size.height - 32;
-              if (gw > 0 && gh > 0) {
-                cx = _viewMinX + ((localF.dx - 50) / gw) * (_viewMaxX - _viewMinX);
-                cy = _viewMaxY - (localF.dy / gh) * (_viewMaxY - _viewMinY);
-              } else {
-                cx = (_viewMinX + _viewMaxX) / 2; cy = (_viewMinY + _viewMaxY) / 2;
+            final lb = _listenerBox;
+            if (lb != null) {
+              final localF = lb.globalToLocal(details.focalPoint);
+              final cx = _pxToDataX(localF.dx);
+              final cy = _pxToDataY(localF.dy);
+              if (cx.isFinite && cy.isFinite) {
+                _viewMinX = cx - (cx - _viewMinX) * factor;
+                _viewMaxX = cx + (_viewMaxX - cx) * factor;
+                _viewMinY = cy - (cy - _viewMinY) * factor;
+                _viewMaxY = cy + (_viewMaxY - cy) * factor;
               }
-            } else {
-              cx = (_viewMinX + _viewMaxX) / 2; cy = (_viewMinY + _viewMaxY) / 2;
             }
-            _viewMinX = cx - (cx - _viewMinX) * factor;
-            _viewMaxX = cx + (_viewMaxX - cx) * factor;
-            _viewMinY = cy - (cy - _viewMinY) * factor;
-            _viewMaxY = cy + (_viewMaxY - cy) * factor;
           } else {
             final lb = _listenerBox;
             final cb = _chartBox;
@@ -385,28 +378,24 @@ class _PlotPanelState extends State<PlotPanel> {
     return _colors[i % _colors.length];
   }
 
-  // Convert listener-local pixel coordinates to data coordinates.
-  // Accounts for axis reserved sizes (left=50, bottom=32) to map
-  // pixel positions within the actual grid area, not the full widget.
+  // Convert listener-local pixel to data coordinate using chart grid area.
   double _pxToDataX(double px) {
     final lb = _listenerBox;
     final cb = _chartBox;
     if (lb == null || cb == null || cb.size.width <= 50) return (_viewMinX + _viewMaxX) / 2;
-    final chartOffset = cb.localToGlobal(Offset.zero) - lb.localToGlobal(Offset.zero);
-    const gridLeft = 50.0; // leftTitles.reservedSize
-    final gridWidth = cb.size.width - gridLeft;
-    final gridX = px - chartOffset.dx - gridLeft;
-    return _viewMinX + (gridX / gridWidth) * (_viewMaxX - _viewMinX);
+    final chartLocal = cb.globalToLocal(lb.localToGlobal(Offset(px, 0)));
+    final gx = chartLocal.dx - 50;
+    final gw = cb.size.width - 50;
+    return _viewMinX + (gx / gw) * (_viewMaxX - _viewMinX);
   }
   double _pxToDataY(double py) {
     final lb = _listenerBox;
     final cb = _chartBox;
     if (lb == null || cb == null || cb.size.height <= 32) return (_viewMinY + _viewMaxY) / 2;
-    final chartOffset = cb.localToGlobal(Offset.zero) - lb.localToGlobal(Offset.zero);
-    const gridBottom = 32.0; // bottomTitles.reservedSize
-    final gridHeight = cb.size.height - gridBottom;
-    final gridY = py - chartOffset.dy;
-    return _viewMaxY - (gridY / gridHeight) * (_viewMaxY - _viewMinY);
+    final chartLocal = cb.globalToLocal(lb.localToGlobal(Offset(0, py)));
+    final gy = chartLocal.dy;
+    final gh = cb.size.height - 32;
+    return _viewMaxY - (gy / gh) * (_viewMaxY - _viewMinY);
   }
 
   void _handleScrollWheel(PointerSignalEvent event) {
@@ -599,8 +588,8 @@ class _PlotPanelState extends State<PlotPanel> {
     if (sigs.isEmpty) sigs.add({'experiment': 'pcs_east', 'server_ip': '202.127.204.12'});
     showDialog(
       context: ctx,
-      builder: (ctx) => _DataSourceDialog(signals: sigs, defaultShot: defaultShot, onSave: () { panel['signal_specs'] = sigs; _rebuildPlots(app); app.startRefreshPreserveView(); }),
-    );
+      builder: (ctx) => _DataSourceDialog(signals: sigs, defaultShot: defaultShot, onSave: () { panel['signal_specs'] = sigs; _rebuildPlots(app); }),
+    ).then((_) { app.startRefreshPreserveView(); });
   }
 
   void _rebuildPlots(AppState app) {
