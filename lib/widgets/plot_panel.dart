@@ -497,7 +497,7 @@ class _PlotPanelState extends State<PlotPanel> {
     if (sigs.isEmpty) sigs.add({'experiment': 'pcs_east', 'server_ip': '202.127.204.12'});
     showDialog(
       context: ctx,
-      builder: (ctx) => _DataSourceDialog(signals: sigs, defaultShot: defaultShot, onSave: () { panel['signal_specs'] = sigs; _rebuildPlots(app); if (app.loggedIn && app.shotText.isNotEmpty) app.startRefresh(); }),
+      builder: (ctx) => _DataSourceDialog(signals: sigs, defaultShot: defaultShot, onSave: () { panel['signal_specs'] = sigs; _rebuildPlots(app); }),
     );
   }
 
@@ -874,19 +874,47 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
   }
 }
 
-class _AutocompleteField extends StatelessWidget {
+class _AutocompleteField extends StatefulWidget {
   final TextEditingController controller;
   final List<String> options;
   final String label;
   final VoidCallback? onChanged;
   const _AutocompleteField({required this.controller, required this.options, required this.label, this.onChanged});
+  @override State<_AutocompleteField> createState() => _AutocompleteFieldState();
+}
 
-  @override Widget build(BuildContext ctx) => RawAutocomplete<String>(
-    optionsBuilder: (v) => options.where((o) => o.toLowerCase().contains(v.text.toLowerCase())).take(20).toList(),
-    onSelected: (v) { controller.text = v; onChanged?.call(); },
-    fieldViewBuilder: (ctx, ctrl, node, onSubmitted) => TextField(controller: controller, focusNode: node, decoration: InputDecoration(labelText: label, isDense: true), style: const TextStyle(fontSize: 12), onChanged: (_) { controller.selection = TextSelection.collapsed(offset: controller.text.length); }),
-    optionsViewBuilder: (ctx, onSelected, opts) { final list = opts.toList(); return Align(alignment: Alignment.topLeft, child: Material(elevation: 4, child: ConstrainedBox(constraints: const BoxConstraints(maxHeight: 200, maxWidth: 250), child: ListView.builder(padding: EdgeInsets.zero, shrinkWrap: true, itemCount: list.length, itemBuilder: (ctx, i) => ListTile(dense: true, title: Text(list[i], style: const TextStyle(fontSize: 12)), onTap: () => onSelected(list[i])))))); },
-  );
+class _AutocompleteFieldState extends State<_AutocompleteField> {
+  List<String> _hints = [];
+  final _node = FocusNode();
+  bool _focused = false;
+
+  @override void initState() {
+    super.initState();
+    _node.addListener(() { setState(() => _focused = _node.hasFocus); });
+    widget.controller.addListener(_update);
+  }
+
+  @override void dispose() {
+    _node.removeListener(() {});
+    widget.controller.removeListener(_update);
+    _node.dispose();
+    super.dispose();
+  }
+
+  void _update() {
+    final v = widget.controller.text.toLowerCase();
+    setState(() { _hints = v.isEmpty ? [] : widget.options.where((o) => o.toLowerCase().contains(v)).take(20).toList(); });
+  }
+
+  @override Widget build(BuildContext ctx) => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    TextField(controller: widget.controller, focusNode: _node, decoration: InputDecoration(labelText: widget.label, isDense: true), style: const TextStyle(fontSize: 12), onChanged: (_) => _update()),
+    if (_focused && _hints.isNotEmpty)
+      Container(
+        constraints: const BoxConstraints(maxHeight: 160),
+        decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300)),
+        child: ListView.builder(padding: EdgeInsets.zero, shrinkWrap: true, itemCount: _hints.length, itemBuilder: (ctx, i) => ListTile(dense: true, title: Text(_hints[i], style: const TextStyle(fontSize: 12)), onTap: () { widget.controller.text = _hints[i]; _node.unfocus(); _update(); widget.onChanged?.call(); })),
+      ),
+  ]);
 }
 
 class _ColorPicker extends StatelessWidget {
@@ -903,15 +931,19 @@ class _ColorPicker extends StatelessWidget {
   }
 
   void _showColorDialog(BuildContext ctx, Color current) {
-    // Build a full color grid (12 cols × 12 rows = 144 colors)
+    // Continuous color grid: 18 columns (hue) × 9 rows (value), with sat=0.8
     final allColors = <Color>[];
-    for (var r = 0; r < 12; r++) {
-      for (var c = 0; c < 12; c++) {
-        final hue = (c * 30 + r * 2) % 360;
-        final sat = 0.4 + (r / 12) * 0.6;
-        final val = 0.4 + (c / 12) * 0.6;
-        allColors.add(HSVColor.fromAHSV(1, hue.toDouble(), sat, val).toColor());
+    for (var row = 0; row < 9; row++) {
+      final value = 1.0 - row * 0.1; // 1.0 to 0.2
+      for (var col = 0; col < 18; col++) {
+        final hue = (col * 20) % 360;
+        allColors.add(HSVColor.fromAHSV(1, hue.toDouble(), 0.85, value).toColor());
       }
+    }
+    // Greyscale row at bottom
+    for (var g = 0; g < 18; g++) {
+      final v = (g * 15); // 0-255
+      allColors.add(Color.fromARGB(255, v, v, v));
     }
     // Add preset colors at the top
     final topColors = _DataSourceDialogState._presetColors;
@@ -920,16 +952,16 @@ class _ColorPicker extends StatelessWidget {
     showDialog(context: ctx, builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) {
       return AlertDialog(
         title: Row(children: [const Text('Curve Color'), const SizedBox(width: 12), Container(width: 28, height: 28, decoration: BoxDecoration(color: selected, border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(3)))]),
-        content: SizedBox(width: 360, child: SingleChildScrollView(
+        content: SizedBox(width: 380, child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Wrap(spacing: 2, runSpacing: 2, children: topColors.map((c) => GestureDetector(
+            Wrap(spacing: 1, runSpacing: 1, children: topColors.map((c) => GestureDetector(
               onTap: () { selected = Color(c); setSt(() {}); },
-              child: Container(width: 24, height: 24, decoration: BoxDecoration(color: Color(c), border: Border.all(color: selected == Color(c) ? Colors.black : Colors.grey, width: selected == Color(c) ? 2 : 1), borderRadius: BorderRadius.circular(2))),
+              child: Container(width: 26, height: 26, decoration: BoxDecoration(color: Color(c), border: Border.all(color: selected == Color(c) ? Colors.black : Colors.grey, width: selected == Color(c) ? 2 : 1), borderRadius: BorderRadius.circular(2))),
             )).toList()),
             const SizedBox(height: 8),
-            Wrap(spacing: 2, runSpacing: 2, children: allColors.map((c) => GestureDetector(
+            Wrap(spacing: 1, runSpacing: 1, children: allColors.map((c) => GestureDetector(
               onTap: () { selected = c; setSt(() {}); },
-              child: Container(width: 20, height: 20, decoration: BoxDecoration(color: c, border: Border.all(color: selected.value == c.value ? Colors.black : Colors.grey, width: selected.value == c.value ? 2 : 1), borderRadius: BorderRadius.circular(2))),
+              child: Container(width: 18, height: 18, decoration: BoxDecoration(color: c, border: Border.all(color: selected.value == c.value ? Colors.black : Colors.grey, width: selected.value == c.value ? 2 : 1), borderRadius: BorderRadius.circular(2))),
             )).toList()),
             const SizedBox(height: 8),
             Row(children: [const Text('#'), Expanded(child: TextField(decoration: const InputDecoration(isDense: true), onSubmitted: (v) { final cleaned = v.replaceFirst('#', ''); final c = int.tryParse(cleaned, radix: 16); if (c != null && cleaned.length == 6) { selected = Color(0xFF000000 | c); setSt(() {}); } }))]),
