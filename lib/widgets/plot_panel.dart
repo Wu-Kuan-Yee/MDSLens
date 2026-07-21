@@ -109,18 +109,16 @@ class _PlotPanelState extends State<PlotPanel> {
             _viewMinY = cy - (cy - _viewMinY) * factor;
             _viewMaxY = cy + (_viewMaxY - cy) * factor;
           } else {
-            // Pan: pixel delta → data delta
             final w = chartBox.size.width - _plotL - _plotR;
             final h = chartBox.size.height - _plotB;
             if (w > 0 && h > 0) {
-            if (w > 0 && h > 0) {
-            final xScale = (_viewMaxX - _viewMinX) / w;
-            final yScale = (_viewMaxY - _viewMinY) / h;
-            _viewMinX -= details.focalPointDelta.dx * xScale;
-            _viewMaxX -= details.focalPointDelta.dx * xScale;
-            _viewMinY += details.focalPointDelta.dy * yScale;
-            _viewMaxY += details.focalPointDelta.dy * yScale;
-          }
+              final xScale = (_viewMaxX - _viewMinX) / w;
+              final yScale = (_viewMaxY - _viewMinY) / h;
+              _viewMinX -= details.focalPointDelta.dx * xScale;
+              _viewMaxX -= details.focalPointDelta.dx * xScale;
+              _viewMinY += details.focalPointDelta.dy * yScale;
+              _viewMaxY += details.focalPointDelta.dy * yScale;
+            }
           }
         });
       },
