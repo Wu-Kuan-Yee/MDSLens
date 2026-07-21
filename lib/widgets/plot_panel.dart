@@ -809,14 +809,16 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
       title: Row(children: [
         const Text('Data Source Setup'),
         const Spacer(),
-        IconButton(icon: const Icon(Icons.add, size: 18), tooltip: 'Add Curve', onPressed: _rows.length < 8 ? () => setState(() {
+        IconButton(icon: const Icon(Icons.add, size: 18), tooltip: 'Add Curve', onPressed: _rows.length < 8 ? () {
           final last = _rows.isNotEmpty ? _rows.last : null;
           final shotCtrl = TextEditingController(text: last?.shot.text ?? widget.defaultShot);
           final treeCtrl = TextEditingController(text: last?.tree.text ?? 'pcs_east');
           final yCtrl = TextEditingController();
           final serverCtrl = TextEditingController(text: last?.server.text ?? '202.127.204.12');
-          _rows.add(_DSRow(shot: shotCtrl, y: yCtrl, tree: treeCtrl, server: serverCtrl)..colorIdx = _rows.length % _presetColors.length);
-        }) : null),
+          final newRow = _DSRow(shot: shotCtrl, y: yCtrl, tree: treeCtrl, server: serverCtrl)..colorIdx = _rows.length % _presetColors.length;
+          setState(() { _rows.add(newRow); });
+          _updateSignalOptions(newRow);
+        } : null),
       ]),
       content: SizedBox(
         height: 400,
