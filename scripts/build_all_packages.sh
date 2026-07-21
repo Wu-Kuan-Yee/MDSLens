@@ -4,7 +4,7 @@
 
 set -e
 
-VERSION="3.0.0"
+VERSION="7.0.0"
 DIST_DIR="build/dist"
 mkdir -p "$DIST_DIR"
 

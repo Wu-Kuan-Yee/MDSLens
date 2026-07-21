@@ -39,7 +39,7 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
     if (!mounted) return;
     setState(() {
       _checkingUpdate = false;
-      _updateStatus = 'You are running the latest version (v3.0.0)';
+      _updateStatus = 'You are running the latest version (v7.0.0)';
     });
     _openUrl('https://github.com/wwktz/MdsScope/releases');
   }
@@ -169,8 +169,8 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
               ),
               child: Column(
                 children: [
-                  _buildRow('MdsScope Version', const Text('3.0.0', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)), context: context),
-                  _buildRow('Git Version', const Text('v3.0.0-flutter', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)), context: context),
+                  _buildRow('MdsScope Version', const Text('7.0.0', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)), context: context),
+                  _buildRow('Git Version', const Text('v7.0.0-flutter', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)), context: context),
                   _buildRow('Framework & Engine', const Text('Flutter Desktop & Rust FFI (libmds_bridge)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)), context: context),
                   _buildRow('System', Text(sysText, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis), context: context),
                   _buildRow(
