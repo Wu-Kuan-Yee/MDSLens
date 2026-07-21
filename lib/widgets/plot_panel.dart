@@ -497,7 +497,7 @@ class _PlotPanelState extends State<PlotPanel> {
     if (sigs.isEmpty) sigs.add({'experiment': 'pcs_east', 'server_ip': '202.127.204.12'});
     showDialog(
       context: ctx,
-      builder: (ctx) => _DataSourceDialog(signals: sigs, defaultShot: defaultShot, onSave: () { panel['signal_specs'] = sigs; for (final s in sigs) { final ss = s['shot']?.toString()??''; if (ss.isNotEmpty && ss != defaultShot) { panel['shot'] = ss; break; } } _rebuildPlots(app); if (app.loggedIn && app.shotText.isNotEmpty) app.startRefresh(); }),
+      builder: (ctx) => _DataSourceDialog(signals: sigs, defaultShot: defaultShot, onSave: () { panel['signal_specs'] = sigs; _rebuildPlots(app); if (app.loggedIn && app.shotText.isNotEmpty) app.startRefresh(); }),
     );
   }
 
@@ -835,7 +835,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
               const SizedBox(width: 4),
               _ColorPicker(row: _rows[i], onChanged: () => setState(() {})),
               const SizedBox(width: 4),
-              SizedBox(width: 42, child: Checkbox(value: _rows[i].hidden, onChanged: (v) => setState(() => _rows[i].hidden = v ?? false))),
+              Padding(padding: const EdgeInsets.only(top: 14), child: Column(children: [const Text('Hide', style: TextStyle(fontSize: 10, color: Colors.grey)), Checkbox(value: _rows[i].hidden, onChanged: (v) => setState(() => _rows[i].hidden = v ?? false))])),
               const SizedBox(width: 2),
               SizedBox(width: 80, child: DropdownButtonFormField<int>(initialValue: _rows[i].readMode, decoration: const InputDecoration(labelText: 'Data', isDense: true), style: const TextStyle(fontSize: 11), items: List.generate(3, (j) => DropdownMenuItem(value: j, child: Text(_modes[j], style: const TextStyle(fontSize: 11)))), onChanged: (v) { if (v != null) setState(() => _rows[i].readMode = v); })),
               const SizedBox(width: 2),
@@ -881,10 +881,11 @@ class _AutocompleteField extends StatelessWidget {
   final VoidCallback? onChanged;
   const _AutocompleteField({required this.controller, required this.options, required this.label, this.onChanged});
 
-  @override Widget build(BuildContext ctx) => Autocomplete<String>(
-    optionsBuilder: (v) => v.text.isEmpty ? [] : options.where((o) => o.toLowerCase().contains(v.text.toLowerCase())).toList(),
+  @override Widget build(BuildContext ctx) => RawAutocomplete<String>(
+    optionsBuilder: (v) => options.where((o) => o.toLowerCase().contains(v.text.toLowerCase())).take(20).toList(),
     onSelected: (v) { controller.text = v; onChanged?.call(); },
-    fieldViewBuilder: (ctx, ctrl, node, onSubmitted) => TextField(controller: controller, focusNode: node, decoration: InputDecoration(labelText: label, isDense: true), style: const TextStyle(fontSize: 12)),
+    fieldViewBuilder: (ctx, ctrl, node, onSubmitted) => TextField(controller: controller, focusNode: node, decoration: InputDecoration(labelText: label, isDense: true), style: const TextStyle(fontSize: 12), onChanged: (_) { controller.selection = TextSelection.collapsed(offset: controller.text.length); }),
+    optionsViewBuilder: (ctx, onSelected, opts) => Align(alignment: Alignment.topLeft, child: Material(elevation: 4, child: ConstrainedBox(constraints: const BoxConstraints(maxHeight: 200, maxWidth: 250), child: ListView.builder(padding: EdgeInsets.zero, shrinkWrap: true, itemCount: opts.length, itemBuilder: (ctx, i) => ListTile(dense: true, title: Text(opts[i], style: const TextStyle(fontSize: 12)), onTap: () => onSelected(opts[i])))))),
   );
 }
 
@@ -902,24 +903,44 @@ class _ColorPicker extends StatelessWidget {
   }
 
   void _showColorDialog(BuildContext ctx, Color current) {
-    showDialog(context: ctx, builder: (ctx) => AlertDialog(
-      title: const Text('Curve Color'),
-      content: SingleChildScrollView(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Wrap(spacing: 4, runSpacing: 4, children: _DataSourceDialogState._presetColors.map((c) => GestureDetector(
-            onTap: () { row.customColor = Color(c); row.colorIdx = _DataSourceDialogState._presetColors.indexOf(c); onChanged(); Navigator.pop(ctx); },
-            child: Container(width: 28, height: 28, decoration: BoxDecoration(color: Color(c), border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(3))),
-          )).toList()),
-          const SizedBox(height: 12),
-          ConstrainedBox(constraints: const BoxConstraints(maxWidth: 200), child: TextField(decoration: const InputDecoration(labelText: 'Custom hex', hintText: '#ff0000', isDense: true), onSubmitted: (v) {
-            final cleaned = v.replaceFirst('#', '');
-            final c = int.tryParse(cleaned, radix: 16);
-            if (c != null && cleaned.length == 6) { row.customColor = Color(0xFF000000 | c); onChanged(); Navigator.pop(ctx); }
-          })),
-        ]),
-      ),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel'))],
-    ));
+    // Build a full color grid (12 cols × 12 rows = 144 colors)
+    final allColors = <Color>[];
+    for (var r = 0; r < 12; r++) {
+      for (var c = 0; c < 12; c++) {
+        final hue = (c * 30 + r * 2) % 360;
+        final sat = 0.4 + (r / 12) * 0.6;
+        final val = 0.4 + (c / 12) * 0.6;
+        allColors.add(HSVColor.fromAHSV(1, hue.toDouble(), sat, val).toColor());
+      }
+    }
+    // Add preset colors at the top
+    final topColors = _DataSourceDialogState._presetColors;
+
+    Color selected = current;
+    showDialog(context: ctx, builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) {
+      return AlertDialog(
+        title: Row(children: [const Text('Curve Color'), const SizedBox(width: 12), Container(width: 28, height: 28, decoration: BoxDecoration(color: selected, border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(3)))]),
+        content: SizedBox(width: 360, child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Wrap(spacing: 2, runSpacing: 2, children: topColors.map((c) => GestureDetector(
+              onTap: () { selected = Color(c); setSt(() {}); },
+              child: Container(width: 24, height: 24, decoration: BoxDecoration(color: Color(c), border: Border.all(color: selected == Color(c) ? Colors.black : Colors.grey, width: selected == Color(c) ? 2 : 1), borderRadius: BorderRadius.circular(2))),
+            )).toList()),
+            const SizedBox(height: 8),
+            Wrap(spacing: 2, runSpacing: 2, children: allColors.map((c) => GestureDetector(
+              onTap: () { selected = c; setSt(() {}); },
+              child: Container(width: 20, height: 20, decoration: BoxDecoration(color: c, border: Border.all(color: selected.value == c.value ? Colors.black : Colors.grey, width: selected.value == c.value ? 2 : 1), borderRadius: BorderRadius.circular(2))),
+            )).toList()),
+            const SizedBox(height: 8),
+            Row(children: [const Text('#'), Expanded(child: TextField(decoration: const InputDecoration(isDense: true), onSubmitted: (v) { final cleaned = v.replaceFirst('#', ''); final c = int.tryParse(cleaned, radix: 16); if (c != null && cleaned.length == 6) { selected = Color(0xFF000000 | c); setSt(() {}); } }))]),
+          ]),
+        )),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(onPressed: () { row.customColor = selected; row.colorIdx = topColors.indexWhere((c) => c == selected.value); if (row.colorIdx < 0) row.colorIdx = 0; onChanged(); Navigator.pop(ctx); }, child: const Text('OK')),
+        ],
+      );
+    }));
   }
 }
 
