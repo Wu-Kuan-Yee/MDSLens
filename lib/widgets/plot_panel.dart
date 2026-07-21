@@ -770,6 +770,13 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
 
   static InputDecoration _dsDeco() => const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 8), border: OutlineInputBorder());
 
+  static Widget _hdrCell(String text, double rightPad) {
+    return Padding(
+      padding: EdgeInsets.only(right: rightPad),
+      child: Center(child: Text(text, style: TextStyle(fontSize: 11, color: Colors.grey.shade600))),
+    );
+  }
+
   Future<String> _loadAsset(String path) async {
     final bundle = DefaultAssetBundle.of(context);
     return await bundle.loadString(path);
@@ -817,39 +824,44 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
           scrollDirection: Axis.horizontal,
           child: IntrinsicWidth(
             child: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Row(children: [
-                  SizedBox(width: 60, child: Text('Shot', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4),
-                  SizedBox(width: 90, child: Text('Tree', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4),
-                  SizedBox(width: 150, child: Text('Signal', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4),
-                  SizedBox(width: 110, child: Text('Server IP', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4),
-                  SizedBox(width: 30, child: Center(child: Text('Color', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)))), const SizedBox(width: 4),
-                  SizedBox(width: 44, child: Center(child: Text('Hide', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)))), const SizedBox(width: 2),
-                  SizedBox(width: 100, child: Text('Data', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4),
-                  SizedBox(width: 26, child: Text('Del', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))),
-                ]),
-                const SizedBox(height: 4),
-                for (var i = 0; i < _rows.length; i++) ...[
-                  if (i > 0) const Divider(height: 6),
-                  Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-                    SizedBox(width: 60, child: TextField(controller: _rows[i].shot, decoration: _dsDeco(), style: const TextStyle(fontSize: 12))),
-                    const SizedBox(width: 4),
-                    SizedBox(width: 90, child: _AutocompleteField(controller: _rows[i].tree, options: _treeNames, label: 'Tree', onChanged: () { _updateSignalOptions(_rows[i]); setState(() {}); })),
-                    const SizedBox(width: 4),
-                    SizedBox(width: 150, child: _AutocompleteField(controller: _rows[i].y, options: _rows[i]._signalOptions, label: 'Signal', onChanged: () { _updateSignalOptions(_rows[i]); })),
-                    const SizedBox(width: 4),
-                    SizedBox(width: 110, child: TextField(controller: _rows[i].server, decoration: _dsDeco(), style: const TextStyle(fontSize: 12))),
-                    const SizedBox(width: 4),
-                    SizedBox(width: 30, child: Center(child: _ColorPicker(row: _rows[i], onChanged: () => setState(() {})))),
-                    const SizedBox(width: 4),
-                    SizedBox(width: 44, child: Center(child: Checkbox(value: _rows[i].hidden, onChanged: (v) => setState(() => _rows[i].hidden = v ?? false)))),
-                    const SizedBox(width: 2),
-                    SizedBox(width: 100, child: DropdownButtonFormField<int>(initialValue: _rows[i].readMode, decoration: _dsDeco(), style: const TextStyle(fontSize: 11), items: List.generate(3, (j) => DropdownMenuItem(value: j, child: Text(_modes[j], style: const TextStyle(fontSize: 11)))), onChanged: (v) { if (v != null) setState(() => _rows[i].readMode = v); })),
-                    const SizedBox(width: 4),
-                    SizedBox(width: 26, child: _rows.length > 1 ? GestureDetector(onTap: () => setState(() { _rows[i].dispose(); _rows.removeAt(i); }), child: const Icon(Icons.close, size: 16, color: Colors.red)) : const SizedBox()),
+              child: Table(
+                columnWidths: const {
+                  0: FixedColumnWidth(64),
+                  1: FixedColumnWidth(94),
+                  2: FixedColumnWidth(154),
+                  3: FixedColumnWidth(114),
+                  4: FixedColumnWidth(34),
+                  5: FixedColumnWidth(46),
+                  6: FixedColumnWidth(104),
+                  7: FixedColumnWidth(26),
+                },
+                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                children: [
+                  TableRow(children: [
+                    _hdrCell('Shot', 4),
+                    _hdrCell('Tree', 4),
+                    _hdrCell('Signal', 4),
+                    _hdrCell('Server IP', 4),
+                    _hdrCell('Color', 4),
+                    _hdrCell('Hide', 2),
+                    _hdrCell('Data', 4),
+                    _hdrCell('Del', 0),
                   ]),
+                  for (var i = 0; i < _rows.length; i++)
+                    TableRow(children: [
+                      Padding(padding: const EdgeInsets.only(right: 4), child: TextField(controller: _rows[i].shot, decoration: _dsDeco(), style: const TextStyle(fontSize: 12))),
+                      Padding(padding: const EdgeInsets.only(right: 4), child: _AutocompleteField(controller: _rows[i].tree, options: _treeNames, label: 'Tree', onChanged: () { _updateSignalOptions(_rows[i]); setState(() {}); })),
+                      Padding(padding: const EdgeInsets.only(right: 4), child: _AutocompleteField(controller: _rows[i].y, options: _rows[i]._signalOptions, label: 'Signal', onChanged: () { _updateSignalOptions(_rows[i]); })),
+                      Padding(padding: const EdgeInsets.only(right: 4), child: TextField(controller: _rows[i].server, decoration: _dsDeco(), style: const TextStyle(fontSize: 12))),
+                      Padding(padding: const EdgeInsets.only(right: 4), child: Center(child: _ColorPicker(row: _rows[i], onChanged: () => setState(() {})))),
+                      Padding(padding: const EdgeInsets.only(right: 2), child: Center(child: Checkbox(value: _rows[i].hidden, onChanged: (v) => setState(() => _rows[i].hidden = v ?? false)))),
+                      Padding(padding: const EdgeInsets.only(right: 4), child: DropdownButtonFormField<int>(initialValue: _rows[i].readMode, decoration: _dsDeco(), style: const TextStyle(fontSize: 11), items: List.generate(3, (j) => DropdownMenuItem(value: j, child: Text(_modes[j], style: const TextStyle(fontSize: 11)))), onChanged: (v) { if (v != null) setState(() => _rows[i].readMode = v); })),
+                      _rows.length > 1
+                          ? GestureDetector(onTap: () => setState(() { _rows[i].dispose(); _rows.removeAt(i); }), child: const Icon(Icons.close, size: 16, color: Colors.red))
+                          : const SizedBox(width: 16),
+                    ]),
                 ],
-              ]),
+              ),
             ),
           ),
         ),
