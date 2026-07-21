@@ -78,16 +78,16 @@ class _PlotPanelState extends State<PlotPanel> {
       ));
     }
 
-    return GestureDetector(
-      onTapDown: (details) {
-        widget.onTap?.call();
+    return Stack(children: [
+      GestureDetector(
+        onTapDown: (details) {
+          widget.onTap?.call();
         final a = context.read<AppState>();
         if (a.interactionMode == 1 && a.pointLocked) {
           a.pointLocked = false;
           // Set crosshair at tap position using full widget mapping
-          final box = context.findRenderObject() as RenderBox?;
-          if (box != null && box.size.width > 0 && _viewMinX.isFinite) {
-            a.setCrosshair(_pxToDataX(details.localPosition.dx, box.size.width));
+          if (_viewMinX.isFinite) {
+            a.setCrosshair(_pxToDataX(details.localPosition.dx));
           }
         }
       },
@@ -96,24 +96,19 @@ class _PlotPanelState extends State<PlotPanel> {
         if (mode != 0 || _midPanning || _inRubberBand) return;
         setState(() {
           if (_viewMinX.isNaN) _initViewToData(plot);
-          final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
-          if (chartBox == null || chartBox.size.width <= _plotL + _plotR || chartBox.size.height <= _plotB) return;
           if (details.scale != 1.0) {
             final factor = 1.0 / details.scale;
-            final globalFocal = (context.findRenderObject() as RenderBox?)?.localToGlobal(details.focalPoint);
-            final chartLocalFocal = globalFocal != null ? chartBox.globalToLocal(globalFocal) : details.focalPoint;
-            final cx = _pxToDataX(chartLocalFocal.dx, chartBox.size.width);
-            final cy = _pxToDataY(chartLocalFocal.dy, chartBox.size.height);
+            final cx = _pxToDataX(details.focalPoint.dx);
+            final cy = _pxToDataY(details.focalPoint.dy);
             _viewMinX = cx - (cx - _viewMinX) * factor;
             _viewMaxX = cx + (_viewMaxX - cx) * factor;
             _viewMinY = cy - (cy - _viewMinY) * factor;
             _viewMaxY = cy + (_viewMaxY - cy) * factor;
           } else {
-            final w = chartBox.size.width - _plotL - _plotR;
-            final h = chartBox.size.height - _plotB;
-            if (w > 0 && h > 0) {
-              final xScale = (_viewMaxX - _viewMinX) / w;
-              final yScale = (_viewMaxY - _viewMinY) / h;
+            final lb = _listenerBox;
+            if (lb != null && lb.size.width > 0 && lb.size.height > 0) {
+              final xScale = (_viewMaxX - _viewMinX) / lb.size.width;
+              final yScale = (_viewMaxY - _viewMinY) / lb.size.height;
               _viewMinX -= details.focalPointDelta.dx * xScale;
               _viewMaxX -= details.focalPointDelta.dx * xScale;
               _viewMinY += details.focalPointDelta.dy * yScale;
@@ -151,21 +146,6 @@ class _PlotPanelState extends State<PlotPanel> {
                     ? Center(child: Text(plot.series.any((s) => s?.error != null && s!.error!.isNotEmpty) ? 'Error' : 'No data', style: TextStyle(color: Colors.grey, fontSize: 10)))
                     : Stack(key: _chartAreaKey, children: [
                         _buildChart(bars, plot, panel, theme),
-                        if (_inRubberBand && _rubberBandRect != null)
-                          Positioned(
-                            left: _rubberBandRect!.left,
-                            top: _rubberBandRect!.top,
-                            width: _rubberBandRect!.width,
-                            height: _rubberBandRect!.height,
-                            child: IgnorePointer(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: const Color(0x180000FF),
-                                  border: Border.all(color: const Color(0xFF0000FF), width: 1),
-                                ),
-                              ),
-                            ),
-                          ),
                       ]),
               ),
               Padding(padding: const EdgeInsets.only(bottom: 2), child: Text(plot.xLabel, style: TextStyle(fontSize: 9, color: theme.colorScheme.onSurface.withValues(alpha: 0.7)))),
@@ -174,7 +154,19 @@ class _PlotPanelState extends State<PlotPanel> {
         ),
         ),
       ),
-    );
+      if (_inRubberBand && _rubberBandRect != null)
+        Positioned(
+          left: _rubberBandRect!.left,
+          top: _rubberBandRect!.top,
+          width: _rubberBandRect!.width,
+          height: _rubberBandRect!.height,
+          child: IgnorePointer(
+            child: Container(
+              decoration: BoxDecoration(color: const Color(0x180000FF), border: Border.all(color: const Color(0xFF0000FF), width: 1)),
+            ),
+          ),
+        ),
+    ]);
   }
 
   Widget _buildChart(List<LineChartBarData> bars, PlotData plot, Map<String, dynamic> panel, ThemeData theme) {
@@ -287,32 +279,16 @@ class _PlotPanelState extends State<PlotPanel> {
     return _colors[i % _colors.length];
   }
 
-  // Axis label reserved space within chart Stack (fl_chart)
-  static const _plotL = 50.0;  // left axis
-  static const _plotR = 56.0;  // right: 28 axis + 28 chart padding
-  static const _plotB = 20.0;  // bottom axis
-
-  // Convert chart-local pixel to data XY. px/py are relative to the Stack widget.
-  double _pxToDataX(double px, double chartW) {
-    final pw = chartW - _plotL - _plotR;
-    if (pw <= 0) return _viewMinX;
-    return _viewMinX + ((px - _plotL) / pw).clamp(0.0, 1.0) * (_viewMaxX - _viewMinX);
-  }
-  double _pxToDataY(double py, double chartH) {
-    final ph = chartH - _plotB;
-    if (ph <= 0) return _viewMaxY;
-    return _viewMaxY - ((py / ph).clamp(0.0, 1.0)) * (_viewMaxY - _viewMinY);
-  }
-
-  /// Convert Listener-local position to chart-local (for rubber band overlay)
-  Offset? _listenerToChart(Offset listenerPos) {
+  // Simple fraction-based pixel→data conversion using listener-local coordinates
+  double _pxToDataX(double px) {
     final lb = _listenerBox;
-    final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
-    if (lb == null || chartBox == null) return null;
-    try {
-      final global = lb.localToGlobal(listenerPos);
-      return chartBox.globalToLocal(global);
-    } catch (_) { return null; }
+    if (lb == null || lb.size.width <= 0) return (_viewMinX + _viewMaxX) / 2;
+    return _viewMinX + (px / lb.size.width) * (_viewMaxX - _viewMinX);
+  }
+  double _pxToDataY(double py) {
+    final lb = _listenerBox;
+    if (lb == null || lb.size.height <= 0) return (_viewMinY + _viewMaxY) / 2;
+    return _viewMaxY - (py / lb.size.height) * (_viewMaxY - _viewMinY);
   }
 
   void _handleScrollWheel(PointerSignalEvent event) {
@@ -322,21 +298,11 @@ class _PlotPanelState extends State<PlotPanel> {
     final plot = app.plots[widget.plotIdx];
     setState(() {
       if (_viewMinX.isNaN) _initViewToData(plot);
-      final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
-      if (chartBox == null || chartBox.size.width <= _plotL + _plotR || chartBox.size.height <= _plotB) return;
       final pos = _cursorPos ?? event.localPosition;
-      // Convert listener-local to chart-local
-      final lb = _listenerBox;
-      Offset? chartPos;
-      if (lb != null) {
-        final g = lb.localToGlobal(pos);
-        chartPos = chartBox.globalToLocal(g);
-      }
-      if (chartPos == null) return;
       final steps = event.scrollDelta.dy / 53.0;
       final factor = math.pow(1.22, -steps);
-      final cx = _pxToDataX(chartPos.dx, chartBox.size.width);
-      final cy = _pxToDataY(chartPos.dy, chartBox.size.height);
+      final cx = _pxToDataX(pos.dx);
+      final cy = _pxToDataY(pos.dy);
       _viewMinX = cx - (cx - _viewMinX) * factor;
       _viewMaxX = cx + (_viewMaxX - cx) * factor;
       _viewMinY = cy - (cy - _viewMinY) * factor;
@@ -352,10 +318,9 @@ class _PlotPanelState extends State<PlotPanel> {
     final isMouseLeft = event.kind == PointerDeviceKind.mouse &&
         (event.buttons & kPrimaryMouseButton) != 0 && !app.shiftHeld;
     if (isMouseLeft) {
-      final cp = _listenerToChart(event.localPosition) ?? event.localPosition;
       _inRubberBand = true;
-      _rubberBandStart = cp;
-      _rubberBandRect = Rect.fromPoints(cp, cp);
+      _rubberBandStart = event.localPosition;
+      _rubberBandRect = Rect.fromPoints(event.localPosition, event.localPosition);
     } else if (isMid || isShiftLeft) {
       _midPanning = true;
       _lastMidPanPos = event.localPosition;
@@ -364,8 +329,7 @@ class _PlotPanelState extends State<PlotPanel> {
 
   void _handlePointerMove(PointerMoveEvent event) {
     if (_inRubberBand && _rubberBandStart != null) {
-      final cp = _listenerToChart(event.localPosition) ?? event.localPosition;
-      setState(() { _rubberBandRect = Rect.fromPoints(_rubberBandStart!, cp); });
+      setState(() { _rubberBandRect = Rect.fromPoints(_rubberBandStart!, event.localPosition); });
       return;
     }
     if (!_midPanning || _lastMidPanPos == null) return;
@@ -393,19 +357,16 @@ class _PlotPanelState extends State<PlotPanel> {
       final r = _rubberBandRect!;
       final app = context.read<AppState>();
       final plot = app.plots[widget.plotIdx];
-      final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
       setState(() {
         _inRubberBand = false;
         _rubberBandStart = null;
         _rubberBandRect = null;
-        if (r.width > 8 && r.height > 8 && chartBox != null &&
-            chartBox.size.width > 0 && chartBox.size.height > 0) {
+        if (r.width > 8 && r.height > 8) {
           if (_viewMinX.isNaN) _initViewToData(plot);
-          // Rubber band rect is already in chart-local coords
-          final x1 = _pxToDataX(r.left, chartBox.size.width);
-          final y1 = _pxToDataY(r.top, chartBox.size.height);
-          final x2 = _pxToDataX(r.right, chartBox.size.width);
-          final y2 = _pxToDataY(r.bottom, chartBox.size.height);
+          final x1 = _pxToDataX(r.left);
+          final y1 = _pxToDataY(r.top);
+          final x2 = _pxToDataX(r.right);
+          final y2 = _pxToDataY(r.bottom);
           _viewMinX = x1 < x2 ? x1 : x2;
           _viewMaxX = x1 > x2 ? x1 : x2;
           _viewMinY = y1 < y2 ? y1 : y2;
