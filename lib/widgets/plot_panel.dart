@@ -36,6 +36,7 @@ class _PlotPanelState extends State<PlotPanel> {
   int _lastResetId = -1;
   bool _midPanning = false;
   Offset? _lastMidPanPos;
+  Offset? _hoverPos; // Track real mouse position for accurate zoom center
   bool _inRubberBand = false;
   Offset? _rubberBandStart;
   Rect? _rubberBandRect;
@@ -116,7 +117,10 @@ class _PlotPanelState extends State<PlotPanel> {
       },
       onSecondaryTapUp: (details) => _showContextMenu(context, details.globalPosition),
       onLongPressStart: (details) => _showContextMenu(context, details.globalPosition),
-      child: Listener(
+      child: MouseRegion(
+        onHover: (e) => _hoverPos = e.localPosition,
+        onExit: (_) => _hoverPos = null,
+        child: Listener(
         key: _listenerKey,
         onPointerSignal: _handleScrollWheel,
         onPointerDown: _handlePointerDown,
@@ -166,6 +170,7 @@ class _PlotPanelState extends State<PlotPanel> {
         ),
         ),
       ),
+    ),
     );
   }
 
@@ -293,10 +298,11 @@ class _PlotPanelState extends State<PlotPanel> {
       if (_viewMinX.isNaN) _initViewToData(plot);
       final lb = _listenerBox;
       if (lb == null || lb.size.width <= 0 || lb.size.height <= 0) return;
+      final pos = _hoverPos ?? event.localPosition; // Use tracked cursor, fallback to event pos
       final steps = event.scrollDelta.dy / 53.0;
       final factor = math.pow(1.22, -steps);
-      final cx = _pxToDataX(event.localPosition.dx, lb.size.width);
-      final cy = _pxToDataY(event.localPosition.dy, lb.size.height);
+      final cx = _pxToDataX(pos.dx, lb.size.width);
+      final cy = _pxToDataY(pos.dy, lb.size.height);
       _viewMinX = cx - (cx - _viewMinX) * factor;
       _viewMaxX = cx + (_viewMaxX - cx) * factor;
       _viewMinY = cy - (cy - _viewMinY) * factor;
@@ -516,15 +522,15 @@ class _PlotPanelState extends State<PlotPanel> {
     } catch (e) { app.setStatus('Export error: $e'); }
   }
 
-  void _initViewToData(PlotData plot) {
-    final bounds = _computeDataBounds(plot);
+  void _initViewToData(PlotData plot, [Map<String, dynamic>? panel]) {
+    final bounds = _computeDataBounds(plot, panel);
     if (bounds != null) {
       _viewMinX = bounds[0]; _viewMaxX = bounds[1];
       _viewMinY = bounds[2]; _viewMaxY = bounds[3];
     }
   }
 
-  List<double>? _computeDataBounds(PlotData plot) {
+  List<double>? _computeDataBounds(PlotData plot, [Map<String, dynamic>? panel]) {
     double? minX, maxX, minY, maxY;
     for (final s in plot.series) {
       if (s?.points == null || s!.points!.isEmpty) continue;
@@ -538,9 +544,24 @@ class _PlotPanelState extends State<PlotPanel> {
       }
     }
     if (minX == null) return null;
-    final xPad = (maxX! - minX) * 0.02;
-    final yPad = (maxY! - minY!) * 0.02;
-    return [minX - xPad, maxX + xPad, minY - yPad, maxY + yPad];
+    var rMinX = minX, rMaxX = maxX!, rMinY = minY!, rMaxY = maxY!;
+    final customX = panel?['custom_x_range'] == true;
+    final customY = panel?['custom_y_range'] == true;
+    if (customX) {
+      final cxmin = (panel?['xmin'] as num?)?.toDouble();
+      final cxmax = (panel?['xmax'] as num?)?.toDouble();
+      if (cxmin != null && cxmin.isFinite) rMinX = cxmin;
+      if (cxmax != null && cxmax.isFinite) rMaxX = cxmax;
+    }
+    if (customY) {
+      final cymin = (panel?['ymin'] as num?)?.toDouble();
+      final cymax = (panel?['ymax'] as num?)?.toDouble();
+      if (cymin != null && cymin.isFinite) rMinY = cymin;
+      if (cymax != null && cymax.isFinite) rMaxY = cymax;
+    }
+    final xPad = customX ? 0.0 : (rMaxX - rMinX) * 0.02;
+    final yPad = customY ? 0.0 : (rMaxY - rMinY) * 0.02;
+    return [rMinX - xPad, rMaxX + xPad, rMinY - yPad, rMaxY + yPad];
   }
 
   List<List<double>> _decimate(List<List<double>> points, int maxPoints) {
@@ -667,37 +688,35 @@ class _DataSourceDialog extends StatefulWidget {
 }
 
 class _DataSourceDialogState extends State<_DataSourceDialog> {
-  late final _ctrls = <_SigCtrls>[];
+  final _ctrls = <_SigCtrls>[];
   var _sigCount = 0;
 
   @override void initState() {
     super.initState();
-    _sigCount = widget.signals.length.clamp(1, 8);
+    _sigCount = widget.signals.isEmpty ? 1 : widget.signals.length;
     _rebuildCtrls();
   }
 
   void _rebuildCtrls() {
-    for (final c in _ctrls) {
-      c.y.dispose(); c.x.dispose(); c.tree.dispose(); c.server.dispose();
-    }
+    for (final c in _ctrls) { c.dispose(); }
     _ctrls.clear();
     for (var i = 0; i < _sigCount; i++) {
       final s = i < widget.signals.length ? widget.signals[i] : null;
       _ctrls.add(_SigCtrls(
+        shot: TextEditingController(text: s?['shot']?.toString() ?? ''),
         y: TextEditingController(text: s?['y_expr']?.toString() ?? ''),
         x: TextEditingController(text: s?['x_expr']?.toString() ?? ''),
         tree: TextEditingController(text: s?['experiment']?.toString() ?? 'pcs_east'),
         server: TextEditingController(text: s?['server_ip']?.toString() ?? '202.127.204.12'),
-      ));
+      )..hidden = s?['hidden'] == true
+       ..color = s?['color_name']?.toString() ?? ''
+       ..readMode = (s?['read_mode'] as int?) ?? 0);
     }
   }
 
-  @override void dispose() {
-    for (final c in _ctrls) {
-      c.y.dispose(); c.x.dispose(); c.tree.dispose(); c.server.dispose();
-    }
-    super.dispose();
-  }
+  static const _modes = ['Thin', 'Medium', 'Full'];
+
+  @override void dispose() { for (final c in _ctrls) { c.dispose(); } super.dispose(); }
 
   @override
   Widget build(BuildContext ctx) {
@@ -711,7 +730,14 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           for (var i = 0; i < _sigCount; i++) ...[
             if (i > 0) const Divider(),
-            Text('Signal ${i + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+            Row(children: [
+              Text('Signal ${i + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const Spacer(),
+              if (_sigCount > 1)
+                SizedBox(width: 20, height: 20, child: IconButton(padding: EdgeInsets.zero, icon: const Icon(Icons.delete, size: 16, color: Colors.red), onPressed: () => setState(() { _ctrls[i].dispose(); _ctrls.removeAt(i); _sigCount--; }))),
+            ]),
+            const SizedBox(height: 4),
+            TextField(controller: _ctrls[i].shot, decoration: const InputDecoration(labelText: 'Shot (override)', isDense: true)),
             const SizedBox(height: 4),
             TextField(controller: _ctrls[i].y, decoration: const InputDecoration(labelText: 'Y expression', isDense: true)),
             const SizedBox(height: 4),
@@ -720,12 +746,19 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
             TextField(controller: _ctrls[i].tree, decoration: const InputDecoration(labelText: 'Tree / Experiment', isDense: true)),
             const SizedBox(height: 4),
             TextField(controller: _ctrls[i].server, decoration: const InputDecoration(labelText: 'Server IP', isDense: true)),
+            const SizedBox(height: 4),
+            TextField(controller: TextEditingController(text: _ctrls[i].color), decoration: const InputDecoration(labelText: 'Color (hex, e.g. #ff0000)', isDense: true), onChanged: (v) => _ctrls[i].color = v),
+            Row(children: [
+              Expanded(child: DropdownButtonFormField<int>(initialValue: _ctrls[i].readMode, decoration: const InputDecoration(labelText: 'Data', isDense: true), items: List.generate(3, (j) => DropdownMenuItem(value: j, child: Text(_modes[j]))), onChanged: (v) { if (v != null) _ctrls[i].readMode = v; })),
+              const SizedBox(width: 8),
+              CheckboxListTile(title: const Text('Hide'), value: _ctrls[i].hidden, onChanged: (v) => setState(() => _ctrls[i].hidden = v ?? false), contentPadding: EdgeInsets.zero, dense: true, controlAffinity: ListTileControlAffinity.leading),
+            ]),
           ],
         ]),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        TextButton(onPressed: _save, child: const Text('Save')),
+        TextButton(onPressed: _save, child: const Text('OK')),
       ],
     );
   }
@@ -735,10 +768,14 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
     for (final c in _ctrls) {
       if (c.y.text.trim().isEmpty) continue;
       widget.signals.add({
+        if (c.shot.text.isNotEmpty) 'shot': c.shot.text,
         'y_expr': c.y.text,
-        'x_expr': c.x.text,
+        if (c.x.text.isNotEmpty) 'x_expr': c.x.text,
         'experiment': c.tree.text,
         'server_ip': c.server.text,
+        if (c.color.isNotEmpty) 'color_name': c.color,
+        'hidden': c.hidden,
+        'read_mode': c.readMode,
       });
     }
     widget.onSave();
@@ -747,6 +784,10 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
 }
 
 class _SigCtrls {
-  final TextEditingController y, x, tree, server;
-  _SigCtrls({required this.y, required this.x, required this.tree, required this.server});
+  final TextEditingController shot, y, x, tree, server;
+  String color;
+  bool hidden;
+  int readMode;
+  _SigCtrls({required this.shot, required this.y, required this.x, required this.tree, required this.server, this.color = '', this.hidden = false, this.readMode = 0});
+  void dispose() { shot.dispose(); y.dispose(); x.dispose(); tree.dispose(); server.dispose(); }
 }
