@@ -183,76 +183,109 @@ class _PlotPanelState extends State<PlotPanel> {
     final yMin = customY ? ((panel['ymin'] as num?)?.toDouble()) : (_viewMinY.isNaN ? null : _viewMinY);
     final yMax = customY ? ((panel['ymax'] as num?)?.toDouble()) : (_viewMaxY.isNaN ? null : _viewMaxY);
 
-    // Evenly-spaced tick intervals matching C++ MdsScope behaviour:
-    // xTickCount = clamp(width/78+1, 3, 7), yTickCount = clamp(height/34+1, 3, 6)
-    final double? xInterval = (xMin != null && xMax != null && xMax > xMin) ? (xMax - xMin) / 5.0 : null;
-    final double? yInterval = (yMin != null && yMax != null && yMax > yMin) ? (yMax - yMin) / 4.0 : null;
+    List<double> evenTicks(double min, double max, int count) {
+      if (count < 2) return [min];
+      final step = (max - min) / (count - 1);
+      return List.generate(count, (i) => min + step * i);
+    }
+    final xTicks = (xMin != null && xMax != null) ? evenTicks(xMin, xMax, 6) : <double>[];
+    final yTicks = (yMin != null && yMax != null) ? evenTicks(yMin, yMax, 5) : <double>[];
 
     return Padding(
       padding: const EdgeInsets.only(right: 28),
-      child: LineChart(
-        LineChartData(
-        lineBarsData: bars,
-        gridData: FlGridData(show: showGrid, drawVerticalLine: showGrid, drawHorizontalLine: showGrid,
-          getDrawingHorizontalLine: (v) => FlLine(color: theme.dividerColor.withValues(alpha: 0.15), strokeWidth: 0.5),
-          getDrawingVerticalLine: (v) => FlLine(color: theme.dividerColor.withValues(alpha: 0.15), strokeWidth: 0.5),
-        ),
-        titlesData: FlTitlesData(
-          bottomTitles: AxisTitles(
-            axisNameWidget: Padding(padding: const EdgeInsets.only(top: 2), child: Text(plot.xLabel, style: TextStyle(fontSize: 9, color: textColor))),
-            axisNameSize: 14,
-            sideTitles: SideTitles(showTitles: true, reservedSize: 20, interval: xInterval,
-              minIncluded: true, maxIncluded: true,
-              getTitlesWidget: (v, _) => _axisLabel(v, textColor),
-            ),
-          ),
-          leftTitles: AxisTitles(
-            axisNameWidget: Padding(padding: const EdgeInsets.only(bottom: 2), child: Text(plot.yLabel, style: TextStyle(fontSize: 9, color: textColor))),
-            axisNameSize: 14,
-            sideTitles: SideTitles(showTitles: true, reservedSize: 50, interval: yInterval,
-              minIncluded: true, maxIncluded: true,
-              getTitlesWidget: (v, _) => _axisLabel(v, textColor),
-            ),
-          ),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false, reservedSize: 28)),
-        ),
-        borderData: FlBorderData(show: true, border: Border.all(color: theme.dividerColor.withValues(alpha: 0.3), width: 0.5)),
-        lineTouchData: LineTouchData(enabled: true,
-          touchCallback: (event, response) {
-            final a = context.read<AppState>();
-            if (a.interactionMode != 1) return;
-            if (a.pointLocked) return; // Esc locked: don't follow mouse
-            if (response?.lineBarSpots != null && response!.lineBarSpots!.isNotEmpty) {
-              final spot = response.lineBarSpots!.first;
-              a.setCrosshair(spot.x);
-              setState(() { _localCrosshairY = spot.y; });
-            }
-          },
-          handleBuiltInTouches: false,
-          touchTooltipData: LineTouchTooltipData(
-            getTooltipColor: (_) => theme.colorScheme.inverseSurface,
-            getTooltipItems: (spots) => spots.map((s) => LineTooltipItem(
-              '${s.x.toStringAsFixed(3)}, ${s.y.toStringAsFixed(4)}',
-              TextStyle(fontSize: 9, color: theme.colorScheme.onInverseSurface, fontFamily: 'monospace'),
-            )).toList(),
-          ),
-        ),
-        extraLinesData: ExtraLinesData(
-          verticalLines: cx != null ? [VerticalLine(x: cx, color: const Color(0xFFFF00FF), strokeWidth: 1, label: _crosshairLabel(bars, cx))] : [],
-          horizontalLines: _localCrosshairY != null ? [HorizontalLine(y: _localCrosshairY!, color: const Color(0xFFFF00FF), strokeWidth: 1)] : [],
-        ),
-        minX: xMin,
-        maxX: xMax,
-        minY: yMin,
-        maxY: yMax,
-      ),
-    ),
-    );
-  }
+      child: LayoutBuilder(
+        builder: (ctx, constraints) {
+          final cw = constraints.maxWidth;
+          final ch = constraints.maxHeight;
+          const leftAxis = 50.0;
+          const bottomAxis = 20.0;
+          final gridW = cw - leftAxis;
+          final gridH = ch - bottomAxis;
 
-  Widget _axisLabel(double value, Color color) {
-    return Padding(padding: const EdgeInsets.only(top: 2), child: Text(_fmtAxis(value), style: TextStyle(fontSize: 8, color: color)));
+          return Stack(
+            clipBehavior: Clip.hardEdge,
+            children: [
+              ClipRect(
+                child: LineChart(
+                  LineChartData(
+                  lineBarsData: bars,
+                  gridData: FlGridData(show: showGrid, drawVerticalLine: showGrid, drawHorizontalLine: showGrid,
+                    getDrawingHorizontalLine: (v) => FlLine(color: theme.dividerColor.withValues(alpha: 0.15), strokeWidth: 0.5),
+                    getDrawingVerticalLine: (v) => FlLine(color: theme.dividerColor.withValues(alpha: 0.15), strokeWidth: 0.5),
+                  ),
+                  titlesData: FlTitlesData(
+                    bottomTitles: AxisTitles(
+                      axisNameSize: 14,
+                      sideTitles: const SideTitles(showTitles: false, reservedSize: 20),
+                    ),
+                    leftTitles: AxisTitles(
+                      axisNameSize: 14,
+                      sideTitles: const SideTitles(showTitles: false, reservedSize: 50),
+                    ),
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  ),
+                  borderData: FlBorderData(show: true, border: Border.all(color: theme.dividerColor.withValues(alpha: 0.3), width: 0.5)),
+                  lineTouchData: LineTouchData(enabled: true,
+                    touchCallback: (event, response) {
+                      final a = context.read<AppState>();
+                      if (a.interactionMode != 1) return;
+                      if (a.pointLocked) return;
+                      if (response?.lineBarSpots != null && response!.lineBarSpots!.isNotEmpty) {
+                        final spot = response.lineBarSpots!.first;
+                        a.setCrosshair(spot.x);
+                        setState(() { _localCrosshairY = spot.y; });
+                      }
+                    },
+                    handleBuiltInTouches: false,
+                    touchTooltipData: LineTouchTooltipData(
+                      getTooltipColor: (_) => theme.colorScheme.inverseSurface,
+                      getTooltipItems: (spots) => spots.map((s) => LineTooltipItem(
+                        '${s.x.toStringAsFixed(3)}, ${s.y.toStringAsFixed(4)}',
+                        TextStyle(fontSize: 9, color: theme.colorScheme.onInverseSurface, fontFamily: 'monospace'),
+                      )).toList(),
+                    ),
+                  ),
+                  extraLinesData: ExtraLinesData(
+                    verticalLines: cx != null ? [VerticalLine(x: cx, color: const Color(0xFFFF00FF), strokeWidth: 1, label: _crosshairLabel(bars, cx))] : [],
+                    horizontalLines: _localCrosshairY != null ? [HorizontalLine(y: _localCrosshairY!, color: const Color(0xFFFF00FF), strokeWidth: 1)] : [],
+                  ),
+                  minX: xMin, maxX: xMax, minY: yMin, maxY: yMax,
+                ),
+                ),
+              ),
+              // X-axis tick labels – fixed at 0/5, 1/5, …, 5/5 of grid width
+              for (int i = 0; i < xTicks.length; i++)
+                Positioned(
+                  left: leftAxis + (i / (xTicks.length - 1)) * gridW - 16,
+                  bottom: 2,
+                  child: Text(_fmtAxis(xTicks[i]), style: TextStyle(fontSize: 8, color: textColor)),
+                ),
+              // Y-axis tick labels – fixed at 0/4, 1/4, …, 4/4 of grid height
+              for (int i = 0; i < yTicks.length; i++)
+                Positioned(
+                  left: 2,
+                  top: ((yTicks.length - 1 - i) / (yTicks.length - 1)) * gridH - 6,
+                  child: SizedBox(width: leftAxis - 4, child: Text(_fmtAxis(yTicks[i]), style: TextStyle(fontSize: 8, color: textColor), textAlign: TextAlign.right)),
+                ),
+              // Axis name labels
+              Positioned(
+                bottom: -2,
+                left: leftAxis,
+                right: 0,
+                child: Center(child: Padding(padding: const EdgeInsets.only(top: 2), child: Text(plot.xLabel, style: TextStyle(fontSize: 9, color: textColor)))),
+              ),
+              Positioned(
+                left: -2,
+                top: 0,
+                bottom: bottomAxis,
+                child: Center(child: Padding(padding: const EdgeInsets.only(bottom: 2), child: RotatedBox(quarterTurns: -1, child: Text(plot.yLabel, style: TextStyle(fontSize: 9, color: textColor))))),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   String _fmtAxis(double v) {
@@ -838,7 +871,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
         } : null),
       ]),
       content: SizedBox(
-        height: 240,
+        height: 180,
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: IntrinsicWidth(

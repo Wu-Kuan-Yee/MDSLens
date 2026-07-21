@@ -399,8 +399,20 @@ pub fn normalized_name(expr: &str) -> String {
     expr.trim().to_string()
 }
 
+/// Returns the higher-precision of global and per-signal read mode.
+/// Matches C++ `effectiveSignalReadMode`: Thin < Medium < Full.
 pub fn effective_read_mode(global: DataReadMode, signal_mode: Option<DataReadMode>) -> DataReadMode {
-    signal_mode.unwrap_or(global)
+    fn rank(m: DataReadMode) -> u8 {
+        match m {
+            DataReadMode::Thin => 0,
+            DataReadMode::Medium => 1,
+            DataReadMode::Full => 2,
+        }
+    }
+    match signal_mode {
+        Some(sig) if rank(sig) >= rank(global) => sig,
+        _ => global,
+    }
 }
 
 pub fn sampling_from_point_count(total: usize, max_points: usize) -> SamplingPlan {
