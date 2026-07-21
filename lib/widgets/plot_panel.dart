@@ -235,11 +235,11 @@ class _PlotPanelState extends State<PlotPanel> {
                   getDrawingHorizontalLine: (v) => FlLine(color: theme.dividerColor.withValues(alpha: 0.15), strokeWidth: 0.5),
                   getDrawingVerticalLine: (v) => FlLine(color: theme.dividerColor.withValues(alpha: 0.15), strokeWidth: 0.5),
                 ),
-                titlesData: const FlTitlesData(
-                  bottomTitles: AxisTitles(axisNameSize: 14, sideTitles: SideTitles(showTitles: false, reservedSize: 32)),
-                  leftTitles: AxisTitles(axisNameSize: 14, sideTitles: SideTitles(showTitles: false, reservedSize: 50)),
-                  topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                titlesData: FlTitlesData(
+                  bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 32, getTitlesWidget: (v, m) => const SizedBox())),
+                  leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 50, getTitlesWidget: (v, m) => const SizedBox())),
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                 ),
                 borderData: FlBorderData(show: true, border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5), width: 1)),
                 lineTouchData: LineTouchData(enabled: true,
