@@ -107,8 +107,9 @@ class _PlotPanelState extends State<PlotPanel> {
           if (_viewMinX.isNaN) _initViewToData(plot);
           if (details.scale != 1.0) {
             final factor = 1.0 / details.scale;
-            final cx = _pxToDataX(details.focalPoint.dx);
-            final cy = _pxToDataY(details.focalPoint.dy);
+            final localF = (_listenerBox?.globalToLocal(details.focalPoint)) ?? details.localFocalPoint;
+            final cx = _pxToDataX(localF.dx);
+            final cy = _pxToDataY(localF.dy);
             _viewMinX = cx - (cx - _viewMinX) * factor;
             _viewMaxX = cx + (_viewMaxX - cx) * factor;
             _viewMinY = cy - (cy - _viewMinY) * factor;
