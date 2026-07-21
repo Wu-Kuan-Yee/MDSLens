@@ -250,6 +250,8 @@ class AppState extends ChangeNotifier {
   }
 
   void _doFetch() {
+    // Clear existing data so "No data" is shown during load
+    for (final p in _plots) { for (final s in p.series) { s?.points = null; } }
     _fetching = true; _status = 'Fetching...'; notifyListeners();
     Future.microtask(() {
       try {
@@ -280,19 +282,7 @@ class AppState extends ChangeNotifier {
         }
         _fetching = false;
         final loaded = _plots.where((p) => p.series.any((s) => s?.points != null && s!.points!.isNotEmpty)).length;
-        // Debug: show timebase and X range
-        var xInfo = '';
-        for (final sig in json) {
-          if (sig is Map) {
-            final s = sig['series'];
-            if (s is Map && s['points'] is List && (s['points'] as List).isNotEmpty) {
-              final pts = s['points'] as List;
-              xInfo = ' [X:${(pts.first as List)[0]}-${(pts.last as List)[0]} tb:start=${s['uniform_start']} step=${s['uniform_step']}]';
-              break;
-            }
-          }
-        }
-        _status = 'Shot $_shotText: ${firstErr ?? "$loaded panels with data"}$xInfo';
+        _status = 'Shot $_shotText: ${firstErr ?? "$loaded panels with data"}';
       } catch (e) { _fetching = false; _status = 'Error: $e'; }
       notifyListeners();
     });
@@ -369,7 +359,7 @@ class PlotData {
 }
 
 class SeriesData {
-  final List<List<double>>? points;
+  List<List<double>>? points;
   final String? error;
   SeriesData({this.points, this.error});
 }

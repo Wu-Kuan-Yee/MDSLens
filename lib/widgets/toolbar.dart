@@ -84,21 +84,24 @@ class ToolbarWidget extends StatelessWidget {
   }
 
   Widget _btn(BuildContext ctx, String label, VoidCallback onTap) {
-    return InkWell(onTap: onTap, borderRadius: BorderRadius.circular(4),
-      child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), child: Text(label, style: const TextStyle(fontSize: 12))));
+    return Padding(padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: ElevatedButton(onPressed: onTap,
+        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: const TextStyle(fontSize: 12)),
+        child: Text(label)));
   }
 
   Widget _modeBtn(BuildContext ctx, String label, bool active, VoidCallback onTap) {
-    return GestureDetector(onTap: onTap, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(4), color: active ? Theme.of(ctx).colorScheme.primaryContainer : null),
-      child: Text(label, style: TextStyle(fontSize: 12, fontWeight: active ? FontWeight.bold : FontWeight.normal))));
+    return Padding(padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: OutlinedButton(onPressed: onTap,
+        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 12, fontWeight: active ? FontWeight.bold : FontWeight.normal), backgroundColor: active ? Theme.of(ctx).colorScheme.primaryContainer : null),
+        child: Text(label)));
   }
 
   Widget _sshBtn(BuildContext ctx, AppState app) {
-    return GestureDetector(
-      onTap: () => SshDialog.show(ctx),
-      child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        child: Text('SSH', style: TextStyle(fontSize: 12, color: app.sshConnected ? Colors.green : null))));
+    return Padding(padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: ElevatedButton(onPressed: () => SshDialog.show(ctx),
+        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 12, color: app.sshConnected ? Colors.green : null)),
+        child: const Text('SSH')));
   }
 
   Widget _themeBtns(BuildContext ctx, AppState app) {
@@ -110,7 +113,9 @@ class ToolbarWidget extends StatelessWidget {
   }
 
   Widget _themeBtn(BuildContext ctx, String label, bool active, VoidCallback onTap) {
-    return GestureDetector(onTap: onTap, child: Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-      child: Text(label, style: TextStyle(fontSize: 11, color: active ? Theme.of(ctx).colorScheme.primary : null))));
+    return Padding(padding: const EdgeInsets.symmetric(horizontal: 1),
+      child: OutlinedButton(onPressed: onTap,
+        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 11, color: active ? Theme.of(ctx).colorScheme.primary : null), backgroundColor: active ? Theme.of(ctx).colorScheme.primaryContainer.withValues(alpha: 0.3) : null),
+        child: Text(label)));
   }
 }
