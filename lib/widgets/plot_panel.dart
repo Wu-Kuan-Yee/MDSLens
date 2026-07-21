@@ -106,9 +106,10 @@ class _PlotPanelState extends State<PlotPanel> {
             _viewMaxY = cy + (_viewMaxY - cy) * factor;
           } else {
             final lb = _listenerBox;
-            if (lb != null && lb.size.width > 0 && lb.size.height > 0) {
-              final xScale = (_viewMaxX - _viewMinX) / lb.size.width;
-              final yScale = (_viewMaxY - _viewMinY) / lb.size.height;
+            final cb = _chartBox;
+            if (lb != null && cb != null && cb.size.width > 0 && cb.size.height > 0) {
+              final xScale = (_viewMaxX - _viewMinX) / cb.size.width;
+              final yScale = (_viewMaxY - _viewMinY) / cb.size.height;
               _viewMinX -= details.focalPointDelta.dx * xScale;
               _viewMaxX -= details.focalPointDelta.dx * xScale;
               _viewMinY += details.focalPointDelta.dy * yScale;
@@ -270,6 +271,7 @@ class _PlotPanelState extends State<PlotPanel> {
   }
 
   RenderBox? get _listenerBox => _listenerKey.currentContext?.findRenderObject() as RenderBox?;
+  RenderBox? get _chartBox => _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
 
   Color _sigColor(int i, List<Map> sigSpecs) {
     if (i < sigSpecs.length && sigSpecs[i]['color_name'] != null) {
@@ -280,16 +282,23 @@ class _PlotPanelState extends State<PlotPanel> {
     return _colors[i % _colors.length];
   }
 
-  // Simple fraction-based pixel→data conversion using listener-local coordinates
+  // Convert listener-local pixel coordinates to data coordinates, accounting for
+  // the actual chart area position within the panel (title + xLabel offsets).
   double _pxToDataX(double px) {
     final lb = _listenerBox;
-    if (lb == null || lb.size.width <= 0) return (_viewMinX + _viewMaxX) / 2;
-    return _viewMinX + (px / lb.size.width) * (_viewMaxX - _viewMinX);
+    final cb = _chartBox;
+    if (lb == null || cb == null || cb.size.width <= 0) return (_viewMinX + _viewMaxX) / 2;
+    final chartOffset = cb.localToGlobal(Offset.zero) - lb.localToGlobal(Offset.zero);
+    final chartX = px - chartOffset.dx;
+    return _viewMinX + (chartX / cb.size.width) * (_viewMaxX - _viewMinX);
   }
   double _pxToDataY(double py) {
     final lb = _listenerBox;
-    if (lb == null || lb.size.height <= 0) return (_viewMinY + _viewMaxY) / 2;
-    return _viewMaxY - (py / lb.size.height) * (_viewMaxY - _viewMinY);
+    final cb = _chartBox;
+    if (lb == null || cb == null || cb.size.height <= 0) return (_viewMinY + _viewMaxY) / 2;
+    final chartOffset = cb.localToGlobal(Offset.zero) - lb.localToGlobal(Offset.zero);
+    final chartY = py - chartOffset.dy;
+    return _viewMaxY - (chartY / cb.size.height) * (_viewMaxY - _viewMinY);
   }
 
   void _handleScrollWheel(PointerSignalEvent event) {
@@ -337,13 +346,14 @@ class _PlotPanelState extends State<PlotPanel> {
     final app = context.read<AppState>();
     final plot = app.plots[widget.plotIdx];
     final lb = _listenerBox;
+    final cb = _chartBox;
     setState(() {
       if (_viewMinX.isNaN) _initViewToData(plot);
-      if (lb == null || lb.size.width <= 0 || lb.size.height <= 0) return;
+      if (lb == null || cb == null || cb.size.width <= 0 || cb.size.height <= 0) return;
       final dx = event.localPosition.dx - _lastMidPanPos!.dx;
       final dy = event.localPosition.dy - _lastMidPanPos!.dy;
-      final xScale = (_viewMaxX - _viewMinX) / lb.size.width;
-      final yScale = (_viewMaxY - _viewMinY) / lb.size.height;
+      final xScale = (_viewMaxX - _viewMinX) / cb.size.width;
+      final yScale = (_viewMaxY - _viewMinY) / cb.size.height;
       _viewMinX -= dx * xScale;
       _viewMaxX -= dx * xScale;
       _viewMinY += dy * yScale;
@@ -801,7 +811,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
           _rows.add(_DSRow(shot: shotCtrl, y: yCtrl, tree: treeCtrl, server: serverCtrl)..colorIdx = _rows.length % _presetColors.length);
         }) : null),
       ]),
-      content: SizedBox(height: 400, child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: IntrinsicWidth(child: SingleChildScrollView(
+      content: SizedBox(height: 400, child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: SizedBox(width: 640, child: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Row(children: [
             SizedBox(width: 62, child: Text('Shot', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4),
