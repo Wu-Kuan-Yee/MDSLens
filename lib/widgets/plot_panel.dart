@@ -768,7 +768,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
     } catch (_) { _signalCache[key] = []; return []; }
   }
 
-  static InputDecoration _dsDeco() => const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 8), border: OutlineInputBorder());
+  static InputDecoration _dsDeco() => const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8), border: OutlineInputBorder());
 
   static Widget _hdrCell(String text, double rightPad) {
     return Padding(
@@ -826,13 +826,13 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
             child: SingleChildScrollView(
               child: Table(
                 columnWidths: const {
-                  0: FixedColumnWidth(64),
-                  1: FixedColumnWidth(94),
-                  2: FixedColumnWidth(154),
-                  3: FixedColumnWidth(114),
+                  0: FixedColumnWidth(84),
+                  1: FixedColumnWidth(124),
+                  2: FixedColumnWidth(184),
+                  3: FixedColumnWidth(144),
                   4: FixedColumnWidth(34),
                   5: FixedColumnWidth(46),
-                  6: FixedColumnWidth(104),
+                  6: FixedColumnWidth(114),
                   7: FixedColumnWidth(26),
                 },
                 defaultVerticalAlignment: TableCellVerticalAlignment.middle,
