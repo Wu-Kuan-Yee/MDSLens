@@ -311,9 +311,16 @@ class AppState extends ChangeNotifier {
 
   void _doFetch() {
     // Clear existing data so "No data" is shown during load
-    for (final p in _plots) { for (final s in p.series) { s?.points = null; } }
+    for (final p in _plots) {
+      for (final s in p.series) {
+        if (s != null) {
+          s.points = null;
+          s.error = null;
+        }
+      }
+    }
     _fetching = true; _status = 'Fetching...'; notifyListeners();
-    Future.microtask(() {
+    Future.delayed(const Duration(milliseconds: 16), () {
       try {
         final cols = _columns.map((col) => col.map((p) {
           final m = Map<String, dynamic>.from(p);
