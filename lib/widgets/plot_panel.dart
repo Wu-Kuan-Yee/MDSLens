@@ -815,18 +815,17 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
         height: 400,
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          child: SizedBox(
-            height: 400,
+          child: IntrinsicWidth(
             child: SingleChildScrollView(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 Row(children: [
-                  SizedBox(width: 62, child: Text('Shot', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4),
-                  SizedBox(width: 92, child: Text('Tree', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4),
-                  SizedBox(width: 152, child: Text('Signal', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4),
-                  SizedBox(width: 112, child: Text('Server IP', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4),
-                  SizedBox(width: 30, child: Text('Color', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4),
-                  SizedBox(width: 44, child: Text('Hide', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 2),
-                  SizedBox(width: 104, child: Text('Data', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 2),
+                  SizedBox(width: 60, child: Text('Shot', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4),
+                  SizedBox(width: 90, child: Text('Tree', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4),
+                  SizedBox(width: 150, child: Text('Signal', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4),
+                  SizedBox(width: 110, child: Text('Server IP', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4),
+                  SizedBox(width: 30, child: Center(child: Text('Color', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)))), const SizedBox(width: 4),
+                  SizedBox(width: 44, child: Center(child: Text('Hide', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)))), const SizedBox(width: 2),
+                  SizedBox(width: 100, child: Text('Data', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4),
                   SizedBox(width: 26, child: Text('Del', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))),
                 ]),
                 const SizedBox(height: 4),
@@ -841,13 +840,13 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                     const SizedBox(width: 4),
                     SizedBox(width: 110, child: TextField(controller: _rows[i].server, decoration: _dsDeco(), style: const TextStyle(fontSize: 12))),
                     const SizedBox(width: 4),
-                    _ColorPicker(row: _rows[i], onChanged: () => setState(() {})),
+                    SizedBox(width: 30, child: Center(child: _ColorPicker(row: _rows[i], onChanged: () => setState(() {})))),
                     const SizedBox(width: 4),
-                    Checkbox(value: _rows[i].hidden, onChanged: (v) => setState(() => _rows[i].hidden = v ?? false)),
+                    SizedBox(width: 44, child: Center(child: Checkbox(value: _rows[i].hidden, onChanged: (v) => setState(() => _rows[i].hidden = v ?? false)))),
                     const SizedBox(width: 2),
                     SizedBox(width: 100, child: DropdownButtonFormField<int>(initialValue: _rows[i].readMode, decoration: _dsDeco(), style: const TextStyle(fontSize: 11), items: List.generate(3, (j) => DropdownMenuItem(value: j, child: Text(_modes[j], style: const TextStyle(fontSize: 11)))), onChanged: (v) { if (v != null) setState(() => _rows[i].readMode = v); })),
                     const SizedBox(width: 4),
-                    if (_rows.length > 1) GestureDetector(onTap: () => setState(() { _rows[i].dispose(); _rows.removeAt(i); }), child: const Icon(Icons.close, size: 16, color: Colors.red)),
+                    SizedBox(width: 26, child: _rows.length > 1 ? GestureDetector(onTap: () => setState(() { _rows[i].dispose(); _rows.removeAt(i); }), child: const Icon(Icons.close, size: 16, color: Colors.red)) : const SizedBox()),
                   ]),
                 ],
               ]),
