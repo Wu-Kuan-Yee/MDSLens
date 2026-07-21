@@ -1,4 +1,4 @@
-name: Build & Package All Platforms
+name: Release
 
 on:
   push:
@@ -7,12 +7,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ── Windows Packaging (x64, arm64, x86) ─────────────────────────────
+  # ── Windows Packaging (x64) ─────────────────────────────────────────
   build-windows:
     runs-on: windows-latest
-    strategy:
-      matrix:
-        arch: [x64, arm64]
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -25,27 +22,21 @@ jobs:
           cargo build --release --manifest-path rust/mds-bridge/Cargo.toml
           flutter build windows --release
 
-      - name: Create Packages (exe installer, msi, zip, portable)
+      - name: Create Windows Packages (.zip, .exe)
         shell: powershell
         run: |
-          $arch = "${{ matrix.arch }}"
           $dist = "build/dist"
           New-Item -ItemType Directory -Force -Path $dist
           
-          # 1. Zip
-          Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath "$dist\mdsscope-windows-$arch.zip" -Force
+          # 1. Zip Archive
+          Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath "$dist\mdsscope-windows-x64.zip" -Force
 
-          # 2. Portable EXE (Self-extracting)
-          Copy-Item "build\windows\x64\runner\Release\mdsscope.exe" "$dist\mdsscope-windows-$arch-portable.exe"
-
-          # 3. Inno Setup EXE Installer
-          if (Get-Command iscc -ErrorAction SilentlyContinue) {
-            iscc /DArch=$arch packaging/windows/setup.iss
-          }
+          # 2. Portable EXE
+          Copy-Item "build\windows\x64\runner\Release\mdsscope.exe" "$dist\mdsscope-windows-x64-portable.exe"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-${{ matrix.arch }}-packages
+          name: windows-x64-packages
           path: build/dist/*
 
   # ── macOS Packaging (arm64, x64) ────────────────────────────────────
@@ -53,7 +44,7 @@ jobs:
     runs-on: macos-latest
     strategy:
       matrix:
-        arch: [arm64, x64]
+        arch: [arm64]
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -66,117 +57,78 @@ jobs:
           cargo build --release --manifest-path rust/mds-bridge/Cargo.toml
           flutter build macos --release
 
-      - name: Package macOS (.dmg, .pkg, .tar.gz, .tar.xz, .tar.bz2, .zip, .app)
+      - name: Create macOS Packages (.dmg, .pkg, .zip, .tar.gz, .app)
         run: |
-          ARCH="${{ matrix.arch }}"
           DIST="build/dist"
           mkdir -p "$DIST"
           APP_PATH="build/macos/Build/Products/Release/mdsscope.app"
 
           # 1. Portable .app Zip/Tar Formats
-          cp -R "$APP_PATH" "$DIST/mdsscope-macos-$ARCH.app"
-          (cd build/macos/Build/Products/Release && zip -r "../../../dist/mdsscope-macos-$ARCH.zip" mdsscope.app)
-          (cd build/macos/Build/Products/Release && tar -czf "../../../dist/mdsscope-macos-$ARCH.tar.gz" mdsscope.app)
-          (cd build/macos/Build/Products/Release && tar -cJf "../../../dist/mdsscope-macos-$ARCH.tar.xz" mdsscope.app)
-          (cd build/macos/Build/Products/Release && tar -cjf "../../../dist/mdsscope-macos-$ARCH.tar.bz2" mdsscope.app)
+          cp -R "$APP_PATH" "$DIST/mdsscope-macos-arm64.app"
+          (cd build/macos/Build/Products/Release && zip -r "../../../dist/mdsscope-macos-arm64.zip" mdsscope.app)
+          (cd build/macos/Build/Products/Release && tar -czf "../../../dist/mdsscope-macos-arm64.tar.gz" mdsscope.app)
+          (cd build/macos/Build/Products/Release && tar -cJf "../../../dist/mdsscope-macos-arm64.tar.xz" mdsscope.app)
 
           # 2. DMG Package
-          hdiutil create -volname "MdsScope" -srcfolder "$APP_PATH" -ov -format UDZO "$DIST/mdsscope-macos-$ARCH.dmg"
+          hdiutil create -volname "MdsScope" -srcfolder "$APP_PATH" -ov -format UDZO "$DIST/mdsscope-macos-arm64.dmg"
 
           # 3. PKG Installer
-          pkgbuild --component "$APP_PATH" --install-location /Applications "$DIST/mdsscope-macos-$ARCH.pkg"
+          pkgbuild --component "$APP_PATH" --install-location /Applications "$DIST/mdsscope-macos-arm64.pkg"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-${{ matrix.arch }}-packages
+          name: macos-arm64-packages
           path: build/dist/*
 
-  # ── Linux Packaging (deb, rpm, pkg.tar.zst, AppImage, tar.*) ─────────
+  # ── Linux Packaging (deb, pkg.tar.zst, tar.*, zip) ──────────────────
   build-linux:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: [x64, arm64]
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install dependencies
+      - name: Install Linux Build Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libsecret-1-dev rpm zstd dpkg-dev
+          sudo apt-get install -y libgtk-3-dev libsecret-1-dev zstd dpkg-dev
 
       - name: Build Flutter Linux
         run: |
           cargo build --release --manifest-path rust/mds-bridge/Cargo.toml
           flutter build linux --release
 
-      - name: Package Linux Formats (.deb, .rpm, .pkg.tar.zst, .pkg.tar.xz, .tar.gz, .tar.xz, .tar.bz2, .zip, .AppImage)
+      - name: Create Linux Packages (.tar.gz, .tar.xz, .zip, .pkg.tar.zst, .deb)
         run: |
-          ARCH="${{ matrix.arch }}"
           DIST="build/dist"
           mkdir -p "$DIST"
           BUNDLE="build/linux/x64/release/bundle"
 
-          # Tar / Zip archives
-          (cd "$BUNDLE" && tar -czf "../../../../$DIST/mdsscope-linux-$ARCH.tar.gz" *)
-          (cd "$BUNDLE" && tar -cJf "../../../../$DIST/mdsscope-linux-$ARCH.tar.xz" *)
-          (cd "$BUNDLE" && tar -cjf "../../../../$DIST/mdsscope-linux-$ARCH.tar.bz2" *)
-          (cd "$BUNDLE" && zip -r "../../../../$DIST/mdsscope-linux-$ARCH.zip" *)
+          # Archives
+          (cd "$BUNDLE" && tar -czf "../../../../$DIST/mdsscope-linux-x64.tar.gz" *)
+          (cd "$BUNDLE" && tar -cJf "../../../../$DIST/mdsscope-linux-x64.tar.xz" *)
+          (cd "$BUNDLE" && zip -r "../../../../$DIST/mdsscope-linux-x64.zip" *)
 
-          # Arch Linux .pkg.tar.zst & .pkg.tar.xz
-          (cd "$BUNDLE" && tar -c --zstd -f "../../../../$DIST/mdsscope-linux-$ARCH.pkg.tar.zst" *)
-          (cd "$BUNDLE" && tar -c --xz -f "../../../../$DIST/mdsscope-linux-$ARCH.pkg.tar.xz" *)
+          # Arch Linux .pkg.tar.zst
+          (cd "$BUNDLE" && tar -c --zstd -f "../../../../$DIST/mdsscope-linux-x64.pkg.tar.zst" *)
 
-          # .deb Package
-          DEB_DIR="build/deb/mdsscope-linux-$ARCH"
+          # Debian .deb Package
+          DEB_DIR="build/deb/mdsscope-linux-x64"
           mkdir -p "$DEB_DIR/usr/bin" "$DEB_DIR/usr/lib/mdsscope" "$DEB_DIR/DEBIAN"
           cp -R "$BUNDLE/"* "$DEB_DIR/usr/lib/mdsscope/"
-          ln -s /usr/lib/mdsscope/mdsscope "$DEB_DIR/usr/bin/mdsscope"
+          ln -sf /usr/lib/mdsscope/mdsscope "$DEB_DIR/usr/bin/mdsscope"
           cat <<EOF > "$DEB_DIR/DEBIAN/control"
-          Package: mdsscope
-          Version: 3.0.0
-          Architecture: amd64
-          Maintainer: MdsScope Contributors
-          Description: Signal data plotting for MDSplus experiments
-          EOF
-          dpkg-deb --build "$DEB_DIR" "$DIST/mdsscope-linux-$ARCH.deb"
+Package: mdsscope
+Version: 7.0.0
+Architecture: amd64
+Maintainer: MdsScope Contributors
+Description: Signal data plotting for MDSplus experiments
+EOF
+          chmod 755 "$DEB_DIR/DEBIAN" "$DEB_DIR/DEBIAN/control"
+          dpkg-deb --build "$DEB_DIR" "$DIST/mdsscope-linux-x64.deb"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: linux-${{ matrix.arch }}-packages
-          path: build/dist/*
-
-  # ── Mobile & Special Platforms (Android APK, iOS IPA, HarmonyOS) ───
-  build-mobile:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-
-      - name: Build Android APKs (Split ABI & Universal)
-        run: |
-          DIST="build/dist"
-          mkdir -p "$DIST"
-          flutter build apk --release --split-per-abi
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "$DIST/mdsscope-android-arm64.apk"
-          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk "$DIST/mdsscope-android-armv7.apk"
-          cp build/app/outputs/flutter-apk/app-x86_64-release.apk "$DIST/mdsscope-android-x64.apk"
-
-      - name: Build iOS IPA
-        run: |
-          DIST="build/dist"
-          mkdir -p "$DIST"
-          flutter build ios --release --no-codesign
-          mkdir -p build/ios/Payload
-          cp -R build/ios/iphoneos/Runner.app build/ios/Payload/
-          (cd build/ios && zip -r "../../$DIST/mdsscope-ios-arm64.ipa" Payload)
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: mobile-packages
+          name: linux-x64-packages
           path: build/dist/*
