@@ -215,12 +215,14 @@ class _PlotPanelState extends State<PlotPanel> {
           final xTicks = xTickCount > 1 ? evenTicks(xMin!, xMax!, xTickCount) : <double>[];
           final yTicks = yTickCount > 1 ? evenTicks(yMin!, yMax!, yTickCount) : <double>[];
 
+          final gridRect = Rect.fromLTWH(leftAxis, topAxis, gridW, gridH);
+
           return Stack(
-            clipBehavior: Clip.hardEdge,
             children: [
-              LineChart(
-                LineChartData(
-                clipData: const FlClipData.all(),
+              ClipRect(
+                clipper: _RectClipper(gridRect),
+                child: LineChart(
+                  LineChartData(
                 lineBarsData: bars,
                 gridData: FlGridData(show: showGrid, drawVerticalLine: showGrid, drawHorizontalLine: showGrid,
                   getDrawingHorizontalLine: (v) => FlLine(color: theme.dividerColor.withValues(alpha: 0.15), strokeWidth: 0.5),
@@ -260,7 +262,8 @@ class _PlotPanelState extends State<PlotPanel> {
                 minX: xMin, maxX: xMax, minY: yMin, maxY: yMax,
               ),
               ),
-              // Grid area border — manually drawn for reliable visibility (C++: QPalette::Midlight)
+            ),
+            // Grid area border — manually drawn for reliable visibility (C++: QPalette::Midlight)
               Positioned(
                 left: leftAxis, top: topAxis, width: gridW, height: gridH,
                 child: IgnorePointer(
@@ -1093,4 +1096,11 @@ class _DSRow {
   List<String> _signalOptions = [];
   _DSRow({required this.shot, required this.y, required this.tree, required this.server});
   void dispose() { shot.dispose(); y.dispose(); tree.dispose(); server.dispose(); }
+}
+
+class _RectClipper extends CustomClipper<Rect> {
+  final Rect rect;
+  const _RectClipper(this.rect);
+  @override Rect getClip(Size size) => rect;
+  @override bool shouldReclip(_RectClipper old) => old.rect != rect;
 }
