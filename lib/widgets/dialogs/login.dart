@@ -19,6 +19,30 @@ class LoginDialog extends StatelessWidget {
     var loading = false;
     var error = '';
 
+    Future<void> doLogin(void Function(void Function()) setState, BuildContext ctx) async {
+      final url = apiCtrl.text.trim();
+      final user = userCtrl.text.trim();
+      final pass = passCtrl.text.trim();
+      if (url.isEmpty || user.isEmpty) {
+        setState(() => error = 'Fill API URL and Username');
+        return;
+      }
+      setState(() { loading = true; error = ''; });
+      try {
+        final (token, usedSsh) = await _login(url, user, pass, app);
+        app.setLoginApiUrl(url);
+        app.setLoginUser(user);
+        app.setLoginPass(pass);
+        app.setLoggedIn(true, token);
+        app.setSshConnected(usedSsh);
+        if (ctx.mounted) Navigator.pop(ctx);
+        app.setStatus('Logged in as $user');
+        app.fetchLatestShot();
+      } catch (e) {
+        setState(() { loading = false; error = 'Error: $e'; });
+      }
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -30,45 +54,22 @@ class LoginDialog extends StatelessWidget {
           if (loading)
             const Row(children: [SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)), SizedBox(width: 12), Text('Logging in...')])
           else ...[
-            TextField(controller: apiCtrl, decoration: const InputDecoration(labelText: 'API URL')),
-            TextField(controller: userCtrl, decoration: const InputDecoration(labelText: 'Username')),
-            TextField(controller: passCtrl, decoration: const InputDecoration(labelText: 'Password'), obscureText: true),
+            TextField(controller: apiCtrl, decoration: const InputDecoration(labelText: 'API URL'), onSubmitted: (_) => doLogin(setState, ctx)),
+            TextField(controller: userCtrl, decoration: const InputDecoration(labelText: 'Username'), onSubmitted: (_) => doLogin(setState, ctx)),
+            TextField(controller: passCtrl, decoration: const InputDecoration(labelText: 'Password'), obscureText: true, onSubmitted: (_) => doLogin(setState, ctx)),
           ],
         ]),
         actions: loading ? [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
         ] : [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () async {
-            final url = apiCtrl.text.trim();
-            final user = userCtrl.text.trim();
-            final pass = passCtrl.text.trim();
-            if (url.isEmpty || user.isEmpty) {
-              setState(() => error = 'Fill API URL and Username');
-              return;
-            }
-            setState(() { loading = true; error = ''; });
-            try {
-              final (token, usedSsh) = await _login(url, user, pass, app);
-              app.setLoginApiUrl(url);
-              app.setLoginUser(user);
-              app.setLoginPass(pass);
-              app.setLoggedIn(true, token);
-              app.setSshConnected(usedSsh);
-              if (ctx.mounted) Navigator.pop(ctx);
-              app.setStatus('Logged in as $user');
-              app.fetchLatestShot();
-            } catch (e) {
-              setState(() { loading = false; error = 'Error: $e'; });
-            }
-          }, child: const Text('Login')),
+          FilledButton(onPressed: () => doLogin(setState, ctx), child: const Text('Login')),
         ],
       )),
     );
   }
 
   static Future<(String, bool)> _login(String apiUrl, String user, String pass, AppState app) async {
-    // Route through SSH tunnel if SSH is configured
     String effectiveUrl = apiUrl;
     bool usedSsh = false;
     if (app.sshMode > 0 && app.sshHost.isNotEmpty) {
