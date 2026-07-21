@@ -309,8 +309,7 @@ class AppState extends ChangeNotifier {
     _doFetch();
   }
 
-  void _doFetch() {
-    // Clear existing data so "No data" is shown during load
+  void _clearAllSeriesPoints() {
     for (final p in _plots) {
       for (final s in p.series) {
         if (s != null) {
@@ -319,6 +318,10 @@ class AppState extends ChangeNotifier {
         }
       }
     }
+  }
+
+  void _doFetch() {
+    _clearAllSeriesPoints();
     _fetching = true; _status = 'Fetching...'; notifyListeners();
     Future.delayed(const Duration(milliseconds: 16), () {
       try {
@@ -376,7 +379,10 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> fetchLatestShot() async {
-    _status = 'Fetching latest shot...'; notifyListeners();
+    _clearAllSeriesPoints();
+    _fetching = true;
+    _status = 'Fetching latest shot...';
+    notifyListeners();
     try {
       String apiUrl = _loginApiUrl;
       // Route through SSH if configured
