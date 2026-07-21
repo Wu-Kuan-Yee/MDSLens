@@ -603,7 +603,7 @@ class _PlotPanelState extends State<PlotPanel> {
     showDialog(
       context: ctx,
       builder: (ctx) => _DataSourceDialog(signals: sigs, defaultShot: defaultShot, onSave: () { panel['signal_specs'] = sigs; _rebuildPlots(app); }),
-    ).then((confirmed) { if (confirmed == true) app.startRefresh(); });
+    ).then((confirmed) { if (confirmed == true) app.fetchSinglePanel(widget.plotIdx); });
   }
 
   void _rebuildPlots(AppState app) {

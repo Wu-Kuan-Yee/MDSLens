@@ -369,6 +369,80 @@ class AppState extends ChangeNotifier {
 
   void stopFetch() { _fetching = false; _status = 'Stopped'; notifyListeners(); }
 
+  void fetchSinglePanel(int plotIdx) async {
+    if (_columns.isEmpty) return;
+    var targetCol = -1, targetRow = -1;
+    var pIdx = 0;
+    for (var c = 0; c < _columns.length; c++) {
+      for (var r = 0; r < _columns[c].length; r++) {
+        if (pIdx == plotIdx) {
+          targetCol = c;
+          targetRow = r;
+          break;
+        }
+        pIdx++;
+      }
+      if (targetCol >= 0) break;
+    }
+    if (targetCol < 0) return;
+
+    if (plotIdx < _plots.length) {
+      for (final s in _plots[plotIdx].series) {
+        if (s != null) {
+          s.points = null;
+          s.error = null;
+        }
+      }
+    }
+
+    _fetching = true;
+    _status = 'Fetching panel ($targetCol, $targetRow)...';
+    notifyListeners();
+
+    await WidgetsBinding.instance.endOfFrame;
+    await Future.delayed(const Duration(milliseconds: 50));
+
+    try {
+      final cols = _columns.map((col) => col.map((p) {
+        final m = Map<String, dynamic>.from(p);
+        m['shot'] = _shotText;
+        m['extraction_points'] ??= 2000;
+        m['grid'] ??= true;
+        return m;
+      }).toList()).toList();
+
+      final sshSettings = _sshMode > 0 && _sshHost.isNotEmpty
+          ? jsonEncode({'host': _sshHost, 'port': _sshPort, 'user': _sshUser, 'password': _sshPass, 'identity_file': _sshIdentity, 'mode': _sshMode})
+          : '';
+      final raw = RustBridge.instance.fetchSigSsh(jsonEncode({'columns': cols}), _dataMode.toString(), sshSettings);
+      if (raw.isNotEmpty) {
+        final json = jsonDecode(raw);
+        if (json is List) {
+          String? firstErr;
+          for (final sig in json) {
+            if (sig is Map) {
+              final c = sig['column'] as int?;
+              final r = sig['row'] as int?;
+              if (c == targetCol && r == targetRow) {
+                final ser = sig['series'];
+                final err = ser?['error']?.toString();
+                if (err != null && err.isNotEmpty) firstErr ??= err;
+                final pts = (ser?['points'] as List?)?.map((p) => [(p[0] as num).toDouble(), (p[1] as num).toDouble()]).toList();
+                updatePlotSeriesByColRow(targetCol, targetRow, sig['signal'] as int, pts, err);
+              }
+            }
+          }
+        }
+      }
+      _fetching = false;
+      _status = 'Updated panel ($targetCol, $targetRow)';
+    } catch (e) {
+      _fetching = false;
+      _status = 'Error: $e';
+    }
+    notifyListeners();
+  }
+
   Future<void> _fetchTopInfo() async {
     if (_loginApiUrl.isEmpty || _shotText.isEmpty || _authToken.isEmpty) return;
     try {
