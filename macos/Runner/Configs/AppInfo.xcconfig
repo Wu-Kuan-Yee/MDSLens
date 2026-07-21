@@ -14,4 +14,4 @@ PRODUCT_BUNDLE_IDENTIFIER = com.example.mdsscope
 PRODUCT_COPYRIGHT = Copyright © 2026 com.example. All rights reserved.
 
 // Static link Rust bridge library
-OTHER_LDFLAGS = $(inherited) $(SRCROOT)/../../rust/target/release/libmds_bridge.a -framework Security -framework SystemConfiguration -lresolv
+OTHER_LDFLAGS = $(inherited) $(SRCROOT)/../rust/target/release/libmds_bridge.a -framework Security -framework SystemConfiguration -lresolv
