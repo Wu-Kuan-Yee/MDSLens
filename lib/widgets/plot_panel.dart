@@ -36,7 +36,6 @@ class _PlotPanelState extends State<PlotPanel> {
   int _lastResetId = -1;
   bool _midPanning = false;
   Offset? _lastMidPanPos;
-  Offset? _hoverPos; // Track real mouse position for accurate zoom center
   bool _inRubberBand = false;
   Offset? _rubberBandStart;
   Rect? _rubberBandRect;
@@ -117,10 +116,7 @@ class _PlotPanelState extends State<PlotPanel> {
       },
       onSecondaryTapUp: (details) => _showContextMenu(context, details.globalPosition),
       onLongPressStart: (details) => _showContextMenu(context, details.globalPosition),
-      child: MouseRegion(
-        onHover: (e) => _hoverPos = e.localPosition,
-        onExit: (_) => _hoverPos = null,
-        child: Listener(
+      child: Listener(
         key: _listenerKey,
         onPointerSignal: _handleScrollWheel,
         onPointerDown: _handlePointerDown,
@@ -170,7 +166,6 @@ class _PlotPanelState extends State<PlotPanel> {
         ),
         ),
       ),
-    ),
     );
   }
 
@@ -296,13 +291,11 @@ class _PlotPanelState extends State<PlotPanel> {
     final plot = app.plots[widget.plotIdx];
     setState(() {
       if (_viewMinX.isNaN) _initViewToData(plot);
-      final lb = _listenerBox;
-      if (lb == null || lb.size.width <= 0 || lb.size.height <= 0) return;
-      final pos = _hoverPos ?? event.localPosition; // Use tracked cursor, fallback to event pos
       final steps = event.scrollDelta.dy / 53.0;
       final factor = math.pow(1.22, -steps);
-      final cx = _pxToDataX(pos.dx, lb.size.width);
-      final cy = _pxToDataY(pos.dy, lb.size.height);
+      // Zoom around view center (correct and predictable, matching professional tools)
+      final cx = (_viewMinX + _viewMaxX) / 2;
+      final cy = (_viewMinY + _viewMaxY) / 2;
       _viewMinX = cx - (cx - _viewMinX) * factor;
       _viewMaxX = cx + (_viewMaxX - cx) * factor;
       _viewMinY = cy - (cy - _viewMinY) * factor;
@@ -473,23 +466,42 @@ class _PlotPanelState extends State<PlotPanel> {
     });
   }
 
+  Map<String, dynamic> _findPanel(AppState app) {
+    var idx = widget.plotIdx;
+    for (final col in app.columns) {
+      if (idx < col.length) return col[idx];
+      idx -= col.length;
+    }
+    return <String, dynamic>{};
+  }
+
   void _showDataSourceSetup(BuildContext ctx, AppState app) {
-    final col = app.columns.isNotEmpty ? app.columns[0] : <Map<String, dynamic>>[];
-    final panel = widget.plotIdx < col.length ? col[widget.plotIdx] : <String, dynamic>{};
-    final sigs = (panel['signal_specs'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final panel = _findPanel(app);
+    final sigs = List<Map<String, dynamic>>.from((panel['signal_specs'] as List?)?.map((s) => Map<String, dynamic>.from(s as Map)) ?? []);
+    if (sigs.isEmpty) sigs.add({'y_expr': '', 'experiment': 'pcs_east', 'server_ip': '202.127.204.12'});
     showDialog(
       context: ctx,
-      builder: (ctx) => _DataSourceDialog(signals: sigs, onSave: () => app.notifyListeners()),
+      builder: (ctx) => _DataSourceDialog(signals: sigs, onSave: () { panel['signal_specs'] = sigs; _rebuildPlots(app); }),
     );
   }
 
+  void _rebuildPlots(AppState app) {
+    app.plots.clear();
+    for (final col in app.columns) {
+      for (final p in col) {
+        final sc = (p['signal_specs'] as List?)?.length ?? 1;
+        app.plots.add(PlotData(title: p['title']?.toString()??'', xLabel: p['x_label']?.toString()??'s', yLabel: p['y_label']?.toString()??'a.u.', series: List.filled(sc > 0 ? sc : 1, null)));
+      }
+    }
+    app.notifyListeners();
+  }
+
   void _showPanelSetup(BuildContext ctx, AppState app) {
-    final col = app.columns.isNotEmpty ? app.columns[0] : <Map<String, dynamic>>[];
-    final panel = widget.plotIdx < col.length ? col[widget.plotIdx] : <String, dynamic>{};
+    final panel = _findPanel(app);
     showDialog(
       context: ctx,
       builder: (ctx) => _PanelSetupDialog(panel: panel, onSave: () {
-        app.notifyListeners();
+        _rebuildPlots(app);
       }),
     );
   }
@@ -747,11 +759,15 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
             const SizedBox(height: 4),
             TextField(controller: _ctrls[i].server, decoration: const InputDecoration(labelText: 'Server IP', isDense: true)),
             const SizedBox(height: 4),
-            TextField(controller: TextEditingController(text: _ctrls[i].color), decoration: const InputDecoration(labelText: 'Color (hex, e.g. #ff0000)', isDense: true), onChanged: (v) => _ctrls[i].color = v),
+            _ColorField(initial: _ctrls[i].color, onChanged: (v) => _ctrls[i].color = v),
             Row(children: [
               Expanded(child: DropdownButtonFormField<int>(initialValue: _ctrls[i].readMode, decoration: const InputDecoration(labelText: 'Data', isDense: true), items: List.generate(3, (j) => DropdownMenuItem(value: j, child: Text(_modes[j]))), onChanged: (v) { if (v != null) _ctrls[i].readMode = v; })),
               const SizedBox(width: 8),
-              CheckboxListTile(title: const Text('Hide'), value: _ctrls[i].hidden, onChanged: (v) => setState(() => _ctrls[i].hidden = v ?? false), contentPadding: EdgeInsets.zero, dense: true, controlAffinity: ListTileControlAffinity.leading),
+              SizedBox(width: 60, child: Row(children: [
+                SizedBox(width: 18, height: 18, child: Checkbox(value: _ctrls[i].hidden, onChanged: (v) => setState(() => _ctrls[i].hidden = v ?? false))),
+                const SizedBox(width: 4),
+                const Text('Hide', style: TextStyle(fontSize: 12)),
+              ])),
             ]),
           ],
         ]),
@@ -781,6 +797,18 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
     widget.onSave();
     Navigator.pop(context);
   }
+}
+
+class _ColorField extends StatefulWidget {
+  final String initial;
+  final ValueChanged<String> onChanged;
+  const _ColorField({required this.initial, required this.onChanged});
+  @override State<_ColorField> createState() => _ColorFieldState();
+}
+class _ColorFieldState extends State<_ColorField> {
+  late final _ctrl = TextEditingController(text: widget.initial);
+  @override void dispose() { _ctrl.dispose(); super.dispose(); }
+  @override Widget build(BuildContext ctx) => TextField(controller: _ctrl, decoration: const InputDecoration(labelText: 'Color (hex, e.g. #ff0000)', isDense: true), onChanged: widget.onChanged);
 }
 
 class _SigCtrls {
