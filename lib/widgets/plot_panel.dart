@@ -217,47 +217,56 @@ class _PlotPanelState extends State<PlotPanel> {
           return Stack(
             clipBehavior: Clip.hardEdge,
             children: [
-              ClipRect(
-                child: LineChart(
-                  LineChartData(
-                  lineBarsData: bars,
-                  gridData: FlGridData(show: showGrid, drawVerticalLine: showGrid, drawHorizontalLine: showGrid,
-                    getDrawingHorizontalLine: (v) => FlLine(color: theme.dividerColor.withValues(alpha: 0.15), strokeWidth: 0.5),
-                    getDrawingVerticalLine: (v) => FlLine(color: theme.dividerColor.withValues(alpha: 0.15), strokeWidth: 0.5),
+              LineChart(
+                LineChartData(
+                lineBarsData: bars,
+                gridData: FlGridData(show: showGrid, drawVerticalLine: showGrid, drawHorizontalLine: showGrid,
+                  getDrawingHorizontalLine: (v) => FlLine(color: theme.dividerColor.withValues(alpha: 0.15), strokeWidth: 0.5),
+                  getDrawingVerticalLine: (v) => FlLine(color: theme.dividerColor.withValues(alpha: 0.15), strokeWidth: 0.5),
+                ),
+                titlesData: const FlTitlesData(
+                  bottomTitles: AxisTitles(axisNameSize: 14, sideTitles: SideTitles(showTitles: false, reservedSize: 32)),
+                  leftTitles: AxisTitles(axisNameSize: 14, sideTitles: SideTitles(showTitles: false, reservedSize: 50)),
+                  topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                ),
+                borderData: FlBorderData(show: false),
+                lineTouchData: LineTouchData(enabled: true,
+                  touchCallback: (event, response) {
+                    final a = context.read<AppState>();
+                    if (a.interactionMode != 1) return;
+                    if (a.pointLocked) return;
+                    if (response?.lineBarSpots != null && response!.lineBarSpots!.isNotEmpty) {
+                      final spot = response.lineBarSpots!.first;
+                      a.setCrosshair(spot.x);
+                      setState(() { _localCrosshairY = spot.y; });
+                    }
+                  },
+                  handleBuiltInTouches: false,
+                  touchTooltipData: LineTouchTooltipData(
+                    getTooltipColor: (_) => theme.colorScheme.inverseSurface,
+                    getTooltipItems: (spots) => spots.map((s) => LineTooltipItem(
+                      '${s.x.toStringAsFixed(3)}, ${s.y.toStringAsFixed(4)}',
+                      TextStyle(fontSize: 9, color: theme.colorScheme.onInverseSurface, fontFamily: 'monospace'),
+                    )).toList(),
                   ),
-                  titlesData: const FlTitlesData(
-                    bottomTitles: AxisTitles(axisNameSize: 14, sideTitles: SideTitles(showTitles: false, reservedSize: 32)),
-                    leftTitles: AxisTitles(axisNameSize: 14, sideTitles: SideTitles(showTitles: false, reservedSize: 50)),
-                    topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  ),
-                  borderData: FlBorderData(show: true, border: Border.all(color: theme.dividerColor.withValues(alpha: 0.3), width: 0.5)),
-                  lineTouchData: LineTouchData(enabled: true,
-                    touchCallback: (event, response) {
-                      final a = context.read<AppState>();
-                      if (a.interactionMode != 1) return;
-                      if (a.pointLocked) return;
-                      if (response?.lineBarSpots != null && response!.lineBarSpots!.isNotEmpty) {
-                        final spot = response.lineBarSpots!.first;
-                        a.setCrosshair(spot.x);
-                        setState(() { _localCrosshairY = spot.y; });
-                      }
-                    },
-                    handleBuiltInTouches: false,
-                    touchTooltipData: LineTouchTooltipData(
-                      getTooltipColor: (_) => theme.colorScheme.inverseSurface,
-                      getTooltipItems: (spots) => spots.map((s) => LineTooltipItem(
-                        '${s.x.toStringAsFixed(3)}, ${s.y.toStringAsFixed(4)}',
-                        TextStyle(fontSize: 9, color: theme.colorScheme.onInverseSurface, fontFamily: 'monospace'),
-                      )).toList(),
+                ),
+                extraLinesData: ExtraLinesData(
+                  verticalLines: cx != null ? [VerticalLine(x: cx, color: const Color(0xFFFF00FF), strokeWidth: 1, label: _crosshairLabel(bars, cx))] : [],
+                  horizontalLines: _localCrosshairY != null ? [HorizontalLine(y: _localCrosshairY!, color: const Color(0xFFFF00FF), strokeWidth: 1)] : [],
+                ),
+                minX: xMin, maxX: xMax, minY: yMin, maxY: yMax,
+              ),
+              ),
+              // Grid area border — manually drawn for reliable visibility (C++: QPalette::Midlight)
+              Positioned(
+                left: leftAxis, top: 0, width: gridW, height: gridH,
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5), width: 1),
                     ),
                   ),
-                  extraLinesData: ExtraLinesData(
-                    verticalLines: cx != null ? [VerticalLine(x: cx, color: const Color(0xFFFF00FF), strokeWidth: 1, label: _crosshairLabel(bars, cx))] : [],
-                    horizontalLines: _localCrosshairY != null ? [HorizontalLine(y: _localCrosshairY!, color: const Color(0xFFFF00FF), strokeWidth: 1)] : [],
-                  ),
-                  minX: xMin, maxX: xMax, minY: yMin, maxY: yMax,
-                ),
                 ),
               ),
               // Y-axis tick marks — 3px horizontal lines (matching C++ render.cpp:251)
