@@ -35,10 +35,12 @@ class SshDialog extends StatelessWidget {
           DropdownButtonFormField<int>(
             initialValue: mode,
             decoration: const InputDecoration(labelText: 'Mode'),
-            items: const [
-              DropdownMenuItem(value: 0, child: Text('Disabled')),
-              DropdownMenuItem(value: 1, child: Text('Auto (direct first)')),
-              DropdownMenuItem(value: 2, child: Text('Always SSH')),
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+            dropdownColor: Theme.of(context).colorScheme.surface,
+            items: [
+              DropdownMenuItem(value: 0, child: Text('Disabled', style: TextStyle(color: Theme.of(context).colorScheme.onSurface))),
+              DropdownMenuItem(value: 1, child: Text('Auto (direct first)', style: TextStyle(color: Theme.of(context).colorScheme.onSurface))),
+              DropdownMenuItem(value: 2, child: Text('Always SSH', style: TextStyle(color: Theme.of(context).colorScheme.onSurface))),
             ],
             onChanged: (v) { if (v != null) setState(() => mode = v); },
           ),
