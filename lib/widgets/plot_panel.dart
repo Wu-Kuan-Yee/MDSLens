@@ -62,12 +62,21 @@ class _PlotPanelState extends State<PlotPanel> {
     // Build line bars with MinMax decimation
     final bars = <LineChartBarData>[];
     final sigSpecs = (panel['signal_specs'] as List?)?.cast<Map>() ?? [];
+    double? viewMinX, viewMaxX, viewMinY, viewMaxY;
     for (var i = 0; i < plot.series.length; i++) {
       final s = plot.series[i];
       if (s?.points == null || s!.points!.isEmpty) continue;
       if (i < sigSpecs.length && sigSpecs[i]['hidden'] == true) continue;
       final decimated = _decimate(s.points!, 2000);
       final spots = decimated.map((p) => FlSpot(p[0], p[1])).toList();
+      for (final sp in spots) {
+        viewMinX ??= sp.x; viewMaxX ??= sp.x;
+        viewMinY ??= sp.y; viewMaxY ??= sp.y;
+        if (sp.x < viewMinX) viewMinX = sp.x;
+        if (sp.x > viewMaxX) viewMaxX = sp.x;
+        if (sp.y < viewMinY) viewMinY = sp.y;
+        if (sp.y > viewMaxY) viewMaxY = sp.y;
+      }
       bars.add(LineChartBarData(
         spots: spots,
         isCurved: false,
@@ -146,7 +155,7 @@ class _PlotPanelState extends State<PlotPanel> {
                 child: bars.isEmpty
                     ? Center(child: Text(plot.series.any((s) => s?.error != null && s!.error!.isNotEmpty) ? 'Error' : 'No data', style: TextStyle(color: Colors.grey, fontSize: 10)))
                     : Stack(key: _chartAreaKey, children: [
-                        _buildChart(bars, plot, panel, theme),
+                        _buildChart(bars, plot, panel, theme, viewMinX, viewMaxX, viewMinY, viewMaxY),
                       ]),
               ),
             ]),
@@ -170,7 +179,8 @@ class _PlotPanelState extends State<PlotPanel> {
     ]);
   }
 
-  Widget _buildChart(List<LineChartBarData> bars, PlotData plot, Map<String, dynamic> panel, ThemeData theme) {
+  Widget _buildChart(List<LineChartBarData> bars, PlotData plot, Map<String, dynamic> panel, ThemeData theme,
+      double? autoMinX, double? autoMaxX, double? autoMinY, double? autoMaxY) {
     final textColor = theme.colorScheme.onSurface.withValues(alpha: 0.6);
     final tickColor = theme.colorScheme.onSurface.withValues(alpha: 0.4);
     final cx = context.read<AppState>().crosshairX;
@@ -178,16 +188,11 @@ class _PlotPanelState extends State<PlotPanel> {
     final customX = panel['custom_x_range'] == true;
     final customY = panel['custom_y_range'] == true;
 
-    // Always compute fresh data bounds for initial auto-scale
-    final b = _computeDataBounds(plot, panel);
-    final bx0 = b != null && b.length > 0 ? b[0] : null;
-    final bx1 = b != null && b.length > 1 ? b[1] : null;
-    final bx2 = b != null && b.length > 2 ? b[2] : null;
-    final bx3 = b != null && b.length > 3 ? b[3] : null;
-    final xMin = customX ? ((panel['xmin'] as num?)?.toDouble()) : (_viewMinX.isNaN ? bx0 : _viewMinX);
-    final xMax = customX ? ((panel['xmax'] as num?)?.toDouble()) : (_viewMaxX.isNaN ? bx1 : _viewMaxX);
-    final yMin = customY ? ((panel['ymin'] as num?)?.toDouble()) : (_viewMinY.isNaN ? bx2 : _viewMinY);
-    final yMax = customY ? ((panel['ymax'] as num?)?.toDouble()) : (_viewMaxY.isNaN ? bx3 : _viewMaxY);
+    // Use view state if user has interacted; otherwise auto-scale to displayed data
+    final xMin = customX ? ((panel['xmin'] as num?)?.toDouble()) : (_viewMinX.isNaN ? autoMinX : _viewMinX);
+    final xMax = customX ? ((panel['xmax'] as num?)?.toDouble()) : (_viewMaxX.isNaN ? autoMaxX : _viewMaxX);
+    final yMin = customY ? ((panel['ymin'] as num?)?.toDouble()) : (_viewMinY.isNaN ? autoMinY : _viewMinY);
+    final yMax = customY ? ((panel['ymax'] as num?)?.toDouble()) : (_viewMaxY.isNaN ? autoMaxY : _viewMaxY);
 
     List<double> evenTicks(double min, double max, int count) {
       if (count < 2) return [min];
