@@ -326,11 +326,14 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  void _doFetch() {
+  void _doFetch() async {
     _clearAllSeriesPoints();
     _fetching = true; _status = 'Fetching...'; notifyListeners();
-    Future.delayed(const Duration(milliseconds: 16), () {
-      try {
+
+    await WidgetsBinding.instance.endOfFrame;
+    await Future.delayed(const Duration(milliseconds: 50));
+
+    try {
         final cols = _columns.map((col) => col.map((p) {
           final m = Map<String, dynamic>.from(p);
           m['shot'] = _shotText;
@@ -362,7 +365,6 @@ class AppState extends ChangeNotifier {
         _fetchTopInfo(); // async fetch Ip/Pulse/It/Time (matching C++ scheduleTopInfoUpdate)
       } catch (e) { _fetching = false; _status = 'Error: $e'; }
       notifyListeners();
-    });
   }
 
   void stopFetch() { _fetching = false; _status = 'Stopped'; notifyListeners(); }
