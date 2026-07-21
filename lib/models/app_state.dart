@@ -298,6 +298,9 @@ class AppState extends ChangeNotifier {
 
   void startRefresh() {
     if (_columns.isEmpty) return;
+    if (_shotCtrl.text.trim().isNotEmpty) {
+      _shotText = _shotCtrl.text.trim();
+    }
     _addToHistory(_shotText);
     _viewResetId++;
     _doFetch();
@@ -305,6 +308,9 @@ class AppState extends ChangeNotifier {
 
   void startRefreshPreserveView() {
     if (_columns.isEmpty) return;
+    if (_shotCtrl.text.trim().isNotEmpty) {
+      _shotText = _shotCtrl.text.trim();
+    }
     _addToHistory(_shotText);
     _doFetch();
   }
