@@ -92,9 +92,6 @@ class _PlotPanelState extends State<PlotPanel> {
         if (mode != 0 || _midPanning || _inRubberBand) return;
         setState(() {
           if (_viewMinX.isNaN) _initViewToData(plot);
-          final box = context.findRenderObject() as RenderBox?;
-          final w = box?.size.width ?? 0;
-          final h = box?.size.height ?? 0;
           final lb = _listenerBox;
           final w = lb?.size.width ?? 0;
           final h = lb?.size.height ?? 0;
