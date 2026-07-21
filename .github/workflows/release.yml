@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 jobs:
   # ── Windows Packaging (x64) ─────────────────────────────────────────
@@ -38,12 +39,9 @@ jobs:
           name: windows-x64-packages
           path: build/dist/*
 
-  # ── macOS Packaging (arm64, x64) ────────────────────────────────────
+  # ── macOS Packaging (arm64) ─────────────────────────────────────────
   build-macos:
     runs-on: macos-latest
-    strategy:
-      matrix:
-        arch: [arm64]
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2

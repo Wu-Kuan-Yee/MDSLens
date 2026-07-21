@@ -2,8 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - flutter-rewrite
   pull_request:
+    branches:
+      - main
+      - flutter-rewrite
 
 jobs:
   rust-test:
