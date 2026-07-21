@@ -48,7 +48,7 @@ pub async fn fetch_shot_info(api_url: &str, token: &str, shot: &str) -> Result<S
     let data = resp.get("data").ok_or("no data")?;
     Ok(ShotInfo {
         shot: shot.parse().unwrap_or(0),
-        ip: data.get("pcrl01").and_then(|v| v.as_str()).unwrap_or("").into(),
+        ip: data.get("pcrl01").and_then(|v| v.as_f64().map(|n| n.to_string()).or_else(|| v.as_str().map(|s| s.to_string()))).unwrap_or_default(),
         pulse: data.get("shot_len").and_then(|v| v.as_f64()).map(|v| format!("{:.3}", v)).unwrap_or_default(),
         it: data.get("iv").and_then(|v| v.as_f64()).map(|v| format!("{:.0}", v)).unwrap_or_default(),
         time: data.get("curr_time").and_then(|v| v.as_str()).unwrap_or("").into(),

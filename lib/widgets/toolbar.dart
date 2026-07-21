@@ -17,8 +17,8 @@ class ToolbarWidget extends StatelessWidget {
     final infoStyle = TextStyle(fontSize: 11, color: theme.colorScheme.primary);
     final shot = app.shotText.isNotEmpty ? app.shotText : '--';
     final ip = app.shotInfoIp.isNotEmpty ? '${app.shotInfoIp} kA' : (app.fetching ? '...' : '--');
-    final pulse = app.shotInfoPulse.isNotEmpty ? app.shotInfoPulse : (app.fetching ? '...' : '--');
-    final it = app.shotInfoIt.isNotEmpty ? app.shotInfoIt : (app.fetching ? '...' : '--');
+    final pulse = app.shotInfoPulse.isNotEmpty ? '${app.shotInfoPulse} s' : (app.fetching ? '...' : '--');
+    final it = app.shotInfoIt.isNotEmpty ? '${app.shotInfoIt} A' : (app.fetching ? '...' : '--');
     final time = app.shotInfoTime.isNotEmpty ? app.shotInfoTime : (app.fetching ? '...' : '--');
 
     return Container(
