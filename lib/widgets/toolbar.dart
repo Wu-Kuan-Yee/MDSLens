@@ -393,9 +393,10 @@ class ToolbarWidget extends StatelessWidget {
   }
 
   Widget _themeBtn(BuildContext ctx, String label, bool active, VoidCallback onTap) {
+    final theme = Theme.of(ctx);
     return Padding(padding: const EdgeInsets.symmetric(horizontal: 1),
       child: OutlinedButton(onPressed: onTap,
-        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 11, color: active ? Theme.of(ctx).colorScheme.primary : null), backgroundColor: active ? Theme.of(ctx).colorScheme.primaryContainer.withValues(alpha: 0.3) : null),
+        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 11, fontWeight: active ? FontWeight.bold : FontWeight.normal, color: active ? theme.colorScheme.onPrimaryContainer : theme.colorScheme.onSurface), backgroundColor: active ? theme.colorScheme.primaryContainer : null),
         child: Text(label)));
   }
 }
