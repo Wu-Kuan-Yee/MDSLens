@@ -308,16 +308,14 @@ mod tests {
 
     #[test]
     fn test_effective_read_mode() {
-        // Per-signal higher than global → signal wins
+        // Per-signal always overrides global when set
         assert_eq!(effective_read_mode(DataReadMode::Thin, Some(DataReadMode::Full)), DataReadMode::Full);
-        assert_eq!(effective_read_mode(DataReadMode::Thin, Some(DataReadMode::Medium)), DataReadMode::Medium);
-        // Per-signal lower than global → global wins (higher precision)
-        assert_eq!(effective_read_mode(DataReadMode::Full, Some(DataReadMode::Thin)), DataReadMode::Full);
-        assert_eq!(effective_read_mode(DataReadMode::Full, Some(DataReadMode::Medium)), DataReadMode::Full);
+        assert_eq!(effective_read_mode(DataReadMode::Full, Some(DataReadMode::Thin)), DataReadMode::Thin);
+        assert_eq!(effective_read_mode(DataReadMode::Medium, Some(DataReadMode::Full)), DataReadMode::Full);
         // No per-signal → global default
         assert_eq!(effective_read_mode(DataReadMode::Thin, None), DataReadMode::Thin);
         assert_eq!(effective_read_mode(DataReadMode::Full, None), DataReadMode::Full);
-        // Equal modes → fine either way
+        // Equal modes
         assert_eq!(effective_read_mode(DataReadMode::Medium, Some(DataReadMode::Medium)), DataReadMode::Medium);
     }
 }

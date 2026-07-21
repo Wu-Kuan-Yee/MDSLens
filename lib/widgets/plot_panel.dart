@@ -370,23 +370,28 @@ class _PlotPanelState extends State<PlotPanel> {
     return _colors[i % _colors.length];
   }
 
-  // Convert listener-local pixel coordinates to data coordinates, accounting for
-  // the actual chart area position within the panel (title + xLabel offsets).
+  // Convert listener-local pixel coordinates to data coordinates.
+  // Accounts for axis reserved sizes (left=50, bottom=32) to map
+  // pixel positions within the actual grid area, not the full widget.
   double _pxToDataX(double px) {
     final lb = _listenerBox;
     final cb = _chartBox;
-    if (lb == null || cb == null || cb.size.width <= 0) return (_viewMinX + _viewMaxX) / 2;
+    if (lb == null || cb == null || cb.size.width <= 50) return (_viewMinX + _viewMaxX) / 2;
     final chartOffset = cb.localToGlobal(Offset.zero) - lb.localToGlobal(Offset.zero);
-    final chartX = px - chartOffset.dx;
-    return _viewMinX + (chartX / cb.size.width) * (_viewMaxX - _viewMinX);
+    const gridLeft = 50.0; // leftTitles.reservedSize
+    final gridWidth = cb.size.width - gridLeft;
+    final gridX = px - chartOffset.dx - gridLeft;
+    return _viewMinX + (gridX / gridWidth) * (_viewMaxX - _viewMinX);
   }
   double _pxToDataY(double py) {
     final lb = _listenerBox;
     final cb = _chartBox;
-    if (lb == null || cb == null || cb.size.height <= 0) return (_viewMinY + _viewMaxY) / 2;
+    if (lb == null || cb == null || cb.size.height <= 32) return (_viewMinY + _viewMaxY) / 2;
     final chartOffset = cb.localToGlobal(Offset.zero) - lb.localToGlobal(Offset.zero);
-    final chartY = py - chartOffset.dy;
-    return _viewMaxY - (chartY / cb.size.height) * (_viewMaxY - _viewMinY);
+    const gridBottom = 32.0; // bottomTitles.reservedSize
+    final gridHeight = cb.size.height - gridBottom;
+    final gridY = py - chartOffset.dy;
+    return _viewMaxY - (gridY / gridHeight) * (_viewMaxY - _viewMinY);
   }
 
   void _handleScrollWheel(PointerSignalEvent event) {
