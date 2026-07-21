@@ -502,32 +502,26 @@ class _PlotPanelState extends State<PlotPanel> {
   }
 
   void _rebuildPlots(AppState app) {
-    // Preserve existing series data, update metadata only
-    final oldPlots = List<PlotData>.from(app.plots);
+    // Preserve existing series data, update metadata without intermediate empty state
+    final newPlots = <PlotData>[];
     var idx = 0;
+    final curPlots = app.plots.toList();
     for (final col in app.columns) {
       for (final p in col) {
         final sc = (p['signal_specs'] as List?)?.length ?? 1;
-        if (idx < oldPlots.length) {
-          // Update metadata only, keep series data
-          oldPlots[idx] = PlotData(
-            title: p['title']?.toString()??'',
-            xLabel: p['x_label']?.toString()??'s',
-            yLabel: p['y_label']?.toString()??'a.u.',
-            series: _resizeSeries(oldPlots[idx].series, sc > 0 ? sc : 1),
-          );
-        } else {
-          oldPlots.add(PlotData(title: p['title']?.toString()??'', xLabel: p['x_label']?.toString()??'s', yLabel: p['y_label']?.toString()??'a.u.', series: List.filled(sc > 0 ? sc : 1, null)));
-        }
+        final oldSeries = idx < curPlots.length ? curPlots[idx].series : <SeriesData?>[];
+        newPlots.add(PlotData(
+          title: p['title']?.toString()??'',
+          xLabel: p['x_label']?.toString()??'s',
+          yLabel: p['y_label']?.toString()??'a.u.',
+          series: _resizeSeries(oldSeries, sc > 0 ? sc : 1),
+        ));
         idx++;
       }
     }
-    // Remove excess plots if layout shrank
-    if (idx < oldPlots.length) oldPlots.removeRange(idx, oldPlots.length);
-    // Reassign to trigger rebuild
-    app.plots
-      ..clear()
-      ..addAll(oldPlots);
+    // Replace in-place to avoid intermediate empty state
+    app.plots.clear();
+    app.plots.addAll(newPlots);
     app.notifyListeners();
   }
 
@@ -886,35 +880,39 @@ class _AutocompleteField extends StatefulWidget {
 class _AutocompleteFieldState extends State<_AutocompleteField> {
   List<String> _hints = [];
   final _node = FocusNode();
-  bool _focused = false;
+  OverlayEntry? _overlay;
+  final _layerLink = LayerLink();
 
   @override void initState() {
     super.initState();
-    _node.addListener(() { setState(() => _focused = _node.hasFocus); });
+    _node.addListener(() { if (!_node.hasFocus) _removeOverlay(); });
     widget.controller.addListener(_update);
   }
 
   @override void dispose() {
-    _node.removeListener(() {});
+    _removeOverlay();
     widget.controller.removeListener(_update);
     _node.dispose();
     super.dispose();
   }
 
-  void _update() {
-    final v = widget.controller.text.toLowerCase();
-    setState(() { _hints = v.isEmpty ? [] : widget.options.where((o) => o.toLowerCase().contains(v)).take(20).toList(); });
+  void _removeOverlay() {
+    _overlay?.remove();
+    _overlay = null;
   }
 
-  @override Widget build(BuildContext ctx) => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-    TextField(controller: widget.controller, focusNode: _node, decoration: InputDecoration(labelText: widget.label, isDense: true), style: const TextStyle(fontSize: 12), onChanged: (_) => _update()),
-    if (_focused && _hints.isNotEmpty)
-      Container(
-        constraints: const BoxConstraints(maxHeight: 160),
-        decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300)),
-        child: ListView.builder(padding: EdgeInsets.zero, shrinkWrap: true, itemCount: _hints.length, itemBuilder: (ctx, i) => ListTile(dense: true, title: Text(_hints[i], style: const TextStyle(fontSize: 12)), onTap: () { widget.controller.text = _hints[i]; _node.unfocus(); _update(); widget.onChanged?.call(); })),
-      ),
-  ]);
+  void _update() {
+    final v = widget.controller.text.toLowerCase();
+    final hints = v.isEmpty ? <String>[] : widget.options.where((o) => o.toLowerCase().contains(v)).take(20).toList();
+    setState(() { _hints = hints; });
+    _removeOverlay();
+    if (hints.isNotEmpty && _node.hasFocus) {
+      _overlay = OverlayEntry(builder: (_) => Positioned(width: 220, child: CompositedTransformFollower(link: _layerLink, showWhenUnlinked: false, offset: const Offset(0, 40), child: Material(elevation: 8, child: Container(constraints: const BoxConstraints(maxHeight: 200), decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300)), child: ListView.builder(padding: EdgeInsets.zero, shrinkWrap: true, itemCount: hints.length, itemBuilder: (_, i) => ListTile(dense: true, title: Text(hints[i], style: const TextStyle(fontSize: 12)), onTap: () { widget.controller.text = hints[i]; widget.controller.selection = TextSelection.collapsed(offset: hints[i].length); _removeOverlay(); _update(); widget.onChanged?.call(); })))))));
+      Overlay.of(context).insert(_overlay!);
+    }
+  }
+
+  @override Widget build(BuildContext ctx) => CompositedTransformTarget(link: _layerLink, child: TextField(controller: widget.controller, focusNode: _node, decoration: InputDecoration(labelText: widget.label, isDense: true), style: const TextStyle(fontSize: 12), onChanged: (_) => _update()));
 }
 
 class _ColorPicker extends StatelessWidget {
@@ -931,38 +929,24 @@ class _ColorPicker extends StatelessWidget {
   }
 
   void _showColorDialog(BuildContext ctx, Color current) {
-    // Continuous color grid: 18 columns (hue) × 9 rows (value), with sat=0.8
-    final allColors = <Color>[];
-    for (var row = 0; row < 9; row++) {
-      final value = 1.0 - row * 0.1; // 1.0 to 0.2
-      for (var col = 0; col < 18; col++) {
-        final hue = (col * 20) % 360;
-        allColors.add(HSVColor.fromAHSV(1, hue.toDouble(), 0.85, value).toColor());
-      }
-    }
-    // Greyscale row at bottom
-    for (var g = 0; g < 18; g++) {
-      final v = (g * 15); // 0-255
-      allColors.add(Color.fromARGB(255, v, v, v));
-    }
-    // Add preset colors at the top
     final topColors = _DataSourceDialogState._presetColors;
-
     Color selected = current;
     showDialog(context: ctx, builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) {
       return AlertDialog(
         title: Row(children: [const Text('Curve Color'), const SizedBox(width: 12), Container(width: 28, height: 28, decoration: BoxDecoration(color: selected, border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(3)))]),
-        content: SizedBox(width: 380, child: SingleChildScrollView(
+        content: SizedBox(width: 300, child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Wrap(spacing: 1, runSpacing: 1, children: topColors.map((c) => GestureDetector(
+            Wrap(spacing: 2, runSpacing: 2, children: topColors.map((c) => GestureDetector(
               onTap: () { selected = Color(c); setSt(() {}); },
-              child: Container(width: 26, height: 26, decoration: BoxDecoration(color: Color(c), border: Border.all(color: selected == Color(c) ? Colors.black : Colors.grey, width: selected == Color(c) ? 2 : 1), borderRadius: BorderRadius.circular(2))),
+              child: Container(width: 22, height: 22, decoration: BoxDecoration(color: Color(c), border: Border.all(color: selected == Color(c) ? Colors.black : Colors.grey, width: selected == Color(c) ? 2 : 1))),
             )).toList()),
             const SizedBox(height: 8),
-            Wrap(spacing: 1, runSpacing: 1, children: allColors.map((c) => GestureDetector(
-              onTap: () { selected = c; setSt(() {}); },
-              child: Container(width: 18, height: 18, decoration: BoxDecoration(color: c, border: Border.all(color: selected.value == c.value ? Colors.black : Colors.grey, width: selected.value == c.value ? 2 : 1), borderRadius: BorderRadius.circular(2))),
-            )).toList()),
+            // Continuous HSV picker: X = hue, Y = value (brightness)
+            GestureDetector(
+              onPanDown: (d) => _pickColor(d.localPosition, setSt, (c) => selected = c),
+              onPanUpdate: (d) => _pickColor(d.localPosition, setSt, (c) => selected = c),
+              child: ClipRRect(borderRadius: BorderRadius.circular(4), child: CustomPaint(size: const Size(280, 180), painter: _HsvPainter())),
+            ),
             const SizedBox(height: 8),
             Row(children: [const Text('#'), Expanded(child: TextField(decoration: const InputDecoration(isDense: true), onSubmitted: (v) { final cleaned = v.replaceFirst('#', ''); final c = int.tryParse(cleaned, radix: 16); if (c != null && cleaned.length == 6) { selected = Color(0xFF000000 | c); setSt(() {}); } }))]),
           ]),
@@ -974,6 +958,24 @@ class _ColorPicker extends StatelessWidget {
       );
     }));
   }
+
+  void _pickColor(Offset pos, StateSetter setSt, void Function(Color) setColor) {
+    if (pos.dx < 0 || pos.dy < 0 || pos.dx > 280 || pos.dy > 180) return;
+    final hue = (pos.dx / 280 * 360).clamp(0, 359);
+    final val = (1.0 - pos.dy / 180).clamp(0, 1);
+    setSt(() => setColor(HSVColor.fromAHSV(1, hue, 1, val).toColor()));
+  }
+}
+
+class _HsvPainter extends CustomPainter {
+  @override void paint(Canvas canvas, Size size) {
+    for (var x = 0; x < size.width; x++) {
+      final hue = (x / size.width * 360).toDouble();
+      final paint = Paint()..shader = LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [HSVColor.fromAHSV(1, hue, 1, 1).toColor(), Colors.black]).createShader(Rect.fromLTWH(x, 0, 1, size.height));
+      canvas.drawRect(Rect.fromLTWH(x, 0, 1, size.height), paint);
+    }
+  }
+  @override bool shouldRepaint(_) => false;
 }
 
 class _DSRow {
