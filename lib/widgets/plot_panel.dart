@@ -217,9 +217,6 @@ class _PlotPanelState extends State<PlotPanel> {
           final gridBottom = ch - 32.0;
           final gridW = gridRight - gridLeft;
           final gridH = gridBottom - gridTop;
-          // Clip 1px outside the grid so curves reach the border edge;
-          // the border Container (painted on top) covers any 1px overshoot.
-          final plotRect = Rect.fromLTRB(gridLeft - 1, gridTop - 1, gridRight + 1, gridBottom + 1);
 
           // Tick count based on pixel size matching C++:
           //   xTickCount = clamp(width/78 + 1, 3, 7)
@@ -231,11 +228,8 @@ class _PlotPanelState extends State<PlotPanel> {
 
           return Stack(
             children: [
-              ClipRect(
-                clipper: _RectClipper(plotRect),
-                child: LineChart(
-                  LineChartData(
-                clipData: const FlClipData.all(),
+              LineChart(
+                LineChartData(
                 lineBarsData: bars,
                 gridData: FlGridData(show: showGrid, drawVerticalLine: showGrid, drawHorizontalLine: showGrid,
                   getDrawingHorizontalLine: (v) => FlLine(color: theme.dividerColor.withValues(alpha: 0.15), strokeWidth: 0.5),
@@ -247,7 +241,7 @@ class _PlotPanelState extends State<PlotPanel> {
                   topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
                 ),
-                borderData: FlBorderData(show: false),
+                borderData: FlBorderData(show: true, border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5), width: 1)),
                 lineTouchData: LineTouchData(enabled: true,
                   touchCallback: (event, response) {
                     final a = context.read<AppState>();
@@ -275,19 +269,7 @@ class _PlotPanelState extends State<PlotPanel> {
                 minX: xMin, maxX: xMax, minY: yMin, maxY: yMax,
               ),
               ),
-            ),
-            // Grid area border — drawn at plotRect (C++: QPalette::Midlight)
-              Positioned(
-                left: gridLeft, top: gridTop, width: gridW, height: gridH,
-                child: IgnorePointer(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5), width: 1),
-                    ),
-                  ),
-                ),
-              ),
-              // Y-axis tick marks — 3px horizontal lines (matching C++ render.cpp:251)
+            // Y-axis tick marks — 3px horizontal lines (matching C++ render.cpp:251)
               for (int i = 0; i < yTicks.length; i++)
                 Positioned(
                   left: gridLeft - 3,
@@ -1127,11 +1109,4 @@ class _DSRow {
   List<String> _signalOptions = [];
   _DSRow({required this.shot, required this.y, required this.tree, required this.server});
   void dispose() { shot.dispose(); y.dispose(); tree.dispose(); server.dispose(); }
-}
-
-class _RectClipper extends CustomClipper<Rect> {
-  final Rect rect;
-  const _RectClipper(this.rect);
-  @override Rect getClip(Size size) => rect;
-  @override bool shouldReclip(_RectClipper old) => old.rect != rect;
 }
