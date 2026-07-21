@@ -145,7 +145,7 @@ class _PlotPanelState extends State<PlotPanel> {
               Expanded(
                 child: bars.isEmpty
                     ? Center(child: Text(plot.series.any((s) => s?.error != null && s!.error!.isNotEmpty) ? 'Error' : 'No data', style: TextStyle(color: Colors.grey, fontSize: 10)))
-                    : Stack(key: _chartAreaKey, children: [
+                    : Stack(key: _chartAreaKey, clipBehavior: Clip.hardEdge, children: [
                         _buildChart(bars, plot, panel, theme),
                       ]),
               ),
@@ -177,6 +177,17 @@ class _PlotPanelState extends State<PlotPanel> {
     final showGrid = panel['grid'] ?? true;
     final customX = panel['custom_x_range'] == true;
     final customY = panel['custom_y_range'] == true;
+
+    final xMin = customX ? ((panel['xmin'] as num?)?.toDouble()) : (_viewMinX.isNaN ? null : _viewMinX);
+    final xMax = customX ? ((panel['xmax'] as num?)?.toDouble()) : (_viewMaxX.isNaN ? null : _viewMaxX);
+    final yMin = customY ? ((panel['ymin'] as num?)?.toDouble()) : (_viewMinY.isNaN ? null : _viewMinY);
+    final yMax = customY ? ((panel['ymax'] as num?)?.toDouble()) : (_viewMaxY.isNaN ? null : _viewMaxY);
+
+    // Evenly-spaced tick intervals matching C++ MdsScope behaviour:
+    // xTickCount = clamp(width/78+1, 3, 7), yTickCount = clamp(height/34+1, 3, 6)
+    final double? xInterval = (xMin != null && xMax != null && xMax > xMin) ? (xMax - xMin) / 5.0 : null;
+    final double? yInterval = (yMin != null && yMax != null && yMax > yMin) ? (yMax - yMin) / 4.0 : null;
+
     return Padding(
       padding: const EdgeInsets.only(right: 28),
       child: LineChart(
@@ -190,12 +201,18 @@ class _PlotPanelState extends State<PlotPanel> {
           bottomTitles: AxisTitles(
             axisNameWidget: Padding(padding: const EdgeInsets.only(top: 2), child: Text(plot.xLabel, style: TextStyle(fontSize: 9, color: textColor))),
             axisNameSize: 14,
-            sideTitles: SideTitles(showTitles: true, reservedSize: 20, interval: null, getTitlesWidget: (v, _) => _axisLabel(v, textColor)),
+            sideTitles: SideTitles(showTitles: true, reservedSize: 20, interval: xInterval,
+              minIncluded: true, maxIncluded: true,
+              getTitlesWidget: (v, _) => _axisLabel(v, textColor),
+            ),
           ),
           leftTitles: AxisTitles(
             axisNameWidget: Padding(padding: const EdgeInsets.only(bottom: 2), child: Text(plot.yLabel, style: TextStyle(fontSize: 9, color: textColor))),
             axisNameSize: 14,
-            sideTitles: SideTitles(showTitles: true, reservedSize: 50, interval: null, getTitlesWidget: (v, _) => _axisLabel(v, textColor)),
+            sideTitles: SideTitles(showTitles: true, reservedSize: 50, interval: yInterval,
+              minIncluded: true, maxIncluded: true,
+              getTitlesWidget: (v, _) => _axisLabel(v, textColor),
+            ),
           ),
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false, reservedSize: 28)),
@@ -225,10 +242,10 @@ class _PlotPanelState extends State<PlotPanel> {
           verticalLines: cx != null ? [VerticalLine(x: cx, color: const Color(0xFFFF00FF), strokeWidth: 1, label: _crosshairLabel(bars, cx))] : [],
           horizontalLines: _localCrosshairY != null ? [HorizontalLine(y: _localCrosshairY!, color: const Color(0xFFFF00FF), strokeWidth: 1)] : [],
         ),
-        minX: customX ? ((panel['xmin'] as num?)?.toDouble()) : (_viewMinX.isNaN ? null : _viewMinX),
-        maxX: customX ? ((panel['xmax'] as num?)?.toDouble()) : (_viewMaxX.isNaN ? null : _viewMaxX),
-        minY: customY ? ((panel['ymin'] as num?)?.toDouble()) : (_viewMinY.isNaN ? null : _viewMinY),
-        maxY: customY ? ((panel['ymax'] as num?)?.toDouble()) : (_viewMaxY.isNaN ? null : _viewMaxY),
+        minX: xMin,
+        maxX: xMax,
+        minY: yMin,
+        maxY: yMax,
       ),
     ),
     );
@@ -821,7 +838,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
         } : null),
       ]),
       content: SizedBox(
-        height: 400,
+        height: 240,
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: IntrinsicWidth(
