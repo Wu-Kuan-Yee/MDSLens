@@ -343,8 +343,8 @@ class AppState extends ChangeNotifier {
         final json = jsonDecode(raw);
         if (json is Map) {
           _shotInfoIp = json['ip']?.toString() ?? '';
-          _shotInfoPulse = (json['pulse']?.toString() ?? '').isNotEmpty ? '${json['pulse']}s' : '';
-          _shotInfoIt = (json['it']?.toString() ?? '').isNotEmpty ? '${json['it']}A' : '';
+          _shotInfoPulse = json['pulse']?.toString() ?? '';
+          _shotInfoIt = json['it']?.toString() ?? '';
           _shotInfoTime = json['time']?.toString() ?? '';
           notifyListeners();
         }

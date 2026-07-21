@@ -49,8 +49,8 @@ pub async fn fetch_shot_info(api_url: &str, token: &str, shot: &str) -> Result<S
     Ok(ShotInfo {
         shot: shot.parse().unwrap_or(0),
         ip: data.get("pcrl01").and_then(|v| v.as_str()).unwrap_or("").into(),
-        pulse: data.get("shot_len").and_then(|v| v.as_f64()).map(|v| format!("{:.3}s", v)).unwrap_or_default(),
-        it: data.get("iv").and_then(|v| v.as_f64()).map(|v| format!("{:.0}A", v)).unwrap_or_default(),
+        pulse: data.get("shot_len").and_then(|v| v.as_f64()).map(|v| format!("{:.3}", v)).unwrap_or_default(),
+        it: data.get("iv").and_then(|v| v.as_f64()).map(|v| format!("{:.0}", v)).unwrap_or_default(),
         time: data.get("curr_time").and_then(|v| v.as_str()).unwrap_or("").into(),
     })
 }
