@@ -200,9 +200,7 @@ class _PlotPanelState extends State<PlotPanel> {
       return List.generate(count, (i) => min + step * i);
     }
 
-    return Padding(
-      padding: const EdgeInsets.only(right: 12),
-      child: LayoutBuilder(
+    return LayoutBuilder(
         builder: (ctx, constraints) {
           final cw = constraints.maxWidth;
           final ch = constraints.maxHeight;
@@ -325,8 +323,7 @@ class _PlotPanelState extends State<PlotPanel> {
             ],
           );
         },
-      ),
-    );
+      );
   }
 
   String _fmtAxis(double v) {
