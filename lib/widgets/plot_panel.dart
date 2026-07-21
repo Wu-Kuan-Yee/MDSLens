@@ -71,7 +71,7 @@ class _PlotPanelState extends State<PlotPanel> {
       bars.add(LineChartBarData(
         spots: spots,
         isCurved: false,
-        color: _colors[i % _colors.length],
+        color: _sigColor(i, sigSpecs),
         barWidth: 1,
         dotData: const FlDotData(show: false),
         belowBarData: BarAreaData(show: false),
@@ -277,6 +277,15 @@ class _PlotPanelState extends State<PlotPanel> {
   }
 
   RenderBox? get _listenerBox => _listenerKey.currentContext?.findRenderObject() as RenderBox?;
+
+  Color _sigColor(int i, List<Map> sigSpecs) {
+    if (i < sigSpecs.length && sigSpecs[i]['color_name'] != null) {
+      final hex = sigSpecs[i]['color_name'].toString().replaceFirst('#', '');
+      final c = int.tryParse(hex, radix: 16);
+      if (c != null) return Color(0xFF000000 | c);
+    }
+    return _colors[i % _colors.length];
+  }
 
   // Match original: pixelToData uses full widget rect (including axis label area)
   // view.left + (px - rect.left) / rect.width * view.width
@@ -497,7 +506,7 @@ class _PlotPanelState extends State<PlotPanel> {
     if (sigs.isEmpty) sigs.add({'experiment': 'pcs_east', 'server_ip': '202.127.204.12'});
     showDialog(
       context: ctx,
-      builder: (ctx) => _DataSourceDialog(signals: sigs, defaultShot: defaultShot, onSave: () { panel['signal_specs'] = sigs; _rebuildPlots(app); }),
+      builder: (ctx) => _DataSourceDialog(signals: sigs, defaultShot: defaultShot, onSave: () { panel['signal_specs'] = sigs; _rebuildPlots(app); app.startRefreshPreserveView(); }),
     );
   }
 
@@ -794,8 +803,9 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
       final hex = s['color_name'].toString().replaceFirst('#', '');
       final c = int.tryParse(hex, radix: 16);
       if (c != null) {
-        for (var j = 0; j < _presetColors.length; j++) { if (_presetColors[j] == c) { _rows.last.colorIdx = j; break; } }
-        _rows.last.customColor = Color(c);
+        final full = 0xFF000000 | c;
+        for (var j = 0; j < _presetColors.length; j++) { if (_presetColors[j] == full) { _rows.last.colorIdx = j; break; } }
+        _rows.last.customColor = Color(full);
       }
     }
   }
@@ -816,30 +826,33 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
           _rows.add(_DSRow(shot: shotCtrl, y: yCtrl, tree: treeCtrl, server: serverCtrl)..colorIdx = _rows.length % _presetColors.length);
         }) : null),
       ]),
-      content: SizedBox(width: 740, child: SingleChildScrollView(
+      content: SizedBox(width: 760, child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
+          // Column headers
+          Row(children: [SizedBox(width: 62, child: Text('Shot', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4), SizedBox(width: 92, child: Text('Tree', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4), SizedBox(width: 150, child: Text('Signal', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4), SizedBox(width: 112, child: Text('Server IP', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4), SizedBox(width: 24, child: Text('Color', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4), SizedBox(width: 42, child: Text('Hide', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 2), SizedBox(width: 82, child: Text('Data', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))),],),
+          const SizedBox(height: 6),
           for (var i = 0; i < _rows.length; i++) ...[
-            if (i > 0) const Divider(height: 12),
+            if (i > 0) const Divider(height: 8),
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              SizedBox(width: 60, child: TextField(controller: _rows[i].shot, decoration: const InputDecoration(labelText: 'Shot', isDense: true), style: const TextStyle(fontSize: 12))),
+              SizedBox(width: 60, child: TextField(controller: _rows[i].shot, decoration: const InputDecoration(isDense: true), style: const TextStyle(fontSize: 12))),
               const SizedBox(width: 4),
-              SizedBox(width: 90, child: _AutocompleteField(controller: _rows[i].tree, options: _treeNames, label: 'Tree', onChanged: () { _updateSignalOptions(_rows[i]); setState(() {}); })),
+              SizedBox(width: 90, child: _AutocompleteField(controller: _rows[i].tree, options: _treeNames, label: '', onChanged: () { _updateSignalOptions(_rows[i]); setState(() {}); })),
               const SizedBox(width: 4),
-              Expanded(child: _AutocompleteField(controller: _rows[i].y, options: _rows[i]._signalOptions, label: 'Signal', onChanged: () { _updateSignalOptions(_rows[i]); })),
+              SizedBox(width: 148, child: _AutocompleteField(controller: _rows[i].y, options: _rows[i]._signalOptions, label: '', onChanged: () { _updateSignalOptions(_rows[i]); })),
               const SizedBox(width: 4),
-              SizedBox(width: 110, child: TextField(controller: _rows[i].server, decoration: const InputDecoration(labelText: 'Server IP', isDense: true), style: const TextStyle(fontSize: 12))),
+              SizedBox(width: 110, child: TextField(controller: _rows[i].server, decoration: const InputDecoration(isDense: true), style: const TextStyle(fontSize: 12))),
               const SizedBox(width: 4),
               _ColorPicker(row: _rows[i], onChanged: () => setState(() {})),
               const SizedBox(width: 4),
-              Padding(padding: const EdgeInsets.only(top: 14), child: Column(children: [const Text('Hide', style: TextStyle(fontSize: 10, color: Colors.grey)), Checkbox(value: _rows[i].hidden, onChanged: (v) => setState(() => _rows[i].hidden = v ?? false))])),
+              Padding(padding: const EdgeInsets.only(top: 6), child: Checkbox(value: _rows[i].hidden, onChanged: (v) => setState(() => _rows[i].hidden = v ?? false))),
               const SizedBox(width: 2),
-              SizedBox(width: 80, child: DropdownButtonFormField<int>(initialValue: _rows[i].readMode, decoration: const InputDecoration(labelText: 'Data', isDense: true), style: const TextStyle(fontSize: 11), items: List.generate(3, (j) => DropdownMenuItem(value: j, child: Text(_modes[j], style: const TextStyle(fontSize: 11)))), onChanged: (v) { if (v != null) setState(() => _rows[i].readMode = v); })),
+              Padding(padding: const EdgeInsets.only(top: 6), child: SizedBox(width: 80, child: DropdownButtonFormField<int>(initialValue: _rows[i].readMode, decoration: const InputDecoration(isDense: true), style: const TextStyle(fontSize: 11), items: List.generate(3, (j) => DropdownMenuItem(value: j, child: Text(_modes[j], style: const TextStyle(fontSize: 11)))), onChanged: (v) { if (v != null) setState(() => _rows[i].readMode = v); }))),
               const SizedBox(width: 2),
               if (_rows.length > 1) SizedBox(width: 24, child: IconButton(padding: EdgeInsets.zero, iconSize: 16, icon: const Icon(Icons.close, color: Colors.red), onPressed: () => setState(() { _rows[i].dispose(); _rows.removeAt(i); }))),
             ]),
           ],
         ]),
-      )),
+      ))),
       actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')), TextButton(onPressed: _save, child: const Text('OK'))],
     );
   }
