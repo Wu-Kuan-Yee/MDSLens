@@ -1,11 +1,44 @@
 [workspace]
 resolver = "2"
-members = ["mds-bridge"]
+members = ["mds-bridge", "mds-core", "mds-ip", "mds-ssh", "mds-auth"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+authors = ["MdsScope Contributors"]
+rust-version = "1.92"
 
 [workspace.dependencies]
-mds-core = { path = "../../mdsscope-rs/mds-core" }
-mds-ip = { path = "../../mdsscope-rs/mds-ip" }
-mds-ssh = { path = "../../mdsscope-rs/mds-ssh" }
-mds-auth = { path = "../../mdsscope-rs/mds-auth" }
-flutter_rust_bridge = "2"
+# Data
+toml = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Async runtime
 tokio = { version = "1", features = ["full"] }
+
+# SSH
+ssh2 = "0.9"
+
+# Network
+reqwest = { version = "0.12", default-features = true, features = ["json"] }
+
+# Utilities
+thiserror = "2"
+tracing = "0.1"
+parking_lot = "0.12"
+bytemuck = "1"
+base64 = "0.22"
+sha2 = "0.10"
+ring = "0.17"
+rayon = "1"
+
+# Internal crates
+mds-core = { path = "mds-core" }
+mds-ip = { path = "mds-ip" }
+mds-ssh = { path = "mds-ssh" }
+mds-auth = { path = "mds-auth" }
+
+# FFI bridge
+flutter_rust_bridge = "2"

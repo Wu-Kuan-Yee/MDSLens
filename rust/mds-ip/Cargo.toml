@@ -1,0 +1,16 @@
+[package]
+name = "mds-ip"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+mds-core.workspace = true
+tokio = { workspace = true, features = ["net", "sync", "time", "rt", "macros"] }
+tracing.workspace = true
+thiserror.workspace = true
+parking_lot.workspace = true
+bytemuck.workspace = true
+rayon.workspace = true
