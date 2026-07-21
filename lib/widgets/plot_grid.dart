@@ -19,11 +19,9 @@ class PlotGrid extends StatelessWidget {
     }
 
     final nCols = app.columns.length;
-    final nRows = app.columns.map((c) => c.length).fold(0, (a, b) => a > b ? a : b);
 
     return LayoutBuilder(builder: (ctx, constraints) {
       final panelW = constraints.maxWidth / nCols;
-      final panelH = constraints.maxHeight / nRows;
 
       return Row(
         children: List.generate(nCols, (col) => SizedBox(
@@ -33,8 +31,7 @@ class PlotGrid extends StatelessWidget {
               final plotIdx = app.columns.take(col).map((c) => c.length).fold(0, (a, b) => a + b) + row;
               if (plotIdx >= app.plots.length) return const SizedBox();
               final selected = app.selectedCol == col && app.selectedRow == row;
-              return SizedBox(
-                height: panelH,
+              return Expanded(
                 child: PlotPanel(
                   plotIdx: plotIdx,
                   selected: selected,

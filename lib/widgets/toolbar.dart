@@ -300,7 +300,7 @@ class ToolbarWidget extends StatelessWidget {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           TextButton(onPressed: () {
             final cols = layout.where((n) => n > 0).toList();
-            if (cols.isNotEmpty) app.applyLayoutList(cols);
+            if (cols.isNotEmpty) { app.applyLayoutList(cols); app.startRefresh(); }
             Navigator.pop(ctx);
           }, child: const Text('Apply')),
         ],
