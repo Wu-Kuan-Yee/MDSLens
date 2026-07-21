@@ -1008,7 +1008,6 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
 
   @override void initState() {
     super.initState();
-    _node.addListener(() { if (!_node.hasFocus) _removeOverlay(); });
     widget.controller.addListener(_update);
   }
 
@@ -1028,7 +1027,9 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
     final v = widget.controller.text.toLowerCase();
     final hints = v.isEmpty ? <String>[] : widget.options.where((o) => o.toLowerCase().contains(v)).take(20).toList();
     _removeOverlay();
-    if (hints.isNotEmpty && _node.hasFocus && hints.length > 1 || (hints.length == 1 && hints[0].toLowerCase() != v)) {
+    if (hints.isNotEmpty && _node.hasFocus) {
+      // Don't show if there's exactly one hint that matches the current text exactly
+      if (hints.length == 1 && hints[0].toLowerCase() == v) return;
       _overlay = OverlayEntry(builder: (_) => Positioned(width: 220, child: CompositedTransformFollower(link: _layerLink, showWhenUnlinked: false, offset: const Offset(0, 40), child: Material(elevation: 8, child: Container(constraints: const BoxConstraints(maxHeight: 200), decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300)), child: ListView.builder(padding: EdgeInsets.zero, shrinkWrap: true, itemCount: hints.length, itemBuilder: (_, i) => ListTile(dense: true, title: Text(hints[i], style: const TextStyle(fontSize: 12)), onTap: () { widget.controller.text = hints[i]; widget.controller.selection = TextSelection.collapsed(offset: hints[i].length); _removeOverlay(); widget.onChanged?.call(); })))))));
       Overlay.of(context).insert(_overlay!);
     }

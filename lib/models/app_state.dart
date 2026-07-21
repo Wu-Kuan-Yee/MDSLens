@@ -342,17 +342,26 @@ class AppState extends ChangeNotifier {
   Future<void> _fetchTopInfo() async {
     if (_loginApiUrl.isEmpty || _shotText.isEmpty) return;
     try {
-      final url = '${_loginApiUrl.replaceAll(RegExp(r'/$'), '')}/pcsEastTree';
-      final uri = Uri.parse(url);
+      String apiUrl = _loginApiUrl;
+      if (_sshMode > 0 && _sshHost.isNotEmpty) {
+        try {
+          final settings = jsonEncode({'host': _sshHost, 'port': _sshPort, 'user': _sshUser, 'password': _sshPass, 'identity_file': _sshIdentity, 'mode': 2});
+          final resp = RustBridge.instance.prepareUrl(_loginApiUrl, settings);
+          if (resp.startsWith('http') && !resp.contains('"error"')) apiUrl = resp;
+        } catch (_) {}
+      }
+      final base = apiUrl.replaceAll(RegExp(r'/$'), '');
+      final uri = Uri.parse('$base/pcsEastTree');
       final client = HttpClient();
       try {
-        final request = await client.postUrl(uri);
-        request.headers.set('Content-Type', 'application/json');
-        request.write(jsonEncode({'shot': _shotText, 'token': _authToken}));
-        final response = await request.close();
-        final body = await response.transform(utf8.decoder).join();
+        final req = await client.postUrl(uri);
+        req.headers.set('Content-Type', 'application/json');
+        if (_authToken.isNotEmpty) req.headers.set('Authorization', 'Bearer $_authToken');
+        req.write(jsonEncode({'shot': _shotText}));
+        final resp = await req.close();
+        final body = await resp.transform(utf8.decoder).join();
         final json = jsonDecode(body);
-        if (json is Map && json['code']?.toString() == '20000') {
+        if (json is Map && (json['code']?.toString() == '20000' || json['code'] == 20000)) {
           final data = json['data'];
           if (data is Map) {
             _shotInfoIp = data['pcrl01']?.toString() ?? '';
