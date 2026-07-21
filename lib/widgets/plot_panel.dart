@@ -39,6 +39,7 @@ class _PlotPanelState extends State<PlotPanel> {
   bool _inRubberBand = false;
   Offset? _rubberBandStart;
   Rect? _rubberBandRect;
+  double _lastScale = 1.0;
 
   @override
   Widget build(BuildContext context) {
@@ -99,13 +100,18 @@ class _PlotPanelState extends State<PlotPanel> {
           }
         }
       },
+      onScaleStart: (details) {
+        _lastScale = 1.0;
+      },
       onScaleUpdate: (details) {
         final mode = context.read<AppState>().interactionMode;
         if (mode != 0 || _midPanning || _inRubberBand) return;
         setState(() {
           if (_viewMinX.isNaN) _initViewToData(plot);
           if (details.scale != 1.0) {
-            final factor = 1.0 / details.scale;
+            final deltaScale = details.scale / _lastScale;
+            _lastScale = details.scale;
+            final factor = 1.0 / deltaScale;
             final localF = details.localFocalPoint;
             final cx = _pxToDataX(localF.dx);
             final cy = _pxToDataY(localF.dy);
