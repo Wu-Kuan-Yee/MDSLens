@@ -8,7 +8,6 @@ import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/app_state.dart';
 import 'package:file_picker/file_picker.dart';
-import '../models/app_state.dart';
 
 const _colors = [
   Color(0xFF2364aa), Color(0xFFc44e52), Color(0xFF2f855a),
@@ -37,7 +36,6 @@ class _PlotPanelState extends State<PlotPanel> {
   int _lastResetId = -1;
   bool _midPanning = false;
   Offset? _lastMidPanPos;
-  Offset? _cursorPos; // Track cursor for accurate scroll-wheel zoom center
   bool _inRubberBand = false;
   Offset? _rubberBandStart;
   Rect? _rubberBandRect;
@@ -532,7 +530,7 @@ class _PlotPanelState extends State<PlotPanel> {
     // Replace in-place to avoid intermediate empty state
     app.plots.clear();
     app.plots.addAll(newPlots);
-    app.notifyListeners();
+    app.rebuild();
   }
 
   List<SeriesData?> _resizeSeries(List<SeriesData?> old, int newCount) {

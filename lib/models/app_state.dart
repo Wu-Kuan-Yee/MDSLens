@@ -102,6 +102,7 @@ class AppState extends ChangeNotifier {
   int _viewResetId = 0;
   int get viewResetId => _viewResetId;
   void resetAllViews() { _viewResetId++; notifyListeners(); }
+  void rebuild() { notifyListeners(); }
 
   // Shared scale (All Same X/Y Scale context menu)
   double? sharedXMin, sharedXMax, sharedYMin, sharedYMax;
