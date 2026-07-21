@@ -149,7 +149,6 @@ class _PlotPanelState extends State<PlotPanel> {
                         _buildChart(bars, plot, panel, theme),
                       ]),
               ),
-              Padding(padding: const EdgeInsets.only(bottom: 2), child: Text(plot.xLabel, style: TextStyle(fontSize: 9, color: theme.colorScheme.onSurface.withValues(alpha: 0.7)))),
             ]),
           ),
         ),
@@ -203,7 +202,7 @@ class _PlotPanelState extends State<PlotPanel> {
           final cw = constraints.maxWidth;
           final ch = constraints.maxHeight;
           const leftAxis = 50.0;
-          const bottomAxis = 20.0;
+          const bottomAxis = 32.0;
           final gridW = cw - leftAxis;
           final gridH = ch - bottomAxis;
 
@@ -227,7 +226,7 @@ class _PlotPanelState extends State<PlotPanel> {
                     getDrawingVerticalLine: (v) => FlLine(color: theme.dividerColor.withValues(alpha: 0.15), strokeWidth: 0.5),
                   ),
                   titlesData: const FlTitlesData(
-                    bottomTitles: AxisTitles(axisNameSize: 14, sideTitles: SideTitles(showTitles: false, reservedSize: 20)),
+                    bottomTitles: AxisTitles(axisNameSize: 14, sideTitles: SideTitles(showTitles: false, reservedSize: 32)),
                     leftTitles: AxisTitles(axisNameSize: 14, sideTitles: SideTitles(showTitles: false, reservedSize: 50)),
                     topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
                     rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -268,7 +267,7 @@ class _PlotPanelState extends State<PlotPanel> {
                   top: ((yTicks.length - 1 - i) / (yTicks.length - 1)) * gridH,
                   child: Container(width: 3, height: 1, color: tickColor),
                 ),
-              // X-axis tick marks — 2px vertical lines (matching C++ render.cpp:327)
+              // X-axis tick marks — 2px vertical lines below axis border (C++ render.cpp:327)
               for (int i = 0; i < xTicks.length; i++)
                 Positioned(
                   left: leftAxis + (i / (xTicks.length - 1)) * gridW,
@@ -282,17 +281,17 @@ class _PlotPanelState extends State<PlotPanel> {
                   top: ((yTicks.length - 1 - i) / (yTicks.length - 1)) * gridH - 6,
                   child: SizedBox(width: leftAxis - 6, child: Text(_fmtAxis(yTicks[i]), style: TextStyle(fontSize: 8, color: textColor), textAlign: TextAlign.right)),
                 ),
-              // X-axis tick labels at fixed fractions of grid width
+              // X-axis tick values — below tick marks (row 1 of 2 below axis)
               for (int i = 0; i < xTicks.length; i++)
                 Positioned(
                   left: leftAxis + (i / (xTicks.length - 1)) * gridW - 16,
-                  bottom: 2,
+                  top: gridH + 4,
                   child: Text(_fmtAxis(xTicks[i]), style: TextStyle(fontSize: 8, color: textColor)),
                 ),
-              // Axis name labels
+              // X-axis name label — below tick values (row 2 of 2 below axis)
               Positioned(
-                bottom: -2, left: leftAxis, right: 0,
-                child: Center(child: Padding(padding: const EdgeInsets.only(top: 2), child: Text(plot.xLabel, style: TextStyle(fontSize: 9, color: textColor)))),
+                left: leftAxis, right: 0, top: gridH + 16,
+                child: Center(child: Text(plot.xLabel, style: TextStyle(fontSize: 9, color: textColor))),
               ),
               Positioned(
                 left: -2, top: 0, bottom: bottomAxis,
