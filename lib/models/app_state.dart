@@ -234,7 +234,7 @@ class AppState extends ChangeNotifier {
   void openFile() async {
     try {
       final r = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['toml','webscp']);
-      if (r == null || r.files.single.path == null) return;
+      if (r == null || r.files.isEmpty || r.files.single.path == null) return;
       final path = r.files.single.path!;
       _status = 'Loading $path...'; notifyListeners();
       final raw = RustBridge.instance.parseEnv(path);
@@ -248,12 +248,16 @@ class AppState extends ChangeNotifier {
           final m = Map<String, dynamic>.from(panel as Map);
           m['extraction_points'] ??= 2000;
           m['grid'] ??= true;
-          // Keep signal_specs as-is (List<Map>)
           return m;
         }).toList();
       }).toList();
       if (cols.isEmpty || cols.every((c) => c.isEmpty)) {
         _status = 'No panels found in config'; notifyListeners(); return;
+      }
+      final fileShot = json['shot'] ?? json['default_shot'] ?? json['global_shot'];
+      if (fileShot != null && fileShot.toString().trim().isNotEmpty) {
+        _shotText = fileShot.toString().trim();
+        _shotCtrl.text = _shotText;
       }
       _columns = cols;
       _plots.clear();
@@ -269,19 +273,19 @@ class AppState extends ChangeNotifier {
         }
       }
       _status = 'Loaded: ${path.split('/').last} (${_columns.length} cols, ${_plots.length} panels)'; notifyListeners();
-      // Auto-refresh if logged in
-      if (_shotText.isNotEmpty && _loggedIn) startRefresh();
+      if (_shotText.isNotEmpty) startRefresh();
     } catch (e) { _status = 'Open error: $e'; notifyListeners(); }
   }
 
   void saveFile() async {
     try {
-      final r = await FilePicker.platform.saveFile(fileName: 'config.toml', type: FileType.custom, allowedExtensions: ['toml']);
-      if (r == null) return;
-      // Serialize _columns to FrbLayoutConfig JSON
+      var r = await FilePicker.platform.saveFile(fileName: 'config.toml', type: FileType.custom, allowedExtensions: ['toml']);
+      if (r == null || r.trim().isEmpty) return;
+      if (!r.endsWith('.toml') && !r.endsWith('.webscp')) {
+        r = '$r.toml';
+      }
       final cols = _columns.map((col) => col.map((panel) {
         final m = Map<String, dynamic>.from(panel);
-        // Remove internal keys not part of FrbPlotSpec
         m.remove('shot');
         return m;
       }).toList()).toList();
