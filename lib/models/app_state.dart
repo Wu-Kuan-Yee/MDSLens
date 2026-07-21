@@ -14,6 +14,22 @@ class AppState extends ChangeNotifier {
   final List<PlotData> _plots = [];
   List<PlotData> get plots => _plots;
   int selectedCol = -1, selectedRow = -1;
+  void selectPanel(int col, int row) {
+    if (selectedCol != col || selectedRow != row) {
+      selectedCol = col;
+      selectedRow = row;
+      notifyListeners();
+    }
+  }
+
+  void clearSelectedPanel() {
+    if (selectedCol != -1 || selectedRow != -1) {
+      selectedCol = -1;
+      selectedRow = -1;
+      notifyListeners();
+    }
+  }
+
   double? crosshairX;
   final List<({String name, double y})> crosshairReadout = [];
 

@@ -89,6 +89,9 @@ class _PlotPanelState extends State<PlotPanel> {
 
     return Stack(children: [
       GestureDetector(
+        onTap: () {
+          widget.onTap?.call();
+        },
         onTapDown: (details) {
           widget.onTap?.call();
         final a = context.read<AppState>();

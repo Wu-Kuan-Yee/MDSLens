@@ -35,7 +35,7 @@ class PlotGrid extends StatelessWidget {
                 child: PlotPanel(
                   plotIdx: plotIdx,
                   selected: selected,
-                  onTap: () { app.selectedCol = col; app.selectedRow = row; },
+                  onTap: () { app.selectPanel(col, row); },
                   onContextAction: (action) {
                     switch (action) {
                       case 'max': app.maximizePlot(plotIdx); break;
