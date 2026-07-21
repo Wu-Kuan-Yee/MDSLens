@@ -4,10 +4,11 @@ import 'models/app_state.dart';
 import 'app.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(
     ChangeNotifierProvider(
       create: (_) => AppState(),
-      child: MdsScopeApp(),
+      child: const MdsScopeApp(),
     ),
   );
 }

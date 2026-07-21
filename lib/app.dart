@@ -16,13 +16,12 @@ class _MdsScopeAppState extends State<MdsScopeApp> {
 
   @override void initState() {
     super.initState();
-    _sysDark = false; // Start light, native call corrects within one frame
+    _sysDark = WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
     ThemeChannel.init();
     ThemeChannel.isDark().then((d) { if (mounted) setState(() => _sysDark = d); });
     ThemeChannel.onThemeChanged.listen((d) { if (mounted) setState(() => _sysDark = d); });
     // Universal platform brightness listener (macOS fallback, Linux/Windows primary)
     WidgetsBinding.instance.platformDispatcher.onPlatformBrightnessChanged = _onBrightnessChanged;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _onBrightnessChanged());
     // Global Shift key tracking for Shift+drag pan
     HardwareKeyboard.instance.addHandler(_onAppKey);
   }
@@ -44,8 +43,12 @@ class _MdsScopeAppState extends State<MdsScopeApp> {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
-    final mode = app.themeMode == 0 ? ThemeMode.light : app.themeMode == 1 ? ThemeMode.dark : _sysDark ? ThemeMode.dark : ThemeMode.light;
+    final mode = app.themeMode == 0
+        ? ThemeMode.light
+        : app.themeMode == 1
+            ? ThemeMode.dark
+            : ThemeMode.system;
     return MaterialApp(title: 'MdsScope', debugShowCheckedModeBanner: false,
-      theme: MdsScopeTheme.light, darkTheme: MdsScopeTheme.dark, themeMode: mode, home: MainPage());
+      theme: MdsScopeTheme.light, darkTheme: MdsScopeTheme.dark, themeMode: mode, home: const MainPage());
   }
 }
