@@ -79,40 +79,32 @@ class _PlotPanelState extends State<PlotPanel> {
         final a = context.read<AppState>();
         if (a.interactionMode == 1 && a.pointLocked) {
           a.pointLocked = false;
-          // Immediately set crosshair at tap position
-          final globalFocal = (context.findRenderObject() as RenderBox?)?.localToGlobal(details.localPosition);
-          final cp = globalFocal != null ? _chartLocalPos(globalFocal) : null;
-          final frac = cp != null ? _plotFraction(cp) : null;
-          if (frac != null && _viewMinX.isFinite) {
-            a.setCrosshair(_viewMinX + frac.$1 * (_viewMaxX - _viewMinX));
+          // Set crosshair at tap position using full widget mapping
+          final box = context.findRenderObject() as RenderBox?;
+          if (box != null && box.size.width > 0 && _viewMinX.isFinite) {
+            a.setCrosshair(_pxToDataX(details.localPosition.dx, box.size.width));
           }
         }
       },
       onScaleUpdate: (details) {
         final mode = context.read<AppState>().interactionMode;
         if (mode != 0 || _midPanning || _inRubberBand) return;
-        final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
-        if (chartBox == null || chartBox.size.width <= 0 || chartBox.size.height <= 0) return;
         setState(() {
           if (_viewMinX.isNaN) _initViewToData(plot);
-          final w = chartBox.size.width;
-          final h = chartBox.size.height;
-          if (details.scale != 1.0) {
-            // Pinch zoom: convert focal point to plot fraction
-            final globalFocal = (context.findRenderObject() as RenderBox?)?.localToGlobal(details.focalPoint);
-            final chartPos = globalFocal != null ? _chartLocalPos(globalFocal) : null;
-            final frac = chartPos != null ? _plotFraction(chartPos) : null;
-            final fx = frac?.$1 ?? (details.focalPoint.dx / (w > 0 ? w : 1));
-            final fy = frac?.$2 ?? (details.focalPoint.dy / (h > 0 ? h : 1));
+          final box = context.findRenderObject() as RenderBox?;
+          final w = box?.size.width ?? 0;
+          final h = box?.size.height ?? 0;
+          if (details.scale != 1.0 && w > 0 && h > 0) {
+            // Pinch zoom: focal point maps to data via full widget size (like original)
             final factor = 1.0 / details.scale;
-            final cx = _viewMinX + fx * (_viewMaxX - _viewMinX);
-            final cy = _viewMaxY - fy * (_viewMaxY - _viewMinY);
+            final cx = _pxToDataX(details.focalPoint.dx, w);
+            final cy = _pxToDataY(details.focalPoint.dy, h);
             _viewMinX = cx - (cx - _viewMinX) * factor;
             _viewMaxX = cx + (_viewMaxX - cx) * factor;
             _viewMinY = cy - (cy - _viewMinY) * factor;
             _viewMaxY = cy + (_viewMaxY - cy) * factor;
-          } else {
-            // One-finger drag pan (delta is already in correct proportion)
+          } else if (w > 0 && h > 0) {
+            // Pan: pixel delta → data delta (matching original)
             final xScale = (_viewMaxX - _viewMinX) / w;
             final yScale = (_viewMaxY - _viewMinY) / h;
             _viewMinX -= details.focalPointDelta.dx * xScale;
@@ -272,39 +264,25 @@ class _PlotPanelState extends State<PlotPanel> {
     return lo;
   }
 
-  Offset? _chartLocalPos(Offset globalPos) {
-    final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
-    if (chartBox == null) return null;
-    try { return chartBox.globalToLocal(globalPos); } catch (_) { return null; }
-  }
-
-  /// Fractional position within the fl_chart plot area (excluding axis labels).
-  /// Returns (fx, fy) where 0..1 maps to data min..max.
-  (double, double)? _plotFraction(Offset chartLocalPos) {
-    final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
-    if (chartBox == null || chartBox.size.width <= 0 || chartBox.size.height <= 0) return null;
-    final w = chartBox.size.width;
-    final h = chartBox.size.height;
-    // fl_chart reserves: left 50, right 56 (28 axis + 28 chart padding), bottom 20
-    const lr = 50.0, rr = 56.0, br = 20.0;
-    if (w <= lr + rr || h <= br) return null;
-    return ((chartLocalPos.dx - lr) / (w - lr - rr), (chartLocalPos.dy) / (h - br));
-  }
+  // Match original: pixelToData uses full widget rect (including axis label area)
+  // view.left + (px - rect.left) / rect.width * view.width
+  // view.top  + (rect.bottom - py) / rect.height * view.height
+  double _pxToDataX(double px, double width) => _viewMinX + px / width * (_viewMaxX - _viewMinX);
+  double _pxToDataY(double py, double height) => _viewMaxY - py / height * (_viewMaxY - _viewMinY);
 
   void _handleScrollWheel(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
     final app = context.read<AppState>();
     if (app.interactionMode != 0) return;
     final plot = app.plots[widget.plotIdx];
-    final chartPos = _chartLocalPos(event.position);
-    final frac = chartPos != null ? _plotFraction(chartPos) : null;
-    if (frac == null) return;
     setState(() {
       if (_viewMinX.isNaN) _initViewToData(plot);
+      final box = context.findRenderObject() as RenderBox?;
+      if (box == null || box.size.width <= 0 || box.size.height <= 0) return;
       final steps = event.scrollDelta.dy / 53.0;
       final factor = math.pow(1.22, -steps);
-      final cx = _viewMinX + frac.$1 * (_viewMaxX - _viewMinX);
-      final cy = _viewMaxY - frac.$2 * (_viewMaxY - _viewMinY);
+      final cx = _pxToDataX(event.localPosition.dx, box.size.width);
+      final cy = _pxToDataY(event.localPosition.dy, box.size.height);
       _viewMinX = cx - (cx - _viewMinX) * factor;
       _viewMaxX = cx + (_viewMaxX - cx) * factor;
       _viewMinY = cy - (cy - _viewMinY) * factor;
@@ -320,42 +298,36 @@ class _PlotPanelState extends State<PlotPanel> {
     final isMouseLeft = event.kind == PointerDeviceKind.mouse &&
         (event.buttons & kPrimaryMouseButton) != 0 && !app.shiftHeld;
     if (isMouseLeft) {
-      final cp = _chartLocalPos(event.position);
-      if (cp == null) return;
       _inRubberBand = true;
-      _rubberBandStart = cp;
-      _rubberBandRect = Rect.fromPoints(cp, cp);
+      _rubberBandStart = event.localPosition;
+      _rubberBandRect = Rect.fromPoints(event.localPosition, event.localPosition);
     } else if (isMid || isShiftLeft) {
       _midPanning = true;
-      _lastMidPanPos = _chartLocalPos(event.position);
+      _lastMidPanPos = event.localPosition;
     }
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
     if (_inRubberBand && _rubberBandStart != null) {
-      final cp = _chartLocalPos(event.position);
-      if (cp == null) return;
-      setState(() { _rubberBandRect = Rect.fromPoints(_rubberBandStart!, cp); });
+      setState(() { _rubberBandRect = Rect.fromPoints(_rubberBandStart!, event.localPosition); });
       return;
     }
     if (!_midPanning || _lastMidPanPos == null) return;
-    final cp = _chartLocalPos(event.position);
-    if (cp == null) return;
     final app = context.read<AppState>();
     final plot = app.plots[widget.plotIdx];
-    final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
-    if (chartBox == null || chartBox.size.width <= 0 || chartBox.size.height <= 0) return;
     setState(() {
       if (_viewMinX.isNaN) _initViewToData(plot);
-      final dx = cp.dx - _lastMidPanPos!.dx;
-      final dy = cp.dy - _lastMidPanPos!.dy;
-      final xScale = (_viewMaxX - _viewMinX) / chartBox.size.width;
-      final yScale = (_viewMaxY - _viewMinY) / chartBox.size.height;
+      final box = context.findRenderObject() as RenderBox?;
+      if (box == null || box.size.width <= 0 || box.size.height <= 0) return;
+      final dx = event.localPosition.dx - _lastMidPanPos!.dx;
+      final dy = event.localPosition.dy - _lastMidPanPos!.dy;
+      final xScale = (_viewMaxX - _viewMinX) / box.size.width;
+      final yScale = (_viewMaxY - _viewMinY) / box.size.height;
       _viewMinX -= dx * xScale;
       _viewMaxX -= dx * xScale;
       _viewMinY += dy * yScale;
       _viewMaxY += dy * yScale;
-      _lastMidPanPos = cp;
+      _lastMidPanPos = event.localPosition;
     });
   }
 
@@ -365,24 +337,22 @@ class _PlotPanelState extends State<PlotPanel> {
       final r = _rubberBandRect!;
       final app = context.read<AppState>();
       final plot = app.plots[widget.plotIdx];
-      final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
       setState(() {
         _inRubberBand = false;
         _rubberBandStart = null;
         _rubberBandRect = null;
         if (r.width > 8 && r.height > 8) {
           if (_viewMinX.isNaN) _initViewToData(plot);
-          final f1 = _plotFraction(r.topLeft);
-          final f2 = _plotFraction(r.bottomRight);
-          if (f1 != null && f2 != null) {
-          final x1 = _viewMinX + f1.$1 * (_viewMaxX - _viewMinX);
-          final y1 = _viewMaxY - f1.$2 * (_viewMaxY - _viewMinY);
-          final x2 = _viewMinX + f2.$1 * (_viewMaxX - _viewMinX);
-          final y2 = _viewMaxY - f2.$2 * (_viewMaxY - _viewMinY);
-          _viewMinX = x1 < x2 ? x1 : x2;
-          _viewMaxX = x1 > x2 ? x1 : x2;
-          _viewMinY = y1 < y2 ? y1 : y2;
-          _viewMaxY = y1 > y2 ? y1 : y2;
+          final box = context.findRenderObject() as RenderBox?;
+          if (box != null && box.size.width > 0 && box.size.height > 0) {
+            final x1 = _pxToDataX(r.left, box.size.width);
+            final y1 = _pxToDataY(r.top, box.size.height);
+            final x2 = _pxToDataX(r.right, box.size.width);
+            final y2 = _pxToDataY(r.bottom, box.size.height);
+            _viewMinX = x1 < x2 ? x1 : x2;
+            _viewMaxX = x1 > x2 ? x1 : x2;
+            _viewMinY = y1 < y2 ? y1 : y2;
+            _viewMaxY = y1 > y2 ? y1 : y2;
           }
         }
       });
@@ -419,21 +389,31 @@ class _PlotPanelState extends State<PlotPanel> {
 
   void _showContextMenu(BuildContext ctx, Offset globalPosition) {
     final app = ctx.read<AppState>();
+    final isMaxed = app.maximizedPlot != null;
     showMenu<String>(
       context: ctx,
       position: RelativeRect.fromLTRB(globalPosition.dx, globalPosition.dy, globalPosition.dx, globalPosition.dy),
-      items: const [
-        PopupMenuItem(value: 'max', child: Text('Max')),
-        PopupMenuItem(value: 'reset', child: Text('Reset Current Scale')),
-        PopupMenuItem(value: 'resetAll', child: Text('Reset All Panels')),
-        PopupMenuItem(value: 'sameX', child: Text('All Same X Scale')),
-        PopupMenuItem(value: 'sameY', child: Text('All Same Y Scale')),
-        PopupMenuItem(value: 'export', child: Text('Export Data')),
-        PopupMenuItem(value: 'setup', child: Text('Panel Setup')),
+      items: [
+        if (isMaxed)
+          const PopupMenuItem(value: 'showAll', child: Text('Show All Panels'))
+        else
+          const PopupMenuItem(value: 'max', child: Text('Max')),
+        const PopupMenuItem(value: 'reset', child: Text('Reset Current Scale')),
+        const PopupMenuItem(value: 'resetAll', child: Text('Reset All Panels')),
+        const PopupMenuItem(value: 'sameX', child: Text('All Same X Scale')),
+        const PopupMenuItem(value: 'sameY', child: Text('All Same Y Scale')),
+        const PopupMenuItem(value: 'export', child: Text('Export Data')),
+        const PopupMenuItem(value: 'setup', child: Text('Panel Setup')),
       ],
     ).then((value) {
       if (value == null) return;
       switch (value) {
+        case 'max':
+          app.maximizePlot(widget.plotIdx);
+          break;
+        case 'showAll':
+          app.showAllPanels();
+          break;
         case 'reset':
           _resetView();
           app.clearCrosshair();
@@ -455,9 +435,22 @@ class _PlotPanelState extends State<PlotPanel> {
         case 'export':
           _exportCsv(app);
           break;
-        // 'max', 'setup': placeholders for future
+        case 'setup':
+          _showPanelSetup(ctx, app);
+          break;
       }
     });
+  }
+
+  void _showPanelSetup(BuildContext ctx, AppState app) {
+    final col = app.columns.isNotEmpty ? app.columns[0] : <Map<String, dynamic>>[];
+    final panel = widget.plotIdx < col.length ? col[widget.plotIdx] : <String, dynamic>{};
+    showDialog(
+      context: ctx,
+      builder: (ctx) => _PanelSetupDialog(panel: panel, onSave: () {
+        app.notifyListeners();
+      }),
+    );
   }
 
   Future<void> _exportCsv(AppState app) async {
@@ -537,5 +530,60 @@ class _PlotPanelState extends State<PlotPanel> {
       }
     }
     return out;
+  }
+}
+
+class _PanelSetupDialog extends StatefulWidget {
+  final Map<String, dynamic> panel;
+  final VoidCallback onSave;
+  const _PanelSetupDialog({required this.panel, required this.onSave});
+
+  @override State<_PanelSetupDialog> createState() => _PanelSetupDialogState();
+}
+
+class _PanelSetupDialogState extends State<_PanelSetupDialog> {
+  late final _titleCtrl = TextEditingController(text: widget.panel['title']?.toString() ?? '');
+  late final _xLabelCtrl = TextEditingController(text: widget.panel['x_label']?.toString() ?? 's');
+  late final _yLabelCtrl = TextEditingController(text: widget.panel['y_label']?.toString() ?? 'a.u.');
+  late final _pointsCtrl = TextEditingController(text: (widget.panel['extraction_points'] ?? 2000).toString());
+  late bool _grid = widget.panel['grid'] ?? true;
+
+  @override void dispose() {
+    _titleCtrl.dispose(); _xLabelCtrl.dispose(); _yLabelCtrl.dispose(); _pointsCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext ctx) {
+    return AlertDialog(
+      title: const Text('Panel Setup'),
+      content: SingleChildScrollView(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: _titleCtrl, decoration: const InputDecoration(labelText: 'Title', isDense: true)),
+          const SizedBox(height: 8),
+          TextField(controller: _xLabelCtrl, decoration: const InputDecoration(labelText: 'X Label', isDense: true)),
+          const SizedBox(height: 8),
+          TextField(controller: _yLabelCtrl, decoration: const InputDecoration(labelText: 'Y Label', isDense: true)),
+          const SizedBox(height: 8),
+          TextField(controller: _pointsCtrl, decoration: const InputDecoration(labelText: 'Extraction Points', isDense: true), keyboardType: TextInputType.number),
+          const SizedBox(height: 8),
+          CheckboxListTile(title: const Text('Show Grid'), value: _grid, onChanged: (v) => setState(() => _grid = v ?? true), contentPadding: EdgeInsets.zero, dense: true, controlAffinity: ListTileControlAffinity.leading),
+        ]),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        TextButton(onPressed: _save, child: const Text('Save')),
+      ],
+    );
+  }
+
+  void _save() {
+    widget.panel['title'] = _titleCtrl.text;
+    widget.panel['x_label'] = _xLabelCtrl.text;
+    widget.panel['y_label'] = _yLabelCtrl.text;
+    widget.panel['extraction_points'] = int.tryParse(_pointsCtrl.text) ?? 2000;
+    widget.panel['grid'] = _grid;
+    widget.onSave();
+    Navigator.pop(context);
   }
 }

@@ -118,6 +118,12 @@ class AppState extends ChangeNotifier {
   bool _fetching = false; bool get fetching => _fetching;
   String _status = 'Ready'; String get status => _status;
 
+  // Max panel (null = show all)
+  int? _maximizedPlot;
+  int? get maximizedPlot => _maximizedPlot;
+  void maximizePlot(int idx) { _maximizedPlot = idx; notifyListeners(); }
+  void showAllPanels() { _maximizedPlot = null; notifyListeners(); }
+
   // Dialogs
   bool _showLogin = false; bool get showLogin => _showLogin;
   bool _showSsh = false; bool get showSsh => _showSsh;

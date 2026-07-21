@@ -11,6 +11,13 @@ class PlotGrid extends StatelessWidget {
     final app = context.watch<AppState>();
     if (app.columns.isEmpty) return const SizedBox();
 
+    // Maximized mode: single panel fills entire area
+    if (app.maximizedPlot != null) {
+      final idx = app.maximizedPlot!;
+      if (idx >= app.plots.length) return const SizedBox();
+      return PlotPanel(plotIdx: idx, selected: true);
+    }
+
     final nCols = app.columns.length;
     final nRows = app.columns.map((c) => c.length).fold(0, (a, b) => a > b ? a : b);
 
@@ -34,7 +41,8 @@ class PlotGrid extends StatelessWidget {
                   onTap: () { app.selectedCol = col; app.selectedRow = row; },
                   onContextAction: (action) {
                     switch (action) {
-                      case 'max': break;
+                      case 'max': app.maximizePlot(plotIdx); break;
+                      case 'showAll': app.showAllPanels(); break;
                       case 'reset': app.plots[plotIdx].crosshairX = null; break;
                       case 'delete': break;
                     }
