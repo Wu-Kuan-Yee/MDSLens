@@ -154,6 +154,7 @@ class _PlotPanelState extends State<PlotPanel> {
         ),
         ),
       ),
+    ),
       if (_inRubberBand && _rubberBandRect != null)
         Positioned(
           left: _rubberBandRect!.left,
