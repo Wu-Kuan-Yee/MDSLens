@@ -82,6 +82,51 @@ class AppState extends ChangeNotifier {
   int get themeMode => _themeMode;
   set themeMode(int v) { _themeMode = v; notifyListeners(); }
 
+  // Font sizes (Customize Fonts dialog)
+  int _fontLegendSize = 11, _fontAxisSize = 8, _fontUnitSize = 9, _fontUiSize = 12;
+  int get fontLegendSize => _fontLegendSize; int get fontAxisSize => _fontAxisSize;
+  int get fontUnitSize => _fontUnitSize; int get fontUiSize => _fontUiSize;
+  void applyFontSizes(int legend, int axis, int unit, int ui) {
+    _fontLegendSize = legend; _fontAxisSize = axis; _fontUnitSize = unit; _fontUiSize = ui;
+    notifyListeners();
+  }
+
+  // Web bookmarks
+  List<Map<String, String>> _webBookmarks = [];
+  List<Map<String, String>> get webBookmarks => _webBookmarks;
+  void addWebBookmark(String alias, String url) { _webBookmarks.add({alias: url}); notifyListeners(); }
+  void removeWebBookmark(int i) { if (i >= 0 && i < _webBookmarks.length) { _webBookmarks.removeAt(i); notifyListeners(); } }
+
+  // Layout
+  void applyLayout(int cols, int rows) {
+    final newCols = <List<Map<String, dynamic>>>[];
+    var sigIdx = 0;
+    for (var c = 0; c < cols; c++) {
+      final col = <Map<String, dynamic>>[];
+      for (var r = 0; r < rows; r++) {
+        if (_columns.isNotEmpty && c < _columns.length && r < _columns[c].length) {
+          col.add(_columns[c][r]);
+        } else {
+          col.add({'title': 'Panel ${sigIdx + 1}', 'x_label': 's', 'y_label': 'a.u.', 'grid': true, 'signal_specs': []});
+        }
+      }
+      newCols.add(col);
+    }
+    _columns = newCols;
+    _rebuildPlotsFromColumns();
+    notifyListeners();
+  }
+
+  void _rebuildPlotsFromColumns() {
+    _plots.clear();
+    for (final col in _columns) {
+      for (final p in col) {
+        final sc = (p['signal_specs'] as List?)?.length ?? 1;
+        _plots.add(PlotData(title: p['title']?.toString()??'', xLabel: p['x_label']?.toString()??'s', yLabel: p['y_label']?.toString()??'a.u.', series: List.filled(sc > 0 ? sc : 1, null)));
+      }
+    }
+  }
+
   // Auth
   bool _loggedIn = false; bool get loggedIn => _loggedIn;
   String _authToken = ''; String get authToken => _authToken;

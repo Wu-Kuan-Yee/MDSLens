@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/app_state.dart';
@@ -11,6 +12,13 @@ class ToolbarWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
     final theme = Theme.of(context);
+    final infoStyle = TextStyle(fontSize: 11, color: theme.colorScheme.primary);
+    final shot = app.shotText.isNotEmpty ? app.shotText : '--';
+    final ip = app.shotInfoIp.isNotEmpty ? '${app.shotInfoIp} kA' : (app.fetching ? '...' : '--');
+    final pulse = app.shotInfoPulse.isNotEmpty ? app.shotInfoPulse : (app.fetching ? '...' : '--');
+    final it = app.shotInfoIt.isNotEmpty ? app.shotInfoIt : (app.fetching ? '...' : '--');
+    final time = app.shotInfoTime.isNotEmpty ? app.shotInfoTime : (app.fetching ? '...' : '--');
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       color: theme.colorScheme.surfaceContainerHighest,
@@ -41,12 +49,20 @@ class ToolbarWidget extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            if (app.shotInfoIp.isNotEmpty) Text('Ip:${app.shotInfoIp}', style: const TextStyle(fontSize: 11)),
-            if (app.shotInfoPulse.isNotEmpty) Text(' Pulse:${app.shotInfoPulse}', style: const TextStyle(fontSize: 11)),
-            if (app.shotInfoIt.isNotEmpty) Text(' It:${app.shotInfoIt}', style: const TextStyle(fontSize: 11)),
+            Text('Shot: $shot', style: infoStyle),
+            const SizedBox(width: 4),
+            Text('Ip: $ip', style: infoStyle),
+            const SizedBox(width: 4),
+            Text('Pulse: $pulse', style: infoStyle),
+            const SizedBox(width: 4),
+            Text('It: $it', style: infoStyle),
+            const SizedBox(width: 4),
+            Text('Time: $time', style: infoStyle),
             const Spacer(),
             _themeBtns(context, app),
-            const SizedBox(width: 8),
+            const SizedBox(width: 4),
+            _settingsMenu(context, app),
+            const SizedBox(width: 4),
             _btn(context, app.loggedIn ? 'Logout' : 'Login', () => app.loggedIn ? app.logout() : LoginDialog.show(context)),
             const SizedBox(width: 4),
             _sshBtn(context, app),
@@ -86,6 +102,176 @@ class ToolbarWidget extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Widget _settingsMenu(BuildContext ctx, AppState app) {
+    return PopupMenuButton<String>(
+      tooltip: 'Settings',
+      icon: Icon(Icons.settings, size: 18, color: Theme.of(ctx).colorScheme.onSurface),
+      onSelected: (v) {
+        switch (v) {
+          case 'web': _showWebBookmarks(ctx, app); break;
+          case 'layout': _showLayoutSetup(ctx, app); break;
+          case 'fonts': _showFontDialog(ctx, app); break;
+        }
+      },
+      itemBuilder: (_) => [
+        const PopupMenuItem(value: 'web', child: Text('Internal web pages')),
+        const PopupMenuItem(value: 'layout', child: Text('Layout setup')),
+        const PopupMenuItem(value: 'fonts', child: Text('Customize fonts')),
+      ],
+    );
+  }
+
+  void _showWebBookmarks(BuildContext ctx, AppState app) {
+    final bookmarks = app.webBookmarks;
+    showDialog(
+      context: ctx,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setState) => AlertDialog(
+        title: const Text('Internal Web Pages'),
+        content: SizedBox(width: 400, height: 300,
+          child: bookmarks.isEmpty
+              ? const Center(child: Text('No Saved Web Addresses', style: TextStyle(color: Colors.grey)))
+              : ListView.builder(
+                  itemCount: bookmarks.length,
+                  itemBuilder: (_, i) => ListTile(
+                    title: Text(bookmarks[i].keys.first),
+                    subtitle: Text(bookmarks[i].values.first, style: const TextStyle(fontSize: 11)),
+                    onTap: () { Navigator.pop(ctx); _openUrl(bookmarks[i].values.first); },
+                  ),
+                ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+          TextButton(onPressed: () { _addBookmark(ctx, app, setState); }, child: const Text('Add...')),
+          if (bookmarks.isNotEmpty)
+            TextButton(onPressed: () { _removeBookmark(ctx, app, setState); }, child: const Text('Remove...')),
+        ],
+      )),
+    );
+  }
+
+  void _addBookmark(BuildContext ctx, AppState app, void Function(VoidCallback) setState) {
+    final aliasCtrl = TextEditingController();
+    final urlCtrl = TextEditingController();
+    showDialog(
+      context: ctx,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Web Bookmark'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: aliasCtrl, decoration: const InputDecoration(labelText: 'Alias')),
+          const SizedBox(height: 8),
+          TextField(controller: urlCtrl, decoration: const InputDecoration(labelText: 'URL')),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(onPressed: () {
+            final alias = aliasCtrl.text.trim();
+            final url = urlCtrl.text.trim();
+            if (alias.isNotEmpty && url.isNotEmpty) {
+              app.addWebBookmark(alias, url);
+              Navigator.pop(ctx);
+              setState(() {});
+            }
+          }, child: const Text('Add')),
+        ],
+      ),
+    );
+  }
+
+  void _removeBookmark(BuildContext ctx, AppState app, void Function(VoidCallback) setState) {
+    final bookmarks = app.webBookmarks;
+    showDialog(
+      context: ctx,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove Bookmark'),
+        content: SizedBox(width: 300, height: 200,
+          child: ListView.builder(
+            itemCount: bookmarks.length,
+            itemBuilder: (_, i) => ListTile(
+              title: Text(bookmarks[i].keys.first),
+              onTap: () { app.removeWebBookmark(i); Navigator.pop(ctx); setState(() {}); },
+            ),
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel'))],
+      ),
+    );
+  }
+
+  void _openUrl(String url) {
+    if (Platform.isMacOS || Platform.isLinux) {
+      Process.run('open', [url]);
+    } else if (Platform.isWindows) {
+      Process.run('start', [url], runInShell: true);
+    } else {
+      Process.run('xdg-open', [url]);
+    }
+  }
+
+  void _showLayoutSetup(BuildContext ctx, AppState app) {
+    final nCols = app.columns.length;
+    var cols = nCols;
+    var rows = app.columns.isNotEmpty ? app.columns.first.length : 1;
+    showDialog(
+      context: ctx,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setState) => AlertDialog(
+        title: const Text('Layout Setup'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(children: [
+            const Text('Columns:'),
+            const SizedBox(width: 8),
+            IconButton(icon: const Icon(Icons.remove, size: 16), onPressed: cols > 1 ? () => setState(() => cols--) : null),
+            Text('$cols', style: const TextStyle(fontSize: 16)),
+            IconButton(icon: const Icon(Icons.add, size: 16), onPressed: () => setState(() => cols++)),
+          ]),
+          const SizedBox(height: 8),
+          Row(children: [
+            const Text('Rows:   '),
+            const SizedBox(width: 8),
+            IconButton(icon: const Icon(Icons.remove, size: 16), onPressed: rows > 1 ? () => setState(() => rows--) : null),
+            Text('$rows', style: const TextStyle(fontSize: 16)),
+            IconButton(icon: const Icon(Icons.add, size: 16), onPressed: () => setState(() => rows++)),
+          ]),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(onPressed: () { app.applyLayout(cols, rows); Navigator.pop(ctx); }, child: const Text('Apply')),
+        ],
+      )),
+    );
+  }
+
+  void _showFontDialog(BuildContext ctx, AppState app) {
+    var legendSize = app.fontLegendSize;
+    var axisSize = app.fontAxisSize;
+    var unitSize = app.fontUnitSize;
+    var uiSize = app.fontUiSize;
+    showDialog(
+      context: ctx,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setState) => AlertDialog(
+        title: const Text('Customize Fonts'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          _fontRow('Legend size', legendSize, (v) => setState(() => legendSize = v)),
+          _fontRow('Axis size', axisSize, (v) => setState(() => axisSize = v)),
+          _fontRow('Unit size', unitSize, (v) => setState(() => unitSize = v)),
+          _fontRow('UI size', uiSize, (v) => setState(() => uiSize = v)),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(onPressed: () { app.applyFontSizes(legendSize, axisSize, unitSize, uiSize); Navigator.pop(ctx); }, child: const Text('OK')),
+        ],
+      )),
+    );
+  }
+
+  Widget _fontRow(String label, int value, void Function(int) onChanged) {
+    return Row(children: [
+      SizedBox(width: 100, child: Text(label)),
+      IconButton(icon: const Icon(Icons.remove, size: 16), onPressed: value > 6 ? () => onChanged(value - 1) : null),
+      SizedBox(width: 30, child: Text('$value', textAlign: TextAlign.center)),
+      IconButton(icon: const Icon(Icons.add, size: 16), onPressed: value < 28 ? () => onChanged(value + 1) : null),
+    ]);
   }
 
   Widget _btn(BuildContext ctx, String label, VoidCallback onTap) {
