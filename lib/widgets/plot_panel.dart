@@ -107,9 +107,21 @@ class _PlotPanelState extends State<PlotPanel> {
           if (_viewMinX.isNaN) _initViewToData(plot);
           if (details.scale != 1.0) {
             final factor = 1.0 / details.scale;
-            final localF = (_listenerBox?.globalToLocal(details.focalPoint)) ?? details.localFocalPoint;
-            final cx = _pxToDataX(localF.dx);
-            final cy = _pxToDataY(localF.dy);
+            final chartBox = _chartBox;
+            double cx, cy;
+            if (chartBox != null) {
+              final localF = chartBox.globalToLocal(details.focalPoint);
+              final gw = chartBox.size.width - 50;
+              final gh = chartBox.size.height - 32;
+              if (gw > 0 && gh > 0) {
+                cx = _viewMinX + ((localF.dx - 50) / gw) * (_viewMaxX - _viewMinX);
+                cy = _viewMaxY - (localF.dy / gh) * (_viewMaxY - _viewMinY);
+              } else {
+                cx = (_viewMinX + _viewMaxX) / 2; cy = (_viewMinY + _viewMaxY) / 2;
+              }
+            } else {
+              cx = (_viewMinX + _viewMaxX) / 2; cy = (_viewMinY + _viewMaxY) / 2;
+            }
             _viewMinX = cx - (cx - _viewMinX) * factor;
             _viewMaxX = cx + (_viewMaxX - cx) * factor;
             _viewMinY = cy - (cy - _viewMinY) * factor;
@@ -117,9 +129,11 @@ class _PlotPanelState extends State<PlotPanel> {
           } else {
             final lb = _listenerBox;
             final cb = _chartBox;
-            if (lb != null && cb != null && cb.size.width > 0 && cb.size.height > 0) {
-              final xScale = (_viewMaxX - _viewMinX) / cb.size.width;
-              final yScale = (_viewMaxY - _viewMinY) / cb.size.height;
+            if (lb != null && cb != null && cb.size.width > 50 && cb.size.height > 32) {
+              final gw = cb.size.width - 50;
+              final gh = cb.size.height - 32;
+              final xScale = (_viewMaxX - _viewMinX) / gw;
+              final yScale = (_viewMaxY - _viewMinY) / gh;
               _viewMinX -= details.focalPointDelta.dx * xScale;
               _viewMaxX -= details.focalPointDelta.dx * xScale;
               _viewMinY += details.focalPointDelta.dy * yScale;
