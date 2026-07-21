@@ -336,38 +336,19 @@ class AppState extends ChangeNotifier {
   void stopFetch() { _fetching = false; _status = 'Stopped'; notifyListeners(); }
 
   Future<void> _fetchTopInfo() async {
-    if (_loginApiUrl.isEmpty || _shotText.isEmpty) return;
+    if (_loginApiUrl.isEmpty || _shotText.isEmpty || _authToken.isEmpty) return;
     try {
-      String apiUrl = _loginApiUrl;
-      if (_sshMode > 0 && _sshHost.isNotEmpty) {
-        try {
-          final settings = jsonEncode({'host': _sshHost, 'port': _sshPort, 'user': _sshUser, 'password': _sshPass, 'identity_file': _sshIdentity, 'mode': 2});
-          final resp = RustBridge.instance.prepareUrl(_loginApiUrl, settings);
-          if (resp.startsWith('http') && !resp.contains('"error"')) apiUrl = resp;
-        } catch (_) {}
-      }
-      final base = apiUrl.replaceAll(RegExp(r'/$'), '');
-      final uri = Uri.parse('$base/treeShot');
-      final client = HttpClient();
-      try {
-        final req = await client.postUrl(uri);
-        req.headers.set('Content-Type', 'application/json');
-        if (_authToken.isNotEmpty) req.headers.set('Authorization', 'Bearer $_authToken');
-        req.write(jsonEncode({'shot': _shotText}));
-        final resp = await req.close();
-        final body = await resp.transform(utf8.decoder).join();
-        final json = jsonDecode(body);
-        if (json is Map && (json['code']?.toString() == '20000' || json['code'] == 20000)) {
-          final data = json['data'];
-          if (data is Map) {
-            _shotInfoIp = data['pcrl01']?.toString() ?? data['ip']?.toString() ?? '';
-            _shotInfoPulse = data['shot_len'] != null ? '${data['shot_len']}s' : (data['pulseLength'] != null ? '${data['pulseLength']}s' : '');
-            _shotInfoIt = data['iv'] != null ? '${data['iv']}A' : (data['it'] != null ? '${data['it']}kA' : '');
-            _shotInfoTime = (data['curr_time'] ?? data['currentTime'])?.toString() ?? '';
-            notifyListeners();
-          }
+      final raw = RustBridge.instance.fetchS(_loginApiUrl, _authToken);
+      if (raw.isNotEmpty) {
+        final json = jsonDecode(raw);
+        if (json is Map) {
+          _shotInfoIp = json['ip']?.toString() ?? '';
+          _shotInfoPulse = json['pulse']?.toString() ?? '';
+          _shotInfoIt = json['it']?.toString() ?? '';
+          _shotInfoTime = json['time']?.toString() ?? '';
+          notifyListeners();
         }
-      } finally { client.close(); }
+      }
     } catch (_) {}
   }
 
