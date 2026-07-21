@@ -36,7 +36,6 @@ class _PlotPanelState extends State<PlotPanel> {
   int _lastResetId = -1;
   bool _midPanning = false;
   Offset? _lastMidPanPos;
-  Offset? _cursorPos;
   bool _inRubberBand = false;
   Offset? _rubberBandStart;
   Rect? _rubberBandRect;
@@ -108,16 +107,12 @@ class _PlotPanelState extends State<PlotPanel> {
           if (details.scale != 1.0) {
             final factor = 1.0 / details.scale;
             final localF = details.localFocalPoint;
-            debugPrint('[ZOOM] localFocalPoint=(${localF.dx.toStringAsFixed(1)}, ${localF.dy.toStringAsFixed(1)}) scale=${details.scale.toStringAsFixed(3)} factor=${factor.toStringAsFixed(3)}');
-            debugPrint('[ZOOM] viewBefore=($_viewMinX..$_viewMaxX, $_viewMinY..$_viewMaxY)');
             final cx = _pxToDataX(localF.dx);
             final cy = _pxToDataY(localF.dy);
-            debugPrint('[ZOOM] cx=$cx cy=$cy');
             _viewMinX = cx - (cx - _viewMinX) * factor;
             _viewMaxX = cx + (_viewMaxX - cx) * factor;
             _viewMinY = cy - (cy - _viewMinY) * factor;
             _viewMaxY = cy + (_viewMaxY - cy) * factor;
-            debugPrint('[ZOOM] viewAfter=($_viewMinX..$_viewMaxX, $_viewMinY..$_viewMaxY)');
           } else {
             final lb = _listenerBox;
             final cb = _chartBox;
@@ -140,7 +135,7 @@ class _PlotPanelState extends State<PlotPanel> {
         key: _listenerKey,
         onPointerSignal: _handleScrollWheel,
         onPointerDown: _handlePointerDown,
-        onPointerMove: (e) { _cursorPos = e.localPosition; _handlePointerMove(e); },
+        onPointerMove: _handlePointerMove,
         onPointerUp: _handlePointerUp,
         child: Padding(
             padding: const EdgeInsets.all(2),
@@ -385,7 +380,6 @@ class _PlotPanelState extends State<PlotPanel> {
     final chartLocal = cb.globalToLocal(lb.localToGlobal(Offset(px, 0)));
     final gx = chartLocal.dx - 50;
     final gw = cb.size.width - 50;
-    debugPrint('[PXD] px=$px lb=${lb.size.width}x${lb.size.height} cb=${cb.size.width}x${cb.size.height} chartX=${chartLocal.dx.toStringAsFixed(1)} gx=$gx gw=$gw');
     return _viewMinX + (gx / gw) * (_viewMaxX - _viewMinX);
   }
   double _pxToDataY(double py) {
@@ -395,7 +389,6 @@ class _PlotPanelState extends State<PlotPanel> {
     final chartLocal = cb.globalToLocal(lb.localToGlobal(Offset(0, py)));
     final gy = chartLocal.dy;
     final gh = cb.size.height - 32;
-    debugPrint('[PYD] py=$py chartY=${chartLocal.dy.toStringAsFixed(1)} gy=$gy gh=$gh');
     return _viewMaxY - (gy / gh) * (_viewMaxY - _viewMinY);
   }
 
@@ -406,7 +399,7 @@ class _PlotPanelState extends State<PlotPanel> {
     final plot = app.plots[widget.plotIdx];
     setState(() {
       if (_viewMinX.isNaN) _initViewToData(plot);
-      final pos = _cursorPos ?? event.localPosition;
+      final pos = event.localPosition;
       final steps = event.scrollDelta.dy / 53.0;
       final factor = math.pow(1.22, -steps);
       final cx = _pxToDataX(pos.dx);
@@ -984,7 +977,6 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
       if (r.y.text.trim().isEmpty) continue;
       final shot = r.shot.text.trim();
       final colorValue = r.customColor ?? Color(_presetColors[r.colorIdx % _presetColors.length]);
-      debugPrint('[DS_SAVE] signal=${r.y.text.trim()} read_mode=${r.readMode}');
       widget.signals.add({
         'y_expr': r.y.text.trim(),
         'experiment': r.tree.text.trim(),

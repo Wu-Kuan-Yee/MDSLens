@@ -250,7 +250,6 @@ class AppState extends ChangeNotifier {
   }
 
   void _doFetch() {
-    debugPrint('[FETCH] _doFetch called, dataMode=$_dataMode');
     _fetching = true; _status = 'Fetching...'; notifyListeners();
     Future.microtask(() {
       try {
@@ -259,10 +258,6 @@ class AppState extends ChangeNotifier {
           m['shot'] = _shotText;
           m['extraction_points'] ??= 2000;
           m['grid'] ??= true;
-          final sigs = m['signal_specs'] as List?;
-          if (sigs != null && sigs.isNotEmpty) {
-            debugPrint('[FETCH] signal_specs[0] read_mode=${(sigs[0] as Map)['read_mode']}');
-          }
           return m;
         }).toList()).toList();
         final sshSettings = _sshMode > 0 && _sshHost.isNotEmpty
