@@ -873,7 +873,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
             ]),
           ],
         ]),
-      ))))),
+      )))),
       actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')), TextButton(onPressed: _save, child: const Text('OK'))],
     );
   }
