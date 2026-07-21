@@ -145,7 +145,7 @@ class _PlotPanelState extends State<PlotPanel> {
               Expanded(
                 child: bars.isEmpty
                     ? Center(child: Text(plot.series.any((s) => s?.error != null && s!.error!.isNotEmpty) ? 'Error' : 'No data', style: TextStyle(color: Colors.grey, fontSize: 10)))
-                    : Stack(key: _chartAreaKey, clipBehavior: Clip.hardEdge, children: [
+                    : Stack(key: _chartAreaKey, children: [
                         _buildChart(bars, plot, panel, theme),
                       ]),
               ),
@@ -212,7 +212,6 @@ class _PlotPanelState extends State<PlotPanel> {
           final gridBottom = ch - 32.0;
           final gridW = gridRight - gridLeft;
           final gridH = gridBottom - gridTop;
-          final plotRect = Rect.fromLTRB(gridLeft, gridTop, gridRight, gridBottom);
 
           // Tick count based on pixel size matching C++:
           //   xTickCount = clamp(width/78 + 1, 3, 7)
@@ -224,10 +223,9 @@ class _PlotPanelState extends State<PlotPanel> {
 
           return Stack(
             children: [
-              ClipRect(
-                clipper: _RectClipper(plotRect),
-                child: LineChart(
-                  LineChartData(
+              LineChart(
+                LineChartData(
+                clipData: const FlClipData.all(),
                 lineBarsData: bars,
                 gridData: FlGridData(show: showGrid, drawVerticalLine: showGrid, drawHorizontalLine: showGrid,
                   getDrawingHorizontalLine: (v) => FlLine(color: theme.dividerColor.withValues(alpha: 0.15), strokeWidth: 0.5),
@@ -267,7 +265,6 @@ class _PlotPanelState extends State<PlotPanel> {
                 minX: xMin, maxX: xMax, minY: yMin, maxY: yMax,
               ),
               ),
-            ),
             // Grid area border — drawn at plotRect (C++: QPalette::Midlight)
               Positioned(
                 left: gridLeft, top: gridTop, width: gridW, height: gridH,
@@ -701,8 +698,8 @@ class _PlotPanelState extends State<PlotPanel> {
       if (cymin != null && cymin.isFinite) rMinY = cymin;
       if (cymax != null && cymax.isFinite) rMaxY = cymax;
     }
-    final xPad = customX ? 0.0 : (rMaxX - rMinX) * 0.02;
-    final yPad = customY ? 0.0 : (rMaxY - rMinY) * 0.02;
+    final xPad = customX ? 0.0 : (rMaxX - rMinX) * 0.01;
+    final yPad = customY ? 0.0 : (rMaxY - rMinY) * 0.04;
     return [rMinX - xPad, rMaxX + xPad, rMinY - yPad, rMaxY + yPad];
   }
 
@@ -1117,11 +1114,4 @@ class _DSRow {
   List<String> _signalOptions = [];
   _DSRow({required this.shot, required this.y, required this.tree, required this.server});
   void dispose() { shot.dispose(); y.dispose(); tree.dispose(); server.dispose(); }
-}
-
-class _RectClipper extends CustomClipper<Rect> {
-  final Rect rect;
-  const _RectClipper(this.rect);
-  @override Rect getClip(Size size) => rect;
-  @override bool shouldReclip(_RectClipper old) => old.rect != rect;
 }
