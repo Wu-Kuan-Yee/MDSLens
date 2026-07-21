@@ -59,6 +59,11 @@ class _PlotPanelState extends State<PlotPanel> {
     final panel = _findPanel(app);
     final theme = Theme.of(context);
 
+    // Initialise view from data bounds on first render
+    if (_viewMinX.isNaN && plot.series.any((s) => s?.points != null && s!.points!.isNotEmpty)) {
+      _initViewToData(plot, panel);
+    }
+
     // Build line bars with MinMax decimation
     final bars = <LineChartBarData>[];
     final sigSpecs = (panel['signal_specs'] as List?)?.cast<Map>() ?? [];
@@ -294,7 +299,7 @@ class _PlotPanelState extends State<PlotPanel> {
               for (int i = 0; i < yTicks.length; i++)
                 Positioned(
                   left: 2,
-                  top: gridTop + ((yTicks.length - 1 - i) / (yTicks.length - 1)) * gridH - 6,
+                  top: (gridTop + ((yTicks.length - 1 - i) / (yTicks.length - 1)) * gridH - 6).clamp(2.0, double.infinity),
                   child: SizedBox(width: gridLeft - 6, child: Text(_fmtAxis(yTicks[i]), style: TextStyle(fontSize: 8, color: textColor), textAlign: TextAlign.right)),
                 ),
               // X-axis tick values — below tick marks (row 1 of 2 below axis)
