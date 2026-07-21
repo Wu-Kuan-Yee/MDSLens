@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - main
+      - flutter-rewrite
   workflow_dispatch:
 
 jobs:
