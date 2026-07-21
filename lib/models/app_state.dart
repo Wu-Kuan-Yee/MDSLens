@@ -336,24 +336,29 @@ class AppState extends ChangeNotifier {
   void stopFetch() { _fetching = false; _status = 'Stopped'; notifyListeners(); }
 
   Future<void> _fetchTopInfo() async {
-    debugPrint('[TOPINFO] api=$_loginApiUrl shot=$_shotText token=${_authToken.isNotEmpty ? "yes" : "no"}');
     if (_loginApiUrl.isEmpty || _shotText.isEmpty || _authToken.isEmpty) return;
     try {
-      final raw = RustBridge.instance.fetchSInfo(_loginApiUrl, _authToken, _shotText);
-      debugPrint('[TOPINFO] raw=$raw');
+      // Route through SSH if configured (matching C++ scheduleTopInfoUpdate)
+      String apiUrl = _loginApiUrl;
+      if (_sshMode > 0 && _sshHost.isNotEmpty) {
+        try {
+          final settings = jsonEncode({'host': _sshHost, 'port': _sshPort, 'user': _sshUser, 'password': _sshPass, 'identity_file': _sshIdentity, 'mode': 2});
+          final resp = RustBridge.instance.prepareUrl(_loginApiUrl, settings);
+          if (resp.startsWith('http') && !resp.contains('"error"')) apiUrl = resp;
+        } catch (_) {}
+      }
+      final raw = RustBridge.instance.fetchSInfo(apiUrl, _authToken, _shotText);
       if (raw.isNotEmpty && !raw.contains('"error"')) {
         final json = jsonDecode(raw);
-        debugPrint('[TOPINFO] json=$json');
         if (json is Map) {
           _shotInfoIp = json['ip']?.toString() ?? '';
           _shotInfoPulse = (json['pulse']?.toString() ?? '').isNotEmpty ? '${json['pulse']}s' : '';
           _shotInfoIt = (json['it']?.toString() ?? '').isNotEmpty ? '${json['it']}A' : '';
           _shotInfoTime = json['time']?.toString() ?? '';
-          debugPrint('[TOPINFO] ip=$_shotInfoIp pulse=$_shotInfoPulse it=$_shotInfoIt time=$_shotInfoTime');
           notifyListeners();
         }
       }
-    } catch (e) { debugPrint('[TOPINFO] error=$e'); }
+    } catch (_) {}
   }
 
   Future<void> fetchLatestShot() async {
