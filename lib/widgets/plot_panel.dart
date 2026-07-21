@@ -36,6 +36,7 @@ class _PlotPanelState extends State<PlotPanel> {
   int _lastResetId = -1;
   bool _midPanning = false;
   Offset? _lastMidPanPos;
+  Offset? _cursorPos; // Track cursor for accurate scroll-wheel zoom center
   bool _inRubberBand = false;
   Offset? _rubberBandStart;
   Rect? _rubberBandRect;
@@ -120,7 +121,7 @@ class _PlotPanelState extends State<PlotPanel> {
         key: _listenerKey,
         onPointerSignal: _handleScrollWheel,
         onPointerDown: _handlePointerDown,
-        onPointerMove: _handlePointerMove,
+        onPointerMove: (e) { _cursorPos = e.localPosition; _handlePointerMove(e); },
         onPointerUp: _handlePointerUp,
         child: Padding(
             padding: const EdgeInsets.all(2),
@@ -291,11 +292,13 @@ class _PlotPanelState extends State<PlotPanel> {
     final plot = app.plots[widget.plotIdx];
     setState(() {
       if (_viewMinX.isNaN) _initViewToData(plot);
+      final lb = _listenerBox;
+      if (lb == null || lb.size.width <= 0 || lb.size.height <= 0) return;
+      final pos = _cursorPos ?? event.localPosition;
       final steps = event.scrollDelta.dy / 53.0;
       final factor = math.pow(1.22, -steps);
-      // Zoom around view center (correct and predictable, matching professional tools)
-      final cx = (_viewMinX + _viewMaxX) / 2;
-      final cy = (_viewMinY + _viewMaxY) / 2;
+      final cx = _pxToDataX(pos.dx, lb.size.width);
+      final cy = _pxToDataY(pos.dy, lb.size.height);
       _viewMinX = cx - (cx - _viewMinX) * factor;
       _viewMaxX = cx + (_viewMaxX - cx) * factor;
       _viewMinY = cy - (cy - _viewMinY) * factor;
@@ -486,14 +489,39 @@ class _PlotPanelState extends State<PlotPanel> {
   }
 
   void _rebuildPlots(AppState app) {
-    app.plots.clear();
+    // Preserve existing series data, update metadata only
+    final oldPlots = List<PlotData>.from(app.plots);
+    var idx = 0;
     for (final col in app.columns) {
       for (final p in col) {
         final sc = (p['signal_specs'] as List?)?.length ?? 1;
-        app.plots.add(PlotData(title: p['title']?.toString()??'', xLabel: p['x_label']?.toString()??'s', yLabel: p['y_label']?.toString()??'a.u.', series: List.filled(sc > 0 ? sc : 1, null)));
+        if (idx < oldPlots.length) {
+          // Update metadata only, keep series data
+          oldPlots[idx] = PlotData(
+            title: p['title']?.toString()??'',
+            xLabel: p['x_label']?.toString()??'s',
+            yLabel: p['y_label']?.toString()??'a.u.',
+            series: _resizeSeries(oldPlots[idx].series, sc > 0 ? sc : 1),
+          );
+        } else {
+          oldPlots.add(PlotData(title: p['title']?.toString()??'', xLabel: p['x_label']?.toString()??'s', yLabel: p['y_label']?.toString()??'a.u.', series: List.filled(sc > 0 ? sc : 1, null)));
+        }
+        idx++;
       }
     }
+    // Remove excess plots if layout shrank
+    if (idx < oldPlots.length) oldPlots.removeRange(idx, oldPlots.length);
+    // Reassign to trigger rebuild
+    app.plots
+      ..clear()
+      ..addAll(oldPlots);
     app.notifyListeners();
+  }
+
+  List<SeriesData?> _resizeSeries(List<SeriesData?> old, int newCount) {
+    if (old.length == newCount) return old;
+    if (old.length > newCount) return old.sublist(0, newCount);
+    return [...old, ...List.filled(newCount - old.length, null)];
   }
 
   void _showPanelSetup(BuildContext ctx, AppState app) {
