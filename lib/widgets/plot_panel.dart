@@ -30,6 +30,7 @@ class PlotPanel extends StatefulWidget {
 
 class _PlotPanelState extends State<PlotPanel> {
   final _chartAreaKey = GlobalKey();
+  final _listenerKey = GlobalKey();
   double _viewMinX = double.nan, _viewMaxX = double.nan, _viewMinY = double.nan, _viewMaxY = double.nan;
   double? _localCrosshairY;
   int _lastResetId = -1;
@@ -94,8 +95,10 @@ class _PlotPanelState extends State<PlotPanel> {
           final box = context.findRenderObject() as RenderBox?;
           final w = box?.size.width ?? 0;
           final h = box?.size.height ?? 0;
+          final lb = _listenerBox;
+          final w = lb?.size.width ?? 0;
+          final h = lb?.size.height ?? 0;
           if (details.scale != 1.0 && w > 0 && h > 0) {
-            // Pinch zoom: focal point maps to data via full widget size (like original)
             final factor = 1.0 / details.scale;
             final cx = _pxToDataX(details.focalPoint.dx, w);
             final cy = _pxToDataY(details.focalPoint.dy, h);
@@ -117,6 +120,7 @@ class _PlotPanelState extends State<PlotPanel> {
       onSecondaryTapUp: (details) => _showContextMenu(context, details.globalPosition),
       onLongPressStart: (details) => _showContextMenu(context, details.globalPosition),
       child: Listener(
+        key: _listenerKey,
         onPointerSignal: _handleScrollWheel,
         onPointerDown: _handlePointerDown,
         onPointerMove: _handlePointerMove,
@@ -264,11 +268,24 @@ class _PlotPanelState extends State<PlotPanel> {
     return lo;
   }
 
+  RenderBox? get _listenerBox => _listenerKey.currentContext?.findRenderObject() as RenderBox?;
+
   // Match original: pixelToData uses full widget rect (including axis label area)
   // view.left + (px - rect.left) / rect.width * view.width
   // view.top  + (rect.bottom - py) / rect.height * view.height
   double _pxToDataX(double px, double width) => _viewMinX + px / width * (_viewMaxX - _viewMinX);
   double _pxToDataY(double py, double height) => _viewMaxY - py / height * (_viewMaxY - _viewMinY);
+
+  /// Convert Listener-local position to chart-local (for rubber band overlay)
+  Offset? _listenerToChart(Offset listenerPos) {
+    final lb = _listenerBox;
+    final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
+    if (lb == null || chartBox == null) return null;
+    try {
+      final global = lb.localToGlobal(listenerPos);
+      return chartBox.globalToLocal(global);
+    } catch (_) { return null; }
+  }
 
   void _handleScrollWheel(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
@@ -277,12 +294,12 @@ class _PlotPanelState extends State<PlotPanel> {
     final plot = app.plots[widget.plotIdx];
     setState(() {
       if (_viewMinX.isNaN) _initViewToData(plot);
-      final box = context.findRenderObject() as RenderBox?;
-      if (box == null || box.size.width <= 0 || box.size.height <= 0) return;
+      final lb = _listenerBox;
+      if (lb == null || lb.size.width <= 0 || lb.size.height <= 0) return;
       final steps = event.scrollDelta.dy / 53.0;
       final factor = math.pow(1.22, -steps);
-      final cx = _pxToDataX(event.localPosition.dx, box.size.width);
-      final cy = _pxToDataY(event.localPosition.dy, box.size.height);
+      final cx = _pxToDataX(event.localPosition.dx, lb.size.width);
+      final cy = _pxToDataY(event.localPosition.dy, lb.size.height);
       _viewMinX = cx - (cx - _viewMinX) * factor;
       _viewMaxX = cx + (_viewMaxX - cx) * factor;
       _viewMinY = cy - (cy - _viewMinY) * factor;
@@ -298,9 +315,10 @@ class _PlotPanelState extends State<PlotPanel> {
     final isMouseLeft = event.kind == PointerDeviceKind.mouse &&
         (event.buttons & kPrimaryMouseButton) != 0 && !app.shiftHeld;
     if (isMouseLeft) {
+      final cp = _listenerToChart(event.localPosition) ?? event.localPosition;
       _inRubberBand = true;
-      _rubberBandStart = event.localPosition;
-      _rubberBandRect = Rect.fromPoints(event.localPosition, event.localPosition);
+      _rubberBandStart = cp;
+      _rubberBandRect = Rect.fromPoints(cp, cp);
     } else if (isMid || isShiftLeft) {
       _midPanning = true;
       _lastMidPanPos = event.localPosition;
@@ -309,20 +327,21 @@ class _PlotPanelState extends State<PlotPanel> {
 
   void _handlePointerMove(PointerMoveEvent event) {
     if (_inRubberBand && _rubberBandStart != null) {
-      setState(() { _rubberBandRect = Rect.fromPoints(_rubberBandStart!, event.localPosition); });
+      final cp = _listenerToChart(event.localPosition) ?? event.localPosition;
+      setState(() { _rubberBandRect = Rect.fromPoints(_rubberBandStart!, cp); });
       return;
     }
     if (!_midPanning || _lastMidPanPos == null) return;
     final app = context.read<AppState>();
     final plot = app.plots[widget.plotIdx];
+    final lb = _listenerBox;
     setState(() {
       if (_viewMinX.isNaN) _initViewToData(plot);
-      final box = context.findRenderObject() as RenderBox?;
-      if (box == null || box.size.width <= 0 || box.size.height <= 0) return;
+      if (lb == null || lb.size.width <= 0 || lb.size.height <= 0) return;
       final dx = event.localPosition.dx - _lastMidPanPos!.dx;
       final dy = event.localPosition.dy - _lastMidPanPos!.dy;
-      final xScale = (_viewMaxX - _viewMinX) / box.size.width;
-      final yScale = (_viewMaxY - _viewMinY) / box.size.height;
+      final xScale = (_viewMaxX - _viewMinX) / lb.size.width;
+      final yScale = (_viewMaxY - _viewMinY) / lb.size.height;
       _viewMinX -= dx * xScale;
       _viewMaxX -= dx * xScale;
       _viewMinY += dy * yScale;
@@ -337,23 +356,28 @@ class _PlotPanelState extends State<PlotPanel> {
       final r = _rubberBandRect!;
       final app = context.read<AppState>();
       final plot = app.plots[widget.plotIdx];
+      final lb = _listenerBox;
+      final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
       setState(() {
         _inRubberBand = false;
         _rubberBandStart = null;
         _rubberBandRect = null;
-        if (r.width > 8 && r.height > 8) {
+        if (r.width > 8 && r.height > 8 && lb != null && chartBox != null &&
+            lb.size.width > 0 && lb.size.height > 0) {
           if (_viewMinX.isNaN) _initViewToData(plot);
-          final box = context.findRenderObject() as RenderBox?;
-          if (box != null && box.size.width > 0 && box.size.height > 0) {
-            final x1 = _pxToDataX(r.left, box.size.width);
-            final y1 = _pxToDataY(r.top, box.size.height);
-            final x2 = _pxToDataX(r.right, box.size.width);
-            final y2 = _pxToDataY(r.bottom, box.size.height);
-            _viewMinX = x1 < x2 ? x1 : x2;
-            _viewMaxX = x1 > x2 ? x1 : x2;
-            _viewMinY = y1 < y2 ? y1 : y2;
-            _viewMaxY = y1 > y2 ? y1 : y2;
-          }
+          // Convert chart-local rubber band corners to listener-local
+          final gtl = chartBox.localToGlobal(r.topLeft);
+          final gbr = chartBox.localToGlobal(r.bottomRight);
+          final ptl = lb.globalToLocal(gtl);
+          final pbr = lb.globalToLocal(gbr);
+          final x1 = _pxToDataX(ptl.dx, lb.size.width);
+          final y1 = _pxToDataY(ptl.dy, lb.size.height);
+          final x2 = _pxToDataX(pbr.dx, lb.size.width);
+          final y2 = _pxToDataY(pbr.dy, lb.size.height);
+          _viewMinX = x1 < x2 ? x1 : x2;
+          _viewMaxX = x1 > x2 ? x1 : x2;
+          _viewMinY = y1 < y2 ? y1 : y2;
+          _viewMaxY = y1 > y2 ? y1 : y2;
         }
       });
       return;
@@ -403,6 +427,7 @@ class _PlotPanelState extends State<PlotPanel> {
         const PopupMenuItem(value: 'sameX', child: Text('All Same X Scale')),
         const PopupMenuItem(value: 'sameY', child: Text('All Same Y Scale')),
         const PopupMenuItem(value: 'export', child: Text('Export Data')),
+        const PopupMenuItem(value: 'dataSource', child: Text('Data Source Setup')),
         const PopupMenuItem(value: 'setup', child: Text('Panel Setup')),
       ],
     ).then((value) {
@@ -435,11 +460,24 @@ class _PlotPanelState extends State<PlotPanel> {
         case 'export':
           _exportCsv(app);
           break;
+        case 'dataSource':
+          _showDataSourceSetup(ctx, app);
+          break;
         case 'setup':
           _showPanelSetup(ctx, app);
           break;
       }
     });
+  }
+
+  void _showDataSourceSetup(BuildContext ctx, AppState app) {
+    final col = app.columns.isNotEmpty ? app.columns[0] : <Map<String, dynamic>>[];
+    final panel = widget.plotIdx < col.length ? col[widget.plotIdx] : <String, dynamic>{};
+    final sigs = (panel['signal_specs'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    showDialog(
+      context: ctx,
+      builder: (ctx) => _DataSourceDialog(signals: sigs, onSave: () => app.notifyListeners()),
+    );
   }
 
   void _showPanelSetup(BuildContext ctx, AppState app) {
@@ -547,9 +585,17 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
   late final _yLabelCtrl = TextEditingController(text: widget.panel['y_label']?.toString() ?? 'a.u.');
   late final _pointsCtrl = TextEditingController(text: (widget.panel['extraction_points'] ?? 2000).toString());
   late bool _grid = widget.panel['grid'] ?? true;
+  late bool _customX = widget.panel['custom_x_range'] ?? false;
+  late bool _customY = widget.panel['custom_y_range'] ?? false;
+  late final _xMinCtrl = TextEditingController(text: (widget.panel['xmin'] ?? '').toString());
+  late final _xMaxCtrl = TextEditingController(text: (widget.panel['xmax'] ?? '').toString());
+  late final _yMinCtrl = TextEditingController(text: (widget.panel['ymin'] ?? '').toString());
+  late final _yMaxCtrl = TextEditingController(text: (widget.panel['ymax'] ?? '').toString());
 
   @override void dispose() {
-    _titleCtrl.dispose(); _xLabelCtrl.dispose(); _yLabelCtrl.dispose(); _pointsCtrl.dispose();
+    _titleCtrl.dispose(); _xLabelCtrl.dispose(); _yLabelCtrl.dispose();
+    _pointsCtrl.dispose(); _xMinCtrl.dispose(); _xMaxCtrl.dispose();
+    _yMinCtrl.dispose(); _yMaxCtrl.dispose();
     super.dispose();
   }
 
@@ -568,6 +614,23 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
           TextField(controller: _pointsCtrl, decoration: const InputDecoration(labelText: 'Extraction Points', isDense: true), keyboardType: TextInputType.number),
           const SizedBox(height: 8),
           CheckboxListTile(title: const Text('Show Grid'), value: _grid, onChanged: (v) => setState(() => _grid = v ?? true), contentPadding: EdgeInsets.zero, dense: true, controlAffinity: ListTileControlAffinity.leading),
+          CheckboxListTile(title: const Text('Custom X range'), value: _customX, onChanged: (v) => setState(() => _customX = v ?? false), contentPadding: EdgeInsets.zero, dense: true, controlAffinity: ListTileControlAffinity.leading),
+          if (_customX) ...[
+            Row(children: [
+              Expanded(child: TextField(controller: _xMinCtrl, decoration: const InputDecoration(labelText: 'X min', isDense: true), keyboardType: TextInputType.number)),
+              const SizedBox(width: 8),
+              Expanded(child: TextField(controller: _xMaxCtrl, decoration: const InputDecoration(labelText: 'X max', isDense: true), keyboardType: TextInputType.number)),
+            ]),
+          ],
+          CheckboxListTile(title: const Text('Custom Y range'), value: _customY, onChanged: (v) => setState(() => _customY = v ?? false), contentPadding: EdgeInsets.zero, dense: true, controlAffinity: ListTileControlAffinity.leading),
+          if (_customY) ...[
+            Row(children: [
+              Expanded(child: TextField(controller: _yMinCtrl, decoration: const InputDecoration(labelText: 'Y min', isDense: true), keyboardType: TextInputType.number),
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: TextField(controller: _yMaxCtrl, decoration: const InputDecoration(labelText: 'Y max', isDense: true), keyboardType: TextInputType.number)),
+            ]),
+          ],
         ]),
       ),
       actions: [
@@ -583,7 +646,110 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
     widget.panel['y_label'] = _yLabelCtrl.text;
     widget.panel['extraction_points'] = int.tryParse(_pointsCtrl.text) ?? 2000;
     widget.panel['grid'] = _grid;
+    widget.panel['custom_x_range'] = _customX;
+    widget.panel['custom_y_range'] = _customY;
+    if (_customX) {
+      widget.panel['xmin'] = double.tryParse(_xMinCtrl.text) ?? double.nan;
+      widget.panel['xmax'] = double.tryParse(_xMaxCtrl.text) ?? double.nan;
+    }
+    if (_customY) {
+      widget.panel['ymin'] = double.tryParse(_yMinCtrl.text) ?? double.nan;
+      widget.panel['ymax'] = double.tryParse(_yMaxCtrl.text) ?? double.nan;
+    }
     widget.onSave();
     Navigator.pop(context);
   }
+}
+
+class _DataSourceDialog extends StatefulWidget {
+  final List<Map<String, dynamic>> signals;
+  final VoidCallback onSave;
+  const _DataSourceDialog({required this.signals, required this.onSave});
+
+  @override State<_DataSourceDialog> createState() => _DataSourceDialogState();
+}
+
+class _DataSourceDialogState extends State<_DataSourceDialog> {
+  late final _ctrls = <_SigCtrls>[];
+  var _sigCount = 0;
+
+  @override void initState() {
+    super.initState();
+    _sigCount = widget.signals.length.clamp(1, 8);
+    _rebuildCtrls();
+  }
+
+  void _rebuildCtrls() {
+    for (final c in _ctrls) {
+      c.y.dispose(); c.x.dispose(); c.tree.dispose(); c.server.dispose();
+    }
+    _ctrls.clear();
+    for (var i = 0; i < _sigCount; i++) {
+      final s = i < widget.signals.length ? widget.signals[i] : null;
+      _ctrls.add(_SigCtrls(
+        y: TextEditingController(text: s?['y_expr']?.toString() ?? ''),
+        x: TextEditingController(text: s?['x_expr']?.toString() ?? ''),
+        tree: TextEditingController(text: s?['experiment']?.toString() ?? 'pcs_east'),
+        server: TextEditingController(text: s?['server_ip']?.toString() ?? '202.127.204.12'),
+      ));
+    }
+  }
+
+  @override void dispose() {
+    for (final c in _ctrls) {
+      c.y.dispose(); c.x.dispose(); c.tree.dispose(); c.server.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext ctx) {
+    return AlertDialog(
+      title: Row(children: [
+        const Text('Data Source Setup'),
+        const Spacer(),
+        IconButton(icon: const Icon(Icons.add, size: 18), onPressed: _sigCount < 8 ? () => setState(() { _sigCount++; _rebuildCtrls(); }) : null),
+      ]),
+      content: SingleChildScrollView(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          for (var i = 0; i < _sigCount; i++) ...[
+            if (i > 0) const Divider(),
+            Text('Signal ${i + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+            const SizedBox(height: 4),
+            TextField(controller: _ctrls[i].y, decoration: const InputDecoration(labelText: 'Y expression', isDense: true)),
+            const SizedBox(height: 4),
+            TextField(controller: _ctrls[i].x, decoration: const InputDecoration(labelText: 'X expression (optional)', isDense: true)),
+            const SizedBox(height: 4),
+            TextField(controller: _ctrls[i].tree, decoration: const InputDecoration(labelText: 'Tree / Experiment', isDense: true)),
+            const SizedBox(height: 4),
+            TextField(controller: _ctrls[i].server, decoration: const InputDecoration(labelText: 'Server IP', isDense: true)),
+          ],
+        ]),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        TextButton(onPressed: _save, child: const Text('Save')),
+      ],
+    );
+  }
+
+  void _save() {
+    widget.signals.clear();
+    for (final c in _ctrls) {
+      if (c.y.text.trim().isEmpty) continue;
+      widget.signals.add({
+        'y_expr': c.y.text,
+        'x_expr': c.x.text,
+        'experiment': c.tree.text,
+        'server_ip': c.server.text,
+      });
+    }
+    widget.onSave();
+    Navigator.pop(context);
+  }
+}
+
+class _SigCtrls {
+  final TextEditingController y, x, tree, server;
+  _SigCtrls({required this.y, required this.x, required this.tree, required this.server});
 }
