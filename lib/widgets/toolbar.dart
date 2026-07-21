@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/app_state.dart';
+import '../services/rust_bridge.dart';
 import 'dialogs/login.dart';
 import 'dialogs/ssh.dart';
 
@@ -137,7 +139,7 @@ class ToolbarWidget extends StatelessWidget {
                   itemBuilder: (_, i) => ListTile(
                     title: Text(bookmarks[i].keys.first),
                     subtitle: Text(bookmarks[i].values.first, style: const TextStyle(fontSize: 11)),
-                    onTap: () { Navigator.pop(ctx); _openUrl(bookmarks[i].values.first); },
+                    onTap: () { Navigator.pop(ctx); _openUrl(bookmarks[i].values.first, app); },
                   ),
                 ),
         ),
@@ -199,41 +201,74 @@ class ToolbarWidget extends StatelessWidget {
     );
   }
 
-  void _openUrl(String url) {
-    if (Platform.isMacOS || Platform.isLinux) {
-      Process.run('open', [url]);
+  void _openUrl(String url, AppState app) {
+    var finalUrl = url;
+    // Route through SSH tunnel if connected (matching C++ behaviour)
+    if (app.sshConnected && app.sshHost.isNotEmpty) {
+      try {
+        final settings = jsonEncode({
+          'host': app.sshHost, 'port': app.sshPort,
+          'user': app.sshUser, 'password': app.sshPass,
+          'identity_file': app.sshIdentity, 'mode': 2,
+        });
+        final prepared = RustBridge.instance.prepareUrl(url, settings);
+        if (prepared.startsWith('http') && !prepared.contains('"error"')) {
+          finalUrl = prepared;
+        }
+      } catch (_) {}
+    }
+    if (Platform.isMacOS) {
+      Process.run('open', [finalUrl]);
     } else if (Platform.isWindows) {
-      Process.run('start', [url], runInShell: true);
+      Process.run('start', [finalUrl], runInShell: true);
     } else {
-      Process.run('xdg-open', [url]);
+      Process.run('xdg-open', [finalUrl]);
     }
   }
 
   void _showLayoutSetup(BuildContext ctx, AppState app) {
-    final nCols = app.columns.length;
-    var cols = nCols;
-    var rows = app.columns.isNotEmpty ? app.columns.first.length : 1;
+    var cols = app.columns.length.clamp(1, 8);
+    var rows = (app.columns.isNotEmpty ? app.columns.first.length : 1).clamp(1, 8);
     showDialog(
       context: ctx,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setState) => AlertDialog(
-        title: const Text('Layout Setup'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Row(children: [
-            const Text('Columns:'),
-            const SizedBox(width: 8),
-            IconButton(icon: const Icon(Icons.remove, size: 16), onPressed: cols > 1 ? () => setState(() => cols--) : null),
-            Text('$cols', style: const TextStyle(fontSize: 16)),
-            IconButton(icon: const Icon(Icons.add, size: 16), onPressed: () => setState(() => cols++)),
-          ]),
-          const SizedBox(height: 8),
-          Row(children: [
-            const Text('Rows:   '),
-            const SizedBox(width: 8),
-            IconButton(icon: const Icon(Icons.remove, size: 16), onPressed: rows > 1 ? () => setState(() => rows--) : null),
-            Text('$rows', style: const TextStyle(fontSize: 16)),
-            IconButton(icon: const Icon(Icons.add, size: 16), onPressed: () => setState(() => rows++)),
-          ]),
+        title: Row(children: [
+          const Text('Layout Setup'),
+          const Spacer(),
+          IconButton(icon: const Icon(Icons.add, size: 18), tooltip: 'Add Column', onPressed: cols < 8 ? () => setState(() => cols++) : null),
+          const SizedBox(width: 4),
+          IconButton(icon: const Icon(Icons.remove, size: 18), tooltip: 'Remove Column', onPressed: cols > 1 ? () => setState(() => cols--) : null),
+          const SizedBox(width: 8),
+          IconButton(icon: const Icon(Icons.add, size: 18), tooltip: 'Add Row', onPressed: rows < 8 ? () => setState(() => rows++) : null),
+          const SizedBox(width: 4),
+          IconButton(icon: const Icon(Icons.remove, size: 18), tooltip: 'Remove Row', onPressed: rows > 1 ? () => setState(() => rows--) : null),
         ]),
+        content: SizedBox(
+          width: cols * 120.0 + 16,
+          height: rows * 90.0 + 16,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                for (var r = 0; r < rows; r++)
+                  Row(mainAxisSize: MainAxisSize.min, children: [
+                    for (var c = 0; c < cols; c++)
+                      Container(
+                        width: 110, height: 80, margin: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade400),
+                          borderRadius: BorderRadius.circular(4),
+                          color: (app.columns.length > c && app.columns[c].length > r) ? Theme.of(ctx).colorScheme.primaryContainer.withValues(alpha: 0.5) : Colors.grey.shade100,
+                        ),
+                        child: Center(
+                          child: Text('${(app.columns.length > c && app.columns[c].length > r) ? (app.columns[c][r]['title']?.toString() ?? 'Panel ${c * rows + r + 1}') : 'New'}', style: TextStyle(fontSize: 10, color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.7))),
+                        ),
+                      ),
+                  ]),
+              ]),
+            ),
+          ),
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           TextButton(onPressed: () { app.applyLayout(cols, rows); Navigator.pop(ctx); }, child: const Text('Apply')),
@@ -243,15 +278,30 @@ class ToolbarWidget extends StatelessWidget {
   }
 
   void _showFontDialog(BuildContext ctx, AppState app) {
+    var fontFamily = app.fontFamily;
     var legendSize = app.fontLegendSize;
     var axisSize = app.fontAxisSize;
     var unitSize = app.fontUnitSize;
     var uiSize = app.fontUiSize;
+    const families = ['System', 'Arial', 'Helvetica', 'Times New Roman', 'Courier New', 'Georgia', 'Verdana', 'Monaco'];
     showDialog(
       context: ctx,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setState) => AlertDialog(
         title: const Text('Customize Fonts'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(children: [
+            const SizedBox(width: 100, child: Text('Font')),
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                initialValue: families.contains(fontFamily) ? fontFamily : 'System',
+                isDense: true,
+                decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4), border: OutlineInputBorder()),
+                items: families.map((f) => DropdownMenuItem(value: f, child: Text(f, style: const TextStyle(fontSize: 12)))).toList(),
+                onChanged: (v) { if (v != null) setState(() => fontFamily = v); },
+              ),
+            ),
+          ]),
+          const SizedBox(height: 8),
           _fontRow('Legend size', legendSize, (v) => setState(() => legendSize = v)),
           _fontRow('Axis size', axisSize, (v) => setState(() => axisSize = v)),
           _fontRow('Unit size', unitSize, (v) => setState(() => unitSize = v)),
@@ -259,7 +309,7 @@ class ToolbarWidget extends StatelessWidget {
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          TextButton(onPressed: () { app.applyFontSizes(legendSize, axisSize, unitSize, uiSize); Navigator.pop(ctx); }, child: const Text('OK')),
+          TextButton(onPressed: () { app.applyFontSettings(fontFamily, legendSize, axisSize, unitSize, uiSize); Navigator.pop(ctx); }, child: const Text('OK')),
         ],
       )),
     );

@@ -82,12 +82,12 @@ class AppState extends ChangeNotifier {
   int get themeMode => _themeMode;
   set themeMode(int v) { _themeMode = v; notifyListeners(); }
 
-  // Font sizes (Customize Fonts dialog)
-  int _fontLegendSize = 11, _fontAxisSize = 8, _fontUnitSize = 9, _fontUiSize = 12;
-  int get fontLegendSize => _fontLegendSize; int get fontAxisSize => _fontAxisSize;
+  // Font settings (Customize Fonts dialog)
+  String _fontFamily = 'System'; int _fontLegendSize = 11, _fontAxisSize = 8, _fontUnitSize = 9, _fontUiSize = 12;
+  String get fontFamily => _fontFamily; int get fontLegendSize => _fontLegendSize; int get fontAxisSize => _fontAxisSize;
   int get fontUnitSize => _fontUnitSize; int get fontUiSize => _fontUiSize;
-  void applyFontSizes(int legend, int axis, int unit, int ui) {
-    _fontLegendSize = legend; _fontAxisSize = axis; _fontUnitSize = unit; _fontUiSize = ui;
+  void applyFontSettings(String family, int legend, int axis, int unit, int ui) {
+    _fontFamily = family; _fontLegendSize = legend; _fontAxisSize = axis; _fontUnitSize = unit; _fontUiSize = ui;
     notifyListeners();
   }
 
