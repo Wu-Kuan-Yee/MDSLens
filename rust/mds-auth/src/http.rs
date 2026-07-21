@@ -42,12 +42,10 @@ pub async fn fetch_latest_shot(api_url: &str, token: &str) -> Result<ShotInfo, S
 /// Calls /pcsEastTree with {shot: shot} — matching C++ scheduleTopInfoUpdate.
 pub async fn fetch_shot_info(api_url: &str, token: &str, shot: &str) -> Result<ShotInfo, String> {
     let url = format!("{}/pcsEastTree", api_url.trim_end_matches('/'));
-    let body = format!(r#"{{"shot":"{}"}}"#, shot);
+    let body = format!(r#"{{"treeshot":{}}}"#, shot);
     let resp = http_post_json(&url, &body, Some(token))?;
-    eprintln!("[RUST-SI] full response: {}", serde_json::to_string(&resp).unwrap_or_default());
     if !resp_ok(&resp) { return Err(resp.get("msg").and_then(|m| m.as_str()).unwrap_or("unknown").into()); }
     let data = resp.get("data").ok_or("no data")?;
-    eprintln!("[RUST-SI] data: {}", serde_json::to_string(data).unwrap_or_default());
     Ok(ShotInfo {
         shot: shot.parse().unwrap_or(0),
         ip: data.get("pcrl01").and_then(|v| v.as_str()).unwrap_or("").into(),

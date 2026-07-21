@@ -338,16 +338,7 @@ class AppState extends ChangeNotifier {
   Future<void> _fetchTopInfo() async {
     if (_loginApiUrl.isEmpty || _shotText.isEmpty || _authToken.isEmpty) return;
     try {
-      // Route through SSH if configured (matching C++ scheduleTopInfoUpdate)
-      String apiUrl = _loginApiUrl;
-      if (_sshMode > 0 && _sshHost.isNotEmpty) {
-        try {
-          final settings = jsonEncode({'host': _sshHost, 'port': _sshPort, 'user': _sshUser, 'password': _sshPass, 'identity_file': _sshIdentity, 'mode': 2});
-          final resp = RustBridge.instance.prepareUrl(_loginApiUrl, settings);
-          if (resp.startsWith('http') && !resp.contains('"error"')) apiUrl = resp;
-        } catch (_) {}
-      }
-      final raw = RustBridge.instance.fetchSInfo(apiUrl, _authToken, _shotText);
+      final raw = RustBridge.instance.fetchSInfo(_loginApiUrl, _authToken, _shotText);
       if (raw.isNotEmpty && !raw.contains('"error"')) {
         final json = jsonDecode(raw);
         if (json is Map) {
