@@ -801,7 +801,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
           _rows.add(_DSRow(shot: shotCtrl, y: yCtrl, tree: treeCtrl, server: serverCtrl)..colorIdx = _rows.length % _presetColors.length);
         }) : null),
       ]),
-      content: SizedBox(height: 400, child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: SizedBox(width: 800, child: SingleChildScrollView(
+      content: SizedBox(height: 400, child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: IntrinsicWidth(child: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Row(children: [
             SizedBox(width: 62, child: Text('Shot', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4),
