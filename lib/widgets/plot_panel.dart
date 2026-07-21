@@ -173,23 +173,28 @@ class _PlotPanelState extends State<PlotPanel> {
 
   Widget _buildChart(List<LineChartBarData> bars, PlotData plot, Map<String, dynamic> panel, ThemeData theme) {
     final textColor = theme.colorScheme.onSurface.withValues(alpha: 0.6);
+    final tickColor = theme.colorScheme.onSurface.withValues(alpha: 0.4);
     final cx = context.read<AppState>().crosshairX;
     final showGrid = panel['grid'] ?? true;
     final customX = panel['custom_x_range'] == true;
     final customY = panel['custom_y_range'] == true;
 
-    final xMin = customX ? ((panel['xmin'] as num?)?.toDouble()) : (_viewMinX.isNaN ? null : _viewMinX);
-    final xMax = customX ? ((panel['xmax'] as num?)?.toDouble()) : (_viewMaxX.isNaN ? null : _viewMaxX);
-    final yMin = customY ? ((panel['ymin'] as num?)?.toDouble()) : (_viewMinY.isNaN ? null : _viewMinY);
-    final yMax = customY ? ((panel['ymax'] as num?)?.toDouble()) : (_viewMaxY.isNaN ? null : _viewMaxY);
+    // Use data bounds as fallback when view not yet initialised
+    final dataBounds = _computeDataBounds(plot, panel);
+    final dx0 = dataBounds != null && dataBounds.length > 0 ? dataBounds[0] : null;
+    final dx1 = dataBounds != null && dataBounds.length > 1 ? dataBounds[1] : null;
+    final dx2 = dataBounds != null && dataBounds.length > 2 ? dataBounds[2] : null;
+    final dx3 = dataBounds != null && dataBounds.length > 3 ? dataBounds[3] : null;
+    final xMin = customX ? ((panel['xmin'] as num?)?.toDouble()) : (_viewMinX.isNaN ? dx0 : _viewMinX);
+    final xMax = customX ? ((panel['xmax'] as num?)?.toDouble()) : (_viewMaxX.isNaN ? dx1 : _viewMaxX);
+    final yMin = customY ? ((panel['ymin'] as num?)?.toDouble()) : (_viewMinY.isNaN ? dx2 : _viewMinY);
+    final yMax = customY ? ((panel['ymax'] as num?)?.toDouble()) : (_viewMaxY.isNaN ? dx3 : _viewMaxY);
 
     List<double> evenTicks(double min, double max, int count) {
       if (count < 2) return [min];
       final step = (max - min) / (count - 1);
       return List.generate(count, (i) => min + step * i);
     }
-    final xTicks = (xMin != null && xMax != null) ? evenTicks(xMin, xMax, 6) : <double>[];
-    final yTicks = (yMin != null && yMax != null) ? evenTicks(yMin, yMax, 5) : <double>[];
 
     return Padding(
       padding: const EdgeInsets.only(right: 28),
@@ -202,6 +207,14 @@ class _PlotPanelState extends State<PlotPanel> {
           final gridW = cw - leftAxis;
           final gridH = ch - bottomAxis;
 
+          // Tick count based on pixel size matching C++:
+          //   xTickCount = clamp(width/78 + 1, 3, 7)
+          //   yTickCount = clamp(height/34 + 1, 3, 6)
+          final xTickCount = xMin != null && xMax != null ? (gridW / 78.0 + 1).round().clamp(3, 7) : 0;
+          final yTickCount = yMin != null && yMax != null ? (gridH / 34.0 + 1).round().clamp(3, 6) : 0;
+          final xTicks = xTickCount > 1 ? evenTicks(xMin!, xMax!, xTickCount) : <double>[];
+          final yTicks = yTickCount > 1 ? evenTicks(yMin!, yMax!, yTickCount) : <double>[];
+
           return Stack(
             clipBehavior: Clip.hardEdge,
             children: [
@@ -213,17 +226,11 @@ class _PlotPanelState extends State<PlotPanel> {
                     getDrawingHorizontalLine: (v) => FlLine(color: theme.dividerColor.withValues(alpha: 0.15), strokeWidth: 0.5),
                     getDrawingVerticalLine: (v) => FlLine(color: theme.dividerColor.withValues(alpha: 0.15), strokeWidth: 0.5),
                   ),
-                  titlesData: FlTitlesData(
-                    bottomTitles: AxisTitles(
-                      axisNameSize: 14,
-                      sideTitles: const SideTitles(showTitles: false, reservedSize: 20),
-                    ),
-                    leftTitles: AxisTitles(
-                      axisNameSize: 14,
-                      sideTitles: const SideTitles(showTitles: false, reservedSize: 50),
-                    ),
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  titlesData: const FlTitlesData(
+                    bottomTitles: AxisTitles(axisNameSize: 14, sideTitles: SideTitles(showTitles: false, reservedSize: 20)),
+                    leftTitles: AxisTitles(axisNameSize: 14, sideTitles: SideTitles(showTitles: false, reservedSize: 50)),
+                    topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   ),
                   borderData: FlBorderData(show: true, border: Border.all(color: theme.dividerColor.withValues(alpha: 0.3), width: 0.5)),
                   lineTouchData: LineTouchData(enabled: true,
@@ -254,31 +261,41 @@ class _PlotPanelState extends State<PlotPanel> {
                 ),
                 ),
               ),
-              // X-axis tick labels – fixed at 0/5, 1/5, …, 5/5 of grid width
+              // Y-axis tick marks — 3px horizontal lines (matching C++ render.cpp:251)
+              for (int i = 0; i < yTicks.length; i++)
+                Positioned(
+                  left: leftAxis - 3,
+                  top: ((yTicks.length - 1 - i) / (yTicks.length - 1)) * gridH,
+                  child: Container(width: 3, height: 1, color: tickColor),
+                ),
+              // X-axis tick marks — 2px vertical lines (matching C++ render.cpp:327)
+              for (int i = 0; i < xTicks.length; i++)
+                Positioned(
+                  left: leftAxis + (i / (xTicks.length - 1)) * gridW,
+                  top: gridH,
+                  child: Container(width: 1, height: 2, color: tickColor),
+                ),
+              // Y-axis tick labels at fixed fractions of grid height
+              for (int i = 0; i < yTicks.length; i++)
+                Positioned(
+                  left: 2,
+                  top: ((yTicks.length - 1 - i) / (yTicks.length - 1)) * gridH - 6,
+                  child: SizedBox(width: leftAxis - 6, child: Text(_fmtAxis(yTicks[i]), style: TextStyle(fontSize: 8, color: textColor), textAlign: TextAlign.right)),
+                ),
+              // X-axis tick labels at fixed fractions of grid width
               for (int i = 0; i < xTicks.length; i++)
                 Positioned(
                   left: leftAxis + (i / (xTicks.length - 1)) * gridW - 16,
                   bottom: 2,
                   child: Text(_fmtAxis(xTicks[i]), style: TextStyle(fontSize: 8, color: textColor)),
                 ),
-              // Y-axis tick labels – fixed at 0/4, 1/4, …, 4/4 of grid height
-              for (int i = 0; i < yTicks.length; i++)
-                Positioned(
-                  left: 2,
-                  top: ((yTicks.length - 1 - i) / (yTicks.length - 1)) * gridH - 6,
-                  child: SizedBox(width: leftAxis - 4, child: Text(_fmtAxis(yTicks[i]), style: TextStyle(fontSize: 8, color: textColor), textAlign: TextAlign.right)),
-                ),
               // Axis name labels
               Positioned(
-                bottom: -2,
-                left: leftAxis,
-                right: 0,
+                bottom: -2, left: leftAxis, right: 0,
                 child: Center(child: Padding(padding: const EdgeInsets.only(top: 2), child: Text(plot.xLabel, style: TextStyle(fontSize: 9, color: textColor)))),
               ),
               Positioned(
-                left: -2,
-                top: 0,
-                bottom: bottomAxis,
+                left: -2, top: 0, bottom: bottomAxis,
                 child: Center(child: Padding(padding: const EdgeInsets.only(bottom: 2), child: RotatedBox(quarterTurns: -1, child: Text(plot.yLabel, style: TextStyle(fontSize: 9, color: textColor))))),
               ),
             ],
@@ -855,6 +872,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
   @override void dispose() { for (final r in _rows) { r.dispose(); } super.dispose(); }
 
   @override Widget build(BuildContext ctx) {
+    final ddStyle = TextStyle(fontSize: 11, color: Theme.of(ctx).colorScheme.onSurface);
     return AlertDialog(
       title: Row(children: [
         const Text('Data Source Setup'),
@@ -907,7 +925,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                       Padding(padding: const EdgeInsets.only(right: 4), child: TextField(controller: _rows[i].server, decoration: _dsDeco(), style: const TextStyle(fontSize: 12))),
                       Padding(padding: const EdgeInsets.only(right: 4), child: Center(child: _ColorPicker(row: _rows[i], onChanged: () => setState(() {})))),
                       Padding(padding: const EdgeInsets.only(right: 2), child: Center(child: Checkbox(value: _rows[i].hidden, onChanged: (v) => setState(() => _rows[i].hidden = v ?? false)))),
-                      Padding(padding: const EdgeInsets.only(right: 4), child: DropdownButtonFormField<int>(initialValue: _rows[i].readMode, decoration: _dsDeco(), style: const TextStyle(fontSize: 11), items: List.generate(3, (j) => DropdownMenuItem(value: j, child: Text(_modes[j], style: const TextStyle(fontSize: 11)))), onChanged: (v) { if (v != null) setState(() => _rows[i].readMode = v); })),
+                      Padding(padding: const EdgeInsets.only(right: 4), child: DropdownButtonFormField<int>(initialValue: _rows[i].readMode, decoration: _dsDeco(), style: ddStyle, dropdownColor: Theme.of(ctx).colorScheme.surface, items: List.generate(3, (j) => DropdownMenuItem(value: j, child: Text(_modes[j], style: ddStyle))), onChanged: (v) { if (v != null) setState(() => _rows[i].readMode = v); })),
                       _rows.length > 1
                           ? GestureDetector(onTap: () => setState(() { _rows[i].dispose(); _rows.removeAt(i); }), child: const Icon(Icons.close, size: 16, color: Colors.red))
                           : const SizedBox(width: 16),
