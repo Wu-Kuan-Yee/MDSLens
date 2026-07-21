@@ -196,7 +196,7 @@ class _PlotPanelState extends State<PlotPanel> {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(right: 28),
+      padding: const EdgeInsets.only(right: 12),
       child: LayoutBuilder(
         builder: (ctx, constraints) {
           final cw = constraints.maxWidth;
