@@ -742,60 +742,104 @@ class _DataSourceDialog extends StatefulWidget {
 }
 
 class _DataSourceDialogState extends State<_DataSourceDialog> {
-  final _ctrls = <_SigCtrls>[];
-  var _sigCount = 0;
-
-  @override void initState() {
-    super.initState();
-    _sigCount = widget.signals.isEmpty ? 1 : widget.signals.length;
-    _rebuildCtrls();
-  }
-
-  void _rebuildCtrls() {
-    for (final c in _ctrls) { c.dispose(); }
-    _ctrls.clear();
-    for (var i = 0; i < _sigCount; i++) {
-      final s = i < widget.signals.length ? widget.signals[i] : null;
-      _ctrls.add(_SigCtrls(
-        shot: TextEditingController(text: s?['shot']?.toString() ?? widget.defaultShot),
-        y: TextEditingController(text: s?['y_expr']?.toString() ?? ''),
-        tree: TextEditingController(text: s?['experiment']?.toString() ?? 'pcs_east'),
-        server: TextEditingController(text: s?['server_ip']?.toString() ?? '202.127.204.12'),
-      )..hidden = s?['hidden'] == true
-       ..colorIdx = i % _presetColors.length
-       ..readMode = (s?['read_mode'] as int?) ?? 0);
-    }
-  }
+  final _rows = <_DSRow>[];
+  List<String> _treeNames = [];
+  Map<String, List<String>> _signalCache = {};
+  bool _indexLoaded = false;
 
   static const _modes = ['Thin', 'Medium', 'Full'];
   static const _presetColors = [0xFF2364aa, 0xFFc44e52, 0xFF2f855a, 0xFF805ad5, 0xFFd97706, 0xFF0f766e, 0xFF9f1239, 0xFF4a5568, 0xFFdb2777, 0xFF16a34a, 0xFFea580c, 0xFF0891b2];
 
-  @override void dispose() { for (final c in _ctrls) { c.dispose(); } super.dispose(); }
+  @override void initState() {
+    super.initState();
+    _loadIndex();
+    final count = widget.signals.isEmpty ? 1 : widget.signals.length;
+    for (var i = 0; i < count; i++) {
+      final s = i < widget.signals.length ? widget.signals[i] : null;
+      _addRowFromSignal(s, i);
+    }
+  }
 
-  @override
-  Widget build(BuildContext ctx) {
+  Future<void> _loadIndex() async {
+    try {
+      final treeText = await _loadAsset('assets/source_index/trees.txt');
+      _treeNames = treeText.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+    } catch (_) { _treeNames = ['pcs_east']; }
+    _indexLoaded = true;
+    if (mounted) setState(() {});
+  }
+
+  Future<List<String>> _signalsForTree(String tree) async {
+    final key = tree.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]+'), '_');
+    if (_signalCache.containsKey(key)) return _signalCache[key]!;
+    try {
+      final text = await _loadAsset('assets/source_index/signals/$key.txt');
+      final sigs = text.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+      _signalCache[key] = sigs;
+      return sigs;
+    } catch (_) { _signalCache[key] = []; return []; }
+  }
+
+  Future<String> _loadAsset(String path) async {
+    final bundle = DefaultAssetBundle.of(context);
+    return await bundle.loadString(path);
+  }
+
+  void _addRowFromSignal(Map<String, dynamic>? s, int i) {
+    _rows.add(_DSRow(
+      shot: TextEditingController(text: s?['shot']?.toString() ?? widget.defaultShot),
+      y: TextEditingController(text: s?['y_expr']?.toString() ?? ''),
+      tree: TextEditingController(text: s?['experiment']?.toString() ?? 'pcs_east'),
+      server: TextEditingController(text: s?['server_ip']?.toString() ?? '202.127.204.12'),
+    )..hidden = s?['hidden'] == true
+     ..colorIdx = i % _presetColors.length
+     ..readMode = (s?['read_mode'] as int?) ?? 0);
+    if (s != null && s['color_name'] != null) {
+      final hex = s['color_name'].toString().replaceFirst('#', '');
+      final c = int.tryParse(hex, radix: 16);
+      if (c != null) {
+        for (var j = 0; j < _presetColors.length; j++) { if (_presetColors[j] == c) { _rows.last.colorIdx = j; break; } }
+        _rows.last.customColor = Color(c);
+      }
+    }
+  }
+
+  @override void dispose() { for (final r in _rows) { r.dispose(); } super.dispose(); }
+
+  @override Widget build(BuildContext ctx) {
     return AlertDialog(
-      title: Row(children: [const Text('Data Source Setup'), const Spacer(), IconButton(icon: const Icon(Icons.add, size: 18), tooltip: 'Add Curve', onPressed: _sigCount < 8 ? () => setState(() { _sigCount++; _rebuildCtrls(); }) : null)]),
-      content: SizedBox(width: 720, child: SingleChildScrollView(
+      title: Row(children: [
+        const Text('Data Source Setup'),
+        const Spacer(),
+        IconButton(icon: const Icon(Icons.add, size: 18), tooltip: 'Add Curve', onPressed: _rows.length < 8 ? () => setState(() {
+          final last = _rows.isNotEmpty ? _rows.last : null;
+          final shotCtrl = TextEditingController(text: last?.shot.text ?? widget.defaultShot);
+          final treeCtrl = TextEditingController(text: last?.tree.text ?? 'pcs_east');
+          final yCtrl = TextEditingController();
+          final serverCtrl = TextEditingController(text: last?.server.text ?? '202.127.204.12');
+          _rows.add(_DSRow(shot: shotCtrl, y: yCtrl, tree: treeCtrl, server: serverCtrl)..colorIdx = _rows.length % _presetColors.length);
+        }) : null),
+      ]),
+      content: SizedBox(width: 740, child: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          for (var i = 0; i < _sigCount; i++) ...[
+          for (var i = 0; i < _rows.length; i++) ...[
             if (i > 0) const Divider(height: 12),
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              SizedBox(width: 60, child: TextField(controller: _ctrls[i].shot, decoration: const InputDecoration(labelText: 'Shot', isDense: true), style: const TextStyle(fontSize: 12))),
+              SizedBox(width: 60, child: TextField(controller: _rows[i].shot, decoration: const InputDecoration(labelText: 'Shot', isDense: true), style: const TextStyle(fontSize: 12))),
               const SizedBox(width: 4),
-              SizedBox(width: 90, child: TextField(controller: _ctrls[i].tree, decoration: const InputDecoration(labelText: 'Tree', isDense: true), style: const TextStyle(fontSize: 12))),
+              SizedBox(width: 90, child: _AutocompleteField(controller: _rows[i].tree, options: _treeNames, label: 'Tree', onChanged: () => setState(() {}))),
               const SizedBox(width: 4),
-              Expanded(child: TextField(controller: _ctrls[i].y, decoration: const InputDecoration(labelText: 'Signal', isDense: true), style: const TextStyle(fontSize: 12))),
+              Expanded(child: _AutocompleteField(controller: _rows[i].y, options: _rows[i]._signalOptions, label: 'Signal', onChanged: () { _updateSignalOptions(_rows[i]); })),
               const SizedBox(width: 4),
-              SizedBox(width: 110, child: TextField(controller: _ctrls[i].server, decoration: const InputDecoration(labelText: 'Server IP', isDense: true), style: const TextStyle(fontSize: 12))),
+              SizedBox(width: 110, child: TextField(controller: _rows[i].server, decoration: const InputDecoration(labelText: 'Server IP', isDense: true), style: const TextStyle(fontSize: 12))),
               const SizedBox(width: 4),
-              Padding(padding: const EdgeInsets.only(top: 14), child: GestureDetector(onTap: () => setState(() => _ctrls[i].colorIdx = (_ctrls[i].colorIdx + 1) % _presetColors.length), child: Container(width: 22, height: 22, decoration: BoxDecoration(color: Color(_presetColors[_ctrls[i].colorIdx % _presetColors.length]), border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(3))))),
+              _ColorPicker(row: _rows[i], onChanged: () => setState(() {})),
               const SizedBox(width: 4),
-              SizedBox(width: 42, child: Checkbox(value: _ctrls[i].hidden, onChanged: (v) => setState(() => _ctrls[i].hidden = v ?? false))),
+              SizedBox(width: 42, child: Checkbox(value: _rows[i].hidden, onChanged: (v) => setState(() => _rows[i].hidden = v ?? false))),
               const SizedBox(width: 2),
-              SizedBox(width: 80, child: DropdownButtonFormField<int>(initialValue: _ctrls[i].readMode, decoration: const InputDecoration(labelText: 'Data', isDense: true), style: const TextStyle(fontSize: 11), items: List.generate(3, (j) => DropdownMenuItem(value: j, child: Text(_modes[j], style: const TextStyle(fontSize: 11)))), onChanged: (v) { if (v != null) _ctrls[i].readMode = v; })),
+              SizedBox(width: 80, child: DropdownButtonFormField<int>(initialValue: _rows[i].readMode, decoration: const InputDecoration(labelText: 'Data', isDense: true), style: const TextStyle(fontSize: 11), items: List.generate(3, (j) => DropdownMenuItem(value: j, child: Text(_modes[j], style: const TextStyle(fontSize: 11)))), onChanged: (v) { if (v != null) setState(() => _rows[i].readMode = v); })),
               const SizedBox(width: 2),
-              if (_sigCount > 1) SizedBox(width: 24, child: IconButton(padding: EdgeInsets.zero, iconSize: 16, icon: const Icon(Icons.close, color: Colors.red), onPressed: () => setState(() { _ctrls[i].dispose(); _ctrls.removeAt(i); _sigCount--; }))),
+              if (_rows.length > 1) SizedBox(width: 24, child: IconButton(padding: EdgeInsets.zero, iconSize: 16, icon: const Icon(Icons.close, color: Colors.red), onPressed: () => setState(() { _rows[i].dispose(); _rows.removeAt(i); }))),
             ]),
           ],
         ]),
@@ -804,19 +848,25 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
     );
   }
 
+  void _updateSignalOptions(_DSRow row) async {
+    final sigs = await _signalsForTree(row.tree.text);
+    setState(() => row._signalOptions = sigs);
+  }
+
   void _save() {
     widget.signals.clear();
-    for (final c in _ctrls) {
-      if (c.y.text.trim().isEmpty) continue;
-      final shot = c.shot.text.trim();
+    for (final r in _rows) {
+      if (r.y.text.trim().isEmpty) continue;
+      final shot = r.shot.text.trim();
+      final colorValue = r.customColor ?? Color(_presetColors[r.colorIdx % _presetColors.length]);
       widget.signals.add({
-        'y_expr': c.y.text.trim(),
-        'experiment': c.tree.text.trim(),
-        'server_ip': c.server.text.trim(),
+        'y_expr': r.y.text.trim(),
+        'experiment': r.tree.text.trim(),
+        'server_ip': r.server.text.trim(),
         if (shot.isNotEmpty && shot != widget.defaultShot) 'shot': shot,
-        'color_name': '#${_presetColors[c.colorIdx % _presetColors.length].toRadixString(16).padLeft(8, '0').substring(2)}',
-        'hidden': c.hidden,
-        'read_mode': c.readMode,
+        'color_name': '#${colorValue.value.toRadixString(16).padLeft(8, '0').substring(2)}',
+        'hidden': r.hidden,
+        'read_mode': r.readMode,
       });
     }
     widget.onSave();
@@ -824,11 +874,62 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
   }
 }
 
-class _SigCtrls {
+class _AutocompleteField extends StatelessWidget {
+  final TextEditingController controller;
+  final List<String> options;
+  final String label;
+  final VoidCallback? onChanged;
+  const _AutocompleteField({required this.controller, required this.options, required this.label, this.onChanged});
+
+  @override Widget build(BuildContext ctx) => Autocomplete<String>(
+    optionsBuilder: (v) => v.text.isEmpty ? [] : options.where((o) => o.toLowerCase().contains(v.text.toLowerCase())).toList(),
+    onSelected: (v) { controller.text = v; onChanged?.call(); },
+    fieldViewBuilder: (ctx, ctrl, node, onSubmitted) => TextField(controller: controller, focusNode: node, decoration: InputDecoration(labelText: label, isDense: true), style: const TextStyle(fontSize: 12)),
+  );
+}
+
+class _ColorPicker extends StatelessWidget {
+  final _DSRow row;
+  final VoidCallback onChanged;
+  const _ColorPicker({required this.row, required this.onChanged});
+
+  @override Widget build(BuildContext ctx) {
+    final current = row.customColor ?? Color(_DataSourceDialogState._presetColors[row.colorIdx % _DataSourceDialogState._presetColors.length]);
+    return GestureDetector(
+      onTap: () => _showColorDialog(ctx, current),
+      child: Padding(padding: const EdgeInsets.only(top: 14), child: Container(width: 22, height: 22, decoration: BoxDecoration(color: current, border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(3)))),
+    );
+  }
+
+  void _showColorDialog(BuildContext ctx, Color current) {
+    showDialog(context: ctx, builder: (ctx) => AlertDialog(
+      title: const Text('Curve Color'),
+      content: SingleChildScrollView(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Wrap(spacing: 4, runSpacing: 4, children: _DataSourceDialogState._presetColors.map((c) => GestureDetector(
+            onTap: () { row.customColor = Color(c); row.colorIdx = _DataSourceDialogState._presetColors.indexOf(c); onChanged(); Navigator.pop(ctx); },
+            child: Container(width: 28, height: 28, decoration: BoxDecoration(color: Color(c), border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(3))),
+          )).toList()),
+          const SizedBox(height: 12),
+          ConstrainedBox(constraints: const BoxConstraints(maxWidth: 200), child: TextField(decoration: const InputDecoration(labelText: 'Custom hex', hintText: '#ff0000', isDense: true), onSubmitted: (v) {
+            final cleaned = v.replaceFirst('#', '');
+            final c = int.tryParse(cleaned, radix: 16);
+            if (c != null && cleaned.length == 6) { row.customColor = Color(0xFF000000 | c); onChanged(); Navigator.pop(ctx); }
+          })),
+        ]),
+      ),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel'))],
+    ));
+  }
+}
+
+class _DSRow {
   final TextEditingController shot, y, tree, server;
   bool hidden = false;
   int readMode = 0;
   int colorIdx = 0;
-  _SigCtrls({required this.shot, required this.y, required this.tree, required this.server, this.hidden = false, this.readMode = 0, this.colorIdx = 0});
+  Color? customColor;
+  List<String> _signalOptions = [];
+  _DSRow({required this.shot, required this.y, required this.tree, required this.server, this.hidden = false, this.readMode = 0, this.colorIdx = 0});
   void dispose() { shot.dispose(); y.dispose(); tree.dispose(); server.dispose(); }
 }
