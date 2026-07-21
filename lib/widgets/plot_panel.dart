@@ -497,7 +497,7 @@ class _PlotPanelState extends State<PlotPanel> {
     if (sigs.isEmpty) sigs.add({'experiment': 'pcs_east', 'server_ip': '202.127.204.12'});
     showDialog(
       context: ctx,
-      builder: (ctx) => _DataSourceDialog(signals: sigs, defaultShot: defaultShot, onSave: () { panel['signal_specs'] = sigs; _rebuildPlots(app); }),
+      builder: (ctx) => _DataSourceDialog(signals: sigs, defaultShot: defaultShot, onSave: () { panel['signal_specs'] = sigs; for (final s in sigs) { final ss = s['shot']?.toString()??''; if (ss.isNotEmpty && ss != defaultShot) { panel['shot'] = ss; break; } } _rebuildPlots(app); if (app.loggedIn && app.shotText.isNotEmpty) app.startRefresh(); }),
     );
   }
 
