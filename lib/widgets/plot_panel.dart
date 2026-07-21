@@ -704,8 +704,9 @@ class _PlotPanelState extends State<PlotPanel> {
       if (cymin != null && cymin.isFinite) rMinY = cymin;
       if (cymax != null && cymax.isFinite) rMaxY = cymax;
     }
-    final xPad = customX ? 0.0 : (rMaxX - rMinX) * 0.01;
-    final yPad = customY ? 0.0 : (rMaxY - rMinY) * 0.04;
+    // Grid boundaries = data min/max exactly, no padding
+    final xPad = 0.0;
+    final yPad = 0.0;
     return [rMinX - xPad, rMaxX + xPad, rMinY - yPad, rMaxY + yPad];
   }
 
@@ -722,12 +723,13 @@ class _PlotPanelState extends State<PlotPanel> {
         if (points[i][1] < minY) { minY = points[i][1]; }
         if (points[i][1] > maxY) { maxY = points[i][1]; }
       }
-      final midX = (points[start][0] + points[end - 1][0]) / 2;
+      // Use endpoint X for first/last bucket so the curve reaches grid edges
+      final x = b == 0 ? points[0][0] : (b == buckets - 1 ? points[points.length - 1][0] : (points[start][0] + points[end - 1][0]) / 2);
       if (minY == maxY) {
-        out.add([midX, minY]);
+        out.add([x, minY]);
       } else {
-        out.add([midX, minY]);
-        out.add([midX, maxY]);
+        out.add([x, minY]);
+        out.add([x, maxY]);
       }
     }
     return out;
