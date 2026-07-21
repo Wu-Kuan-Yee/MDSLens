@@ -56,6 +56,7 @@ class _PlotPanelState extends State<PlotPanel> {
     if (widget.plotIdx >= app.plots.length) return const SizedBox();
 
     final plot = app.plots[widget.plotIdx];
+    final panel = _findPanel(app);
     final theme = Theme.of(context);
 
     // Build line bars with MinMax decimation
@@ -93,13 +94,17 @@ class _PlotPanelState extends State<PlotPanel> {
         if (mode != 0 || _midPanning || _inRubberBand) return;
         setState(() {
           if (_viewMinX.isNaN) _initViewToData(plot);
-          final lb = _listenerBox;
-          final w = lb?.size.width ?? 0;
-          final h = lb?.size.height ?? 0;
-          if (details.scale != 1.0 && w > 0 && h > 0) {
+          final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
+          if (chartBox == null || chartBox.size.width <= 0 || chartBox.size.height <= 0) return;
+          final w = chartBox.size.width;
+          final h = chartBox.size.height;
+          if (details.scale != 1.0) {
             final factor = 1.0 / details.scale;
-            final cx = _pxToDataX(details.focalPoint.dx, w);
-            final cy = _pxToDataY(details.focalPoint.dy, h);
+            // Convert focal point from GestureDetector to chart-local
+            final globalFocal = (context.findRenderObject() as RenderBox?)?.localToGlobal(details.focalPoint);
+            final chartLocalFocal = globalFocal != null ? chartBox.globalToLocal(globalFocal) : details.focalPoint;
+            final cx = _pxToDataX(chartLocalFocal.dx.clamp(0, w), w);
+            final cy = _pxToDataY(chartLocalFocal.dy.clamp(0, h), h);
             _viewMinX = cx - (cx - _viewMinX) * factor;
             _viewMaxX = cx + (_viewMaxX - cx) * factor;
             _viewMinY = cy - (cy - _viewMinY) * factor;
@@ -143,7 +148,7 @@ class _PlotPanelState extends State<PlotPanel> {
                 child: bars.isEmpty
                     ? Center(child: Text(plot.series.any((s) => s?.error != null && s!.error!.isNotEmpty) ? 'Error' : 'No data', style: TextStyle(color: Colors.grey, fontSize: 10)))
                     : Stack(key: _chartAreaKey, children: [
-                        _buildChart(bars, plot, theme),
+                        _buildChart(bars, plot, panel, theme),
                         if (_inRubberBand && _rubberBandRect != null)
                           Positioned(
                             left: _rubberBandRect!.left,
@@ -170,15 +175,18 @@ class _PlotPanelState extends State<PlotPanel> {
     );
   }
 
-  Widget _buildChart(List<LineChartBarData> bars, PlotData plot, ThemeData theme) {
+  Widget _buildChart(List<LineChartBarData> bars, PlotData plot, Map<String, dynamic> panel, ThemeData theme) {
     final textColor = theme.colorScheme.onSurface.withValues(alpha: 0.6);
     final cx = context.read<AppState>().crosshairX;
+    final showGrid = panel['grid'] ?? true;
+    final customX = panel['custom_x_range'] == true;
+    final customY = panel['custom_y_range'] == true;
     return Padding(
       padding: const EdgeInsets.only(right: 28),
       child: LineChart(
         LineChartData(
         lineBarsData: bars,
-        gridData: FlGridData(show: true, drawVerticalLine: true, drawHorizontalLine: true,
+        gridData: FlGridData(show: showGrid, drawVerticalLine: showGrid, drawHorizontalLine: showGrid,
           getDrawingHorizontalLine: (v) => FlLine(color: theme.dividerColor.withValues(alpha: 0.15), strokeWidth: 0.5),
           getDrawingVerticalLine: (v) => FlLine(color: theme.dividerColor.withValues(alpha: 0.15), strokeWidth: 0.5),
         ),
@@ -221,10 +229,10 @@ class _PlotPanelState extends State<PlotPanel> {
           verticalLines: cx != null ? [VerticalLine(x: cx, color: const Color(0xFFFF00FF), strokeWidth: 1, label: _crosshairLabel(bars, cx))] : [],
           horizontalLines: _localCrosshairY != null ? [HorizontalLine(y: _localCrosshairY!, color: const Color(0xFFFF00FF), strokeWidth: 1)] : [],
         ),
-        minX: _viewMinX.isNaN ? null : _viewMinX,
-        maxX: _viewMaxX.isNaN ? null : _viewMaxX,
-        minY: _viewMinY.isNaN ? null : _viewMinY,
-        maxY: _viewMaxY.isNaN ? null : _viewMaxY,
+        minX: customX ? ((panel['xmin'] as num?)?.toDouble()) : (_viewMinX.isNaN ? null : _viewMinX),
+        maxX: customX ? ((panel['xmax'] as num?)?.toDouble()) : (_viewMaxX.isNaN ? null : _viewMaxX),
+        minY: customY ? ((panel['ymin'] as num?)?.toDouble()) : (_viewMinY.isNaN ? null : _viewMinY),
+        maxY: customY ? ((panel['ymax'] as num?)?.toDouble()) : (_viewMaxY.isNaN ? null : _viewMaxY),
       ),
     ),
     );
@@ -293,12 +301,22 @@ class _PlotPanelState extends State<PlotPanel> {
     setState(() {
       if (_viewMinX.isNaN) _initViewToData(plot);
       final lb = _listenerBox;
-      if (lb == null || lb.size.width <= 0 || lb.size.height <= 0) return;
+      final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
+      if (lb == null || chartBox == null || chartBox.size.width <= 0 || chartBox.size.height <= 0) return;
+      // Map cursor to chart-local coordinates for accurate data mapping
+      final chartGlobal = chartBox.localToGlobal(Offset.zero);
+      final listenerGlobal = lb.localToGlobal(Offset.zero);
+      final chartLeft = chartGlobal.dx - listenerGlobal.dx;
+      final chartTop = chartGlobal.dy - listenerGlobal.dy;
       final pos = _cursorPos ?? event.localPosition;
+      final relX = pos.dx - chartLeft;
+      final relY = pos.dy - chartTop;
+      // Clamp to chart bounds
+      if (relX < 0 || relY < 0 || relX > chartBox.size.width || relY > chartBox.size.height) return;
       final steps = event.scrollDelta.dy / 53.0;
       final factor = math.pow(1.22, -steps);
-      final cx = _pxToDataX(pos.dx, lb.size.width);
-      final cy = _pxToDataY(pos.dy, lb.size.height);
+      final cx = _pxToDataX(relX, chartBox.size.width);
+      final cy = _pxToDataY(relY, chartBox.size.height);
       _viewMinX = cx - (cx - _viewMinX) * factor;
       _viewMaxX = cx + (_viewMaxX - cx) * factor;
       _viewMinY = cy - (cy - _viewMinY) * factor;
@@ -480,11 +498,13 @@ class _PlotPanelState extends State<PlotPanel> {
 
   void _showDataSourceSetup(BuildContext ctx, AppState app) {
     final panel = _findPanel(app);
-    final sigs = List<Map<String, dynamic>>.from((panel['signal_specs'] as List?)?.map((s) => Map<String, dynamic>.from(s as Map)) ?? []);
-    if (sigs.isEmpty) sigs.add({'y_expr': '', 'experiment': 'pcs_east', 'server_ip': '202.127.204.12'});
+    final sigs = List<Map<String, dynamic>>.from(
+      (panel['signal_specs'] as List?)?.map((s) => Map<String, dynamic>.from(s as Map)) ?? []);
+    final defaultShot = (panel['shot']?.toString() ?? app.shotText).trim();
+    if (sigs.isEmpty) sigs.add({'experiment': 'pcs_east', 'server_ip': '202.127.204.12'});
     showDialog(
       context: ctx,
-      builder: (ctx) => _DataSourceDialog(signals: sigs, onSave: () { panel['signal_specs'] = sigs; _rebuildPlots(app); }),
+      builder: (ctx) => _DataSourceDialog(signals: sigs, defaultShot: defaultShot, onSave: () { panel['signal_specs'] = sigs; _rebuildPlots(app); }),
     );
   }
 
@@ -721,8 +741,9 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
 
 class _DataSourceDialog extends StatefulWidget {
   final List<Map<String, dynamic>> signals;
+  final String defaultShot;
   final VoidCallback onSave;
-  const _DataSourceDialog({required this.signals, required this.onSave});
+  const _DataSourceDialog({required this.signals, required this.defaultShot, required this.onSave});
 
   @override State<_DataSourceDialog> createState() => _DataSourceDialogState();
 }
@@ -743,67 +764,50 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
     for (var i = 0; i < _sigCount; i++) {
       final s = i < widget.signals.length ? widget.signals[i] : null;
       _ctrls.add(_SigCtrls(
-        shot: TextEditingController(text: s?['shot']?.toString() ?? ''),
+        shot: TextEditingController(text: s?['shot']?.toString() ?? widget.defaultShot),
         y: TextEditingController(text: s?['y_expr']?.toString() ?? ''),
-        x: TextEditingController(text: s?['x_expr']?.toString() ?? ''),
         tree: TextEditingController(text: s?['experiment']?.toString() ?? 'pcs_east'),
         server: TextEditingController(text: s?['server_ip']?.toString() ?? '202.127.204.12'),
       )..hidden = s?['hidden'] == true
-       ..color = s?['color_name']?.toString() ?? ''
+       ..colorIdx = i % _presetColors.length
        ..readMode = (s?['read_mode'] as int?) ?? 0);
     }
   }
 
   static const _modes = ['Thin', 'Medium', 'Full'];
+  static const _presetColors = [0xFF2364aa, 0xFFc44e52, 0xFF2f855a, 0xFF805ad5, 0xFFd97706, 0xFF0f766e, 0xFF9f1239, 0xFF4a5568, 0xFFdb2777, 0xFF16a34a, 0xFFea580c, 0xFF0891b2];
 
   @override void dispose() { for (final c in _ctrls) { c.dispose(); } super.dispose(); }
 
   @override
   Widget build(BuildContext ctx) {
     return AlertDialog(
-      title: Row(children: [
-        const Text('Data Source Setup'),
-        const Spacer(),
-        IconButton(icon: const Icon(Icons.add, size: 18), onPressed: _sigCount < 8 ? () => setState(() { _sigCount++; _rebuildCtrls(); }) : null),
-      ]),
-      content: SingleChildScrollView(
+      title: Row(children: [const Text('Data Source Setup'), const Spacer(), IconButton(icon: const Icon(Icons.add, size: 18), tooltip: 'Add Curve', onPressed: _sigCount < 8 ? () => setState(() { _sigCount++; _rebuildCtrls(); }) : null)]),
+      content: SizedBox(width: 720, child: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           for (var i = 0; i < _sigCount; i++) ...[
-            if (i > 0) const Divider(),
-            Row(children: [
-              Text('Signal ${i + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-              const Spacer(),
-              if (_sigCount > 1)
-                SizedBox(width: 20, height: 20, child: IconButton(padding: EdgeInsets.zero, icon: const Icon(Icons.delete, size: 16, color: Colors.red), onPressed: () => setState(() { _ctrls[i].dispose(); _ctrls.removeAt(i); _sigCount--; }))),
-            ]),
-            const SizedBox(height: 4),
-            TextField(controller: _ctrls[i].shot, decoration: const InputDecoration(labelText: 'Shot (override)', isDense: true)),
-            const SizedBox(height: 4),
-            TextField(controller: _ctrls[i].y, decoration: const InputDecoration(labelText: 'Y expression', isDense: true)),
-            const SizedBox(height: 4),
-            TextField(controller: _ctrls[i].x, decoration: const InputDecoration(labelText: 'X expression (optional)', isDense: true)),
-            const SizedBox(height: 4),
-            TextField(controller: _ctrls[i].tree, decoration: const InputDecoration(labelText: 'Tree / Experiment', isDense: true)),
-            const SizedBox(height: 4),
-            TextField(controller: _ctrls[i].server, decoration: const InputDecoration(labelText: 'Server IP', isDense: true)),
-            const SizedBox(height: 4),
-            _ColorField(initial: _ctrls[i].color, onChanged: (v) => _ctrls[i].color = v),
-            Row(children: [
-              Expanded(child: DropdownButtonFormField<int>(initialValue: _ctrls[i].readMode, decoration: const InputDecoration(labelText: 'Data', isDense: true), items: List.generate(3, (j) => DropdownMenuItem(value: j, child: Text(_modes[j]))), onChanged: (v) { if (v != null) _ctrls[i].readMode = v; })),
-              const SizedBox(width: 8),
-              SizedBox(width: 60, child: Row(children: [
-                SizedBox(width: 18, height: 18, child: Checkbox(value: _ctrls[i].hidden, onChanged: (v) => setState(() => _ctrls[i].hidden = v ?? false))),
-                const SizedBox(width: 4),
-                const Text('Hide', style: TextStyle(fontSize: 12)),
-              ])),
+            if (i > 0) const Divider(height: 12),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              SizedBox(width: 60, child: TextField(controller: _ctrls[i].shot, decoration: const InputDecoration(labelText: 'Shot', isDense: true), style: const TextStyle(fontSize: 12))),
+              const SizedBox(width: 4),
+              SizedBox(width: 90, child: TextField(controller: _ctrls[i].tree, decoration: const InputDecoration(labelText: 'Tree', isDense: true), style: const TextStyle(fontSize: 12))),
+              const SizedBox(width: 4),
+              Expanded(child: TextField(controller: _ctrls[i].y, decoration: const InputDecoration(labelText: 'Signal', isDense: true), style: const TextStyle(fontSize: 12))),
+              const SizedBox(width: 4),
+              SizedBox(width: 110, child: TextField(controller: _ctrls[i].server, decoration: const InputDecoration(labelText: 'Server IP', isDense: true), style: const TextStyle(fontSize: 12))),
+              const SizedBox(width: 4),
+              Padding(padding: const EdgeInsets.only(top: 14), child: GestureDetector(onTap: () => setState(() => _ctrls[i].colorIdx = (_ctrls[i].colorIdx + 1) % _presetColors.length), child: Container(width: 22, height: 22, decoration: BoxDecoration(color: Color(_presetColors[_ctrls[i].colorIdx % _presetColors.length]), border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(3))))),
+              const SizedBox(width: 4),
+              SizedBox(width: 42, child: Checkbox(value: _ctrls[i].hidden, onChanged: (v) => setState(() => _ctrls[i].hidden = v ?? false))),
+              const SizedBox(width: 2),
+              SizedBox(width: 80, child: DropdownButtonFormField<int>(initialValue: _ctrls[i].readMode, decoration: const InputDecoration(labelText: 'Data', isDense: true), style: const TextStyle(fontSize: 11), items: List.generate(3, (j) => DropdownMenuItem(value: j, child: Text(_modes[j], style: const TextStyle(fontSize: 11)))), onChanged: (v) { if (v != null) _ctrls[i].readMode = v; })),
+              const SizedBox(width: 2),
+              if (_sigCount > 1) SizedBox(width: 24, child: IconButton(padding: EdgeInsets.zero, iconSize: 16, icon: const Icon(Icons.close, color: Colors.red), onPressed: () => setState(() { _ctrls[i].dispose(); _ctrls.removeAt(i); _sigCount--; }))),
             ]),
           ],
         ]),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        TextButton(onPressed: _save, child: const Text('OK')),
-      ],
+      )),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')), TextButton(onPressed: _save, child: const Text('OK'))],
     );
   }
 
@@ -811,13 +815,13 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
     widget.signals.clear();
     for (final c in _ctrls) {
       if (c.y.text.trim().isEmpty) continue;
+      final shot = c.shot.text.trim();
       widget.signals.add({
-        if (c.shot.text.isNotEmpty) 'shot': c.shot.text,
-        'y_expr': c.y.text,
-        if (c.x.text.isNotEmpty) 'x_expr': c.x.text,
-        'experiment': c.tree.text,
-        'server_ip': c.server.text,
-        if (c.color.isNotEmpty) 'color_name': c.color,
+        'y_expr': c.y.text.trim(),
+        'experiment': c.tree.text.trim(),
+        'server_ip': c.server.text.trim(),
+        if (shot.isNotEmpty && shot != widget.defaultShot) 'shot': shot,
+        'color_name': '#${_presetColors[c.colorIdx % _presetColors.length].toRadixString(16).padLeft(8, '0').substring(2)}',
         'hidden': c.hidden,
         'read_mode': c.readMode,
       });
@@ -827,23 +831,11 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
   }
 }
 
-class _ColorField extends StatefulWidget {
-  final String initial;
-  final ValueChanged<String> onChanged;
-  const _ColorField({required this.initial, required this.onChanged});
-  @override State<_ColorField> createState() => _ColorFieldState();
-}
-class _ColorFieldState extends State<_ColorField> {
-  late final _ctrl = TextEditingController(text: widget.initial);
-  @override void dispose() { _ctrl.dispose(); super.dispose(); }
-  @override Widget build(BuildContext ctx) => TextField(controller: _ctrl, decoration: const InputDecoration(labelText: 'Color (hex, e.g. #ff0000)', isDense: true), onChanged: widget.onChanged);
-}
-
 class _SigCtrls {
-  final TextEditingController shot, y, x, tree, server;
-  String color;
-  bool hidden;
-  int readMode;
-  _SigCtrls({required this.shot, required this.y, required this.x, required this.tree, required this.server, this.color = '', this.hidden = false, this.readMode = 0});
-  void dispose() { shot.dispose(); y.dispose(); x.dispose(); tree.dispose(); server.dispose(); }
+  final TextEditingController shot, y, tree, server;
+  bool hidden = false;
+  int readMode = 0;
+  int colorIdx = 0;
+  _SigCtrls({required this.shot, required this.y, required this.tree, required this.server, this.hidden = false, this.readMode = 0, this.colorIdx = 0});
+  void dispose() { shot.dispose(); y.dispose(); tree.dispose(); server.dispose(); }
 }
