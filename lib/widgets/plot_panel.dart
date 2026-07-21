@@ -59,9 +59,6 @@ class _PlotPanelState extends State<PlotPanel> {
     final panel = _findPanel(app);
     final theme = Theme.of(context);
 
-    // Initialise view from data bounds when unset
-    if (_viewMinX.isNaN) _initViewToData(plot, panel);
-
     // Build line bars with MinMax decimation
     final bars = <LineChartBarData>[];
     final sigSpecs = (panel['signal_specs'] as List?)?.cast<Map>() ?? [];
@@ -181,11 +178,16 @@ class _PlotPanelState extends State<PlotPanel> {
     final customX = panel['custom_x_range'] == true;
     final customY = panel['custom_y_range'] == true;
 
-    // View range is initialised by _initViewToData before first render
-    final xMin = customX ? ((panel['xmin'] as num?)?.toDouble()) : (_viewMinX.isNaN ? null : _viewMinX);
-    final xMax = customX ? ((panel['xmax'] as num?)?.toDouble()) : (_viewMaxX.isNaN ? null : _viewMaxX);
-    final yMin = customY ? ((panel['ymin'] as num?)?.toDouble()) : (_viewMinY.isNaN ? null : _viewMinY);
-    final yMax = customY ? ((panel['ymax'] as num?)?.toDouble()) : (_viewMaxY.isNaN ? null : _viewMaxY);
+    // Always compute fresh data bounds for initial auto-scale
+    final b = _computeDataBounds(plot, panel);
+    final bx0 = b != null && b.length > 0 ? b[0] : null;
+    final bx1 = b != null && b.length > 1 ? b[1] : null;
+    final bx2 = b != null && b.length > 2 ? b[2] : null;
+    final bx3 = b != null && b.length > 3 ? b[3] : null;
+    final xMin = customX ? ((panel['xmin'] as num?)?.toDouble()) : (_viewMinX.isNaN ? bx0 : _viewMinX);
+    final xMax = customX ? ((panel['xmax'] as num?)?.toDouble()) : (_viewMaxX.isNaN ? bx1 : _viewMaxX);
+    final yMin = customY ? ((panel['ymin'] as num?)?.toDouble()) : (_viewMinY.isNaN ? bx2 : _viewMinY);
+    final yMax = customY ? ((panel['ymax'] as num?)?.toDouble()) : (_viewMaxY.isNaN ? bx3 : _viewMaxY);
 
     List<double> evenTicks(double min, double max, int count) {
       if (count < 2) return [min];
