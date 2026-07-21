@@ -61,9 +61,11 @@ class _PlotPanelState extends State<PlotPanel> {
 
     // Build line bars with MinMax decimation
     final bars = <LineChartBarData>[];
+    final sigSpecs = (panel['signal_specs'] as List?)?.cast<Map>() ?? [];
     for (var i = 0; i < plot.series.length; i++) {
       final s = plot.series[i];
       if (s?.points == null || s!.points!.isEmpty) continue;
+      if (i < sigSpecs.length && sigSpecs[i]['hidden'] == true) continue;
       final decimated = _decimate(s.points!, 2000);
       final spots = decimated.map((p) => FlSpot(p[0], p[1])).toList();
       bars.add(LineChartBarData(
@@ -300,23 +302,14 @@ class _PlotPanelState extends State<PlotPanel> {
     final plot = app.plots[widget.plotIdx];
     setState(() {
       if (_viewMinX.isNaN) _initViewToData(plot);
-      final lb = _listenerBox;
       final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
-      if (lb == null || chartBox == null || chartBox.size.width <= 0 || chartBox.size.height <= 0) return;
-      // Map cursor to chart-local coordinates for accurate data mapping
-      final chartGlobal = chartBox.localToGlobal(Offset.zero);
-      final listenerGlobal = lb.localToGlobal(Offset.zero);
-      final chartLeft = chartGlobal.dx - listenerGlobal.dx;
-      final chartTop = chartGlobal.dy - listenerGlobal.dy;
-      final pos = _cursorPos ?? event.localPosition;
-      final relX = pos.dx - chartLeft;
-      final relY = pos.dy - chartTop;
-      // Clamp to chart bounds
-      if (relX < 0 || relY < 0 || relX > chartBox.size.width || relY > chartBox.size.height) return;
+      if (chartBox == null || chartBox.size.width <= 0 || chartBox.size.height <= 0) return;
+      final chartPos = chartBox.globalToLocal(event.position);
+      if (chartPos.dx < 0 || chartPos.dy < 0 || chartPos.dx > chartBox.size.width || chartPos.dy > chartBox.size.height) return;
       final steps = event.scrollDelta.dy / 53.0;
       final factor = math.pow(1.22, -steps);
-      final cx = _pxToDataX(relX, chartBox.size.width);
-      final cy = _pxToDataY(relY, chartBox.size.height);
+      final cx = _pxToDataX(chartPos.dx, chartBox.size.width);
+      final cy = _pxToDataY(chartPos.dy, chartBox.size.height);
       _viewMinX = cx - (cx - _viewMinX) * factor;
       _viewMaxX = cx + (_viewMaxX - cx) * factor;
       _viewMinY = cy - (cy - _viewMinY) * factor;
