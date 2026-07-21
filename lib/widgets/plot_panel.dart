@@ -272,7 +272,7 @@ class _PlotPanelState extends State<PlotPanel> {
             // Y-axis tick marks — 3px horizontal lines (matching C++ render.cpp:251)
               for (int i = 0; i < yTicks.length; i++)
                 Positioned(
-                  left: gridLeft - 3,
+                  left: gridLeft,
                   top: gridTop + ((yTicks.length - 1 - i) / (yTicks.length - 1)) * gridH,
                   child: Container(width: 3, height: 1, color: tickColor),
                 ),
