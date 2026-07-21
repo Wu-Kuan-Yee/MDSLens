@@ -59,6 +59,9 @@ class _PlotPanelState extends State<PlotPanel> {
     final panel = _findPanel(app);
     final theme = Theme.of(context);
 
+    // Initialise view from data bounds when unset
+    if (_viewMinX.isNaN) _initViewToData(plot, panel);
+
     // Build line bars with MinMax decimation
     final bars = <LineChartBarData>[];
     final sigSpecs = (panel['signal_specs'] as List?)?.cast<Map>() ?? [];
@@ -178,16 +181,11 @@ class _PlotPanelState extends State<PlotPanel> {
     final customX = panel['custom_x_range'] == true;
     final customY = panel['custom_y_range'] == true;
 
-    // Use data bounds as fallback when view not yet initialised
-    final dataBounds = _computeDataBounds(plot, panel);
-    final dx0 = dataBounds != null && dataBounds.length > 0 ? dataBounds[0] : null;
-    final dx1 = dataBounds != null && dataBounds.length > 1 ? dataBounds[1] : null;
-    final dx2 = dataBounds != null && dataBounds.length > 2 ? dataBounds[2] : null;
-    final dx3 = dataBounds != null && dataBounds.length > 3 ? dataBounds[3] : null;
-    final xMin = customX ? ((panel['xmin'] as num?)?.toDouble()) : (_viewMinX.isNaN ? dx0 : _viewMinX);
-    final xMax = customX ? ((panel['xmax'] as num?)?.toDouble()) : (_viewMaxX.isNaN ? dx1 : _viewMaxX);
-    final yMin = customY ? ((panel['ymin'] as num?)?.toDouble()) : (_viewMinY.isNaN ? dx2 : _viewMinY);
-    final yMax = customY ? ((panel['ymax'] as num?)?.toDouble()) : (_viewMaxY.isNaN ? dx3 : _viewMaxY);
+    // View range is initialised by _initViewToData before first render
+    final xMin = customX ? ((panel['xmin'] as num?)?.toDouble()) : (_viewMinX.isNaN ? null : _viewMinX);
+    final xMax = customX ? ((panel['xmax'] as num?)?.toDouble()) : (_viewMaxX.isNaN ? null : _viewMaxX);
+    final yMin = customY ? ((panel['ymin'] as num?)?.toDouble()) : (_viewMinY.isNaN ? null : _viewMinY);
+    final yMax = customY ? ((panel['ymax'] as num?)?.toDouble()) : (_viewMaxY.isNaN ? null : _viewMaxY);
 
     List<double> evenTicks(double min, double max, int count) {
       if (count < 2) return [min];
