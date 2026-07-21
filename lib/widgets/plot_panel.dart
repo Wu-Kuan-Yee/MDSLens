@@ -297,12 +297,28 @@ class _PlotPanelState extends State<PlotPanel> {
                   child: SizedBox(width: leftAxis - 6, child: Text(_fmtAxis(yTicks[i]), style: TextStyle(fontSize: 8, color: textColor), textAlign: TextAlign.right)),
                 ),
               // X-axis tick values — below tick marks (row 1 of 2 below axis)
-              for (int i = 0; i < xTicks.length; i++)
-                Positioned(
-                  left: leftAxis + (i / (xTicks.length - 1)) * gridW - 16,
-                  top: topAxis + gridH + 4,
-                  child: Text(_fmtAxis(xTicks[i]), style: TextStyle(fontSize: 8, color: textColor)),
-                ),
+              // First label left-aligned, last label right-aligned, others centered
+              if (xTicks.isNotEmpty)
+                for (int i = 0; i < xTicks.length; i++) ...[
+                  if (i == 0)
+                    Positioned(
+                      left: leftAxis,
+                      top: topAxis + gridH + 4,
+                      child: Text(_fmtAxis(xTicks[i]), style: TextStyle(fontSize: 8, color: textColor)),
+                    )
+                  else if (i == xTicks.length - 1)
+                    Positioned(
+                      right: rightAxis,
+                      top: topAxis + gridH + 4,
+                      child: Text(_fmtAxis(xTicks[i]), style: TextStyle(fontSize: 8, color: textColor)),
+                    )
+                  else
+                    Positioned(
+                      left: leftAxis + (i / (xTicks.length - 1)) * gridW - 16,
+                      top: topAxis + gridH + 4,
+                      child: Text(_fmtAxis(xTicks[i]), style: TextStyle(fontSize: 8, color: textColor)),
+                    ),
+                ],
               // X-axis name label — below tick values (row 2 of 2 below axis)
               Positioned(
                 left: leftAxis, right: 0, top: topAxis + gridH + 16,
