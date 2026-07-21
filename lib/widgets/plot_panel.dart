@@ -201,12 +201,18 @@ class _PlotPanelState extends State<PlotPanel> {
         builder: (ctx, constraints) {
           final cw = constraints.maxWidth;
           final ch = constraints.maxHeight;
-          const leftAxis = 50.0;
-          const topAxis = 4.0;
-          const bottomAxis = 32.0;
-          const rightAxis = 16.0;
-          final gridW = cw - leftAxis - rightAxis;
-          final gridH = ch - topAxis - bottomAxis;
+          // Chart grid area — matches fl_chart internal grid exactly
+          //   left = 50 (leftTitles.reservedSize)
+          //   top = 0 (no top titles)
+          //   right = full width (no right titles)
+          //   bottom = ch - 32 (bottomTitles.reservedSize)
+          final gridLeft = 50.0;
+          final gridTop = 0.0;
+          final gridRight = cw;
+          final gridBottom = ch - 32.0;
+          final gridW = gridRight - gridLeft;
+          final gridH = gridBottom - gridTop;
+          final plotRect = Rect.fromLTRB(gridLeft, gridTop, gridRight, gridBottom);
 
           // Tick count based on pixel size matching C++:
           //   xTickCount = clamp(width/78 + 1, 3, 7)
@@ -216,12 +222,10 @@ class _PlotPanelState extends State<PlotPanel> {
           final xTicks = xTickCount > 1 ? evenTicks(xMin!, xMax!, xTickCount) : <double>[];
           final yTicks = yTickCount > 1 ? evenTicks(yMin!, yMax!, yTickCount) : <double>[];
 
-          final gridRect = Rect.fromLTWH(leftAxis, topAxis, gridW, gridH);
-
           return Stack(
             children: [
               ClipRect(
-                clipper: _RectClipper(gridRect),
+                clipper: _RectClipper(plotRect),
                 child: LineChart(
                   LineChartData(
                 lineBarsData: bars,
@@ -264,9 +268,9 @@ class _PlotPanelState extends State<PlotPanel> {
               ),
               ),
             ),
-            // Grid area border — manually drawn for reliable visibility (C++: QPalette::Midlight)
+            // Grid area border — drawn at plotRect (C++: QPalette::Midlight)
               Positioned(
-                left: leftAxis, top: topAxis, width: gridW, height: gridH,
+                left: gridLeft, top: gridTop, width: gridW, height: gridH,
                 child: IgnorePointer(
                   child: Container(
                     decoration: BoxDecoration(
@@ -278,23 +282,23 @@ class _PlotPanelState extends State<PlotPanel> {
               // Y-axis tick marks — 3px horizontal lines (matching C++ render.cpp:251)
               for (int i = 0; i < yTicks.length; i++)
                 Positioned(
-                  left: leftAxis - 3,
-                  top: topAxis + ((yTicks.length - 1 - i) / (yTicks.length - 1)) * gridH,
+                  left: gridLeft - 3,
+                  top: gridTop + ((yTicks.length - 1 - i) / (yTicks.length - 1)) * gridH,
                   child: Container(width: 3, height: 1, color: tickColor),
                 ),
               // X-axis tick marks — 2px vertical lines below axis border (C++ render.cpp:327)
               for (int i = 0; i < xTicks.length; i++)
                 Positioned(
-                  left: leftAxis + (i / (xTicks.length - 1)) * gridW,
-                  top: topAxis + gridH,
+                  left: gridLeft + (i / (xTicks.length - 1)) * gridW,
+                  top: gridBottom,
                   child: Container(width: 1, height: 2, color: tickColor),
                 ),
               // Y-axis tick labels at fixed fractions of grid height
               for (int i = 0; i < yTicks.length; i++)
                 Positioned(
                   left: 2,
-                  top: topAxis + ((yTicks.length - 1 - i) / (yTicks.length - 1)) * gridH - 6,
-                  child: SizedBox(width: leftAxis - 6, child: Text(_fmtAxis(yTicks[i]), style: TextStyle(fontSize: 8, color: textColor), textAlign: TextAlign.right)),
+                  top: gridTop + ((yTicks.length - 1 - i) / (yTicks.length - 1)) * gridH - 6,
+                  child: SizedBox(width: gridLeft - 6, child: Text(_fmtAxis(yTicks[i]), style: TextStyle(fontSize: 8, color: textColor), textAlign: TextAlign.right)),
                 ),
               // X-axis tick values — below tick marks (row 1 of 2 below axis)
               // First label left-aligned, last label right-aligned, others centered
@@ -302,30 +306,30 @@ class _PlotPanelState extends State<PlotPanel> {
                 for (int i = 0; i < xTicks.length; i++) ...[
                   if (i == 0)
                     Positioned(
-                      left: leftAxis,
-                      top: topAxis + gridH + 4,
+                      left: gridLeft,
+                      top: gridBottom + 4,
                       child: Text(_fmtAxis(xTicks[i]), style: TextStyle(fontSize: 8, color: textColor)),
                     )
                   else if (i == xTicks.length - 1)
                     Positioned(
-                      right: rightAxis,
-                      top: topAxis + gridH + 4,
+                      right: cw - gridRight,
+                      top: gridBottom + 4,
                       child: Text(_fmtAxis(xTicks[i]), style: TextStyle(fontSize: 8, color: textColor)),
                     )
                   else
                     Positioned(
-                      left: leftAxis + (i / (xTicks.length - 1)) * gridW - 16,
-                      top: topAxis + gridH + 4,
+                      left: gridLeft + (i / (xTicks.length - 1)) * gridW - 16,
+                      top: gridBottom + 4,
                       child: Text(_fmtAxis(xTicks[i]), style: TextStyle(fontSize: 8, color: textColor)),
                     ),
                 ],
               // X-axis name label — below tick values (row 2 of 2 below axis)
               Positioned(
-                left: leftAxis, right: 0, top: topAxis + gridH + 16,
+                left: gridLeft, right: 0, top: gridBottom + 16,
                 child: Center(child: Text(plot.xLabel, style: TextStyle(fontSize: 9, color: textColor))),
               ),
               Positioned(
-                left: -2, top: topAxis, bottom: bottomAxis,
+                left: -2, top: gridTop, bottom: ch - gridBottom,
                 child: Center(child: Padding(padding: const EdgeInsets.only(bottom: 2), child: RotatedBox(quarterTurns: -1, child: Text(plot.yLabel, style: TextStyle(fontSize: 9, color: textColor))))),
               ),
             ],
