@@ -101,6 +101,18 @@ class AppState extends ChangeNotifier {
   // View reset — incremented on each Refresh/Apply to reset zoom/pan
   int _viewResetId = 0;
   int get viewResetId => _viewResetId;
+  void resetAllViews() { _viewResetId++; notifyListeners(); }
+
+  // Shared scale (All Same X/Y Scale context menu)
+  double? sharedXMin, sharedXMax, sharedYMin, sharedYMax;
+  void applySharedXScale(double min, double max) {
+    sharedXMin = min; sharedXMax = max; sharedYMin = null; sharedYMax = null;
+    resetAllViews();
+  }
+  void applySharedYScale(double min, double max) {
+    sharedYMin = min; sharedYMax = max; sharedXMin = null; sharedXMax = null;
+    resetAllViews();
+  }
 
   // Fetch
   bool _fetching = false; bool get fetching => _fetching;

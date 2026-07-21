@@ -45,6 +45,8 @@ class _PlotPanelState extends State<PlotPanel> {
     if (app.viewResetId != _lastResetId) {
       _lastResetId = app.viewResetId;
       _resetView();
+      if (app.sharedXMin != null) { _viewMinX = app.sharedXMin!; _viewMaxX = app.sharedXMax!; }
+      if (app.sharedYMin != null) { _viewMinY = app.sharedYMin!; _viewMaxY = app.sharedYMax!; }
     }
     if (app.crosshairX == null && _localCrosshairY != null) {
       _localCrosshairY = null;
@@ -78,14 +80,11 @@ class _PlotPanelState extends State<PlotPanel> {
         if (a.interactionMode == 1 && a.pointLocked) {
           a.pointLocked = false;
           // Immediately set crosshair at tap position
-          final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
-          if (chartBox != null && chartBox.size.width > 0 && _viewMinX.isFinite) {
-            final globalFocal = (context.findRenderObject() as RenderBox?)?.localToGlobal(details.localPosition);
-            final cp = globalFocal != null ? _chartLocalPos(globalFocal) : details.localPosition;
-            if (cp != null) {
-              final x = _viewMinX + (cp.dx / chartBox.size.width) * (_viewMaxX - _viewMinX);
-              a.setCrosshair(x);
-            }
+          final globalFocal = (context.findRenderObject() as RenderBox?)?.localToGlobal(details.localPosition);
+          final cp = globalFocal != null ? _chartLocalPos(globalFocal) : null;
+          final frac = cp != null ? _plotFraction(cp) : null;
+          if (frac != null && _viewMinX.isFinite) {
+            a.setCrosshair(_viewMinX + frac.$1 * (_viewMaxX - _viewMinX));
           }
         }
       },
@@ -99,14 +98,15 @@ class _PlotPanelState extends State<PlotPanel> {
           final w = chartBox.size.width;
           final h = chartBox.size.height;
           if (details.scale != 1.0) {
-            // Pinch zoom: convert focal point from GestureDetector local to chart local
+            // Pinch zoom: convert focal point to plot fraction
             final globalFocal = (context.findRenderObject() as RenderBox?)?.localToGlobal(details.focalPoint);
             final chartPos = globalFocal != null ? _chartLocalPos(globalFocal) : null;
-            final fx = chartPos?.dx ?? details.focalPoint.dx;
-            final fy = chartPos?.dy ?? details.focalPoint.dy;
+            final frac = chartPos != null ? _plotFraction(chartPos) : null;
+            final fx = frac?.$1 ?? (details.focalPoint.dx / (w > 0 ? w : 1));
+            final fy = frac?.$2 ?? (details.focalPoint.dy / (h > 0 ? h : 1));
             final factor = 1.0 / details.scale;
-            final cx = _viewMinX + (fx / w) * (_viewMaxX - _viewMinX);
-            final cy = _viewMaxY - (fy / h) * (_viewMaxY - _viewMinY);
+            final cx = _viewMinX + fx * (_viewMaxX - _viewMinX);
+            final cy = _viewMaxY - fy * (_viewMaxY - _viewMinY);
             _viewMinX = cx - (cx - _viewMinX) * factor;
             _viewMaxX = cx + (_viewMaxX - cx) * factor;
             _viewMinY = cy - (cy - _viewMinY) * factor;
@@ -278,21 +278,33 @@ class _PlotPanelState extends State<PlotPanel> {
     try { return chartBox.globalToLocal(globalPos); } catch (_) { return null; }
   }
 
+  /// Fractional position within the fl_chart plot area (excluding axis labels).
+  /// Returns (fx, fy) where 0..1 maps to data min..max.
+  (double, double)? _plotFraction(Offset chartLocalPos) {
+    final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
+    if (chartBox == null || chartBox.size.width <= 0 || chartBox.size.height <= 0) return null;
+    final w = chartBox.size.width;
+    final h = chartBox.size.height;
+    // fl_chart reserves: left 50, right 56 (28 axis + 28 chart padding), bottom 20
+    const lr = 50.0, rr = 56.0, br = 20.0;
+    if (w <= lr + rr || h <= br) return null;
+    return ((chartLocalPos.dx - lr) / (w - lr - rr), (chartLocalPos.dy) / (h - br));
+  }
+
   void _handleScrollWheel(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
     final app = context.read<AppState>();
     if (app.interactionMode != 0) return;
     final plot = app.plots[widget.plotIdx];
     final chartPos = _chartLocalPos(event.position);
-    if (chartPos == null) return;
+    final frac = chartPos != null ? _plotFraction(chartPos) : null;
+    if (frac == null) return;
     setState(() {
       if (_viewMinX.isNaN) _initViewToData(plot);
-      final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
-      if (chartBox == null || chartBox.size.width <= 0 || chartBox.size.height <= 0) return;
       final steps = event.scrollDelta.dy / 53.0;
       final factor = math.pow(1.22, -steps);
-      final cx = _viewMinX + (chartPos.dx / chartBox.size.width) * (_viewMaxX - _viewMinX);
-      final cy = _viewMaxY - (chartPos.dy / chartBox.size.height) * (_viewMaxY - _viewMinY);
+      final cx = _viewMinX + frac.$1 * (_viewMaxX - _viewMinX);
+      final cy = _viewMaxY - frac.$2 * (_viewMaxY - _viewMinY);
       _viewMinX = cx - (cx - _viewMinX) * factor;
       _viewMaxX = cx + (_viewMaxX - cx) * factor;
       _viewMinY = cy - (cy - _viewMinY) * factor;
@@ -358,27 +370,42 @@ class _PlotPanelState extends State<PlotPanel> {
         _inRubberBand = false;
         _rubberBandStart = null;
         _rubberBandRect = null;
-        if (r.width > 8 && r.height > 8 && chartBox != null &&
-            chartBox.size.width > 0 && chartBox.size.height > 0) {
+        if (r.width > 8 && r.height > 8) {
           if (_viewMinX.isNaN) _initViewToData(plot);
-          final fx1 = r.left / chartBox.size.width;
-          final fy1 = r.top / chartBox.size.height;
-          final fx2 = r.right / chartBox.size.width;
-          final fy2 = r.bottom / chartBox.size.height;
-          final x1 = _viewMinX + fx1 * (_viewMaxX - _viewMinX);
-          final y1 = _viewMaxY - fy1 * (_viewMaxY - _viewMinY);
-          final x2 = _viewMinX + fx2 * (_viewMaxX - _viewMinX);
-          final y2 = _viewMaxY - fy2 * (_viewMaxY - _viewMinY);
+          final f1 = _plotFraction(r.topLeft);
+          final f2 = _plotFraction(r.bottomRight);
+          if (f1 != null && f2 != null) {
+          final x1 = _viewMinX + f1.$1 * (_viewMaxX - _viewMinX);
+          final y1 = _viewMaxY - f1.$2 * (_viewMaxY - _viewMinY);
+          final x2 = _viewMinX + f2.$1 * (_viewMaxX - _viewMinX);
+          final y2 = _viewMaxY - f2.$2 * (_viewMaxY - _viewMinY);
           _viewMinX = x1 < x2 ? x1 : x2;
           _viewMaxX = x1 > x2 ? x1 : x2;
           _viewMinY = y1 < y2 ? y1 : y2;
           _viewMaxY = y1 > y2 ? y1 : y2;
+          }
         }
       });
       return;
     }
     _midPanning = false;
     _lastMidPanPos = null;
+  }
+
+  List<double>? _currentRange(AppState app) {
+    if (!_viewMinX.isNaN) return [_viewMinX, _viewMaxX, _viewMinY, _viewMaxY];
+    final plot = app.plots[widget.plotIdx];
+    double? minX, maxX, minY, maxY;
+    for (final s in plot.series) {
+      if (s?.points == null || s!.points!.isEmpty) continue;
+      for (final p in s.points!) {
+        if (minX == null || p[0] < minX) minX = p[0];
+        if (maxX == null || p[0] > maxX) maxX = p[0];
+        if (minY == null || p[1] < minY) minY = p[1];
+        if (maxY == null || p[1] > maxY) maxY = p[1];
+      }
+    }
+    return minX != null ? [minX, maxX!, minY!, maxY!] : null;
   }
 
   void _resetView() {
@@ -397,7 +424,10 @@ class _PlotPanelState extends State<PlotPanel> {
       position: RelativeRect.fromLTRB(globalPosition.dx, globalPosition.dy, globalPosition.dx, globalPosition.dy),
       items: const [
         PopupMenuItem(value: 'max', child: Text('Max')),
-        PopupMenuItem(value: 'reset', child: Text('Reset View')),
+        PopupMenuItem(value: 'reset', child: Text('Reset Current Scale')),
+        PopupMenuItem(value: 'resetAll', child: Text('Reset All Panels')),
+        PopupMenuItem(value: 'sameX', child: Text('All Same X Scale')),
+        PopupMenuItem(value: 'sameY', child: Text('All Same Y Scale')),
         PopupMenuItem(value: 'export', child: Text('Export Data')),
         PopupMenuItem(value: 'setup', child: Text('Panel Setup')),
       ],
@@ -407,6 +437,20 @@ class _PlotPanelState extends State<PlotPanel> {
         case 'reset':
           _resetView();
           app.clearCrosshair();
+          break;
+        case 'resetAll':
+          app.sharedXMin = null; app.sharedXMax = null;
+          app.sharedYMin = null; app.sharedYMax = null;
+          app.resetAllViews();
+          app.clearCrosshair();
+          break;
+        case 'sameX':
+          final r = _currentRange(app);
+          app.applySharedXScale(r != null ? r[0] : 0, r != null ? r[1] : 1);
+          break;
+        case 'sameY':
+          final r = _currentRange(app);
+          app.applySharedYScale(r != null ? r[2] : 0, r != null ? r[3] : 1);
           break;
         case 'export':
           _exportCsv(app);
