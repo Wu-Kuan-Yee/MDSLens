@@ -702,8 +702,8 @@ class _PlotPanelState extends State<PlotPanel> {
       if (cymin != null && cymin.isFinite) rMinY = cymin;
       if (cymax != null && cymax.isFinite) rMaxY = cymax;
     }
-    final xPad = customX ? 0.0 : (rMaxX - rMinX) * 0.01;
-    final yPad = customY ? 0.0 : (rMaxY - rMinY) * 0.04;
+    final xPad = customX ? 0.0 : (rMaxX - rMinX) * 0.005;
+    final yPad = customY ? 0.0 : (rMaxY - rMinY) * 0.005;
     return [rMinX - xPad, rMaxX + xPad, rMinY - yPad, rMaxY + yPad];
   }
 
