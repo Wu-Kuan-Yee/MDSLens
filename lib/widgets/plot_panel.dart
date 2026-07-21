@@ -236,6 +236,7 @@ class _PlotPanelState extends State<PlotPanel> {
                 Positioned(left: gridLeft, right: 0, top: gridTop + 2, child: Center(child: Text(plot.title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: textColor)))),
               LineChart(
                 LineChartData(
+                clipData: const FlClipData.all(),
                 lineBarsData: bars,
                 gridData: FlGridData(show: showGrid, drawVerticalLine: showGrid, drawHorizontalLine: showGrid,
                   getDrawingHorizontalLine: (v) => FlLine(color: theme.dividerColor.withValues(alpha: 0.15), strokeWidth: 0.5),
