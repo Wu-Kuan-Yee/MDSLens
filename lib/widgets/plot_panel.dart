@@ -97,28 +97,30 @@ class _PlotPanelState extends State<PlotPanel> {
         setState(() {
           if (_viewMinX.isNaN) _initViewToData(plot);
           final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
-          if (chartBox == null || chartBox.size.width <= 0 || chartBox.size.height <= 0) return;
-          final w = chartBox.size.width;
-          final h = chartBox.size.height;
+          if (chartBox == null || chartBox.size.width <= _plotL + _plotR || chartBox.size.height <= _plotB) return;
           if (details.scale != 1.0) {
             final factor = 1.0 / details.scale;
-            // Convert focal point from GestureDetector to chart-local
             final globalFocal = (context.findRenderObject() as RenderBox?)?.localToGlobal(details.focalPoint);
             final chartLocalFocal = globalFocal != null ? chartBox.globalToLocal(globalFocal) : details.focalPoint;
-            final cx = _pxToDataX(chartLocalFocal.dx.clamp(0, w), w);
-            final cy = _pxToDataY(chartLocalFocal.dy.clamp(0, h), h);
+            final cx = _pxToDataX(chartLocalFocal.dx, chartBox.size.width);
+            final cy = _pxToDataY(chartLocalFocal.dy, chartBox.size.height);
             _viewMinX = cx - (cx - _viewMinX) * factor;
             _viewMaxX = cx + (_viewMaxX - cx) * factor;
             _viewMinY = cy - (cy - _viewMinY) * factor;
             _viewMaxY = cy + (_viewMaxY - cy) * factor;
-          } else if (w > 0 && h > 0) {
-            // Pan: pixel delta → data delta (matching original)
+          } else {
+            // Pan: pixel delta → data delta
+            final w = chartBox.size.width - _plotL - _plotR;
+            final h = chartBox.size.height - _plotB;
+            if (w > 0 && h > 0) {
+            if (w > 0 && h > 0) {
             final xScale = (_viewMaxX - _viewMinX) / w;
             final yScale = (_viewMaxY - _viewMinY) / h;
             _viewMinX -= details.focalPointDelta.dx * xScale;
             _viewMaxX -= details.focalPointDelta.dx * xScale;
             _viewMinY += details.focalPointDelta.dy * yScale;
             _viewMaxY += details.focalPointDelta.dy * yScale;
+          }
           }
         });
       },
@@ -287,11 +289,22 @@ class _PlotPanelState extends State<PlotPanel> {
     return _colors[i % _colors.length];
   }
 
-  // Match original: pixelToData uses full widget rect (including axis label area)
-  // view.left + (px - rect.left) / rect.width * view.width
-  // view.top  + (rect.bottom - py) / rect.height * view.height
-  double _pxToDataX(double px, double width) => _viewMinX + px / width * (_viewMaxX - _viewMinX);
-  double _pxToDataY(double py, double height) => _viewMaxY - py / height * (_viewMaxY - _viewMinY);
+  // Axis label reserved space within chart Stack (fl_chart)
+  static const _plotL = 50.0;  // left axis
+  static const _plotR = 56.0;  // right: 28 axis + 28 chart padding
+  static const _plotB = 20.0;  // bottom axis
+
+  // Convert chart-local pixel to data XY. px/py are relative to the Stack widget.
+  double _pxToDataX(double px, double chartW) {
+    final pw = chartW - _plotL - _plotR;
+    if (pw <= 0) return _viewMinX;
+    return _viewMinX + ((px - _plotL) / pw).clamp(0.0, 1.0) * (_viewMaxX - _viewMinX);
+  }
+  double _pxToDataY(double py, double chartH) {
+    final ph = chartH - _plotB;
+    if (ph <= 0) return _viewMaxY;
+    return _viewMaxY - ((py / ph).clamp(0.0, 1.0)) * (_viewMaxY - _viewMinY);
+  }
 
   /// Convert Listener-local position to chart-local (for rubber band overlay)
   Offset? _listenerToChart(Offset listenerPos) {
@@ -311,13 +324,21 @@ class _PlotPanelState extends State<PlotPanel> {
     final plot = app.plots[widget.plotIdx];
     setState(() {
       if (_viewMinX.isNaN) _initViewToData(plot);
-      final lb = _listenerBox;
-      if (lb == null || lb.size.width <= 0 || lb.size.height <= 0) return;
+      final chartBox = _chartAreaKey.currentContext?.findRenderObject() as RenderBox?;
+      if (chartBox == null || chartBox.size.width <= _plotL + _plotR || chartBox.size.height <= _plotB) return;
       final pos = _cursorPos ?? event.localPosition;
+      // Convert listener-local to chart-local
+      final lb = _listenerBox;
+      Offset? chartPos;
+      if (lb != null) {
+        final g = lb.localToGlobal(pos);
+        chartPos = chartBox.globalToLocal(g);
+      }
+      if (chartPos == null) return;
       final steps = event.scrollDelta.dy / 53.0;
       final factor = math.pow(1.22, -steps);
-      final cx = _pxToDataX(pos.dx, lb.size.width);
-      final cy = _pxToDataY(pos.dy, lb.size.height);
+      final cx = _pxToDataX(chartPos.dx, chartBox.size.width);
+      final cy = _pxToDataY(chartPos.dy, chartBox.size.height);
       _viewMinX = cx - (cx - _viewMinX) * factor;
       _viewMaxX = cx + (_viewMaxX - cx) * factor;
       _viewMinY = cy - (cy - _viewMinY) * factor;
@@ -820,7 +841,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
           _rows.add(_DSRow(shot: shotCtrl, y: yCtrl, tree: treeCtrl, server: serverCtrl)..colorIdx = _rows.length % _presetColors.length);
         }) : null),
       ]),
-      content: SizedBox(width: 700, height: 400, child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: SingleChildScrollView(
+      content: SizedBox(height: 400, child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: SizedBox(width: 800, child: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Row(children: [
             SizedBox(width: 62, child: Text('Shot', style: TextStyle(fontSize: 11, color: Colors.grey.shade600))), const SizedBox(width: 4),
@@ -854,7 +875,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
             ]),
           ],
         ]),
-      ))),
+      ))))),
       actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')), TextButton(onPressed: _save, child: const Text('OK'))],
     );
   }
