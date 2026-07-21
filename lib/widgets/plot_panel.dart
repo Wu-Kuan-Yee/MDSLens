@@ -127,7 +127,7 @@ class _PlotPanelState extends State<PlotPanel> {
         key: _listenerKey,
         onPointerSignal: _handleScrollWheel,
         onPointerDown: _handlePointerDown,
-        onPointerMove: (e) { _cursorPos = e.localPosition; _handlePointerMove(e); },
+        onPointerMove: _handlePointerMove,
         onPointerUp: _handlePointerUp,
         child: Padding(
             padding: const EdgeInsets.all(2),
@@ -747,7 +747,6 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
   final _rows = <_DSRow>[];
   List<String> _treeNames = [];
   Map<String, List<String>> _signalCache = {};
-  bool _indexLoaded = false;
 
   static const _modes = ['Thin', 'Medium', 'Full'];
   static const _presetColors = [0xFF2364aa, 0xFFc44e52, 0xFF2f855a, 0xFF805ad5, 0xFFd97706, 0xFF0f766e, 0xFF9f1239, 0xFF4a5568, 0xFFdb2777, 0xFF16a34a, 0xFFea580c, 0xFF0891b2];
@@ -767,7 +766,6 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
       final treeText = await _loadAsset('assets/source_index/trees.txt');
       _treeNames = treeText.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
     } catch (_) { _treeNames = ['pcs_east']; }
-    _indexLoaded = true;
     // Load initial signal options for each row
     for (final r in _rows) { _updateSignalOptions(r); }
     if (mounted) setState(() {});
@@ -892,7 +890,6 @@ class _AutocompleteField extends StatefulWidget {
 }
 
 class _AutocompleteFieldState extends State<_AutocompleteField> {
-  List<String> _hints = [];
   final _node = FocusNode();
   OverlayEntry? _overlay;
   final _layerLink = LayerLink();
@@ -918,7 +915,6 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
   void _update() {
     final v = widget.controller.text.toLowerCase();
     final hints = v.isEmpty ? <String>[] : widget.options.where((o) => o.toLowerCase().contains(v)).take(20).toList();
-    setState(() { _hints = hints; });
     _removeOverlay();
     if (hints.isNotEmpty && _node.hasFocus) {
       _overlay = OverlayEntry(builder: (_) => Positioned(width: 220, child: CompositedTransformFollower(link: _layerLink, showWhenUnlinked: false, offset: const Offset(0, 40), child: Material(elevation: 8, child: Container(constraints: const BoxConstraints(maxHeight: 200), decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300)), child: ListView.builder(padding: EdgeInsets.zero, shrinkWrap: true, itemCount: hints.length, itemBuilder: (_, i) => ListTile(dense: true, title: Text(hints[i], style: const TextStyle(fontSize: 12)), onTap: () { widget.controller.text = hints[i]; widget.controller.selection = TextSelection.collapsed(offset: hints[i].length); _removeOverlay(); _update(); widget.onChanged?.call(); })))))));
@@ -999,6 +995,6 @@ class _DSRow {
   int colorIdx = 0;
   Color? customColor;
   List<String> _signalOptions = [];
-  _DSRow({required this.shot, required this.y, required this.tree, required this.server, this.hidden = false, this.readMode = 0, this.colorIdx = 0});
+  _DSRow({required this.shot, required this.y, required this.tree, required this.server});
   void dispose() { shot.dispose(); y.dispose(); tree.dispose(); server.dispose(); }
 }
