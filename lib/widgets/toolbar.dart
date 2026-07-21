@@ -26,9 +26,12 @@ class ToolbarWidget extends StatelessWidget {
             Text('Rate:', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface)),
             DropdownButton<int>(
               value: app.dataMode, underline: const SizedBox(), isDense: true,
-              style: const TextStyle(fontSize: 12),
-              items: const [
-                DropdownMenuItem(value: 0, child: Text('Thin')), DropdownMenuItem(value: 1, child: Text('Medium')), DropdownMenuItem(value: 2, child: Text('Full'))
+              style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface),
+              dropdownColor: theme.colorScheme.surface,
+              items: [
+                DropdownMenuItem(value: 0, child: Text('Thin', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface))),
+                DropdownMenuItem(value: 1, child: Text('Medium', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface))),
+                DropdownMenuItem(value: 2, child: Text('Full', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface))),
               ],
               onChanged: (v) { if (v != null) { app.dataMode = v; app.startRefresh(); } },
             ),
