@@ -212,7 +212,9 @@ class _PlotPanelState extends State<PlotPanel> {
           final gridBottom = ch - 32.0;
           final gridW = gridRight - gridLeft;
           final gridH = gridBottom - gridTop;
-          final plotRect = Rect.fromLTRB(gridLeft, gridTop, gridRight, gridBottom);
+          // Clip 1px outside the grid so curves reach the border edge;
+          // the border Container (painted on top) covers any 1px overshoot.
+          final plotRect = Rect.fromLTRB(gridLeft - 1, gridTop - 1, gridRight + 1, gridBottom + 1);
 
           // Tick count based on pixel size matching C++:
           //   xTickCount = clamp(width/78 + 1, 3, 7)
@@ -702,8 +704,8 @@ class _PlotPanelState extends State<PlotPanel> {
       if (cymin != null && cymin.isFinite) rMinY = cymin;
       if (cymax != null && cymax.isFinite) rMaxY = cymax;
     }
-    final xPad = customX ? 0.0 : (rMaxX - rMinX) * 0.005;
-    final yPad = customY ? 0.0 : (rMaxY - rMinY) * 0.005;
+    final xPad = customX ? 0.0 : (rMaxX - rMinX) * 0.01;
+    final yPad = customY ? 0.0 : (rMaxY - rMinY) * 0.04;
     return [rMinX - xPad, rMaxX + xPad, rMinY - yPad, rMaxY + yPad];
   }
 
