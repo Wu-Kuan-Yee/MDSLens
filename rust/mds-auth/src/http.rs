@@ -38,6 +38,23 @@ pub async fn fetch_latest_shot(api_url: &str, token: &str) -> Result<ShotInfo, S
     })
 }
 
+/// Fetch shot summary info (Ip, Pulse, It, Time) for a specific shot.
+/// Calls /pcsEastTree with {shot: shot} — matching C++ scheduleTopInfoUpdate.
+pub async fn fetch_shot_info(api_url: &str, token: &str, shot: &str) -> Result<ShotInfo, String> {
+    let url = format!("{}/pcsEastTree", api_url.trim_end_matches('/'));
+    let body = format!(r#"{{"shot":"{}"}}"#, shot);
+    let resp = http_post_json(&url, &body, Some(token))?;
+    if !resp_ok(&resp) { return Err(resp.get("msg").and_then(|m| m.as_str()).unwrap_or("unknown").into()); }
+    let data = resp.get("data").ok_or("no data")?;
+    Ok(ShotInfo {
+        shot: shot.parse().unwrap_or(0),
+        ip: data.get("pcrl01").and_then(|v| v.as_str()).unwrap_or("").into(),
+        pulse: data.get("shot_len").and_then(|v| v.as_f64()).map(|v| format!("{:.3}s", v)).unwrap_or_default(),
+        it: data.get("iv").and_then(|v| v.as_f64()).map(|v| format!("{:.0}A", v)).unwrap_or_default(),
+        time: data.get("curr_time").and_then(|v| v.as_str()).unwrap_or("").into(),
+    })
+}
+
 fn find_shot(v: &serde_json::Value) -> Option<i64> {
     match v {
         serde_json::Value::Number(n) => n.as_i64().filter(|&x| x >= 1000 && x <= 99999999),

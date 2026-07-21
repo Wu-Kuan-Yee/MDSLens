@@ -185,6 +185,11 @@ pub async fn fetch_shot(api_url: String, token: String) -> Result<FrbShotInfo, S
     Ok(FrbShotInfo { shot: info.shot, ip: info.ip, pulse: info.pulse, it: info.it, time: info.time })
 }
 
+pub async fn fetch_shot_info(api_url: String, token: String, shot: String) -> Result<FrbShotInfo, String> {
+    let info = mds_auth::http::fetch_shot_info(&api_url, &token, &shot).await?;
+    Ok(FrbShotInfo { shot: info.shot, ip: info.ip, pulse: info.pulse, it: info.it, time: info.time })
+}
+
 // ── SSH ────────────────────────────────────────────────────────────────
 
 

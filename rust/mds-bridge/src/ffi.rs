@@ -59,6 +59,15 @@ pub extern "C" fn mds_fetch_shot(api_url: *const c_char, token: *const c_char) -
 }
 
 #[no_mangle]
+pub extern "C" fn mds_fetch_shot_info(api_url: *const c_char, token: *const c_char, shot: *const c_char) -> *mut c_char {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    match rt.block_on(a::fetch_shot_info(to_rust(api_url), to_rust(token), to_rust(shot))) {
+        Ok(info) => ffi_string!(serde_json::to_string(&info).unwrap_or_default()),
+        Err(e) => ffi_string!(format!("{{\"error\":\"{}\"}}", e)),
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn mds_ssh_test(settings_json: *const c_char) -> *mut c_char {
     let settings: a::FrbSshSettings = match serde_json::from_str(&to_rust(settings_json)) {
         Ok(s) => s,

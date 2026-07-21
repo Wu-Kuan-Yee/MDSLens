@@ -338,13 +338,13 @@ class AppState extends ChangeNotifier {
   Future<void> _fetchTopInfo() async {
     if (_loginApiUrl.isEmpty || _shotText.isEmpty || _authToken.isEmpty) return;
     try {
-      final raw = RustBridge.instance.fetchS(_loginApiUrl, _authToken);
-      if (raw.isNotEmpty) {
+      final raw = RustBridge.instance.fetchSInfo(_loginApiUrl, _authToken, _shotText);
+      if (raw.isNotEmpty && !raw.contains('"error"')) {
         final json = jsonDecode(raw);
         if (json is Map) {
           _shotInfoIp = json['ip']?.toString() ?? '';
-          _shotInfoPulse = json['pulse']?.toString() ?? '';
-          _shotInfoIt = json['it']?.toString() ?? '';
+          _shotInfoPulse = (json['pulse']?.toString() ?? '').isNotEmpty ? '${json['pulse']}s' : '';
+          _shotInfoIt = (json['it']?.toString() ?? '').isNotEmpty ? '${json['it']}A' : '';
           _shotInfoTime = json['time']?.toString() ?? '';
           notifyListeners();
         }
