@@ -162,7 +162,7 @@ class _PlotPanelState extends State<PlotPanel> {
             child: Column(children: [
               Expanded(
                 child: bars.isEmpty
-                    ? Center(child: Text(plot.series.any((s) => s?.error != null && s!.error!.isNotEmpty) ? 'Error' : 'No data', style: TextStyle(color: Colors.grey, fontSize: 10)))
+                    ? Center(child: Text(_getPlaceholderText(app, plot), style: TextStyle(color: Colors.grey, fontSize: 10), textAlign: TextAlign.center))
                     : Stack(key: _chartAreaKey, children: [
                         _buildChart(bars, plot, panel, theme, viewMinX, viewMaxX, viewMinY, viewMaxY),
                       ]),
@@ -347,6 +347,16 @@ class _PlotPanelState extends State<PlotPanel> {
     // Adaptive: 3 decimals then strip trailing zeros for natural precision
     final s = v.toStringAsFixed(3);
     return s.contains('.') ? s.replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '') : s;
+  }
+
+  String _getPlaceholderText(AppState app, PlotData plot) {
+    if (app.fetching) return 'Loading...';
+    for (final s in plot.series) {
+      if (s?.error != null && s!.error!.isNotEmpty) {
+        return s.error!;
+      }
+    }
+    return 'No data';
   }
 
   VerticalLineLabel? _crosshairLabel(List<LineChartBarData> bars, double? cx) {
