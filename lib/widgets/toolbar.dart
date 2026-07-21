@@ -24,6 +24,7 @@ class ToolbarWidget extends StatelessWidget {
             _btn(context, app.fetching ? 'Stop' : 'Refresh', () => app.fetching ? app.stopFetch() : app.startRefresh()),
             const SizedBox(width: 8),
             Text('Rate:', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface)),
+            const SizedBox(width: 4),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(border: Border.all(color: theme.dividerColor), borderRadius: BorderRadius.circular(4)),
@@ -90,21 +91,21 @@ class ToolbarWidget extends StatelessWidget {
   Widget _btn(BuildContext ctx, String label, VoidCallback onTap) {
     return Padding(padding: const EdgeInsets.symmetric(horizontal: 2),
       child: ElevatedButton(onPressed: onTap,
-        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: const TextStyle(fontSize: 12)),
+        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: const TextStyle(fontSize: 12)),
         child: Text(label)));
   }
 
   Widget _modeBtn(BuildContext ctx, String label, bool active, VoidCallback onTap) {
     return Padding(padding: const EdgeInsets.symmetric(horizontal: 2),
       child: OutlinedButton(onPressed: onTap,
-        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 12, fontWeight: active ? FontWeight.bold : FontWeight.normal), backgroundColor: active ? Theme.of(ctx).colorScheme.primaryContainer : null),
+        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 12, fontWeight: active ? FontWeight.bold : FontWeight.normal), backgroundColor: active ? Theme.of(ctx).colorScheme.primaryContainer : null),
         child: Text(label)));
   }
 
   Widget _sshBtn(BuildContext ctx, AppState app) {
     return Padding(padding: const EdgeInsets.symmetric(horizontal: 2),
       child: ElevatedButton(onPressed: () => SshDialog.show(ctx),
-        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 12, color: app.sshConnected ? Colors.green : null)),
+        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 12, color: app.sshConnected ? Colors.green : null)),
         child: const Text('SSH')));
   }
 
