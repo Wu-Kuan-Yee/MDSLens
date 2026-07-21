@@ -98,16 +98,16 @@ class AppState extends ChangeNotifier {
   void removeWebBookmark(int i) { if (i >= 0 && i < _webBookmarks.length) { _webBookmarks.removeAt(i); notifyListeners(); } }
 
   // Layout
-  void applyLayout(int cols, int rows) {
+  void applyLayout(int cols, int rows) { applyLayoutList(List.filled(cols, rows)); }
+  void applyLayoutList(List<int> colSizes) {
     final newCols = <List<Map<String, dynamic>>>[];
-    var sigIdx = 0;
-    for (var c = 0; c < cols; c++) {
+    for (var c = 0; c < colSizes.length; c++) {
       final col = <Map<String, dynamic>>[];
-      for (var r = 0; r < rows; r++) {
-        if (_columns.isNotEmpty && c < _columns.length && r < _columns[c].length) {
+      for (var r = 0; r < colSizes[c]; r++) {
+        if (c < _columns.length && r < _columns[c].length) {
           col.add(_columns[c][r]);
         } else {
-          col.add({'title': 'Panel ${sigIdx + 1}', 'x_label': 's', 'y_label': 'a.u.', 'grid': true, 'signal_specs': []});
+          col.add({'title': 'Panel ${_countPanels(newCols) + col.length + 1}', 'x_label': 's', 'y_label': 'a.u.', 'grid': true, 'signal_specs': []});
         }
       }
       newCols.add(col);
@@ -115,6 +115,9 @@ class AppState extends ChangeNotifier {
     _columns = newCols;
     _rebuildPlotsFromColumns();
     notifyListeners();
+  }
+  int _countPanels(List<List<Map<String, dynamic>>> cols) {
+    var n = 0; for (final c in cols) { n += c.length; } return n;
   }
 
   void _rebuildPlotsFromColumns() {
@@ -328,12 +331,40 @@ class AppState extends ChangeNotifier {
         _fetching = false;
         final loaded = _plots.where((p) => p.series.any((s) => s?.points != null && s!.points!.isNotEmpty)).length;
         _status = 'Shot $_shotText: ${firstErr ?? "$loaded panels with data"}';
+        _fetchTopInfo(); // async fetch Ip/Pulse/It/Time (matching C++ scheduleTopInfoUpdate)
       } catch (e) { _fetching = false; _status = 'Error: $e'; }
       notifyListeners();
     });
   }
 
   void stopFetch() { _fetching = false; _status = 'Stopped'; notifyListeners(); }
+
+  Future<void> _fetchTopInfo() async {
+    if (_loginApiUrl.isEmpty || _shotText.isEmpty) return;
+    try {
+      final url = '${_loginApiUrl.replaceAll(RegExp(r'/$'), '')}/pcsEastTree';
+      final uri = Uri.parse(url);
+      final client = HttpClient();
+      try {
+        final request = await client.postUrl(uri);
+        request.headers.set('Content-Type', 'application/json');
+        request.write(jsonEncode({'shot': _shotText, 'token': _authToken}));
+        final response = await request.close();
+        final body = await response.transform(utf8.decoder).join();
+        final json = jsonDecode(body);
+        if (json is Map && json['code']?.toString() == '20000') {
+          final data = json['data'];
+          if (data is Map) {
+            _shotInfoIp = data['pcrl01']?.toString() ?? '';
+            _shotInfoPulse = data['shot_len'] != null ? '${data['shot_len']}s' : '';
+            _shotInfoIt = data['iv'] != null ? '${data['iv']}A' : '';
+            _shotInfoTime = data['curr_time']?.toString() ?? '';
+            notifyListeners();
+          }
+        }
+      } finally { client.close(); }
+    } catch (_) {}
+  }
 
   Future<void> fetchLatestShot() async {
     _status = 'Fetching latest shot...'; notifyListeners();

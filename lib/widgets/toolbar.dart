@@ -227,54 +227,93 @@ class ToolbarWidget extends StatelessWidget {
   }
 
   void _showLayoutSetup(BuildContext ctx, AppState app) {
-    var cols = app.columns.length.clamp(1, 8);
-    var rows = (app.columns.isNotEmpty ? app.columns.first.length : 1).clamp(1, 8);
+    var layout = app.columns.map((col) => col.length).toList();
+    if (layout.isEmpty) layout = [1];
+    var selectedCol = -1, selectedRow = -1;
+
     showDialog(
       context: ctx,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setState) => AlertDialog(
         title: Row(children: [
           const Text('Layout Setup'),
           const Spacer(),
-          IconButton(icon: const Icon(Icons.add, size: 18), tooltip: 'Add Column', onPressed: cols < 8 ? () => setState(() => cols++) : null),
-          const SizedBox(width: 4),
-          IconButton(icon: const Icon(Icons.remove, size: 18), tooltip: 'Remove Column', onPressed: cols > 1 ? () => setState(() => cols--) : null),
-          const SizedBox(width: 8),
-          IconButton(icon: const Icon(Icons.add, size: 18), tooltip: 'Add Row', onPressed: rows < 8 ? () => setState(() => rows++) : null),
-          const SizedBox(width: 4),
-          IconButton(icon: const Icon(Icons.remove, size: 18), tooltip: 'Remove Row', onPressed: rows > 1 ? () => setState(() => rows--) : null),
+          IconButton(icon: const Icon(Icons.add, size: 18), tooltip: 'Add Panel After Selected', onPressed: () {
+            if (selectedCol >= 0 && selectedCol < layout.length && selectedRow >= 0 && selectedRow < layout[selectedCol]) {
+              layout[selectedCol] = layout[selectedCol] + 1;
+              setState(() {});
+            }
+          }),
         ]),
         content: SizedBox(
-          width: cols * 120.0 + 16,
-          height: rows * 90.0 + 16,
+          width: (layout.length * 120.0 + 16).clamp(200.0, 700.0),
+          height: (layout.reduce((a, b) => a > b ? a : b) * 90.0 + 16).clamp(100.0, 500.0),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                for (var r = 0; r < rows; r++)
-                  Row(mainAxisSize: MainAxisSize.min, children: [
-                    for (var c = 0; c < cols; c++)
-                      Container(
-                        width: 110, height: 80, margin: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade400),
-                          borderRadius: BorderRadius.circular(4),
-                          color: (app.columns.length > c && app.columns[c].length > r) ? Theme.of(ctx).colorScheme.primaryContainer.withValues(alpha: 0.5) : Colors.grey.shade100,
-                        ),
-                        child: Center(
-                          child: Text('${(app.columns.length > c && app.columns[c].length > r) ? (app.columns[c][r]['title']?.toString() ?? 'Panel ${c * rows + r + 1}') : 'New'}', style: TextStyle(fontSize: 10, color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.7))),
+              child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                for (var c = 0; c < layout.length; c++) ...[
+                  if (c > 0) const VerticalDivider(width: 1),
+                  Column(mainAxisSize: MainAxisSize.min, children: [
+                    // Column header with delete button
+                    SizedBox(height: 28, child: Center(child: Text('Col ${c + 1}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)))),
+                    for (var r = 0; r < layout[c]; r++)
+                      GestureDetector(
+                        onTap: () => setState(() { selectedCol = c; selectedRow = r; }),
+                        child: Container(
+                          width: 110, height: 80, margin: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: selectedCol == c && selectedRow == r ? Theme.of(ctx).colorScheme.primary : Colors.grey.shade400, width: selectedCol == c && selectedRow == r ? 2 : 1),
+                            borderRadius: BorderRadius.circular(4),
+                            color: Theme.of(ctx).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                          ),
+                          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            Text('Panel ${_panelIndex(app, c, r) + 1}', style: TextStyle(fontSize: 10, color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.7))),
+                            if (selectedCol == c && selectedRow == r)
+                              TextButton(onPressed: () {
+                                if (layout.length == 1 && layout[0] == 1) return; // keep at least 1
+                                layout[c] = layout[c] - 1;
+                                if (layout[c] <= 0) layout.removeAt(c);
+                                selectedCol = -1; selectedRow = -1;
+                                setState(() {});
+                              }, child: const Text('Delete', style: TextStyle(fontSize: 9))),
+                          ]),
                         ),
                       ),
+                    // Add panel button at bottom of column
+                    TextButton(onPressed: () {
+                      layout[c] = layout[c] + 1;
+                      setState(() {});
+                    }, child: const Text('+ Add', style: TextStyle(fontSize: 10))),
                   ]),
+                ],
+                const SizedBox(width: 8),
+                // Add column button
+                Column(children: [
+                  const SizedBox(height: 28),
+                  TextButton(onPressed: () { layout.add(1); setState(() {}); }, child: const Text('+ Col', style: TextStyle(fontSize: 10))),
+                ]),
               ]),
             ),
           ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          TextButton(onPressed: () { app.applyLayout(cols, rows); Navigator.pop(ctx); }, child: const Text('Apply')),
+          TextButton(onPressed: () {
+            final cols = layout.where((n) => n > 0).toList();
+            if (cols.isNotEmpty) app.applyLayoutList(cols);
+            Navigator.pop(ctx);
+          }, child: const Text('Apply')),
         ],
       )),
     );
+  }
+
+  int _panelIndex(AppState app, int col, int row) {
+    var idx = 0;
+    for (var c = 0; c < col; c++) {
+      idx += app.columns.length > c ? app.columns[c].length : 0;
+    }
+    return idx + row;
   }
 
   void _showFontDialog(BuildContext ctx, AppState app) {
@@ -296,7 +335,7 @@ class ToolbarWidget extends StatelessWidget {
                 initialValue: families.contains(fontFamily) ? fontFamily : 'System',
                 isDense: true,
                 decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4), border: OutlineInputBorder()),
-                items: families.map((f) => DropdownMenuItem(value: f, child: Text(f, style: const TextStyle(fontSize: 12)))).toList(),
+                items: families.map((f) => DropdownMenuItem(value: f, child: Text(f, style: TextStyle(fontSize: 12, fontFamily: f == 'System' ? null : f)))).toList(),
                 onChanged: (v) { if (v != null) setState(() => fontFamily = v); },
               ),
             ),
