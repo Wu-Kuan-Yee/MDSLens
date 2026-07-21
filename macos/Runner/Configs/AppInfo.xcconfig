@@ -13,5 +13,5 @@ PRODUCT_BUNDLE_IDENTIFIER = com.example.mdsscope
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 com.example. All rights reserved.
 
-// Static link Rust bridge library
-OTHER_LDFLAGS = $(inherited) -Wl,-force_load,$(SRCROOT)/../rust/target/release/libmds_bridge.a -framework Security -framework SystemConfiguration -lresolv
+// Static link Rust bridge (force_load keeps symbols for dart:ffi lookup)
+OTHER_LDFLAGS = $(inherited) -force_load $(SRCROOT)/../rust/target/release/libmds_bridge.a -framework Security -framework SystemConfiguration -lresolv
