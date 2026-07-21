@@ -204,7 +204,8 @@ class _PlotPanelState extends State<PlotPanel> {
           const leftAxis = 50.0;
           const topAxis = 4.0;
           const bottomAxis = 32.0;
-          final gridW = cw - leftAxis;
+          const rightAxis = 16.0;
+          final gridW = cw - leftAxis - rightAxis;
           final gridH = ch - topAxis - bottomAxis;
 
           // Tick count based on pixel size matching C++:
