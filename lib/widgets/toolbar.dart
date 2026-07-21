@@ -6,6 +6,7 @@ import '../models/app_state.dart';
 import '../services/rust_bridge.dart';
 import 'dialogs/login.dart';
 import 'dialogs/ssh.dart';
+import 'dialogs/about.dart';
 
 class ToolbarWidget extends StatelessWidget {
   const ToolbarWidget({super.key});
@@ -65,6 +66,12 @@ class ToolbarWidget extends StatelessWidget {
             const SizedBox(width: 4),
             _settingsMenu(context, app),
             const SizedBox(width: 4),
+            IconButton(
+              icon: Icon(Icons.info_outline, size: 18, color: Theme.of(context).colorScheme.onSurface),
+              tooltip: 'About MdsScope',
+              onPressed: () => AboutDialogWidget.show(context),
+            ),
+            const SizedBox(width: 4),
             _btn(context, app.loggedIn ? 'Logout' : 'Login', () => app.loggedIn ? app.logout() : LoginDialog.show(context)),
             const SizedBox(width: 4),
             _sshBtn(context, app),
@@ -115,12 +122,15 @@ class ToolbarWidget extends StatelessWidget {
           case 'web': _showWebBookmarks(ctx, app); break;
           case 'layout': _showLayoutSetup(ctx, app); break;
           case 'fonts': _showFontDialog(ctx, app); break;
+          case 'about': AboutDialogWidget.show(ctx); break;
         }
       },
       itemBuilder: (_) => [
         const PopupMenuItem(value: 'web', child: Text('Internal web pages')),
         const PopupMenuItem(value: 'layout', child: Text('Layout setup')),
         const PopupMenuItem(value: 'fonts', child: Text('Customize fonts')),
+        const PopupMenuDivider(),
+        const PopupMenuItem(value: 'about', child: Text('About MdsScope')),
       ],
     );
   }
