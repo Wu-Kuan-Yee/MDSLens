@@ -107,7 +107,7 @@ class AppState extends ChangeNotifier {
         if (c < _columns.length && r < _columns[c].length) {
           col.add(_columns[c][r]);
         } else {
-          col.add({'title': 'Panel ${_countPanels(newCols) + col.length + 1}', 'x_label': 's', 'y_label': 'a.u.', 'grid': true, 'signal_specs': []});
+          col.add({'title': '', 'x_label': 's', 'y_label': 'a.u.', 'grid': true, 'signal_specs': []});
         }
       }
       newCols.add(col);
@@ -116,10 +116,6 @@ class AppState extends ChangeNotifier {
     _rebuildPlotsFromColumns();
     notifyListeners();
   }
-  int _countPanels(List<List<Map<String, dynamic>>> cols) {
-    var n = 0; for (final c in cols) { n += c.length; } return n;
-  }
-
   void _rebuildPlotsFromColumns() {
     _plots.clear();
     for (final col in _columns) {
@@ -351,7 +347,7 @@ class AppState extends ChangeNotifier {
         } catch (_) {}
       }
       final base = apiUrl.replaceAll(RegExp(r'/$'), '');
-      final uri = Uri.parse('$base/pcsEastTree');
+      final uri = Uri.parse('$base/treeShot');
       final client = HttpClient();
       try {
         final req = await client.postUrl(uri);
@@ -364,10 +360,10 @@ class AppState extends ChangeNotifier {
         if (json is Map && (json['code']?.toString() == '20000' || json['code'] == 20000)) {
           final data = json['data'];
           if (data is Map) {
-            _shotInfoIp = data['pcrl01']?.toString() ?? '';
-            _shotInfoPulse = data['shot_len'] != null ? '${data['shot_len']}s' : '';
-            _shotInfoIt = data['iv'] != null ? '${data['iv']}A' : '';
-            _shotInfoTime = data['curr_time']?.toString() ?? '';
+            _shotInfoIp = data['pcrl01']?.toString() ?? data['ip']?.toString() ?? '';
+            _shotInfoPulse = data['shot_len'] != null ? '${data['shot_len']}s' : (data['pulseLength'] != null ? '${data['pulseLength']}s' : '');
+            _shotInfoIt = data['iv'] != null ? '${data['iv']}A' : (data['it'] != null ? '${data['it']}kA' : '');
+            _shotInfoTime = (data['curr_time'] ?? data['currentTime'])?.toString() ?? '';
             notifyListeners();
           }
         }

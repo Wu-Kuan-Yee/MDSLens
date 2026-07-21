@@ -583,7 +583,7 @@ class _PlotPanelState extends State<PlotPanel> {
     showDialog(
       context: ctx,
       builder: (ctx) => _DataSourceDialog(signals: sigs, defaultShot: defaultShot, onSave: () { panel['signal_specs'] = sigs; _rebuildPlots(app); }),
-    ).then((_) { app.startRefresh(); });
+    ).then((confirmed) { if (confirmed == true) app.startRefresh(); });
   }
 
   void _rebuildPlots(AppState app) {
@@ -962,7 +962,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
           ),
         ),
       ),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')), TextButton(onPressed: _save, child: const Text('OK'))],
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')), TextButton(onPressed: _save, child: const Text('OK'))],
     );
   }
 
@@ -988,7 +988,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
       });
     }
     widget.onSave();
-    Navigator.pop(context);
+    Navigator.pop(context, true);
   }
 }
 
