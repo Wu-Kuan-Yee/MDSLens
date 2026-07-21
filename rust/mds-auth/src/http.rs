@@ -39,23 +39,21 @@ pub async fn fetch_latest_shot(api_url: &str, token: &str) -> Result<ShotInfo, S
 }
 
 /// Fetch shot summary info (Ip, Pulse, It, Time) for a specific shot.
-/// Calls /treeShot with {shot: shot} — same endpoint as fetch_latest_shot.
+/// Calls /pcsEastTree with {shot: shot} — matching C++ scheduleTopInfoUpdate.
 pub async fn fetch_shot_info(api_url: &str, token: &str, shot: &str) -> Result<ShotInfo, String> {
-    let url = format!("{}/treeShot", api_url.trim_end_matches('/'));
+    let url = format!("{}/pcsEastTree", api_url.trim_end_matches('/'));
     let body = format!(r#"{{"shot":"{}"}}"#, shot);
     let resp = http_post_json(&url, &body, Some(token))?;
     eprintln!("[RUST-SI] full response: {}", serde_json::to_string(&resp).unwrap_or_default());
     if !resp_ok(&resp) { return Err(resp.get("msg").and_then(|m| m.as_str()).unwrap_or("unknown").into()); }
     let data = resp.get("data").ok_or("no data")?;
     eprintln!("[RUST-SI] data: {}", serde_json::to_string(data).unwrap_or_default());
-    let shot_num = data.get("shot").and_then(|s| s.as_i64())
-        .or_else(|| find_shot(data)).unwrap_or(shot.parse().unwrap_or(0)) as i32;
     Ok(ShotInfo {
-        shot: shot_num,
-        ip: data.get("ip").and_then(|v| v.as_str()).unwrap_or("").into(),
-        pulse: data.get("pulseLength").and_then(|v| v.as_f64()).map(|v| format!("{:.3}s", v)).unwrap_or_default(),
-        it: data.get("it").and_then(|v| v.as_f64()).map(|v| format!("{:.0}kA", v)).unwrap_or_default(),
-        time: data.get("currentTime").and_then(|v| v.as_str()).unwrap_or("").into(),
+        shot: shot.parse().unwrap_or(0),
+        ip: data.get("pcrl01").and_then(|v| v.as_str()).unwrap_or("").into(),
+        pulse: data.get("shot_len").and_then(|v| v.as_f64()).map(|v| format!("{:.3}s", v)).unwrap_or_default(),
+        it: data.get("iv").and_then(|v| v.as_f64()).map(|v| format!("{:.0}A", v)).unwrap_or_default(),
+        time: data.get("curr_time").and_then(|v| v.as_str()).unwrap_or("").into(),
     })
 }
 
