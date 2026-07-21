@@ -336,20 +336,24 @@ class AppState extends ChangeNotifier {
   void stopFetch() { _fetching = false; _status = 'Stopped'; notifyListeners(); }
 
   Future<void> _fetchTopInfo() async {
+    debugPrint('[TOPINFO] api=$_loginApiUrl shot=$_shotText token=${_authToken.isNotEmpty ? "yes" : "no"}');
     if (_loginApiUrl.isEmpty || _shotText.isEmpty || _authToken.isEmpty) return;
     try {
       final raw = RustBridge.instance.fetchSInfo(_loginApiUrl, _authToken, _shotText);
+      debugPrint('[TOPINFO] raw=$raw');
       if (raw.isNotEmpty && !raw.contains('"error"')) {
         final json = jsonDecode(raw);
+        debugPrint('[TOPINFO] json=$json');
         if (json is Map) {
           _shotInfoIp = json['ip']?.toString() ?? '';
           _shotInfoPulse = (json['pulse']?.toString() ?? '').isNotEmpty ? '${json['pulse']}s' : '';
           _shotInfoIt = (json['it']?.toString() ?? '').isNotEmpty ? '${json['it']}A' : '';
           _shotInfoTime = json['time']?.toString() ?? '';
+          debugPrint('[TOPINFO] ip=$_shotInfoIp pulse=$_shotInfoPulse it=$_shotInfoIt time=$_shotInfoTime');
           notifyListeners();
         }
       }
-    } catch (_) {}
+    } catch (e) { debugPrint('[TOPINFO] error=$e'); }
   }
 
   Future<void> fetchLatestShot() async {
