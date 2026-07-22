@@ -208,6 +208,112 @@ void main() {
     expect(centerAfterPan, lessThan(centerBeforePan));
   });
 
+  testWidgets(
+      'Touch plots use one finger for scrolling and two fingers for the view',
+      (tester) async {
+    final app = AppState();
+    app.applyLayoutList([4]);
+    for (var row = 0; row < 4; row++) {
+      app.updatePlotSeriesByColRow(
+          0,
+          row,
+          0,
+          [
+            [0, 0],
+            [5, 5],
+            [10, 10]
+          ],
+          null);
+    }
+    app.interactionMode = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 600);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: PlotGrid())),
+      ),
+    );
+
+    final list = find.byKey(const ValueKey('plot-scroll-view'));
+    final scrollable = find.descendant(
+      of: list,
+      matching: find.byType(Scrollable),
+    );
+    final scrollPosition = tester.state<ScrollableState>(scrollable).position;
+    expect(scrollPosition.maxScrollExtent, greaterThan(0));
+    LineChart firstChart() =>
+        tester.widgetList<LineChart>(find.byType(LineChart)).first;
+    final initialMinX = firstChart().data.minX;
+    final initialMaxX = firstChart().data.maxX;
+    final initialMinY = firstChart().data.minY;
+    final initialMaxY = firstChart().data.maxY;
+
+    final firstPanel = find.byKey(const ValueKey('plot-panel-0'));
+    var center = tester.getCenter(firstPanel);
+    await tester.tapAt(center);
+    await tester.pump();
+    final tappedCrosshair = app.crosshairX;
+    expect(tappedCrosshair, isNotNull);
+
+    final verticalDrag = await tester.startGesture(center, pointer: 10);
+    await tester.pump();
+    await verticalDrag.moveBy(const Offset(0, -40));
+    await tester.pump();
+    await verticalDrag.moveBy(const Offset(0, -40));
+    await tester.pump();
+    await verticalDrag.up();
+    await tester.pumpAndSettle();
+
+    expect(scrollPosition.pixels, greaterThan(0));
+    expect(firstChart().data.minX, initialMinX);
+    expect(firstChart().data.maxX, initialMaxX);
+    expect(firstChart().data.minY, initialMinY);
+    expect(firstChart().data.maxY, initialMaxY);
+    expect(app.crosshairX, tappedCrosshair);
+
+    scrollPosition.jumpTo(0);
+    await tester.pumpAndSettle();
+    center = tester.getCenter(firstPanel);
+    final horizontalDrag = await tester.startGesture(center, pointer: 11);
+    await horizontalDrag.moveBy(const Offset(120, 0));
+    await tester.pump();
+    await horizontalDrag.up();
+    await tester.pumpAndSettle();
+
+    expect(scrollPosition.pixels, 0);
+    expect(firstChart().data.minX, initialMinX);
+    expect(firstChart().data.maxX, initialMaxX);
+    expect(firstChart().data.minY, initialMinY);
+    expect(firstChart().data.maxY, initialMaxY);
+    expect(app.crosshairX, tappedCrosshair);
+
+    center = tester.getCenter(firstPanel);
+    final first = await tester.startGesture(
+      center.translate(-30, 20),
+      pointer: 12,
+    );
+    final second = await tester.startGesture(
+      center.translate(30, 20),
+      pointer: 13,
+    );
+    await tester.pump();
+    await first.moveBy(const Offset(-25, -55));
+    await second.moveBy(const Offset(25, -55));
+    await tester.pump();
+    await first.up();
+    await second.up();
+    await tester.pumpAndSettle();
+
+    expect(scrollPosition.pixels, 0);
+    expect(firstChart().data.maxX - firstChart().data.minX,
+        lessThan(initialMaxX - initialMinX));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Toolbar keeps ordered groups across responsive screen widths',
       (tester) async {
     final app = AppState();

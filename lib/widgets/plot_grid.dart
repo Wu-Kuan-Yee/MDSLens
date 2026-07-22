@@ -4,8 +4,22 @@ import '../models/app_state.dart';
 import 'plot_panel.dart';
 import 'responsive_plot_layout.dart';
 
-class PlotGrid extends StatelessWidget {
+class PlotGrid extends StatefulWidget {
   const PlotGrid({super.key});
+
+  @override
+  State<PlotGrid> createState() => _PlotGridState();
+}
+
+class _PlotGridState extends State<PlotGrid> {
+  final Set<int> _multiTouchPlots = <int>{};
+
+  void _setMultiTouchActive(int plotIndex, bool active) {
+    final changed = active
+        ? _multiTouchPlots.add(plotIndex)
+        : _multiTouchPlots.remove(plotIndex);
+    if (changed && mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,6 +43,10 @@ class PlotGrid extends StatelessWidget {
       if (usesScrollablePlotList(constraints.maxWidth)) {
         final cells = displayColumns.single;
         return ListView.builder(
+          key: const ValueKey('plot-scroll-view'),
+          physics: _multiTouchPlots.isNotEmpty
+              ? const NeverScrollableScrollPhysics()
+              : null,
           itemCount: cells.length,
           itemBuilder: (ctx, i) {
             final cell = cells[i];
@@ -66,6 +84,8 @@ class PlotGrid extends StatelessWidget {
       plotIdx: cell.plotIndex,
       selected: selected,
       onTap: () => app.selectPanel(cell.sourceColumn, cell.sourceRow),
+      onMultiTouchChanged: (active) =>
+          _setMultiTouchActive(cell.plotIndex, active),
       onContextAction: (action) {
         switch (action) {
           case 'max':

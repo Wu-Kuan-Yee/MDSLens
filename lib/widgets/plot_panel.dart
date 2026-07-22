@@ -28,12 +28,14 @@ class PlotPanel extends StatefulWidget {
   final int plotIdx;
   final bool selected;
   final void Function()? onTap;
+  final ValueChanged<bool>? onMultiTouchChanged;
   final void Function(String action)? onContextAction;
 
   const PlotPanel(
       {super.key,
       required this.plotIdx,
       this.onTap,
+      this.onMultiTouchChanged,
       this.onContextAction,
       this.selected = false});
 
@@ -54,7 +56,10 @@ class _PlotPanelState extends State<PlotPanel> {
   bool _inRubberBand = false;
   Offset? _rubberBandStart;
   Rect? _rubberBandRect;
-  double _lastScale = 1.0;
+  final Map<int, Offset> _touchPositions = <int, Offset>{};
+  bool _multiTouchActive = false;
+  Offset? _lastMultiTouchFocalPoint;
+  double? _lastMultiTouchSpan;
   Timer? _longPressTimer;
   Offset? _longPressStartPos;
 
@@ -111,59 +116,17 @@ class _PlotPanelState extends State<PlotPanel> {
 
     return Stack(children: [
       GestureDetector(
-        onTap: () {
-          widget.onTap?.call();
-        },
-        onTapDown: (details) {
-          widget.onTap?.call();
+        onTapDown: (_) => widget.onTap?.call(),
+        onTapUp: (details) {
           final a = context.read<AppState>();
-          if (a.interactionMode == 1 && a.pointLocked) {
-            a.pointLocked = false;
-            // Set crosshair at tap position using full widget mapping
-            if (_viewMinX.isFinite) {
-              a.setCrosshair(_pxToDataX(details.localPosition.dx));
-            }
+          if (a.interactionMode != 1) return;
+          if (a.pointLocked) a.pointLocked = false;
+          if (_ensureViewInitialized(a)) {
+            a.setCrosshair(
+              _pxToDataX(details.localPosition.dx),
+              sourcePlot: widget.plotIdx,
+            );
           }
-        },
-        onScaleStart: (details) {
-          _lastScale = 1.0;
-        },
-        onScaleUpdate: (details) {
-          final mode = context.read<AppState>().interactionMode;
-          if (mode != 0 || _midPanning || _inRubberBand) return;
-          setState(() {
-            if (_viewMinX.isNaN) _initViewToData(plot);
-            final cb = _chartBox;
-            final app = context.read<AppState>();
-            final gridLeft = _gridLeftInset(app);
-            final gridBottom = _gridBottomInset(app);
-            if (cb == null ||
-                cb.size.width <= gridLeft ||
-                cb.size.height <= gridBottom) {
-              return;
-            }
-
-            final gridWidth = cb.size.width - gridLeft;
-            final gridHeight = cb.size.height - gridBottom;
-            final xScale = (_viewMaxX - _viewMinX) / gridWidth;
-            final yScale = (_viewMaxY - _viewMinY) / gridHeight;
-            _viewMinX -= details.focalPointDelta.dx * xScale;
-            _viewMaxX -= details.focalPointDelta.dx * xScale;
-            _viewMinY += details.focalPointDelta.dy * yScale;
-            _viewMaxY += details.focalPointDelta.dy * yScale;
-
-            final deltaScale = details.scale / _lastScale;
-            _lastScale = details.scale;
-            if ((deltaScale - 1).abs() < 0.0001) return;
-            final factor = 1.0 / deltaScale;
-            final localFocalPoint = details.localFocalPoint;
-            final cx = _pxToDataX(localFocalPoint.dx);
-            final cy = _pxToDataY(localFocalPoint.dy);
-            _viewMinX = cx - (cx - _viewMinX) * factor;
-            _viewMaxX = cx + (_viewMaxX - cx) * factor;
-            _viewMinY = cy - (cy - _viewMinY) * factor;
-            _viewMaxY = cy + (_viewMaxY - cy) * factor;
-          });
         },
         onSecondaryTapUp: (details) =>
             _showContextMenu(context, details.globalPosition),
@@ -173,17 +136,19 @@ class _PlotPanelState extends State<PlotPanel> {
           onPointerSignal: _handleScrollWheel,
           onPointerDown: (e) {
             _handlePointerDown(e);
-            _startLongPressTimer(e);
+            if (!_multiTouchActive) _startLongPressTimer(e);
           },
           onPointerMove: (e) {
             _handlePointerMove(e);
             _cancelLongPressIfMoved(e);
           },
+          onPointerHover: _handlePointerHover,
           onPointerUp: (e) {
             _handlePointerUp(e);
             _cancelLongPressTimer();
           },
-          onPointerCancel: (_) {
+          onPointerCancel: (e) {
+            _handlePointerCancel(e);
             _cancelLongPressTimer();
           },
           child: Padding(
@@ -362,39 +327,10 @@ class _PlotPanelState extends State<PlotPanel> {
                     border: Border.all(
                         color: theme.dividerColor.withValues(alpha: 0.5),
                         width: 1)),
-                lineTouchData: app.interactionMode == 1
-                    ? LineTouchData(
-                        enabled: true,
-                        touchCallback: (event, response) {
-                          final a = context.read<AppState>();
-                          if (a.pointLocked) return;
-                          if (response?.lineBarSpots != null &&
-                              response!.lineBarSpots!.isNotEmpty) {
-                            final spot = response.lineBarSpots!.first;
-                            a.setCrosshair(
-                              spot.x,
-                              sourcePlot: widget.plotIdx,
-                              sourceSeries: spot.barIndex,
-                            );
-                          }
-                        },
-                        handleBuiltInTouches: false,
-                        touchTooltipData: LineTouchTooltipData(
-                          getTooltipColor: (_) =>
-                              theme.colorScheme.inverseSurface,
-                          getTooltipItems: (spots) => spots
-                              .map((s) => LineTooltipItem(
-                                    '${s.x.toStringAsFixed(3)}, ${s.y.toStringAsFixed(4)}',
-                                    TextStyle(
-                                        fontSize: legendSize,
-                                        color:
-                                            theme.colorScheme.onInverseSurface,
-                                        fontFamily: fontFamily),
-                                  ))
-                              .toList(),
-                        ),
-                      )
-                    : const LineTouchData(enabled: false),
+                // Point interaction is handled by the panel's outer pointer
+                // layer. Keeping fl_chart's pan recognizer enabled would win
+                // the gesture arena and prevent one-finger page scrolling.
+                lineTouchData: const LineTouchData(enabled: false),
                 extraLinesData: ExtraLinesData(
                   verticalLines: cx != null
                       ? [
@@ -670,6 +606,15 @@ class _PlotPanelState extends State<PlotPanel> {
   }
 
   void _handlePointerDown(PointerDownEvent event) {
+    if (event.kind == PointerDeviceKind.touch) {
+      _touchPositions[event.pointer] = event.localPosition;
+      if (_touchPositions.length >= 2) {
+        _beginMultiTouch();
+        _resetMultiTouchMetrics();
+      }
+      return;
+    }
+
     final app = context.read<AppState>();
     if (app.interactionMode != 0) return;
     final isMid = (event.buttons & kMiddleMouseButton) != 0;
@@ -690,6 +635,28 @@ class _PlotPanelState extends State<PlotPanel> {
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
+    if (event.kind == PointerDeviceKind.touch &&
+        _touchPositions.containsKey(event.pointer)) {
+      _touchPositions[event.pointer] = event.localPosition;
+      if (_multiTouchActive && _touchPositions.length >= 2) {
+        _applyMultiTouchTransform();
+      }
+      return;
+    }
+
+    final app = context.read<AppState>();
+    if (app.interactionMode == 1 &&
+        !app.pointLocked &&
+        (event.kind == PointerDeviceKind.mouse ||
+            event.kind == PointerDeviceKind.stylus) &&
+        _ensureViewInitialized(app)) {
+      app.setCrosshair(
+        _pxToDataX(event.localPosition.dx),
+        sourcePlot: widget.plotIdx,
+      );
+      return;
+    }
+
     if (_inRubberBand && _rubberBandStart != null) {
       setState(() {
         _rubberBandRect =
@@ -698,7 +665,6 @@ class _PlotPanelState extends State<PlotPanel> {
       return;
     }
     if (!_midPanning || _lastMidPanPos == null) return;
-    final app = context.read<AppState>();
     final plot = app.plots[widget.plotIdx];
     final lb = _listenerBox;
     final cb = _chartBox;
@@ -719,6 +685,11 @@ class _PlotPanelState extends State<PlotPanel> {
   }
 
   void _handlePointerUp(PointerUpEvent event) {
+    if (event.kind == PointerDeviceKind.touch) {
+      _removeTouchPointer(event.pointer);
+      return;
+    }
+
     if (_inRubberBand &&
         _rubberBandRect != null &&
         ((event.buttons & kPrimaryMouseButton) == 0)) {
@@ -745,6 +716,130 @@ class _PlotPanelState extends State<PlotPanel> {
     }
     _midPanning = false;
     _lastMidPanPos = null;
+  }
+
+  void _handlePointerCancel(PointerCancelEvent event) {
+    if (event.kind == PointerDeviceKind.touch) {
+      _removeTouchPointer(event.pointer);
+      return;
+    }
+    _midPanning = false;
+    _lastMidPanPos = null;
+    if (_inRubberBand && mounted) {
+      setState(() {
+        _inRubberBand = false;
+        _rubberBandStart = null;
+        _rubberBandRect = null;
+      });
+    }
+  }
+
+  void _handlePointerHover(PointerHoverEvent event) {
+    final app = context.read<AppState>();
+    if (app.interactionMode != 1 ||
+        app.pointLocked ||
+        !_ensureViewInitialized(app)) {
+      return;
+    }
+    app.setCrosshair(
+      _pxToDataX(event.localPosition.dx),
+      sourcePlot: widget.plotIdx,
+    );
+  }
+
+  void _beginMultiTouch() {
+    if (_multiTouchActive) return;
+    _multiTouchActive = true;
+    _cancelLongPressTimer();
+    widget.onMultiTouchChanged?.call(true);
+  }
+
+  bool _ensureViewInitialized(AppState app) {
+    if (_viewMinX.isFinite) return true;
+    if (widget.plotIdx >= app.plots.length) return false;
+    _initViewToData(app.plots[widget.plotIdx], _findPanel(app));
+    return _viewMinX.isFinite;
+  }
+
+  void _removeTouchPointer(int pointer) {
+    _touchPositions.remove(pointer);
+    if (_multiTouchActive && _touchPositions.length < 2) {
+      _multiTouchActive = false;
+      _lastMultiTouchFocalPoint = null;
+      _lastMultiTouchSpan = null;
+      widget.onMultiTouchChanged?.call(false);
+    } else if (_multiTouchActive) {
+      _resetMultiTouchMetrics();
+    }
+  }
+
+  ({Offset focalPoint, double span})? _multiTouchMetrics() {
+    if (_touchPositions.length < 2) return null;
+    var focalPoint = Offset.zero;
+    for (final position in _touchPositions.values) {
+      focalPoint += position;
+    }
+    focalPoint = focalPoint / _touchPositions.length.toDouble();
+
+    var span = 0.0;
+    for (final position in _touchPositions.values) {
+      span += (position - focalPoint).distance;
+    }
+    span /= _touchPositions.length;
+    return (focalPoint: focalPoint, span: span);
+  }
+
+  void _resetMultiTouchMetrics() {
+    final metrics = _multiTouchMetrics();
+    _lastMultiTouchFocalPoint = metrics?.focalPoint;
+    _lastMultiTouchSpan = metrics?.span;
+  }
+
+  void _applyMultiTouchTransform() {
+    final metrics = _multiTouchMetrics();
+    final previousFocalPoint = _lastMultiTouchFocalPoint;
+    final previousSpan = _lastMultiTouchSpan;
+    if (metrics == null || previousFocalPoint == null || previousSpan == null) {
+      _resetMultiTouchMetrics();
+      return;
+    }
+
+    _lastMultiTouchFocalPoint = metrics.focalPoint;
+    _lastMultiTouchSpan = metrics.span;
+    final app = context.read<AppState>();
+    final plot = app.plots[widget.plotIdx];
+    final cb = _chartBox;
+    final gridLeft = _gridLeftInset(app);
+    final gridBottom = _gridBottomInset(app);
+    if (cb == null ||
+        cb.size.width <= gridLeft ||
+        cb.size.height <= gridBottom) {
+      return;
+    }
+
+    setState(() {
+      if (_viewMinX.isNaN) _initViewToData(plot);
+      final gridWidth = cb.size.width - gridLeft;
+      final gridHeight = cb.size.height - gridBottom;
+      final focalDelta = metrics.focalPoint - previousFocalPoint;
+      final xScale = (_viewMaxX - _viewMinX) / gridWidth;
+      final yScale = (_viewMaxY - _viewMinY) / gridHeight;
+      _viewMinX -= focalDelta.dx * xScale;
+      _viewMaxX -= focalDelta.dx * xScale;
+      _viewMinY += focalDelta.dy * yScale;
+      _viewMaxY += focalDelta.dy * yScale;
+
+      if (previousSpan <= 0.1 || metrics.span <= 0.1) return;
+      final scale = metrics.span / previousSpan;
+      if ((scale - 1).abs() < 0.0001) return;
+      final factor = 1.0 / scale;
+      final cx = _pxToDataX(metrics.focalPoint.dx);
+      final cy = _pxToDataY(metrics.focalPoint.dy);
+      _viewMinX = cx - (cx - _viewMinX) * factor;
+      _viewMaxX = cx + (_viewMaxX - cx) * factor;
+      _viewMinY = cy - (cy - _viewMinY) * factor;
+      _viewMaxY = cy + (_viewMaxY - cy) * factor;
+    });
   }
 
   List<double>? _currentRange(AppState app) {
