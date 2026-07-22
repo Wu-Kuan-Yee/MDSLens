@@ -134,12 +134,17 @@ class _PlotPanelState extends State<PlotPanel> {
           setState(() {
             if (_viewMinX.isNaN) _initViewToData(plot);
             final cb = _chartBox;
-            if (cb == null || cb.size.width <= 50 || cb.size.height <= 32) {
+            final app = context.read<AppState>();
+            final gridLeft = _gridLeftInset(app);
+            final gridBottom = _gridBottomInset(app);
+            if (cb == null ||
+                cb.size.width <= gridLeft ||
+                cb.size.height <= gridBottom) {
               return;
             }
 
-            final gridWidth = cb.size.width - 50;
-            final gridHeight = cb.size.height - 32;
+            final gridWidth = cb.size.width - gridLeft;
+            final gridHeight = cb.size.height - gridBottom;
             final xScale = (_viewMaxX - _viewMinX) / gridWidth;
             final yScale = (_viewMaxY - _viewMinY) / gridHeight;
             _viewMinX -= details.focalPointDelta.dx * xScale;
@@ -201,8 +206,11 @@ class _PlotPanelState extends State<PlotPanel> {
                     child: bars.isEmpty
                         ? Center(
                             child: Text(_getPlaceholderText(app, plot),
-                                style:
-                                    TextStyle(color: Colors.grey, fontSize: 10),
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontFamily: app.effectiveFontFamily,
+                                  fontSize: app.fontUiSize.toDouble(),
+                                ),
                                 textAlign: TextAlign.center))
                         : Stack(key: _chartAreaKey, children: [
                             _buildChart(bars, plot, panel, theme, viewMinX,
@@ -244,6 +252,10 @@ class _PlotPanelState extends State<PlotPanel> {
     final textColor = theme.colorScheme.onSurface.withValues(alpha: 0.6);
     final tickColor = theme.colorScheme.onSurface.withValues(alpha: 0.4);
     final app = context.read<AppState>();
+    final fontFamily = app.effectiveFontFamily;
+    final legendSize = app.fontLegendSize.toDouble();
+    final axisSize = app.fontAxisSize.toDouble();
+    final unitSize = app.fontUnitSize.toDouble();
     final cx = app.crosshairX;
     final crosshairY = _crosshairY(bars, cx, app);
     final showGrid = panel['grid'] ?? true;
@@ -275,14 +287,14 @@ class _PlotPanelState extends State<PlotPanel> {
         final cw = constraints.maxWidth;
         final ch = constraints.maxHeight;
         // Chart grid area — matches fl_chart internal grid exactly
-        //   left = 50 (leftTitles.reservedSize)
+        // Insets grow with the configured axis/unit fonts.
         //   top = 0 (no top titles)
         //   right = full width (no right titles)
-        //   bottom = ch - 32 (bottomTitles.reservedSize)
-        final gridLeft = 50.0;
+        final gridLeft = _gridLeftInset(app);
         final gridTop = 0.0;
         final gridRight = cw;
-        final gridBottom = ch - 32.0;
+        final bottomInset = _gridBottomInset(app);
+        final gridBottom = ch - bottomInset;
         final gridW = gridRight - gridLeft;
         final gridH = gridBottom - gridTop;
 
@@ -311,7 +323,8 @@ class _PlotPanelState extends State<PlotPanel> {
                       child: Text(plot.title,
                           style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              fontSize: 11,
+                              fontFamily: fontFamily,
+                              fontSize: legendSize,
                               color: textColor)))),
             LineChart(
               LineChartData(
@@ -332,12 +345,12 @@ class _PlotPanelState extends State<PlotPanel> {
                   bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
                           showTitles: true,
-                          reservedSize: 32,
+                          reservedSize: bottomInset,
                           getTitlesWidget: (v, m) => const SizedBox())),
                   leftTitles: AxisTitles(
                       sideTitles: SideTitles(
                           showTitles: true,
-                          reservedSize: 50,
+                          reservedSize: gridLeft,
                           getTitlesWidget: (v, m) => const SizedBox())),
                   topTitles: const AxisTitles(
                       sideTitles: SideTitles(showTitles: false)),
@@ -373,10 +386,10 @@ class _PlotPanelState extends State<PlotPanel> {
                               .map((s) => LineTooltipItem(
                                     '${s.x.toStringAsFixed(3)}, ${s.y.toStringAsFixed(4)}',
                                     TextStyle(
-                                        fontSize: 9,
+                                        fontSize: legendSize,
                                         color:
                                             theme.colorScheme.onInverseSurface,
-                                        fontFamily: 'monospace'),
+                                        fontFamily: fontFamily),
                                   ))
                               .toList(),
                         ),
@@ -389,7 +402,7 @@ class _PlotPanelState extends State<PlotPanel> {
                               x: cx,
                               color: const Color(0xFFFF00FF),
                               strokeWidth: 1,
-                              label: _crosshairLabel(bars, cx))
+                              label: _crosshairLabel(bars, cx, app))
                         ]
                       : [],
                   horizontalLines: crosshairY != null
@@ -434,7 +447,10 @@ class _PlotPanelState extends State<PlotPanel> {
                 child: SizedBox(
                     width: gridLeft - 6,
                     child: Text(_fmtAxis(yTicks[i]),
-                        style: TextStyle(fontSize: 8, color: textColor),
+                        style: TextStyle(
+                            fontFamily: fontFamily,
+                            fontSize: axisSize,
+                            color: textColor),
                         textAlign: TextAlign.right)),
               ),
             // X-axis tick values — below tick marks (row 1 of 2 below axis)
@@ -446,21 +462,30 @@ class _PlotPanelState extends State<PlotPanel> {
                     left: gridLeft,
                     top: gridBottom + 4,
                     child: Text(_fmtAxis(xTicks[i]),
-                        style: TextStyle(fontSize: 8, color: textColor)),
+                        style: TextStyle(
+                            fontFamily: fontFamily,
+                            fontSize: axisSize,
+                            color: textColor)),
                   )
                 else if (i == xTicks.length - 1)
                   Positioned(
                     right: cw - gridRight,
                     top: gridBottom + 4,
                     child: Text(_fmtAxis(xTicks[i]),
-                        style: TextStyle(fontSize: 8, color: textColor)),
+                        style: TextStyle(
+                            fontFamily: fontFamily,
+                            fontSize: axisSize,
+                            color: textColor)),
                   )
                 else
                   Positioned(
                     left: gridLeft + (i / (xTicks.length - 1)) * gridW - 16,
                     top: gridBottom + 4,
                     child: Text(_fmtAxis(xTicks[i]),
-                        style: TextStyle(fontSize: 8, color: textColor)),
+                        style: TextStyle(
+                            fontFamily: fontFamily,
+                            fontSize: axisSize,
+                            color: textColor)),
                   ),
               ],
             // X-axis name label — below tick values (row 2 of 2 below axis)
@@ -470,7 +495,10 @@ class _PlotPanelState extends State<PlotPanel> {
               top: gridBottom + 16,
               child: Center(
                   child: Text(plot.xLabel,
-                      style: TextStyle(fontSize: 9, color: textColor))),
+                      style: TextStyle(
+                          fontFamily: fontFamily,
+                          fontSize: unitSize,
+                          color: textColor))),
             ),
             Positioned(
               left: -2,
@@ -482,8 +510,10 @@ class _PlotPanelState extends State<PlotPanel> {
                       child: RotatedBox(
                           quarterTurns: -1,
                           child: Text(plot.yLabel,
-                              style:
-                                  TextStyle(fontSize: 9, color: textColor))))),
+                              style: TextStyle(
+                                  fontFamily: fontFamily,
+                                  fontSize: unitSize,
+                                  color: textColor))))),
             ),
           ],
         );
@@ -515,7 +545,8 @@ class _PlotPanelState extends State<PlotPanel> {
     return 'No data';
   }
 
-  VerticalLineLabel? _crosshairLabel(List<LineChartBarData> bars, double? cx) {
+  VerticalLineLabel? _crosshairLabel(
+      List<LineChartBarData> bars, double? cx, AppState app) {
     if (cx == null || bars.isEmpty) return null;
     final parts = <String>[];
     for (final bar in bars) {
@@ -528,7 +559,25 @@ class _PlotPanelState extends State<PlotPanel> {
     return VerticalLineLabel(
         show: true,
         labelResolver: (_) => parts.join('\n'),
-        style: const TextStyle(fontSize: 9, color: Color(0xFFFF00FF)));
+        style: TextStyle(
+          fontFamily: app.effectiveFontFamily,
+          fontSize: app.fontLegendSize.toDouble(),
+          color: const Color(0xFFFF00FF),
+        ));
+  }
+
+  double _gridLeftInset(AppState app) {
+    return math.max(
+      50,
+      app.fontAxisSize * 3.8 + app.fontUnitSize + 6,
+    );
+  }
+
+  double _gridBottomInset(AppState app) {
+    return math.max(
+      32,
+      app.fontAxisSize + app.fontUnitSize + 15,
+    );
   }
 
   double? _crosshairY(List<LineChartBarData> bars, double? x, AppState app) {
@@ -578,22 +627,26 @@ class _PlotPanelState extends State<PlotPanel> {
   double _pxToDataX(double px) {
     final lb = _listenerBox;
     final cb = _chartBox;
-    if (lb == null || cb == null || cb.size.width <= 50)
+    final app = context.read<AppState>();
+    final gridLeft = _gridLeftInset(app);
+    if (lb == null || cb == null || cb.size.width <= gridLeft)
       return (_viewMinX + _viewMaxX) / 2;
     final chartLocal = cb.globalToLocal(lb.localToGlobal(Offset(px, 0)));
-    final gx = chartLocal.dx - 50;
-    final gw = cb.size.width - 50;
+    final gx = chartLocal.dx - gridLeft;
+    final gw = cb.size.width - gridLeft;
     return _viewMinX + (gx / gw) * (_viewMaxX - _viewMinX);
   }
 
   double _pxToDataY(double py) {
     final lb = _listenerBox;
     final cb = _chartBox;
-    if (lb == null || cb == null || cb.size.height <= 32)
+    final app = context.read<AppState>();
+    final gridBottom = _gridBottomInset(app);
+    if (lb == null || cb == null || cb.size.height <= gridBottom)
       return (_viewMinY + _viewMaxY) / 2;
     final chartLocal = cb.globalToLocal(lb.localToGlobal(Offset(0, py)));
     final gy = chartLocal.dy;
-    final gh = cb.size.height - 32;
+    final gh = cb.size.height - gridBottom;
     return _viewMaxY - (gy / gh) * (_viewMaxY - _viewMinY);
   }
 

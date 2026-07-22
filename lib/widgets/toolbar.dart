@@ -16,7 +16,12 @@ class ToolbarWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
     final theme = Theme.of(context);
-    final infoStyle = TextStyle(fontSize: 11, color: theme.colorScheme.primary);
+    final uiSize = app.fontUiSize.toDouble();
+    final infoStyle = TextStyle(
+      fontFamily: app.effectiveFontFamily,
+      fontSize: (uiSize - 1).clamp(6, 28).toDouble(),
+      color: theme.colorScheme.primary,
+    );
     final shot = app.shotText.isNotEmpty ? app.shotText : '--';
     final ip = app.shotInfoIp.isNotEmpty
         ? '${app.shotInfoIp} kA'
@@ -39,7 +44,8 @@ class ToolbarWidget extends StatelessWidget {
     ]);
     final rateSelector = Row(mainAxisSize: MainAxisSize.min, children: [
       Text('Rate:',
-          style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface)),
+          style:
+              TextStyle(fontSize: uiSize, color: theme.colorScheme.onSurface)),
       const SizedBox(width: 4),
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -50,24 +56,25 @@ class ToolbarWidget extends StatelessWidget {
           value: app.dataMode,
           underline: const SizedBox(),
           isDense: true,
-          style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface),
+          style:
+              TextStyle(fontSize: uiSize, color: theme.colorScheme.onSurface),
           dropdownColor: theme.colorScheme.surface,
           items: [
             DropdownMenuItem(
                 value: 0,
                 child: Text('Thin',
                     style: TextStyle(
-                        fontSize: 12, color: theme.colorScheme.onSurface))),
+                        fontSize: uiSize, color: theme.colorScheme.onSurface))),
             DropdownMenuItem(
                 value: 1,
                 child: Text('Medium',
                     style: TextStyle(
-                        fontSize: 12, color: theme.colorScheme.onSurface))),
+                        fontSize: uiSize, color: theme.colorScheme.onSurface))),
             DropdownMenuItem(
                 value: 2,
                 child: Text('Full',
                     style: TextStyle(
-                        fontSize: 12, color: theme.colorScheme.onSurface))),
+                        fontSize: uiSize, color: theme.colorScheme.onSurface))),
           ],
           onChanged: (v) {
             if (v != null) {
@@ -103,7 +110,8 @@ class ToolbarWidget extends StatelessWidget {
     ]);
     final shotEntry = Row(mainAxisSize: MainAxisSize.min, children: [
       Text('Shot:',
-          style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurface)),
+          style:
+              TextStyle(fontSize: uiSize, color: theme.colorScheme.onSurface)),
       if (app.shotHistory.isNotEmpty)
         PopupMenuButton<String>(
           padding: EdgeInsets.zero,
@@ -117,8 +125,7 @@ class ToolbarWidget extends StatelessWidget {
           },
           itemBuilder: (_) => app.shotHistory
               .map((s) => PopupMenuItem(
-                  value: s,
-                  child: Text(s, style: const TextStyle(fontSize: 13))))
+                  value: s, child: Text(s, style: TextStyle(fontSize: uiSize))))
               .toList(),
         ),
       const SizedBox(width: 4),
@@ -126,7 +133,7 @@ class ToolbarWidget extends StatelessWidget {
         width: 95,
         child: TextField(
           controller: app.shotCtrl,
-          style: const TextStyle(fontSize: 13),
+          style: TextStyle(fontSize: uiSize),
           decoration: const InputDecoration(
               isDense: true,
               contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -683,6 +690,7 @@ class ToolbarWidget extends StatelessWidget {
   }
 
   Widget _btn(BuildContext ctx, String label, VoidCallback onTap) {
+    final app = ctx.read<AppState>();
     return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 3),
         child: ElevatedButton(
@@ -694,13 +702,16 @@ class ToolbarWidget extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                textStyle:
-                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                textStyle: TextStyle(
+                    fontFamily: app.effectiveFontFamily,
+                    fontSize: app.fontUiSize.toDouble(),
+                    fontWeight: FontWeight.w500)),
             child: Text(label)));
   }
 
   Widget _modeBtn(
       BuildContext ctx, String label, bool active, VoidCallback onTap) {
+    final app = ctx.read<AppState>();
     return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 3),
         child: OutlinedButton(
@@ -713,7 +724,8 @@ class ToolbarWidget extends StatelessWidget {
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 textStyle: TextStyle(
-                    fontSize: 13,
+                    fontFamily: app.effectiveFontFamily,
+                    fontSize: app.fontUiSize.toDouble(),
                     fontWeight: active ? FontWeight.bold : FontWeight.w500),
                 backgroundColor:
                     active ? Theme.of(ctx).colorScheme.primaryContainer : null),
@@ -733,7 +745,8 @@ class ToolbarWidget extends StatelessWidget {
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 textStyle: TextStyle(
-                    fontSize: 13,
+                    fontFamily: app.effectiveFontFamily,
+                    fontSize: app.fontUiSize.toDouble(),
                     color: app.sshConnected ? Colors.green : null)),
             child: const Text('SSH')));
   }
@@ -749,6 +762,7 @@ class ToolbarWidget extends StatelessWidget {
   Widget _themeBtn(
       BuildContext ctx, String label, bool active, VoidCallback onTap) {
     final theme = Theme.of(ctx);
+    final app = ctx.read<AppState>();
     return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 2),
         child: OutlinedButton(
@@ -760,7 +774,8 @@ class ToolbarWidget extends StatelessWidget {
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 textStyle: TextStyle(
-                    fontSize: 12,
+                    fontFamily: app.effectiveFontFamily,
+                    fontSize: app.fontUiSize.toDouble(),
                     fontWeight: active ? FontWeight.bold : FontWeight.normal,
                     color: active
                         ? theme.colorScheme.onPrimaryContainer

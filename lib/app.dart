@@ -8,20 +8,28 @@ import 'pages/main_page.dart';
 
 class MdsScopeApp extends StatefulWidget {
   const MdsScopeApp({super.key});
-  @override State<MdsScopeApp> createState() => _MdsScopeAppState();
+  @override
+  State<MdsScopeApp> createState() => _MdsScopeAppState();
 }
 
 class _MdsScopeAppState extends State<MdsScopeApp> {
   bool _sysDark = false;
 
-  @override void initState() {
+  @override
+  void initState() {
     super.initState();
-    _sysDark = WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
+    _sysDark = WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+        Brightness.dark;
     ThemeChannel.init();
-    ThemeChannel.isDark().then((d) { if (mounted) setState(() => _sysDark = d); });
-    ThemeChannel.onThemeChanged.listen((d) { if (mounted) setState(() => _sysDark = d); });
+    ThemeChannel.isDark().then((d) {
+      if (mounted) setState(() => _sysDark = d);
+    });
+    ThemeChannel.onThemeChanged.listen((d) {
+      if (mounted) setState(() => _sysDark = d);
+    });
     // Universal platform brightness listener (macOS fallback, Linux/Windows primary)
-    WidgetsBinding.instance.platformDispatcher.onPlatformBrightnessChanged = _onBrightnessChanged;
+    WidgetsBinding.instance.platformDispatcher.onPlatformBrightnessChanged =
+        _onBrightnessChanged;
     // Global Shift key tracking for Shift+drag pan
     HardwareKeyboard.instance.addHandler(_onAppKey);
   }
@@ -36,7 +44,9 @@ class _MdsScopeAppState extends State<MdsScopeApp> {
 
   void _onBrightnessChanged() {
     if (!mounted) return;
-    final isDark = WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
+    final isDark =
+        WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+            Brightness.dark;
     if (isDark != _sysDark) setState(() => _sysDark = isDark);
   }
 
@@ -47,8 +57,22 @@ class _MdsScopeAppState extends State<MdsScopeApp> {
         ? false
         : app.themeMode == 1
             ? true
-            : (WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark || _sysDark);
-    return MaterialApp(title: 'MdsScope', debugShowCheckedModeBanner: false,
-      theme: MdsScopeTheme.light, darkTheme: MdsScopeTheme.dark, themeMode: isDark ? ThemeMode.dark : ThemeMode.light, home: const MainPage());
+            : (WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+                    Brightness.dark ||
+                _sysDark);
+    return MaterialApp(
+      title: 'MdsScope',
+      debugShowCheckedModeBanner: false,
+      theme: MdsScopeTheme.light(
+        fontFamily: app.effectiveFontFamily,
+        uiFontSize: app.fontUiSize.toDouble(),
+      ),
+      darkTheme: MdsScopeTheme.dark(
+        fontFamily: app.effectiveFontFamily,
+        uiFontSize: app.fontUiSize.toDouble(),
+      ),
+      themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
+      home: const MainPage(),
+    );
   }
 }

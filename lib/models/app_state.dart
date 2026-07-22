@@ -148,6 +148,8 @@ class AppState extends ChangeNotifier {
       _fontUnitSize = 9,
       _fontUiSize = 12;
   String get fontFamily => _fontFamily;
+  String? get effectiveFontFamily =>
+      _fontFamily == 'System' ? null : _fontFamily;
   int get fontLegendSize => _fontLegendSize;
   int get fontAxisSize => _fontAxisSize;
   int get fontUnitSize => _fontUnitSize;
@@ -159,6 +161,7 @@ class AppState extends ChangeNotifier {
     _fontAxisSize = axis;
     _fontUnitSize = unit;
     _fontUiSize = ui;
+    savePreferences();
     notifyListeners();
   }
 

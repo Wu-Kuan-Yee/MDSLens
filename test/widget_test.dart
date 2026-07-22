@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:mdsscope/models/app_state.dart';
 import 'package:mdsscope/services/external_url_launcher.dart';
+import 'package:mdsscope/theme/mdsscope_theme.dart';
 import 'package:mdsscope/widgets/plot_panel.dart';
 import 'package:mdsscope/widgets/plot_grid.dart';
 import 'package:mdsscope/widgets/responsive_plot_layout.dart';
@@ -10,6 +11,17 @@ import 'package:mdsscope/widgets/toolbar.dart';
 import 'package:provider/provider.dart';
 
 void main() {
+  test('Customize Fonts values are applied to the application theme', () {
+    final theme = MdsScopeTheme.light(
+      fontFamily: 'Courier New',
+      uiFontSize: 18,
+    );
+
+    expect(theme.textTheme.bodyMedium?.fontFamily, 'Courier New');
+    expect(theme.textTheme.bodyMedium?.fontSize, 18);
+    expect(theme.textTheme.labelLarge?.fontSize, 18);
+  });
+
   test('Responsive plot columns preserve order across screen sizes', () {
     final phone = buildResponsivePlotColumns([2, 1, 2], 390);
     expect(phone, hasLength(1));
@@ -82,6 +94,48 @@ void main() {
     expect(charts, hasLength(2));
     expect(charts[0].data.extraLinesData.horizontalLines.single.y, 12);
     expect(charts[1].data.extraLinesData.horizontalLines.single.y, 22);
+  });
+
+  testWidgets('Plot title, axes, and units use customized fonts',
+      (tester) async {
+    final app = AppState();
+    app.applyFontSettings('Courier New', 17, 14, 13, 16);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 10],
+          [1, 12],
+          [2, 14]
+        ],
+        null);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MaterialApp(
+          theme: MdsScopeTheme.light(
+            fontFamily: app.effectiveFontFamily,
+            uiFontSize: app.fontUiSize.toDouble(),
+          ),
+          home: const Scaffold(
+            body:
+                SizedBox(width: 500, height: 400, child: PlotPanel(plotIdx: 0)),
+          ),
+        ),
+      ),
+    );
+
+    final title = tester.widget<Text>(find.text('Ip'));
+    final xUnit = tester.widget<Text>(find.text('s'));
+    final plotTexts = tester.widgetList<Text>(
+      find.descendant(of: find.byType(PlotPanel), matching: find.byType(Text)),
+    );
+    expect(title.style?.fontFamily, 'Courier New');
+    expect(title.style?.fontSize, 17);
+    expect(xUnit.style?.fontSize, 13);
+    expect(plotTexts.any((text) => text.style?.fontSize == 14), isTrue);
   });
 
   testWidgets('Two-finger gestures pan and zoom a plot in Zoom/Move mode',
