@@ -1,12 +1,53 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/rust_bridge.dart';
 
+typedef SignalFetchWorker = Future<String> Function(
+  String configJson,
+  String dataMode,
+  String sshSettingsJson,
+);
+
+typedef ShotInfoFetchWorker = Future<String> Function(
+  String apiUrl,
+  String token,
+  String shot,
+);
+
+Future<String> _fetchSignalsInBackground(
+  String configJson,
+  String dataMode,
+  String sshSettingsJson,
+) {
+  return Isolate.run(
+    () => RustBridge.instance.fetchSigSsh(
+      configJson,
+      dataMode,
+      sshSettingsJson,
+    ),
+  );
+}
+
+Future<String> _fetchShotInfoInBackground(
+  String apiUrl,
+  String token,
+  String shot,
+) {
+  return Isolate.run(
+    () => RustBridge.instance.fetchSInfo(apiUrl, token, shot),
+  );
+}
+
 class AppState extends ChangeNotifier {
+  final SignalFetchWorker _signalFetchWorker;
+  final ShotInfoFetchWorker _shotInfoFetchWorker;
+  bool _disposed = false;
+
   // Config
   List<List<Map<String, dynamic>>> _columns = [];
   List<List<Map<String, dynamic>>> get columns => _columns;
@@ -59,6 +100,7 @@ class AppState extends ChangeNotifier {
   final _shotCtrl = TextEditingController();
   TextEditingController get shotCtrl => _shotCtrl;
   set shotText(String v) {
+    _invalidateFetchForSettingsChange();
     _shotText = v;
     _shotCtrl.text = v;
     savePreferences();
@@ -77,9 +119,15 @@ class AppState extends ChangeNotifier {
 
   late final Future<void> preferencesReady;
 
-  AppState() {
+  AppState({
+    SignalFetchWorker? signalFetchWorker,
+    ShotInfoFetchWorker? shotInfoFetchWorker,
+  })  : _signalFetchWorker = signalFetchWorker ?? _fetchSignalsInBackground,
+        _shotInfoFetchWorker =
+            shotInfoFetchWorker ?? _fetchShotInfoInBackground {
     _shotCtrl.addListener(() {
       if (_shotCtrl.text != _shotText) {
+        _invalidateFetchForSettingsChange();
         _shotText = _shotCtrl.text;
         savePreferences();
         notifyListeners();
@@ -90,6 +138,7 @@ class AppState extends ChangeNotifier {
   }
 
   void setShotFromApi(String v) {
+    _invalidateFetchForSettingsChange();
     _shotText = v;
     _shotCtrl.text = v;
     // Move cursor to end
@@ -111,6 +160,8 @@ class AppState extends ChangeNotifier {
   int _dataMode = 0;
   int get dataMode => _dataMode;
   set dataMode(int v) {
+    if (v == _dataMode) return;
+    _invalidateFetchForSettingsChange();
     _dataMode = v;
     savePreferences();
     notifyListeners();
@@ -195,6 +246,7 @@ class AppState extends ChangeNotifier {
   }
 
   void applyLayoutList(List<int> colSizes) {
+    _invalidateFetchForSettingsChange();
     final newCols = <List<Map<String, dynamic>>>[];
     for (var c = 0; c < colSizes.length; c++) {
       final col = <Map<String, dynamic>>[];
@@ -259,6 +311,8 @@ class AppState extends ChangeNotifier {
   int _sshMode = 1;
   int get sshMode => _sshMode;
   set sshMode(int v) {
+    if (v == _sshMode) return;
+    _invalidateFetchForSettingsChange();
     _sshMode = v;
     savePreferences();
     notifyListeners();
@@ -287,6 +341,7 @@ class AppState extends ChangeNotifier {
   }
 
   void rebuild() {
+    _invalidateFetchForSettingsChange();
     savePreferences();
     notifyListeners();
   }
@@ -314,6 +369,19 @@ class AppState extends ChangeNotifier {
   bool get fetching => _fetching;
   String _status = 'Ready';
   String get status => _status;
+  int _fetchGeneration = 0;
+
+  bool _isCurrentFetch(int generation) {
+    return !_disposed && generation == _fetchGeneration;
+  }
+
+  void _invalidateFetchForSettingsChange() {
+    _fetchGeneration++;
+    if (_fetching) {
+      _fetching = false;
+      _status = 'Settings changed. Previous load discarded.';
+    }
+  }
 
   // Max panel (null = show all)
   int? _maximizedPlot;
@@ -335,6 +403,8 @@ class AppState extends ChangeNotifier {
   bool get showSsh => _showSsh;
 
   void setLoginApiUrl(String v) {
+    if (v == _loginApiUrl) return;
+    _invalidateFetchForSettingsChange();
     _loginApiUrl = v;
     savePreferences();
   }
@@ -350,27 +420,37 @@ class AppState extends ChangeNotifier {
   }
 
   void setSshHost(String v) {
+    if (v == _sshHost) return;
+    _invalidateFetchForSettingsChange();
     _sshHost = v;
     savePreferences();
     notifyListeners();
   }
 
   void setSshPort(int v) {
+    if (v == _sshPort) return;
+    _invalidateFetchForSettingsChange();
     _sshPort = v;
     savePreferences();
   }
 
   void setSshUser(String v) {
+    if (v == _sshUser) return;
+    _invalidateFetchForSettingsChange();
     _sshUser = v;
     savePreferences();
   }
 
   void setSshPass(String v) {
+    if (v == _sshPass) return;
+    _invalidateFetchForSettingsChange();
     _sshPass = v;
     savePreferences();
   }
 
   void setSshIdentity(String v) {
+    if (v == _sshIdentity) return;
+    _invalidateFetchForSettingsChange();
     _sshIdentity = v;
     savePreferences();
   }
@@ -386,6 +466,8 @@ class AppState extends ChangeNotifier {
   }
 
   void setLoggedIn(bool v, String token) {
+    if (v == _loggedIn && token == _authToken) return;
+    _invalidateFetchForSettingsChange();
     _loggedIn = v;
     _authToken = token;
     savePreferences();
@@ -412,6 +494,7 @@ class AppState extends ChangeNotifier {
   Future<void> initPreferences() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      _invalidateFetchForSettingsChange();
       _rememberLogin = prefs.getBool('rememberLogin') ?? true;
       _loginApiUrl = prefs.getString('loginApiUrl') ?? _loginApiUrl;
       _loginUser = prefs.getString('loginUser') ?? _loginUser;
@@ -625,6 +708,7 @@ class AppState extends ChangeNotifier {
         notifyListeners();
         return;
       }
+      _invalidateFetchForSettingsChange();
       final fileShot =
           json['shot'] ?? json['default_shot'] ?? json['global_shot'];
       if (fileShot != null && fileShot.toString().trim().isNotEmpty) {
@@ -727,48 +811,65 @@ class AppState extends ChangeNotifier {
     _doFetch();
   }
 
+  String _buildSignalConfigJson() {
+    final cols = _columns
+        .map((col) => col.map((p) {
+              final panel = Map<String, dynamic>.from(p);
+              panel['shot'] = _shotText;
+              panel['extraction_points'] ??= 2000;
+              panel['grid'] ??= true;
+              return panel;
+            }).toList())
+        .toList();
+    return jsonEncode({'columns': cols});
+  }
+
   void _clearAllSeriesPoints() {
-    for (final p in _plots) {
-      for (final s in p.series) {
-        if (s != null) {
-          s.points = null;
-          s.error = null;
+    for (final plot in _plots) {
+      for (final series in plot.series) {
+        if (series != null) {
+          series.points = null;
+          series.error = null;
         }
       }
     }
   }
 
-  void _doFetch() async {
-    _clearAllSeriesPoints();
+  void _clearPanelSeries(int plotIdx) {
+    if (plotIdx < 0 || plotIdx >= _plots.length) return;
+    for (final series in _plots[plotIdx].series) {
+      if (series != null) {
+        series.points = null;
+        series.error = null;
+      }
+    }
+  }
+
+  String _buildSshSettingsJson() {
+    if (_sshMode <= 0 || _sshHost.isEmpty) return '';
+    return jsonEncode({
+      'host': _sshHost,
+      'port': _sshPort,
+      'user': _sshUser,
+      'password': _sshPass,
+      'identity_file': _sshIdentity,
+      'mode': _sshMode,
+    });
+  }
+
+  Future<void> _doFetch() async {
+    final generation = ++_fetchGeneration;
+    final requestShot = _shotText;
+    final configJson = _buildSignalConfigJson();
+    final dataMode = _dataMode.toString();
+    final sshSettings = _buildSshSettingsJson();
     _fetching = true;
     _status = 'Fetching...';
     notifyListeners();
 
-    await WidgetsBinding.instance.endOfFrame;
-    await Future.delayed(const Duration(milliseconds: 50));
-
     try {
-      final cols = _columns
-          .map((col) => col.map((p) {
-                final m = Map<String, dynamic>.from(p);
-                m['shot'] = _shotText;
-                m['extraction_points'] ??= 2000;
-                m['grid'] ??= true;
-                return m;
-              }).toList())
-          .toList();
-      final sshSettings = _sshMode > 0 && _sshHost.isNotEmpty
-          ? jsonEncode({
-              'host': _sshHost,
-              'port': _sshPort,
-              'user': _sshUser,
-              'password': _sshPass,
-              'identity_file': _sshIdentity,
-              'mode': _sshMode
-            })
-          : '';
-      final raw = RustBridge.instance.fetchSigSsh(
-          jsonEncode({'columns': cols}), _dataMode.toString(), sshSettings);
+      final raw = await _signalFetchWorker(configJson, dataMode, sshSettings);
+      if (!_isCurrentFetch(generation)) return;
       if (raw.isEmpty) {
         _fetching = false;
         _status = 'Empty raw from Rust';
@@ -789,6 +890,7 @@ class AppState extends ChangeNotifier {
         notifyListeners();
         return;
       }
+      _clearAllSeriesPoints();
       String? firstErr;
       for (final sig in json) {
         if (sig is Map) {
@@ -807,22 +909,24 @@ class AppState extends ChangeNotifier {
           .where((p) =>
               p.series.any((s) => s?.points != null && s!.points!.isNotEmpty))
           .length;
-      _status = 'Shot $_shotText: ${firstErr ?? "$loaded panels with data"}';
-      _fetchTopInfo(); // async fetch Ip/Pulse/It/Time (matching C++ scheduleTopInfoUpdate)
+      _status = 'Shot $requestShot: ${firstErr ?? "$loaded panels with data"}';
+      unawaited(_fetchTopInfo(requestShot, generation));
     } catch (e) {
+      if (!_isCurrentFetch(generation)) return;
       _fetching = false;
       _status = 'Error: $e';
     }
-    notifyListeners();
+    if (_isCurrentFetch(generation)) notifyListeners();
   }
 
   void stopFetch() {
+    _fetchGeneration++;
     _fetching = false;
     _status = 'Stopped';
     notifyListeners();
   }
 
-  void fetchSinglePanel(int plotIdx) async {
+  Future<void> fetchSinglePanel(int plotIdx) async {
     if (_columns.isEmpty) return;
     var targetCol = -1, targetRow = -1;
     var pIdx = 0;
@@ -839,48 +943,21 @@ class AppState extends ChangeNotifier {
     }
     if (targetCol < 0) return;
 
-    if (plotIdx < _plots.length) {
-      for (final s in _plots[plotIdx].series) {
-        if (s != null) {
-          s.points = null;
-          s.error = null;
-        }
-      }
-    }
-
+    final generation = ++_fetchGeneration;
+    final configJson = _buildSignalConfigJson();
+    final dataMode = _dataMode.toString();
+    final sshSettings = _buildSshSettingsJson();
     _fetching = true;
     _status = 'Fetching panel ($targetCol, $targetRow)...';
     notifyListeners();
 
-    await WidgetsBinding.instance.endOfFrame;
-    await Future.delayed(const Duration(milliseconds: 50));
-
     try {
-      final cols = _columns
-          .map((col) => col.map((p) {
-                final m = Map<String, dynamic>.from(p);
-                m['shot'] = _shotText;
-                m['extraction_points'] ??= 2000;
-                m['grid'] ??= true;
-                return m;
-              }).toList())
-          .toList();
-
-      final sshSettings = _sshMode > 0 && _sshHost.isNotEmpty
-          ? jsonEncode({
-              'host': _sshHost,
-              'port': _sshPort,
-              'user': _sshUser,
-              'password': _sshPass,
-              'identity_file': _sshIdentity,
-              'mode': _sshMode
-            })
-          : '';
-      final raw = RustBridge.instance.fetchSigSsh(
-          jsonEncode({'columns': cols}), _dataMode.toString(), sshSettings);
+      final raw = await _signalFetchWorker(configJson, dataMode, sshSettings);
+      if (!_isCurrentFetch(generation)) return;
       if (raw.isNotEmpty) {
         final json = jsonDecode(raw);
         if (json is List) {
+          _clearPanelSeries(plotIdx);
           String? firstErr;
           for (final sig in json) {
             if (sig is Map) {
@@ -904,17 +981,20 @@ class AppState extends ChangeNotifier {
       _fetching = false;
       _status = 'Updated panel ($targetCol, $targetRow)';
     } catch (e) {
+      if (!_isCurrentFetch(generation)) return;
       _fetching = false;
       _status = 'Error: $e';
     }
-    notifyListeners();
+    if (_isCurrentFetch(generation)) notifyListeners();
   }
 
-  Future<void> _fetchTopInfo() async {
-    if (_loginApiUrl.isEmpty || _shotText.isEmpty || _authToken.isEmpty) return;
+  Future<void> _fetchTopInfo(String shot, int generation) async {
+    if (_loginApiUrl.isEmpty || shot.isEmpty || _authToken.isEmpty) return;
+    final apiUrl = _loginApiUrl;
+    final token = _authToken;
     try {
-      final raw =
-          RustBridge.instance.fetchSInfo(_loginApiUrl, _authToken, _shotText);
+      final raw = await _shotInfoFetchWorker(apiUrl, token, shot);
+      if (!_isCurrentFetch(generation)) return;
       if (raw.isNotEmpty && !raw.contains('"error"')) {
         final json = jsonDecode(raw);
         if (json is Map) {
@@ -929,7 +1009,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> fetchLatestShot() async {
-    _clearAllSeriesPoints();
+    final generation = ++_fetchGeneration;
     _fetching = true;
     _status = 'Fetching latest shot...';
     notifyListeners();
@@ -961,6 +1041,7 @@ class AppState extends ChangeNotifier {
         req.write('{}');
         final resp = await req.close();
         final body = await resp.transform(utf8.decoder).join();
+        if (!_isCurrentFetch(generation)) return;
         final json = jsonDecode(body);
         if (json is! Map) throw 'unexpected: $body';
         if (json['code'] != '20000' && json['code'] != 20000)
@@ -981,6 +1062,7 @@ class AppState extends ChangeNotifier {
           notifyListeners();
           startRefresh();
         } else {
+          _fetching = false;
           _status = 'No shot found';
           notifyListeners();
         }
@@ -988,6 +1070,8 @@ class AppState extends ChangeNotifier {
         client.close();
       }
     } catch (e) {
+      if (!_isCurrentFetch(generation)) return;
+      _fetching = false;
       _status = 'Shot fetch: $e';
       notifyListeners();
     }
@@ -1035,6 +1119,14 @@ class AppState extends ChangeNotifier {
       }
       _plots[pi].series[sigIdx] = SeriesData(points: pts, error: err);
     }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _fetchGeneration++;
+    _shotCtrl.dispose();
+    super.dispose();
   }
 }
 

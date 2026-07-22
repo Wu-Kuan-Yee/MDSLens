@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -69,6 +71,65 @@ void main() {
     expect(second.columns.map((column) => column.length), [1, 2]);
     expect(second.columns[0][0]['title'], 'Saved panel');
     expect(second.columns[0][0]['xmin'], isNull);
+  });
+
+  test('Waveform loading stays interactive and discards stale results',
+      () async {
+    final pending = <Completer<String>>[];
+    final requestedConfigs = <String>[];
+    final app = AppState(
+      signalFetchWorker: (configJson, dataMode, sshSettings) {
+        requestedConfigs.add(configJson);
+        final result = Completer<String>();
+        pending.add(result);
+        return result.future;
+      },
+    );
+    await app.preferencesReady;
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 10],
+          [1, 11]
+        ],
+        null);
+
+    app.shotText = '163701';
+    app.startRefresh();
+    expect(app.fetching, isTrue);
+    expect(pending, hasLength(1));
+    expect(requestedConfigs.single, contains('163701'));
+
+    app.interactionMode = 1;
+    expect(app.interactionMode, 1);
+    expect(app.fetching, isTrue);
+    expect(app.plots[0].series[0]!.points![0][1], 10);
+
+    app.shotText = '163702';
+    expect(app.fetching, isFalse);
+    app.startRefresh();
+    expect(app.fetching, isTrue);
+    expect(pending, hasLength(2));
+    expect(requestedConfigs.last, contains('163702'));
+
+    pending[0].complete(
+      '[{"column":0,"row":0,"signal":0,'
+      '"series":{"points":[[0,111],[1,112]],"error":""}}]',
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(app.fetching, isTrue);
+    expect(app.plots[0].series[0]!.points![0][1], 10);
+
+    pending[1].complete(
+      '[{"column":0,"row":0,"signal":0,'
+      '"series":{"points":[[0,222],[1,223]],"error":""}}]',
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(app.fetching, isFalse);
+    expect(app.plots[0].series[0]!.points![0][1], 222);
+    expect(app.status, contains('163702'));
   });
 
   test('Responsive plot columns preserve order across screen sizes', () {
