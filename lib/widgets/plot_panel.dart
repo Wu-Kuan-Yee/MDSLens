@@ -1027,12 +1027,18 @@ class _PlotPanelState extends State<PlotPanel> {
         final sc = (p['signal_specs'] as List?)?.length ?? 1;
         final oldSeries =
             idx < curPlots.length ? curPlots[idx].series : <SeriesData?>[];
+        final oldPlot = idx < curPlots.length ? curPlots[idx] : null;
         newPlots.add(PlotData(
           title: p['title']?.toString() ?? '',
           xLabel: p['x_label']?.toString() ?? 's',
           yLabel: p['y_label']?.toString() ?? 'a.u.',
           series: _resizeSeries(oldSeries, sc > 0 ? sc : 1),
-        ));
+        )..setViewRange(
+            oldPlot?.viewMinX ?? double.nan,
+            oldPlot?.viewMaxX ?? double.nan,
+            oldPlot?.viewMinY ?? double.nan,
+            oldPlot?.viewMaxY ?? double.nan,
+          ));
         idx++;
       }
     }
@@ -1317,12 +1323,34 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
     widget.panel['custom_x_range'] = _customX;
     widget.panel['custom_y_range'] = _customY;
     if (_customX) {
-      widget.panel['xmin'] = double.tryParse(_xMinCtrl.text) ?? double.nan;
-      widget.panel['xmax'] = double.tryParse(_xMaxCtrl.text) ?? double.nan;
+      final min = double.tryParse(_xMinCtrl.text);
+      final max = double.tryParse(_xMaxCtrl.text);
+      if (min != null && max != null && min.isFinite && max.isFinite) {
+        widget.panel['xmin'] = min;
+        widget.panel['xmax'] = max;
+      } else {
+        widget.panel['custom_x_range'] = false;
+        widget.panel.remove('xmin');
+        widget.panel.remove('xmax');
+      }
+    } else {
+      widget.panel.remove('xmin');
+      widget.panel.remove('xmax');
     }
     if (_customY) {
-      widget.panel['ymin'] = double.tryParse(_yMinCtrl.text) ?? double.nan;
-      widget.panel['ymax'] = double.tryParse(_yMaxCtrl.text) ?? double.nan;
+      final min = double.tryParse(_yMinCtrl.text);
+      final max = double.tryParse(_yMaxCtrl.text);
+      if (min != null && max != null && min.isFinite && max.isFinite) {
+        widget.panel['ymin'] = min;
+        widget.panel['ymax'] = max;
+      } else {
+        widget.panel['custom_y_range'] = false;
+        widget.panel.remove('ymin');
+        widget.panel.remove('ymax');
+      }
+    } else {
+      widget.panel.remove('ymin');
+      widget.panel.remove('ymax');
     }
     widget.onSave();
     Navigator.pop(context);

@@ -11,8 +11,11 @@ import 'package:mdsscope/widgets/plot_grid.dart';
 import 'package:mdsscope/widgets/responsive_plot_layout.dart';
 import 'package:mdsscope/widgets/toolbar.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   test('Release versions are compared semantically', () {
     expect(compareVersions('v7.1.0', '7.0.9'), greaterThan(0));
     expect(compareVersions('7.0', '7.0.0'), 0);
@@ -28,6 +31,44 @@ void main() {
     expect(theme.textTheme.bodyMedium?.fontFamily, 'Courier New');
     expect(theme.textTheme.bodyMedium?.fontSize, 18);
     expect(theme.textTheme.labelLarge?.fontSize, 18);
+  });
+
+  test('Manual application settings survive an application restart', () async {
+    SharedPreferences.setMockInitialValues({
+      'shotHistory': '["163700","163699"]',
+    });
+
+    final first = AppState();
+    await first.preferencesReady;
+    first.dataMode = 2;
+    first.interactionMode = 1;
+    first.themeMode = 0;
+    first.shotText = '163701';
+    first.applyFontSettings('Courier New', 17, 14, 13, 16);
+    first.addWebBookmark('Status', 'http://10.0.0.8/status');
+    first.applyLayoutList([1, 2]);
+    first.columns[0][0]['title'] = 'Saved panel';
+    first.columns[0][0]['custom_x_range'] = true;
+    first.columns[0][0]['xmin'] = double.nan;
+    first.rebuild();
+    await first.savePreferences();
+
+    final second = AppState();
+    await second.preferencesReady;
+
+    expect(second.dataMode, 2);
+    expect(second.interactionMode, 1);
+    expect(second.themeMode, 0);
+    expect(second.shotText, '163701');
+    expect(second.fontFamily, 'Courier New');
+    expect(second.fontLegendSize, 17);
+    expect(second.webBookmarks, [
+      {'Status': 'http://10.0.0.8/status'}
+    ]);
+    expect(second.shotHistory, ['163700', '163699']);
+    expect(second.columns.map((column) => column.length), [1, 2]);
+    expect(second.columns[0][0]['title'], 'Saved panel');
+    expect(second.columns[0][0]['xmin'], isNull);
   });
 
   test('Responsive plot columns preserve order across screen sizes', () {

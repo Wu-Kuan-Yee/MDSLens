@@ -61,6 +61,7 @@ class AppState extends ChangeNotifier {
   set shotText(String v) {
     _shotText = v;
     _shotCtrl.text = v;
+    savePreferences();
     notifyListeners();
   }
 
@@ -74,6 +75,8 @@ class AppState extends ChangeNotifier {
     if (_shotHistory.length > 20) _shotHistory.removeLast();
   }
 
+  late final Future<void> preferencesReady;
+
   AppState() {
     _shotCtrl.addListener(() {
       if (_shotCtrl.text != _shotText) {
@@ -83,7 +86,7 @@ class AppState extends ChangeNotifier {
       }
     });
     loadDefaultConfig();
-    initPreferences();
+    preferencesReady = initPreferences();
   }
 
   void setShotFromApi(String v) {
@@ -91,6 +94,7 @@ class AppState extends ChangeNotifier {
     _shotCtrl.text = v;
     // Move cursor to end
     _shotCtrl.selection = TextSelection.collapsed(offset: v.length);
+    savePreferences();
     notifyListeners();
   }
 
@@ -108,6 +112,7 @@ class AppState extends ChangeNotifier {
   int get dataMode => _dataMode;
   set dataMode(int v) {
     _dataMode = v;
+    savePreferences();
     notifyListeners();
   }
 
@@ -130,6 +135,7 @@ class AppState extends ChangeNotifier {
       pointLocked = false;
       clearCrosshair();
     }
+    savePreferences();
     notifyListeners();
   }
 
@@ -138,6 +144,7 @@ class AppState extends ChangeNotifier {
   int get themeMode => _themeMode;
   set themeMode(int v) {
     _themeMode = v;
+    savePreferences();
     notifyListeners();
   }
 
@@ -170,12 +177,14 @@ class AppState extends ChangeNotifier {
   List<Map<String, String>> get webBookmarks => _webBookmarks;
   void addWebBookmark(String alias, String url) {
     _webBookmarks.add({alias: url});
+    savePreferences();
     notifyListeners();
   }
 
   void removeWebBookmark(int i) {
     if (i >= 0 && i < _webBookmarks.length) {
       _webBookmarks.removeAt(i);
+      savePreferences();
       notifyListeners();
     }
   }
@@ -206,6 +215,7 @@ class AppState extends ChangeNotifier {
     }
     _columns = newCols;
     _rebuildPlotsFromColumns();
+    savePreferences();
     notifyListeners();
   }
 
@@ -277,6 +287,7 @@ class AppState extends ChangeNotifier {
   }
 
   void rebuild() {
+    savePreferences();
     notifyListeners();
   }
 
@@ -415,7 +426,10 @@ class AppState extends ChangeNotifier {
       _sshPass = prefs.getString('sshPass') ?? _sshPass;
       _sshIdentity = prefs.getString('sshIdentity') ?? _sshIdentity;
       _sshMode = prefs.getInt('sshMode') ?? _sshMode;
-      _themeMode = prefs.getInt('themeMode') ?? _themeMode;
+      _dataMode = (prefs.getInt('dataMode') ?? _dataMode).clamp(0, 2);
+      _interactionMode =
+          (prefs.getInt('interactionMode') ?? _interactionMode).clamp(0, 1);
+      _themeMode = (prefs.getInt('themeMode') ?? _themeMode).clamp(0, 2);
       _fontFamily = prefs.getString('fontFamily') ?? _fontFamily;
       _fontLegendSize = prefs.getInt('fontLegendSize') ?? _fontLegendSize;
       _fontAxisSize = prefs.getInt('fontAxisSize') ?? _fontAxisSize;
@@ -429,6 +443,21 @@ class AppState extends ChangeNotifier {
           _webBookmarks.clear();
           for (final item in list) {
             if (item is Map) _webBookmarks.add(Map<String, String>.from(item));
+          }
+        }
+      }
+
+      final shotHistoryJson = prefs.getString('shotHistory');
+      if (shotHistoryJson != null) {
+        final list = jsonDecode(shotHistoryJson);
+        if (list is List) {
+          _shotHistory
+            ..clear()
+            ..addAll(list.map((item) => item.toString()).where(
+                  (item) => item.isNotEmpty,
+                ));
+          if (_shotHistory.length > 20) {
+            _shotHistory.removeRange(20, _shotHistory.length);
           }
         }
       }
@@ -462,6 +491,8 @@ class AppState extends ChangeNotifier {
       await prefs.setString('sshPass', _sshPass);
       await prefs.setString('sshIdentity', _sshIdentity);
       await prefs.setInt('sshMode', _sshMode);
+      await prefs.setInt('dataMode', _dataMode);
+      await prefs.setInt('interactionMode', _interactionMode);
       await prefs.setInt('themeMode', _themeMode);
       await prefs.setString('fontFamily', _fontFamily);
       await prefs.setInt('fontLegendSize', _fontLegendSize);
@@ -469,10 +500,25 @@ class AppState extends ChangeNotifier {
       await prefs.setInt('fontUnitSize', _fontUnitSize);
       await prefs.setInt('fontUiSize', _fontUiSize);
       await prefs.setString('webBookmarks', jsonEncode(_webBookmarks));
+      await prefs.setString('shotHistory', jsonEncode(_shotHistory));
 
-      final configJson = jsonEncode({'columns': _columns, 'shot': _shotText});
+      final configJson = jsonEncode({
+        'columns': _jsonSafeValue(_columns),
+        'shot': _shotText,
+      });
       await prefs.setString('lastConfigJson', configJson);
     } catch (_) {}
+  }
+
+  dynamic _jsonSafeValue(dynamic value) {
+    if (value is double && !value.isFinite) return null;
+    if (value is List) return value.map(_jsonSafeValue).toList();
+    if (value is Map) {
+      return value.map(
+        (key, item) => MapEntry(key.toString(), _jsonSafeValue(item)),
+      );
+    }
+    return value;
   }
 
   void _applyConfigJsonString(String raw) {
@@ -665,6 +711,7 @@ class AppState extends ChangeNotifier {
       _shotText = _shotCtrl.text.trim();
     }
     _addToHistory(_shotText);
+    savePreferences();
     _viewResetId++;
     _doFetch();
   }
@@ -676,6 +723,7 @@ class AppState extends ChangeNotifier {
       _shotText = _shotCtrl.text.trim();
     }
     _addToHistory(_shotText);
+    savePreferences();
     _doFetch();
   }
 
