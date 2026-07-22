@@ -15,6 +15,7 @@ class LoginDialog extends StatelessWidget {
     final passCtrl = TextEditingController(text: app.loginPass);
     var loading = false;
     var error = '';
+    var notice = app.hasActiveSession ? 'Signed in' : 'Not signed in';
 
     Future<void> doLogin(
         void Function(void Function()) setState, BuildContext ctx) async {
@@ -28,6 +29,7 @@ class LoginDialog extends StatelessWidget {
       setState(() {
         loading = true;
         error = '';
+        notice = 'Connecting...';
       });
       try {
         await app.loginAndLoadLatest(
@@ -40,9 +42,19 @@ class LoginDialog extends StatelessWidget {
         if (!ctx.mounted) return;
         setState(() {
           loading = false;
+          notice = 'Not signed in';
           error = 'Error: $e';
         });
       }
+    }
+
+    void doLogout(void Function(void Function()) setState) {
+      app.logout();
+      setState(() {
+        loading = false;
+        error = '';
+        notice = 'Signed out';
+      });
     }
 
     showDialog(
@@ -50,66 +62,100 @@ class LoginDialog extends StatelessWidget {
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
           builder: (ctx, setState) => AlertDialog(
-                title: Text(
-                    loading ? 'Login — Connecting...' : 'Login — EAST API'),
-                content: Column(mainAxisSize: MainAxisSize.min, children: [
-                  if (error.isNotEmpty)
-                    SelectableText(error,
-                        style:
-                            const TextStyle(color: Colors.red, fontSize: 13)),
-                  if (error.isNotEmpty) const SizedBox(height: 8),
-                  if (loading)
-                    const Row(children: [
-                      SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2)),
-                      SizedBox(width: 12),
-                      Text('Logging in...')
-                    ])
-                  else ...[
-                    TextField(
+                title: const Text('MdsScope Account'),
+                content: SingleChildScrollView(
+                  child: SizedBox(
+                    width: 420,
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Row(children: [
+                        Icon(
+                          app.hasActiveSession
+                              ? Icons.check_circle_rounded
+                              : Icons.account_circle_outlined,
+                          color: app.hasActiveSession
+                              ? const Color(0xFF16A34A)
+                              : Theme.of(ctx).colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(notice)),
+                        if (loading)
+                          const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                      ]),
+                      if (error.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        SelectableText(error,
+                            style: const TextStyle(
+                                color: Colors.red, fontSize: 13)),
+                      ],
+                      const SizedBox(height: 12),
+                      TextField(
+                        key: const ValueKey('login-api-url'),
                         controller: apiCtrl,
+                        enabled: !loading,
                         decoration: const InputDecoration(labelText: 'API URL'),
-                        onSubmitted: (_) => doLogin(setState, ctx)),
-                    TextField(
+                        keyboardType: TextInputType.url,
+                        onSubmitted: (_) => doLogin(setState, ctx),
+                      ),
+                      TextField(
+                        key: const ValueKey('login-username'),
                         controller: userCtrl,
+                        enabled: !loading,
                         decoration:
                             const InputDecoration(labelText: 'Username'),
-                        onSubmitted: (_) => doLogin(setState, ctx)),
-                    TextField(
+                        textInputAction: TextInputAction.next,
+                        onSubmitted: (_) => doLogin(setState, ctx),
+                      ),
+                      TextField(
+                        key: const ValueKey('login-password'),
                         controller: passCtrl,
+                        enabled: !loading,
                         decoration:
                             const InputDecoration(labelText: 'Password'),
                         obscureText: true,
-                        onSubmitted: (_) => doLogin(setState, ctx)),
-                    const SizedBox(height: 6),
-                    Row(children: [
-                      Checkbox(
-                        value: app.rememberLogin,
-                        onChanged: (v) {
-                          if (v != null) setState(() => app.rememberLogin = v);
-                        },
+                        onSubmitted: (_) => doLogin(setState, ctx),
                       ),
-                      const Text('Remember Credentials',
-                          style: TextStyle(fontSize: 13)),
+                      const SizedBox(height: 6),
+                      Row(children: [
+                        Checkbox(
+                          value: app.rememberLogin,
+                          onChanged: loading
+                              ? null
+                              : (v) {
+                                  if (v != null) {
+                                    setState(() => app.rememberLogin = v);
+                                  }
+                                },
+                        ),
+                        const Expanded(
+                          child: Text('Remember Credentials',
+                              style: TextStyle(fontSize: 13)),
+                        ),
+                      ]),
                     ]),
-                  ],
-                ]),
-                actions: loading
-                    ? [
-                        TextButton(
-                            onPressed: () => Navigator.pop(ctx),
-                            child: const Text('Cancel')),
-                      ]
-                    : [
-                        TextButton(
-                            onPressed: () => Navigator.pop(ctx),
-                            child: const Text('Cancel')),
-                        FilledButton(
-                            onPressed: () => doLogin(setState, ctx),
-                            child: const Text('Login')),
-                      ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancel'),
+                  ),
+                  OutlinedButton(
+                    key: const ValueKey('login-dialog-logout'),
+                    onPressed: loading || !app.hasActiveSession
+                        ? null
+                        : () => doLogout(setState),
+                    child: const Text('Logout'),
+                  ),
+                  FilledButton(
+                    key: const ValueKey('login-dialog-login'),
+                    onPressed: loading ? null : () => doLogin(setState, ctx),
+                    child: const Text('Login'),
+                  ),
+                ],
               )),
     );
   }

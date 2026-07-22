@@ -119,6 +119,7 @@ void main() {
       },
     );
     await app.preferencesReady;
+    app.setLoggedIn(true, 'test-token');
     app.updatePlotSeriesByColRow(
         0,
         0,
@@ -163,6 +164,105 @@ void main() {
     expect(app.fetching, isFalse);
     expect(app.plots[0].series[0]!.points![0][1], 222);
     expect(app.status, contains('163702'));
+  });
+
+  test('Logout preserves loaded data and blocks authenticated operations',
+      () async {
+    var signalRequests = 0;
+    var latestRequests = 0;
+    final app = AppState(
+      signalFetchWorker: (configJson, dataMode, sshSettings) async {
+        signalRequests++;
+        return '[]';
+      },
+      latestShotWorker: (apiUrl, token, sshSettings) async {
+        latestRequests++;
+        return {'shot': 170100};
+      },
+    );
+    await app.preferencesReady;
+    app.setLoggedIn(true, 'valid-token');
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 12],
+          [1, 13],
+        ],
+        null);
+
+    app.logout();
+    app.startRefresh();
+    await app.fetchLatestShot();
+
+    expect(app.hasActiveSession, isFalse);
+    expect(signalRequests, 0);
+    expect(latestRequests, 0);
+    expect(app.plots[0].series[0]!.points, [
+      [0, 12],
+      [1, 13],
+    ]);
+    expect(app.status, contains('Login required'));
+  });
+
+  test('Explicit logout suppresses automatic sign-in after restart', () async {
+    SharedPreferences.setMockInitialValues({
+      'rememberLogin': true,
+      'explicitlyLoggedOut': true,
+      'loginApiUrl': 'http://east.example/api',
+      'loginUser': 'saved-user',
+      'loginPass': 'saved-password',
+      'loggedIn': false,
+    });
+    var loginRequests = 0;
+    final app = AppState(
+      loginWorker: (apiUrl, user, password, sshSettings) async {
+        loginRequests++;
+        return (token: 'unexpected-token', usedSsh: false);
+      },
+    );
+
+    await app.initializeStartupSession();
+
+    expect(loginRequests, 0);
+    expect(app.hasActiveSession, isFalse);
+  });
+
+  testWidgets('Signed-in account button opens a login panel with real logout',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    app.setLoggedIn(true, 'valid-token');
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+
+    expect(find.byTooltip('Account — signed in'), findsOneWidget);
+    await tester.tap(find.byTooltip('Account — signed in'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('login-api-url')), findsOneWidget);
+    expect(find.byKey(const ValueKey('login-username')), findsOneWidget);
+    expect(find.byKey(const ValueKey('login-password')), findsOneWidget);
+    expect(find.byKey(const ValueKey('login-dialog-login')), findsOneWidget);
+    expect(find.byKey(const ValueKey('login-dialog-logout')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('login-dialog-logout')));
+    await tester.pump();
+    expect(app.hasActiveSession, isFalse);
+    final logout = tester.widget<OutlinedButton>(
+      find.byKey(const ValueKey('login-dialog-logout')),
+    );
+    expect(logout.onPressed, isNull);
+    expect(find.text('Signed out'), findsOneWidget);
   });
 
   test('Startup signs in, fetches the latest shot, and loads its waveforms',

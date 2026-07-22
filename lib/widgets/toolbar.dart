@@ -140,8 +140,14 @@ class ToolbarWidget extends StatelessWidget {
           tooltip: 'About MdsScope',
           onPressed: () => AboutDialogWidget.show(context),
         ),
-        _btn(context, app.loggedIn ? 'Logout' : 'Login',
-            () => app.loggedIn ? app.logout() : LoginDialog.show(context)),
+        _toolbarIconButton(
+          context,
+          icon: Icons.account_box_rounded,
+          tooltip: app.hasActiveSession ? 'Account — signed in' : 'Login',
+          onPressed: () => LoginDialog.show(context),
+          active: app.hasActiveSession,
+          activeColor: const Color(0xFF16A34A),
+        ),
         _sshBtn(context, app),
       ],
     );
@@ -1181,57 +1187,55 @@ class ToolbarWidget extends StatelessWidget {
     ]);
   }
 
-  Widget _btn(BuildContext ctx, String label, VoidCallback onTap) {
-    final app = ctx.read<AppState>();
-    return ElevatedButton(
-        onPressed: onTap,
-        style: ElevatedButton.styleFrom(
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            minimumSize: const Size(0, 44),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            textStyle: TextStyle(
-                fontFamily: app.effectiveFontFamily,
-                fontSize: app.fontUiSize.toDouble(),
-                fontWeight: FontWeight.w500)),
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(label, maxLines: 1),
-        ));
-  }
-
   Widget _toolbarIconButton(
     BuildContext context, {
     required IconData icon,
     required String tooltip,
     required VoidCallback onPressed,
     bool active = false,
+    Color? activeColor,
   }) {
     final colors = Theme.of(context).colorScheme;
+    final highlight = activeColor ?? colors.primary;
     return Semantics(
       button: true,
       selected: active,
       label: tooltip,
       child: Tooltip(
         message: tooltip,
-        child: OutlinedButton(
-          onPressed: onPressed,
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(44, 44),
-            padding: EdgeInsets.zero,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            side: BorderSide(
-              color: active ? colors.primary : colors.outlineVariant,
-              width: active ? 1.5 : 1,
-            ),
-            backgroundColor: active ? colors.primaryContainer : null,
-            foregroundColor:
-                active ? colors.onPrimaryContainer : colors.onSurface,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: active
+                ? [
+                    BoxShadow(
+                      color: highlight.withValues(alpha: 0.28),
+                      blurRadius: 9,
+                      spreadRadius: 1,
+                    ),
+                  ]
+                : null,
           ),
-          child: Icon(icon, size: 22),
+          child: OutlinedButton(
+            onPressed: onPressed,
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(44, 44),
+              padding: EdgeInsets.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+              side: BorderSide(
+                color: active ? highlight : colors.outlineVariant,
+                width: active ? 1.5 : 1,
+              ),
+              backgroundColor: active
+                  ? Color.alphaBlend(
+                      highlight.withValues(alpha: 0.18), colors.surface)
+                  : null,
+              foregroundColor: active ? highlight : colors.onSurface,
+            ),
+            child: Icon(icon, size: 22),
+          ),
         ),
       ),
     );

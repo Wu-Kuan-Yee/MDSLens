@@ -398,6 +398,8 @@ class AppState extends ChangeNotifier {
   bool get loggedIn => _loggedIn;
   String _authToken = '';
   String get authToken => _authToken;
+  bool get hasActiveSession => _loggedIn && _authToken.trim().isNotEmpty;
+  bool _explicitlyLoggedOut = false;
   String _loginApiUrl = 'http://202.127.204.26:80/api';
   String get loginApiUrl => _loginApiUrl;
   String _loginUser = '';
@@ -583,6 +585,7 @@ class AppState extends ChangeNotifier {
     _invalidateFetchForSettingsChange();
     _loggedIn = v;
     _authToken = token;
+    _explicitlyLoggedOut = !v;
     savePreferences();
     notifyListeners();
   }
@@ -592,6 +595,7 @@ class AppState extends ChangeNotifier {
     _invalidateFetchForSettingsChange();
     _loggedIn = false;
     _authToken = '';
+    _explicitlyLoggedOut = true;
     savePreferences();
     setStatus('Logged out');
   }
@@ -628,6 +632,7 @@ class AppState extends ChangeNotifier {
       _loginPass = password;
       _loggedIn = true;
       _authToken = result.token;
+      _explicitlyLoggedOut = false;
       _sshConnected = result.usedSsh;
       _status = 'Logged in as $user';
       await savePreferences();
@@ -648,7 +653,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> initializeStartupSession() async {
     await preferencesReady;
-    if (_disposed || !_rememberLogin) return;
+    if (_disposed || !_rememberLogin || _explicitlyLoggedOut) return;
     if (_loginUser.trim().isNotEmpty) {
       try {
         await loginAndLoadLatest(
@@ -672,6 +677,8 @@ class AppState extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       _invalidateFetchForSettingsChange();
       _rememberLogin = prefs.getBool('rememberLogin') ?? true;
+      _explicitlyLoggedOut =
+          prefs.getBool('explicitlyLoggedOut') ?? _explicitlyLoggedOut;
       _loginApiUrl = prefs.getString('loginApiUrl') ?? _loginApiUrl;
       _loginUser = prefs.getString('loginUser') ?? _loginUser;
       if (_rememberLogin) {
@@ -733,6 +740,7 @@ class AppState extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('rememberLogin', _rememberLogin);
+      await prefs.setBool('explicitlyLoggedOut', _explicitlyLoggedOut);
       await prefs.setString('loginApiUrl', _loginApiUrl);
       await prefs.setString('loginUser', _loginUser);
       if (_rememberLogin) {
@@ -964,7 +972,17 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  bool _requireActiveSession(String action) {
+    if (hasActiveSession) return true;
+    _fetchGeneration++;
+    _fetching = false;
+    _status = 'Login required to $action.';
+    notifyListeners();
+    return false;
+  }
+
   void startRefresh() {
+    if (!_requireActiveSession('load a shot')) return;
     if (_columns.isEmpty) return;
     _clearCustomReadModes();
     if (_shotCtrl.text.trim().isNotEmpty) {
@@ -977,6 +995,7 @@ class AppState extends ChangeNotifier {
   }
 
   void startRefreshPreserveView() {
+    if (!_requireActiveSession('load a shot')) return;
     if (_columns.isEmpty) return;
     _clearCustomReadModes();
     if (_shotCtrl.text.trim().isNotEmpty) {
@@ -1034,6 +1053,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _doFetch() async {
+    if (!_requireActiveSession('load waveforms')) return;
     final generation = ++_fetchGeneration;
     final requestShot = _shotText;
     final configJson = _buildSignalConfigJson();
@@ -1103,6 +1123,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> fetchSinglePanel(int plotIdx) async {
+    if (!_requireActiveSession('reload a panel')) return;
     if (_columns.isEmpty) return;
     var targetCol = -1, targetRow = -1;
     var pIdx = 0;
@@ -1185,6 +1206,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> fetchLatestShot() async {
+    if (!_requireActiveSession('load the latest shot')) return;
     final generation = ++_fetchGeneration;
     final apiUrl = _loginApiUrl;
     final token = _authToken;
