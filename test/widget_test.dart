@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:mdsscope/models/app_state.dart';
+import 'package:mdsscope/widgets/plot_panel.dart';
 import 'package:mdsscope/widgets/plot_grid.dart';
 import 'package:provider/provider.dart';
 
@@ -48,5 +49,67 @@ void main() {
     expect(charts, hasLength(2));
     expect(charts[0].data.extraLinesData.horizontalLines.single.y, 12);
     expect(charts[1].data.extraLinesData.horizontalLines.single.y, 22);
+  });
+
+  testWidgets('Two-finger gestures pan and zoom a plot in Zoom/Move mode',
+      (tester) async {
+    final app = AppState();
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 0],
+          [5, 5],
+          [10, 10]
+        ],
+        null);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                  width: 500, height: 400, child: PlotPanel(plotIdx: 0)),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    LineChart chart() => tester.widget<LineChart>(find.byType(LineChart));
+    final initialWidth = chart().data.maxX - chart().data.minX;
+
+    final first = await tester.startGesture(const Offset(220, 200), pointer: 1);
+    final second =
+        await tester.startGesture(const Offset(280, 200), pointer: 2);
+    await tester.pump();
+    await first.moveTo(const Offset(180, 200));
+    await second.moveTo(const Offset(320, 200));
+    await tester.pump();
+    await first.up();
+    await second.up();
+    await tester.pump();
+
+    final zoomedWidth = chart().data.maxX - chart().data.minX;
+    expect(zoomedWidth, lessThan(initialWidth));
+
+    final centerBeforePan = (chart().data.minX + chart().data.maxX) / 2;
+    final panFirst =
+        await tester.startGesture(const Offset(220, 200), pointer: 3);
+    final panSecond =
+        await tester.startGesture(const Offset(280, 200), pointer: 4);
+    await tester.pump();
+    await panFirst.moveBy(const Offset(40, 0));
+    await panSecond.moveBy(const Offset(40, 0));
+    await tester.pump();
+    await panFirst.up();
+    await panSecond.up();
+    await tester.pump();
+
+    final centerAfterPan = (chart().data.minX + chart().data.maxX) / 2;
+    expect(centerAfterPan, lessThan(centerBeforePan));
   });
 }

@@ -133,34 +133,31 @@ class _PlotPanelState extends State<PlotPanel> {
           if (mode != 0 || _midPanning || _inRubberBand) return;
           setState(() {
             if (_viewMinX.isNaN) _initViewToData(plot);
-            if (details.scale != 1.0) {
-              final deltaScale = details.scale / _lastScale;
-              _lastScale = details.scale;
-              final factor = 1.0 / deltaScale;
-              final localF = details.localFocalPoint;
-              final cx = _pxToDataX(localF.dx);
-              final cy = _pxToDataY(localF.dy);
-              _viewMinX = cx - (cx - _viewMinX) * factor;
-              _viewMaxX = cx + (_viewMaxX - cx) * factor;
-              _viewMinY = cy - (cy - _viewMinY) * factor;
-              _viewMaxY = cy + (_viewMaxY - cy) * factor;
-            } else {
-              final lb = _listenerBox;
-              final cb = _chartBox;
-              if (lb != null &&
-                  cb != null &&
-                  cb.size.width > 50 &&
-                  cb.size.height > 32) {
-                final gw = cb.size.width - 50;
-                final gh = cb.size.height - 32;
-                final xScale = (_viewMaxX - _viewMinX) / gw;
-                final yScale = (_viewMaxY - _viewMinY) / gh;
-                _viewMinX -= details.focalPointDelta.dx * xScale;
-                _viewMaxX -= details.focalPointDelta.dx * xScale;
-                _viewMinY += details.focalPointDelta.dy * yScale;
-                _viewMaxY += details.focalPointDelta.dy * yScale;
-              }
+            final cb = _chartBox;
+            if (cb == null || cb.size.width <= 50 || cb.size.height <= 32) {
+              return;
             }
+
+            final gridWidth = cb.size.width - 50;
+            final gridHeight = cb.size.height - 32;
+            final xScale = (_viewMaxX - _viewMinX) / gridWidth;
+            final yScale = (_viewMaxY - _viewMinY) / gridHeight;
+            _viewMinX -= details.focalPointDelta.dx * xScale;
+            _viewMaxX -= details.focalPointDelta.dx * xScale;
+            _viewMinY += details.focalPointDelta.dy * yScale;
+            _viewMaxY += details.focalPointDelta.dy * yScale;
+
+            final deltaScale = details.scale / _lastScale;
+            _lastScale = details.scale;
+            if ((deltaScale - 1).abs() < 0.0001) return;
+            final factor = 1.0 / deltaScale;
+            final localFocalPoint = details.localFocalPoint;
+            final cx = _pxToDataX(localFocalPoint.dx);
+            final cy = _pxToDataY(localFocalPoint.dy);
+            _viewMinX = cx - (cx - _viewMinX) * factor;
+            _viewMaxX = cx + (_viewMaxX - cx) * factor;
+            _viewMinY = cy - (cy - _viewMinY) * factor;
+            _viewMaxY = cy + (_viewMaxY - cy) * factor;
           });
         },
         onSecondaryTapUp: (details) =>
@@ -352,36 +349,39 @@ class _PlotPanelState extends State<PlotPanel> {
                     border: Border.all(
                         color: theme.dividerColor.withValues(alpha: 0.5),
                         width: 1)),
-                lineTouchData: LineTouchData(
-                  enabled: true,
-                  touchCallback: (event, response) {
-                    final a = context.read<AppState>();
-                    if (a.interactionMode != 1) return;
-                    if (a.pointLocked) return;
-                    if (response?.lineBarSpots != null &&
-                        response!.lineBarSpots!.isNotEmpty) {
-                      final spot = response.lineBarSpots!.first;
-                      a.setCrosshair(
-                        spot.x,
-                        sourcePlot: widget.plotIdx,
-                        sourceSeries: spot.barIndex,
-                      );
-                    }
-                  },
-                  handleBuiltInTouches: false,
-                  touchTooltipData: LineTouchTooltipData(
-                    getTooltipColor: (_) => theme.colorScheme.inverseSurface,
-                    getTooltipItems: (spots) => spots
-                        .map((s) => LineTooltipItem(
-                              '${s.x.toStringAsFixed(3)}, ${s.y.toStringAsFixed(4)}',
-                              TextStyle(
-                                  fontSize: 9,
-                                  color: theme.colorScheme.onInverseSurface,
-                                  fontFamily: 'monospace'),
-                            ))
-                        .toList(),
-                  ),
-                ),
+                lineTouchData: app.interactionMode == 1
+                    ? LineTouchData(
+                        enabled: true,
+                        touchCallback: (event, response) {
+                          final a = context.read<AppState>();
+                          if (a.pointLocked) return;
+                          if (response?.lineBarSpots != null &&
+                              response!.lineBarSpots!.isNotEmpty) {
+                            final spot = response.lineBarSpots!.first;
+                            a.setCrosshair(
+                              spot.x,
+                              sourcePlot: widget.plotIdx,
+                              sourceSeries: spot.barIndex,
+                            );
+                          }
+                        },
+                        handleBuiltInTouches: false,
+                        touchTooltipData: LineTouchTooltipData(
+                          getTooltipColor: (_) =>
+                              theme.colorScheme.inverseSurface,
+                          getTooltipItems: (spots) => spots
+                              .map((s) => LineTooltipItem(
+                                    '${s.x.toStringAsFixed(3)}, ${s.y.toStringAsFixed(4)}',
+                                    TextStyle(
+                                        fontSize: 9,
+                                        color:
+                                            theme.colorScheme.onInverseSurface,
+                                        fontFamily: 'monospace'),
+                                  ))
+                              .toList(),
+                        ),
+                      )
+                    : const LineTouchData(enabled: false),
                 extraLinesData: ExtraLinesData(
                   verticalLines: cx != null
                       ? [
