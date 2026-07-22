@@ -269,6 +269,9 @@ class AppState extends ChangeNotifier {
   int _viewResetId = 0;
   int get viewResetId => _viewResetId;
   void resetAllViews() {
+    for (final plot in _plots) {
+      plot.clearViewRange();
+    }
     _viewResetId++;
     notifyListeners();
   }
@@ -990,13 +993,32 @@ class AppState extends ChangeNotifier {
 class PlotData {
   final String title, xLabel, yLabel;
   double? crosshairX;
+  double? viewMinX, viewMaxX, viewMinY, viewMaxY;
   List<SeriesData?> series;
   PlotData(
       {required this.title,
       required this.xLabel,
       required this.yLabel,
       required this.series,
-      this.crosshairX});
+      this.crosshairX,
+      this.viewMinX,
+      this.viewMaxX,
+      this.viewMinY,
+      this.viewMaxY});
+
+  void setViewRange(double minX, double maxX, double minY, double maxY) {
+    viewMinX = minX.isFinite ? minX : null;
+    viewMaxX = maxX.isFinite ? maxX : null;
+    viewMinY = minY.isFinite ? minY : null;
+    viewMaxY = maxY.isFinite ? maxY : null;
+  }
+
+  void clearViewRange() {
+    viewMinX = null;
+    viewMaxX = null;
+    viewMinY = null;
+    viewMaxY = null;
+  }
 }
 
 class SeriesData {

@@ -208,6 +208,61 @@ void main() {
     expect(centerAfterPan, lessThan(centerBeforePan));
   });
 
+  testWidgets('Plot view survives panel disposal and reconstruction',
+      (tester) async {
+    final app = AppState();
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 0],
+          [5, 5],
+          [10, 10]
+        ],
+        null);
+
+    Widget panelApp(Widget child) => ChangeNotifierProvider.value(
+          value: app,
+          child: MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: SizedBox(width: 500, height: 400, child: child),
+              ),
+            ),
+          ),
+        );
+
+    await tester.pumpWidget(panelApp(const PlotPanel(plotIdx: 0)));
+    final first = await tester.startGesture(const Offset(220, 200), pointer: 1);
+    final second =
+        await tester.startGesture(const Offset(280, 200), pointer: 2);
+    await tester.pump();
+    await first.moveTo(const Offset(180, 200));
+    await second.moveTo(const Offset(320, 200));
+    await tester.pump();
+    await first.up();
+    await second.up();
+    await tester.pump();
+
+    LineChart chart() => tester.widget<LineChart>(find.byType(LineChart));
+    final savedRange = (
+      minX: chart().data.minX,
+      maxX: chart().data.maxX,
+      minY: chart().data.minY,
+      maxY: chart().data.maxY,
+    );
+
+    await tester.pumpWidget(panelApp(const SizedBox()));
+    await tester.pumpWidget(panelApp(const PlotPanel(plotIdx: 0)));
+
+    expect(chart().data.minX, savedRange.minX);
+    expect(chart().data.maxX, savedRange.maxX);
+    expect(chart().data.minY, savedRange.minY);
+    expect(chart().data.maxY, savedRange.maxY);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
       'Touch plots use one finger for scrolling and two fingers for the view',
       (tester) async {

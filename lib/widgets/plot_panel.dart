@@ -66,9 +66,14 @@ class _PlotPanelState extends State<PlotPanel> {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
-    if (app.viewResetId != _lastResetId) {
+    if (widget.plotIdx >= app.plots.length) return const SizedBox();
+    final plot = app.plots[widget.plotIdx];
+    if (_lastResetId < 0) {
       _lastResetId = app.viewResetId;
-      _resetView();
+      _restoreView(plot, app);
+    } else if (app.viewResetId != _lastResetId) {
+      _lastResetId = app.viewResetId;
+      _resetView(plot);
       if (app.sharedXMin != null) {
         _viewMinX = app.sharedXMin!;
         _viewMaxX = app.sharedXMax!;
@@ -77,10 +82,9 @@ class _PlotPanelState extends State<PlotPanel> {
         _viewMinY = app.sharedYMin!;
         _viewMaxY = app.sharedYMax!;
       }
+      _storeView(plot);
     }
-    if (widget.plotIdx >= app.plots.length) return const SizedBox();
 
-    final plot = app.plots[widget.plotIdx];
     final panel = _findPanel(app);
     final theme = Theme.of(context);
 
@@ -602,6 +606,7 @@ class _PlotPanelState extends State<PlotPanel> {
       _viewMaxX = cx + (_viewMaxX - cx) * factor;
       _viewMinY = cy - (cy - _viewMinY) * factor;
       _viewMaxY = cy + (_viewMaxY - cy) * factor;
+      _storeView(plot);
     });
   }
 
@@ -681,6 +686,7 @@ class _PlotPanelState extends State<PlotPanel> {
       _viewMinY += dy * yScale;
       _viewMaxY += dy * yScale;
       _lastMidPanPos = event.localPosition;
+      _storeView(plot);
     });
   }
 
@@ -710,6 +716,7 @@ class _PlotPanelState extends State<PlotPanel> {
           _viewMaxX = x1 > x2 ? x1 : x2;
           _viewMinY = y1 < y2 ? y1 : y2;
           _viewMaxY = y1 > y2 ? y1 : y2;
+          _storeView(plot);
         }
       });
       return;
@@ -828,6 +835,7 @@ class _PlotPanelState extends State<PlotPanel> {
       _viewMaxX -= focalDelta.dx * xScale;
       _viewMinY += focalDelta.dy * yScale;
       _viewMaxY += focalDelta.dy * yScale;
+      _storeView(plot);
 
       if (previousSpan <= 0.1 || metrics.span <= 0.1) return;
       final scale = metrics.span / previousSpan;
@@ -839,6 +847,7 @@ class _PlotPanelState extends State<PlotPanel> {
       _viewMaxX = cx + (_viewMaxX - cx) * factor;
       _viewMinY = cy - (cy - _viewMinY) * factor;
       _viewMaxY = cy + (_viewMaxY - cy) * factor;
+      _storeView(plot);
     });
   }
 
@@ -858,11 +867,32 @@ class _PlotPanelState extends State<PlotPanel> {
     return minX != null ? [minX, maxX!, minY!, maxY!] : null;
   }
 
-  void _resetView() {
+  void _restoreView(PlotData plot, AppState app) {
+    _viewMinX = plot.viewMinX ?? double.nan;
+    _viewMaxX = plot.viewMaxX ?? double.nan;
+    _viewMinY = plot.viewMinY ?? double.nan;
+    _viewMaxY = plot.viewMaxY ?? double.nan;
+    if (_viewMinX.isNaN && app.sharedXMin != null) {
+      _viewMinX = app.sharedXMin!;
+      _viewMaxX = app.sharedXMax!;
+    }
+    if (_viewMinY.isNaN && app.sharedYMin != null) {
+      _viewMinY = app.sharedYMin!;
+      _viewMaxY = app.sharedYMax!;
+    }
+    _storeView(plot);
+  }
+
+  void _storeView(PlotData plot) {
+    plot.setViewRange(_viewMinX, _viewMaxX, _viewMinY, _viewMaxY);
+  }
+
+  void _resetView(PlotData plot) {
     _viewMinX = double.nan;
     _viewMaxX = double.nan;
     _viewMinY = double.nan;
     _viewMaxY = double.nan;
+    plot.clearViewRange();
     _inRubberBand = false;
     _rubberBandStart = null;
     _rubberBandRect = null;
@@ -923,7 +953,7 @@ class _PlotPanelState extends State<PlotPanel> {
           app.showAllPanels();
           break;
         case 'reset':
-          _resetView();
+          _resetView(app.plots[widget.plotIdx]);
           app.clearCrosshair();
           break;
         case 'resetAll':
