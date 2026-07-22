@@ -7,6 +7,7 @@ import '../services/rust_bridge.dart';
 import 'dialogs/login.dart';
 import 'dialogs/ssh.dart';
 import 'dialogs/about.dart';
+import 'dropdown_items.dart';
 import 'plot_panel.dart';
 import 'responsive_plot_layout.dart';
 
@@ -80,6 +81,7 @@ class ToolbarWidget extends StatelessWidget {
               borderRadius: BorderRadius.circular(6)),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<int>(
+              key: const ValueKey('toolbar-rate-dropdown'),
               value: app.dataMode,
               isExpanded: true,
               isDense: true,
@@ -87,31 +89,34 @@ class ToolbarWidget extends StatelessWidget {
               style: TextStyle(
                   fontSize: uiSize, color: theme.colorScheme.onSurface),
               dropdownColor: theme.colorScheme.surface,
+              selectedItemBuilder: (_) => ['Thin', 'Medium', 'Full']
+                  .map((label) => Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(label,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ))
+                  .toList(),
               items: [
-                DropdownMenuItem(
-                    value: 0,
-                    child: Text('Thin',
+                for (var index = 0;
+                    index < const ['Thin', 'Medium', 'Full'].length;
+                    index++)
+                  DropdownMenuItem(
+                    value: index,
+                    child: separatedDropdownItem(
+                      context,
+                      key: ValueKey('rate-option-$index'),
+                      isLast: index == 2,
+                      child: Text(
+                        const ['Thin', 'Medium', 'Full'][index],
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                            fontSize: uiSize,
-                            color: theme.colorScheme.onSurface))),
-                DropdownMenuItem(
-                    value: 1,
-                    child: Text('Medium',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: uiSize,
-                            color: theme.colorScheme.onSurface))),
-                DropdownMenuItem(
-                    value: 2,
-                    child: Text('Full',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: uiSize,
-                            color: theme.colorScheme.onSurface))),
+                          fontSize: uiSize,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                  ),
               ],
               onChanged: (v) {
                 if (v != null) {
@@ -155,10 +160,13 @@ class ToolbarWidget extends StatelessWidget {
             app.shotText = v;
             app.startRefresh();
           },
-          itemBuilder: (_) => app.shotHistory
-              .map((s) => PopupMenuItem(
-                  value: s, child: Text(s, style: TextStyle(fontSize: uiSize))))
-              .toList(),
+          itemBuilder: (_) => separatedPopupMenuItems(
+            app.shotHistory
+                .map((s) => PopupMenuItem(
+                    value: s,
+                    child: Text(s, style: TextStyle(fontSize: uiSize))))
+                .toList(),
+          ),
         ),
       const SizedBox(width: 6),
       Expanded(
@@ -502,13 +510,12 @@ class ToolbarWidget extends StatelessWidget {
             break;
         }
       },
-      itemBuilder: (_) => [
-        const PopupMenuItem(value: 'web', child: Text('Internal web pages')),
-        const PopupMenuItem(value: 'layout', child: Text('Layout setup')),
-        const PopupMenuItem(value: 'fonts', child: Text('Customize fonts')),
-        const PopupMenuDivider(),
-        const PopupMenuItem(value: 'about', child: Text('About MdsScope')),
-      ],
+      itemBuilder: (_) => separatedPopupMenuItems(const [
+        PopupMenuItem(value: 'web', child: Text('Internal web pages')),
+        PopupMenuItem(value: 'layout', child: Text('Layout setup')),
+        PopupMenuItem(value: 'fonts', child: Text('Customize fonts')),
+        PopupMenuItem(value: 'about', child: Text('About MdsScope')),
+      ]),
     );
   }
 
@@ -1093,18 +1100,42 @@ class ToolbarWidget extends StatelessWidget {
                             ? fontFamily
                             : 'System',
                         isDense: true,
+                        selectedItemBuilder: (_) => families
+                            .map((family) => Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    family,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontFamily:
+                                          family == 'System' ? null : family,
+                                    ),
+                                  ),
+                                ))
+                            .toList(),
                         decoration: const InputDecoration(
                             contentPadding: EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 4),
                             border: OutlineInputBorder()),
-                        items: families
-                            .map((f) => DropdownMenuItem(
-                                value: f,
-                                child: Text(f,
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        fontFamily: f == 'System' ? null : f))))
-                            .toList(),
+                        items: [
+                          for (var index = 0; index < families.length; index++)
+                            DropdownMenuItem(
+                              value: families[index],
+                              child: separatedDropdownItem(
+                                ctx,
+                                isLast: index == families.length - 1,
+                                child: Text(
+                                  families[index],
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontFamily: families[index] == 'System'
+                                        ? null
+                                        : families[index],
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                         onChanged: (v) {
                           if (v != null) setState(() => fontFamily = v);
                         },

@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dropdown_items.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/app_state.dart';
 import 'package:file_picker/file_picker.dart';
@@ -1000,18 +1001,23 @@ class _PlotPanelState extends State<PlotPanel> {
       position: RelativeRect.fromLTRB(globalPosition.dx, globalPosition.dy,
           globalPosition.dx, globalPosition.dy),
       items: [
-        if (isMaxed)
-          const PopupMenuItem(value: 'showAll', child: Text('Show All Panels'))
-        else
-          const PopupMenuItem(value: 'max', child: Text('Max')),
-        const PopupMenuItem(value: 'reset', child: Text('Reset Current Scale')),
-        const PopupMenuItem(value: 'resetAll', child: Text('Reset All Panels')),
-        const PopupMenuItem(value: 'sameX', child: Text('All Same X Scale')),
-        const PopupMenuItem(value: 'sameY', child: Text('All Same Y Scale')),
-        const PopupMenuItem(value: 'export', child: Text('Export Data')),
-        const PopupMenuItem(
-            value: 'dataSource', child: Text('Data Source Setup')),
-        const PopupMenuItem(value: 'setup', child: Text('Panel Setup')),
+        ...separatedPopupMenuItems([
+          if (isMaxed)
+            const PopupMenuItem(
+                value: 'showAll', child: Text('Show All Panels'))
+          else
+            const PopupMenuItem(value: 'max', child: Text('Max')),
+          const PopupMenuItem(
+              value: 'reset', child: Text('Reset Current Scale')),
+          const PopupMenuItem(
+              value: 'resetAll', child: Text('Reset All Panels')),
+          const PopupMenuItem(value: 'sameX', child: Text('All Same X Scale')),
+          const PopupMenuItem(value: 'sameY', child: Text('All Same Y Scale')),
+          const PopupMenuItem(value: 'export', child: Text('Export Data')),
+          const PopupMenuItem(
+              value: 'dataSource', child: Text('Data Source Setup')),
+          const PopupMenuItem(value: 'setup', child: Text('Panel Setup')),
+        ]),
       ],
     ).then((value) {
       if (value == null || !mounted) return;
@@ -1679,14 +1685,28 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                               decoration: _dsDeco(),
                               style: ddStyle,
                               dropdownColor: Theme.of(ctx).colorScheme.surface,
+                              selectedItemBuilder: (_) => _modes
+                                  .map((mode) => Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          mode,
+                                          style: ddStyle,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ))
+                                  .toList(),
                               items: List.generate(
                                   3,
                                   (j) => DropdownMenuItem(
                                       value: j,
-                                      child: Text(
-                                        _modes[j],
-                                        style: ddStyle,
-                                        overflow: TextOverflow.ellipsis,
+                                      child: separatedDropdownItem(
+                                        ctx,
+                                        isLast: j == 2,
+                                        child: Text(
+                                          _modes[j],
+                                          style: ddStyle,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ))),
                               onChanged: (v) {
                                 if (v != null)

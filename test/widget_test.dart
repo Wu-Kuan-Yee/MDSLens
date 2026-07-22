@@ -761,6 +761,31 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Dropdown and popup menu choices have visible separators',
+      (tester) async {
+    final app = AppState();
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('toolbar-rate-dropdown')));
+    await tester.pumpAndSettle();
+    final firstRateOption = tester.widget<Container>(
+      find.byKey(const ValueKey('rate-option-0')),
+    );
+    final decoration = firstRateOption.decoration as BoxDecoration;
+    expect(decoration.border?.bottom.width, greaterThan(0));
+    await tester.tap(find.byKey(const ValueKey('rate-option-0')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    expect(find.byType(PopupMenuDivider), findsNWidgets(3));
+  });
+
   testWidgets('Toolbar remains bounded with enlarged customized UI fonts',
       (tester) async {
     final app = AppState();
