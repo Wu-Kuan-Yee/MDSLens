@@ -267,20 +267,23 @@ void main() {
 
     LineChart chart() => tester.widget<LineChart>(find.byType(LineChart));
     final initialWidth = chart().data.maxX - chart().data.minX;
+    final initialCenter = (chart().data.minX + chart().data.maxX) / 2;
 
     final first = await tester.startGesture(const Offset(220, 200), pointer: 1);
     final second =
         await tester.startGesture(const Offset(280, 200), pointer: 2);
     await tester.pump();
-    await first.moveTo(const Offset(180, 200));
-    await second.moveTo(const Offset(320, 200));
+    await first.moveTo(const Offset(200, 200));
+    await second.moveTo(const Offset(340, 200));
     await tester.pump();
     await first.up();
     await second.up();
     await tester.pump();
 
     final zoomedWidth = chart().data.maxX - chart().data.minX;
+    final zoomedCenter = (chart().data.minX + chart().data.maxX) / 2;
     expect(zoomedWidth, lessThan(initialWidth));
+    expect((zoomedCenter - initialCenter).abs(), greaterThan(0.01));
 
     final centerBeforePan = (chart().data.minX + chart().data.maxX) / 2;
     final panFirst =
@@ -297,6 +300,52 @@ void main() {
 
     final centerAfterPan = (chart().data.minX + chart().data.maxX) / 2;
     expect(centerAfterPan, lessThan(centerBeforePan));
+  });
+
+  testWidgets('One-finger touch drag pans a plot in Zoom/Move mode',
+      (tester) async {
+    final app = AppState();
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 0],
+          [5, 5],
+          [10, 10]
+        ],
+        null);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 500,
+              height: 400,
+              child: PlotPanel(plotIdx: 0),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    LineChart chart() => tester.widget<LineChart>(find.byType(LineChart));
+    final centerBefore = (chart().data.minX + chart().data.maxX) / 2;
+    final widthBefore = chart().data.maxX - chart().data.minX;
+
+    final drag = await tester.startGesture(const Offset(240, 200));
+    await drag.moveBy(const Offset(80, -30));
+    await tester.pump();
+    await drag.up();
+    await tester.pump();
+
+    final centerAfter = (chart().data.minX + chart().data.maxX) / 2;
+    final widthAfter = chart().data.maxX - chart().data.minX;
+    expect(centerAfter, lessThan(centerBefore));
+    expect(widthAfter, closeTo(widthBefore, 0.0001));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Plot view survives panel disposal and reconstruction',

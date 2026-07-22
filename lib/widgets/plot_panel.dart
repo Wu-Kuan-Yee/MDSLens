@@ -642,11 +642,17 @@ class _PlotPanelState extends State<PlotPanel> {
   void _handlePointerMove(PointerMoveEvent event) {
     if (event.kind == PointerDeviceKind.touch &&
         _touchPositions.containsKey(event.pointer)) {
+      final previousPosition = _touchPositions[event.pointer]!;
       _touchPositions[event.pointer] = event.localPosition;
       if (_multiTouchActive && _touchPositions.length >= 2) {
         _applyMultiTouchTransform();
       } else {
-        _updateTouchCrosshair(event.localPosition);
+        final app = context.read<AppState>();
+        if (app.interactionMode == 0) {
+          _applySingleTouchPan(previousPosition, event.localPosition);
+        } else {
+          _updateTouchCrosshair(event.localPosition);
+        }
       }
       return;
     }
@@ -773,6 +779,27 @@ class _PlotPanelState extends State<PlotPanel> {
     _cancelLongPressTimer();
   }
 
+  void _applySingleTouchPan(Offset previousPosition, Offset currentPosition) {
+    final app = context.read<AppState>();
+    if (app.interactionMode != 0 || !_ensureViewInitialized(app)) return;
+    final plot = app.plots[widget.plotIdx];
+    final cb = _chartBox;
+    final gridWidth = (cb?.size.width ?? 0) - _gridLeftInset(app);
+    final gridHeight = (cb?.size.height ?? 0) - _gridBottomInset(app);
+    if (gridWidth <= 0 || gridHeight <= 0) return;
+
+    final delta = currentPosition - previousPosition;
+    setState(() {
+      final xScale = (_viewMaxX - _viewMinX) / gridWidth;
+      final yScale = (_viewMaxY - _viewMinY) / gridHeight;
+      _viewMinX -= delta.dx * xScale;
+      _viewMaxX -= delta.dx * xScale;
+      _viewMinY += delta.dy * yScale;
+      _viewMaxY += delta.dy * yScale;
+      _storeView(plot);
+    });
+  }
+
   bool _ensureViewInitialized(AppState app) {
     if (_viewMinX.isFinite) return true;
     if (widget.plotIdx >= app.plots.length) return false;
@@ -825,6 +852,7 @@ class _PlotPanelState extends State<PlotPanel> {
     _lastMultiTouchFocalPoint = metrics.focalPoint;
     _lastMultiTouchSpan = metrics.span;
     final app = context.read<AppState>();
+    if (app.interactionMode != 0) return;
     final plot = app.plots[widget.plotIdx];
     final cb = _chartBox;
     final gridLeft = _gridLeftInset(app);
