@@ -219,9 +219,9 @@ class SshDialog extends StatelessWidget {
                           app.setSshPass(passCtrl.text);
                           app.setSshIdentity(keyCtrl.text);
                           app.sshMode = mode;
-                          app.setSshConnected(result == 'ok');
+                          app.setSshTestResult(result == 'ok' && mode > 0);
                           app.setStatus(result == 'ok'
-                              ? 'SSH connected'
+                              ? 'SSH test passed; tunnel will light up when used'
                               : 'SSH settings saved');
                           Navigator.pop(ctx);
                         },

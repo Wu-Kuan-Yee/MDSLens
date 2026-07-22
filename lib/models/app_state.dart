@@ -418,6 +418,7 @@ class AppState extends ChangeNotifier {
     _sessionGeneration++;
     _invalidateFetchForSettingsChange();
     _sshMode = v;
+    _resetSshConnectionState();
     savePreferences();
     notifyListeners();
   }
@@ -430,8 +431,10 @@ class AppState extends ChangeNotifier {
   String get sshPass => _sshPass;
   String _sshIdentity = '';
   String get sshIdentity => _sshIdentity;
-  bool _sshConnected = false;
-  bool get sshConnected => _sshConnected;
+  bool _sshTunnelReachable = false;
+  bool get sshTunnelReachable => _sshTunnelReachable;
+  bool _sshInUse = false;
+  bool get sshConnected => _sshTunnelReachable && _sshInUse;
 
   // View reset — incremented on each Refresh/Apply to reset zoom/pan
   int _viewResetId = 0;
@@ -533,6 +536,7 @@ class AppState extends ChangeNotifier {
     _sessionGeneration++;
     _invalidateFetchForSettingsChange();
     _sshHost = v;
+    _resetSshConnectionState();
     savePreferences();
     notifyListeners();
   }
@@ -542,7 +546,9 @@ class AppState extends ChangeNotifier {
     _sessionGeneration++;
     _invalidateFetchForSettingsChange();
     _sshPort = v;
+    _resetSshConnectionState();
     savePreferences();
+    notifyListeners();
   }
 
   void setSshUser(String v) {
@@ -550,7 +556,9 @@ class AppState extends ChangeNotifier {
     _sessionGeneration++;
     _invalidateFetchForSettingsChange();
     _sshUser = v;
+    _resetSshConnectionState();
     savePreferences();
+    notifyListeners();
   }
 
   void setSshPass(String v) {
@@ -558,7 +566,9 @@ class AppState extends ChangeNotifier {
     _sessionGeneration++;
     _invalidateFetchForSettingsChange();
     _sshPass = v;
+    _resetSshConnectionState();
     savePreferences();
+    notifyListeners();
   }
 
   void setSshIdentity(String v) {
@@ -566,7 +576,9 @@ class AppState extends ChangeNotifier {
     _sessionGeneration++;
     _invalidateFetchForSettingsChange();
     _sshIdentity = v;
+    _resetSshConnectionState();
     savePreferences();
+    notifyListeners();
   }
 
   void openLogin() {
@@ -605,8 +617,20 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setSshConnected(bool v) {
-    _sshConnected = v;
+  void _resetSshConnectionState() {
+    _sshTunnelReachable = false;
+    _sshInUse = false;
+  }
+
+  void setSshTestResult(bool reachable) {
+    _sshTunnelReachable = reachable;
+    if (!reachable) _sshInUse = false;
+    notifyListeners();
+  }
+
+  void recordSshUsage(bool used) {
+    _sshInUse = used;
+    if (used) _sshTunnelReachable = true;
     notifyListeners();
   }
 
@@ -633,7 +657,7 @@ class AppState extends ChangeNotifier {
       _loggedIn = true;
       _authToken = result.token;
       _explicitlyLoggedOut = false;
-      _sshConnected = result.usedSsh;
+      recordSshUsage(result.usedSsh);
       _status = 'Logged in as $user';
       await savePreferences();
       if (_disposed || generation != _sessionGeneration) return;
@@ -1217,6 +1241,7 @@ class AppState extends ChangeNotifier {
     try {
       final data = await _latestShotWorker(apiUrl, token, sshSettings);
       if (!_isCurrentFetch(generation)) return;
+      recordSshUsage(sshSettings.isNotEmpty);
       final shot =
           data is Map ? (data['shot'] ?? _findShot(data)) : _findShot(data);
       if (shot != null) {
@@ -1238,6 +1263,7 @@ class AppState extends ChangeNotifier {
       }
     } catch (e) {
       if (!_isCurrentFetch(generation)) return;
+      recordSshUsage(false);
       _fetching = false;
       _status = 'Shot fetch: $e';
       notifyListeners();

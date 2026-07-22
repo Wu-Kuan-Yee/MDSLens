@@ -265,6 +265,41 @@ void main() {
     expect(find.text('Signed out'), findsOneWidget);
   });
 
+  testWidgets('SSH button lights only while a reachable tunnel is in use',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+
+    expect(find.byTooltip('SSH tunnel'), findsOneWidget);
+    app.setSshTestResult(true);
+    await tester.pump();
+    expect(app.sshTunnelReachable, isTrue);
+    expect(app.sshConnected, isFalse);
+    expect(
+        find.byTooltip('SSH tunnel — reachable, not in use'), findsOneWidget);
+
+    app.recordSshUsage(true);
+    await tester.pump();
+    expect(app.sshConnected, isTrue);
+    expect(find.byTooltip('SSH tunnel — in use'), findsOneWidget);
+
+    app.recordSshUsage(false);
+    await tester.pump();
+    expect(app.sshConnected, isFalse);
+    expect(
+        find.byTooltip('SSH tunnel — reachable, not in use'), findsOneWidget);
+
+    app.setSshTestResult(false);
+    await tester.pump();
+    expect(find.byTooltip('SSH tunnel'), findsOneWidget);
+  });
+
   test('Startup signs in, fetches the latest shot, and loads its waveforms',
       () async {
     SharedPreferences.setMockInitialValues({

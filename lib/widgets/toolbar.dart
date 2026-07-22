@@ -640,8 +640,8 @@ class ToolbarWidget extends StatelessWidget {
 
   Future<void> _openUrl(String url, AppState app) async {
     var finalUrl = url;
-    // Route through SSH tunnel if connected (matching C++ behaviour)
-    if (app.sshConnected && app.sshHost.isNotEmpty) {
+    var usedSsh = false;
+    if (app.sshMode > 0 && app.sshHost.isNotEmpty) {
       try {
         final settings = jsonEncode({
           'host': app.sshHost,
@@ -654,9 +654,11 @@ class ToolbarWidget extends StatelessWidget {
         final prepared = RustBridge.instance.prepareUrl(url, settings);
         if (prepared.startsWith('http') && !prepared.contains('"error"')) {
           finalUrl = prepared;
+          usedSsh = true;
         }
       } catch (_) {}
     }
+    app.recordSshUsage(usedSsh);
     final opened = await openExternalWebUrl(finalUrl);
     app.setStatus(opened
         ? 'Opened internal web page'
@@ -1242,22 +1244,19 @@ class ToolbarWidget extends StatelessWidget {
   }
 
   Widget _sshBtn(BuildContext ctx, AppState app) {
-    return ElevatedButton(
-        onPressed: () => SshDialog.show(ctx),
-        style: ElevatedButton.styleFrom(
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            minimumSize: const Size(0, 44),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            textStyle: TextStyle(
-                fontFamily: app.effectiveFontFamily,
-                fontSize: app.fontUiSize.toDouble(),
-                color: app.sshConnected ? Colors.green : null)),
-        child: const FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text('SSH', maxLines: 1),
-        ));
+    final tooltip = app.sshConnected
+        ? 'SSH tunnel — in use'
+        : app.sshTunnelReachable
+            ? 'SSH tunnel — reachable, not in use'
+            : 'SSH tunnel';
+    return _toolbarIconButton(
+      ctx,
+      icon: Icons.terminal_rounded,
+      tooltip: tooltip,
+      onPressed: () => SshDialog.show(ctx),
+      active: app.sshConnected,
+      activeColor: const Color(0xFF16A34A),
+    );
   }
 
   Widget _themeBtns(BuildContext ctx, AppState app) {
