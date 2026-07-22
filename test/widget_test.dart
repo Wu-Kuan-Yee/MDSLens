@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:mdsscope/app.dart';
 import 'package:mdsscope/models/app_state.dart';
 import 'package:mdsscope/services/external_url_launcher.dart';
 import 'package:mdsscope/services/update_service.dart';
@@ -33,6 +34,38 @@ void main() {
     expect(theme.textTheme.bodyMedium?.fontFamily, 'Courier New');
     expect(theme.textTheme.bodyMedium?.fontSize, 18);
     expect(theme.textTheme.labelLarge?.fontSize, 18);
+  });
+
+  testWidgets('Auto theme follows live platform brightness changes',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    app.themeMode = 2;
+    addTearDown(
+        tester.binding.platformDispatcher.clearPlatformBrightnessTestValue);
+    tester.binding.platformDispatcher.platformBrightnessTestValue =
+        Brightness.light;
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MdsScopeApp(),
+      ),
+    );
+    expect(tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+        ThemeMode.light);
+
+    tester.binding.platformDispatcher.platformBrightnessTestValue =
+        Brightness.dark;
+    await tester.pump();
+    expect(tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+        ThemeMode.dark);
+
+    tester.binding.platformDispatcher.platformBrightnessTestValue =
+        Brightness.light;
+    await tester.pump();
+    expect(tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+        ThemeMode.light);
   });
 
   test('Manual application settings survive an application restart', () async {
@@ -624,17 +657,17 @@ void main() {
             of: toolbar, matching: find.byType(SingleChildScrollView)),
         findsNothing,
       );
-      final themeTop = tester
-          .getTopLeft(find.byKey(const ValueKey('toolbar-theme-actions')))
+      final themeCenter = tester
+          .getCenter(find.byKey(const ValueKey('toolbar-theme-actions')))
           .dy;
-      final appTop = tester
-          .getTopLeft(find.byKey(const ValueKey('toolbar-app-actions')))
+      final appCenter = tester
+          .getCenter(find.byKey(const ValueKey('toolbar-app-actions')))
           .dy;
       final fileTop = tester
           .getTopLeft(find.byKey(const ValueKey('toolbar-file-actions')))
           .dy;
-      expect(themeTop, closeTo(appTop, 0.01));
-      expect(themeTop, lessThanOrEqualTo(fileTop + 0.01));
+      expect(themeCenter, closeTo(appCenter, 0.01));
+      expect(themeCenter, lessThanOrEqualTo(fileTop + 22.01));
       expect(tester.takeException(), isNull);
     }
   });
@@ -713,8 +746,8 @@ void main() {
     for (var i = 1; i < tops.length; i++) {
       expect(tops[i], greaterThan(tops[i - 1]));
     }
-    expect(tester.getTopLeft(appActions).dy,
-        closeTo(tester.getTopLeft(themes).dy, 0.01));
+    expect(tester.getCenter(appActions).dy,
+        closeTo(tester.getCenter(themes).dy, 0.01));
     expect(tester.getTopLeft(modes).dy,
         closeTo(tester.getTopLeft(navigation).dy, 0.01));
     expect(tester.takeException(), isNull);

@@ -1208,24 +1208,25 @@ class ToolbarWidget extends StatelessWidget {
         child: Container(
           key: const ValueKey('theme-mode-switch'),
           width: switchWidth,
-          height: 40,
-          padding: const EdgeInsets.all(3),
+          height: 44,
+          padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
             color: theme.colorScheme.surfaceContainerLow,
             border: Border.all(color: theme.dividerColor),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(22),
           ),
           child: Stack(
+            clipBehavior: Clip.none,
             children: [
               AnimatedPositioned(
                 key: const ValueKey('theme-mode-thumb'),
                 duration: const Duration(milliseconds: 150),
                 curve: Curves.easeOutCubic,
-                left: selectedIndex * 34.0 + 1,
+                left: selectedIndex * (100 / 3) - 1 / 3,
                 top: 1,
                 child: Container(
-                  width: 32,
-                  height: 32,
+                  width: 34,
+                  height: 34,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: theme.colorScheme.surface,
