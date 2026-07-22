@@ -1,140 +1,202 @@
-name: Release
+name: Release packages
 
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: 3.44.3
+
 jobs:
-  # ── Windows Packaging (x64) ─────────────────────────────────────────
-  build-windows:
-    runs-on: windows-latest
+  windows:
+    name: Windows ${{ matrix.arch }}
+    runs-on: windows-2025
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Build Flutter Windows & Bundle Rust
-        run: |
-          cargo build --release --manifest-path rust/mds-bridge/Cargo.toml
-          flutter build windows --release
-          copy rust\target\release\mds_bridge.dll build\windows\x64\runner\Release\
-
-      - name: Create Windows Packages (.zip, .exe)
+          cache: true
+      - uses: dtolnay/rust-toolchain@1.92.0
+      - name: Install Windows packagers
         shell: powershell
-        run: |
-          $dist = "build/dist"
-          New-Item -ItemType Directory -Force -Path $dist
-          
-          # 1. Zip Archive
-          Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath "$dist\mdsscope-windows-x64.zip" -Force
-
-          # 2. Portable EXE
-          Copy-Item "build\windows\x64\runner\Release\mdsscope.exe" "$dist\mdsscope-windows-x64-portable.exe"
-
+        run: choco install innosetup wixtoolset --no-progress -y
+      - name: Build packages
+        run: >-
+          python build_app.py -p windows -a ${{ matrix.arch }}
+          -f exe msi zip tar.gz tar.xz tar.bz2
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-x64-packages
+          name: mdsscope-windows-${{ matrix.arch }}
           path: build/dist/*
+          if-no-files-found: error
 
-  # ── macOS Packaging (arm64) ─────────────────────────────────────────
-  build-macos:
-    runs-on: macos-latest
+  macos:
+    name: macOS universal
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Build Flutter macOS & Bundle Rust
-        run: |
-          cargo build --release --manifest-path rust/mds-bridge/Cargo.toml
-          flutter build macos --release
-          APP_PATH="build/macos/Build/Products/Release/mdsscope.app"
-          mkdir -p "$APP_PATH/Contents/Frameworks" "$APP_PATH/Contents/MacOS"
-          cp rust/target/release/libmds_bridge.dylib "$APP_PATH/Contents/Frameworks/"
-          cp rust/target/release/libmds_bridge.dylib "$APP_PATH/Contents/MacOS/"
-
-      - name: Create macOS Packages (.dmg, .pkg, .zip, .tar.gz, .app)
-        run: |
-          DIST="build/dist"
-          mkdir -p "$DIST"
-          APP_PATH="build/macos/Build/Products/Release/mdsscope.app"
-
-          # 1. Portable .app Zip/Tar Formats
-          cp -R "$APP_PATH" "$DIST/mdsscope-macos-arm64.app"
-          (cd build/macos/Build/Products/Release && zip -r "../../../dist/mdsscope-macos-arm64.zip" mdsscope.app)
-          (cd build/macos/Build/Products/Release && tar -czf "../../../dist/mdsscope-macos-arm64.tar.gz" mdsscope.app)
-          (cd build/macos/Build/Products/Release && tar -cJf "../../../dist/mdsscope-macos-arm64.tar.xz" mdsscope.app)
-
-          # 2. DMG Package
-          hdiutil create -volname "MdsScope" -srcfolder "$APP_PATH" -ov -format UDZO "$DIST/mdsscope-macos-arm64.dmg"
-
-          # 3. PKG Installer
-          pkgbuild --component "$APP_PATH" --install-location /Applications "$DIST/mdsscope-macos-arm64.pkg"
-
+          cache: true
+      - uses: dtolnay/rust-toolchain@1.92.0
+      - name: Build packages
+        run: >-
+          python3 build_app.py -p macos
+          -f app dmg pkg zip tar.gz tar.xz tar.bz2
+      - name: Verify the application bundle
+        run: codesign --verify --deep --strict build/dist/mdsscope-macos-universal.app
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-arm64-packages
+          name: mdsscope-macos-universal
           path: build/dist/*
+          if-no-files-found: error
 
-  # ── Linux Packaging (deb, pkg.tar.zst, tar.*, zip) ──────────────────
-  build-linux:
-    runs-on: ubuntu-latest
+  linux:
+    name: Linux ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Install Linux Build Tools
+          cache: true
+      - uses: dtolnay/rust-toolchain@1.92.0
+      - name: Install Linux build and packaging tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libsecret-1-dev zstd dpkg-dev
-
-      - name: Build Flutter Linux & Bundle Rust
-        run: |
-          cargo build --release --manifest-path rust/mds-bridge/Cargo.toml
-          flutter build linux --release
-          BUNDLE="build/linux/x64/release/bundle"
-          mkdir -p "$BUNDLE/lib"
-          cp rust/target/release/libmds_bridge.so "$BUNDLE/lib/"
-          cp rust/target/release/libmds_bridge.so "$BUNDLE/"
-
-      - name: Create Linux Packages (.tar.gz, .tar.xz, .zip, .pkg.tar.zst, .deb)
-        run: |
-          DIST="build/dist"
-          mkdir -p "$DIST"
-          BUNDLE="build/linux/x64/release/bundle"
-
-          # Archives
-          (cd "$BUNDLE" && tar -czf "../../../../$DIST/mdsscope-linux-x64.tar.gz" *)
-          (cd "$BUNDLE" && tar -cJf "../../../../$DIST/mdsscope-linux-x64.tar.xz" *)
-          (cd "$BUNDLE" && zip -r "../../../../$DIST/mdsscope-linux-x64.zip" *)
-
-          # Arch Linux .pkg.tar.zst
-          (cd "$BUNDLE" && tar -c --zstd -f "../../../../$DIST/mdsscope-linux-x64.pkg.tar.zst" *)
-
-          # Debian .deb Package
-          DEB_DIR="build/deb/mdsscope-linux-x64"
-          mkdir -p "$DEB_DIR/usr/bin" "$DEB_DIR/usr/lib/mdsscope" "$DEB_DIR/DEBIAN"
-          cp -R "$BUNDLE/"* "$DEB_DIR/usr/lib/mdsscope/"
-          ln -sf /usr/lib/mdsscope/mdsscope "$DEB_DIR/usr/bin/mdsscope"
-          cat <<EOF > "$DEB_DIR/DEBIAN/control"
-Package: mdsscope
-Version: 7.0.0
-Architecture: amd64
-Maintainer: MdsScope Contributors
-Description: Signal data plotting for MDSplus experiments
-EOF
-          chmod 755 "$DEB_DIR/DEBIAN" "$DEB_DIR/DEBIAN/control"
-          dpkg-deb --build "$DEB_DIR" "$DIST/mdsscope-linux-x64.deb"
-
+          sudo apt-get install -y libgtk-3-dev ninja-build pkg-config rpm zstd xz-utils
+      - name: Build packages
+        run: >-
+          python3 build_app.py -p linux -a ${{ matrix.arch }}
+          -f deb rpm pkg.tar.zst pkg.tar.xz zip tar.gz tar.xz tar.bz2
       - uses: actions/upload-artifact@v4
         with:
-          name: linux-x64-packages
+          name: mdsscope-linux-${{ matrix.arch }}
           path: build/dist/*
+          if-no-files-found: error
+
+  android:
+    name: Android
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - uses: dtolnay/rust-toolchain@1.92.0
+      - name: Install the pinned Android NDK
+        run: sdkmanager "ndk;27.0.12077973"
+      - name: Build APKs and Android App Bundle
+        run: python3 build_app.py -p android -f apk aab
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mdsscope-android
+          path: build/dist/*
+          if-no-files-found: error
+
+  apple-mobile:
+    name: iOS and iPadOS
+    runs-on: macos-15
+    env:
+      APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+      APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - uses: dtolnay/rust-toolchain@1.92.0
+      - name: Detect signing credentials
+        id: signing
+        shell: bash
+        run: |
+          if [[ -n "$APPLE_CERTIFICATE_BASE64" && -n "$APPLE_PROVISIONING_PROFILE_BASE64" && -n "$APPLE_KEYCHAIN_PASSWORD" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install Apple signing credentials
+        if: steps.signing.outputs.available == 'true'
+        shell: bash
+        run: |
+          certificate="$RUNNER_TEMP/mdsscope-release.p12"
+          profile="$RUNNER_TEMP/mdsscope.mobileprovision"
+          profile_plist="$RUNNER_TEMP/mdsscope-profile.plist"
+          keychain="$RUNNER_TEMP/mdsscope-signing.keychain-db"
+          printf '%s' "$APPLE_CERTIFICATE_BASE64" | base64 -D > "$certificate"
+          printf '%s' "$APPLE_PROVISIONING_PROFILE_BASE64" | base64 -D > "$profile"
+          security create-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$keychain"
+          security import "$certificate" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -k "$APPLE_KEYCHAIN_PASSWORD" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          security cms -D -i "$profile" > "$profile_plist"
+          profile_uuid=$(/usr/libexec/PlistBuddy -c 'Print UUID' "$profile_plist")
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$profile" "$HOME/Library/MobileDevice/Provisioning Profiles/$profile_uuid.mobileprovision"
+      - name: Build signed IPA
+        if: steps.signing.outputs.available == 'true'
+        run: python3 build_app.py -p ios -p ipados -f ipa
+      - name: Build unsigned verification bundle
+        if: steps.signing.outputs.available != 'true'
+        shell: bash
+        run: |
+          flutter build ios --release --no-codesign
+          mkdir -p build/dist
+          ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app build/dist/mdsscope-ios-arm64-unsigned.zip
+          cp build/dist/mdsscope-ios-arm64-unsigned.zip build/dist/mdsscope-ipados-arm64-unsigned.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mdsscope-apple-mobile
+          path: build/dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [windows, macos, linux, android, apple-mobile]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Upload packages to the tag release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || gh release create "${GITHUB_REF_NAME}" --generate-notes
+          find artifacts -maxdepth 1 -type f -print0 | xargs -0 gh release upload "${GITHUB_REF_NAME}" --clobber
