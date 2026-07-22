@@ -1,7 +1,7 @@
 name: mdsscope
 description: MDSplus signal plotting for EAST fusion research.
 publish_to: 'none'
-version: 7.0.0
+version: 7.0.0+1
 
 environment:
   sdk: '>=3.6.0 <4.0.0'

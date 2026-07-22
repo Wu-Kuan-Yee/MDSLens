@@ -22,6 +22,16 @@ if (flutterVersionName == null) {
     flutterVersionName = '1.0'
 }
 
+def releaseStorePath = System.getenv('MDSSCOPE_ANDROID_KEYSTORE')
+def releaseStorePassword = System.getenv('MDSSCOPE_ANDROID_STORE_PASSWORD')
+def releaseKeyAlias = System.getenv('MDSSCOPE_ANDROID_KEY_ALIAS')
+def releaseKeyPassword = System.getenv('MDSSCOPE_ANDROID_KEY_PASSWORD')
+def hasReleaseSigning = releaseStorePath != null &&
+    new File(releaseStorePath).isFile() &&
+    releaseStorePassword != null &&
+    releaseKeyAlias != null &&
+    releaseKeyPassword != null
+
 android {
     namespace "com.mdsscope.app"
     compileSdk 36
@@ -44,14 +54,33 @@ android {
     defaultConfig {
         applicationId "com.mdsscope.app"
         minSdkVersion flutter.minSdkVersion
-        targetSdk 34
+        targetSdk 36
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
     }
 
+    signingConfigs {
+        release {
+            if (hasReleaseSigning) {
+                storeFile file(releaseStorePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            signingConfig signingConfigs.debug
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            } else {
+                // Keep one-command local device builds possible. CI and store
+                // releases should always supply the four MDSSCOPE_ANDROID_*
+                // signing variables so the package has a stable identity.
+                logger.warn('MdsScope release signing is not configured; using the local debug key.')
+                signingConfig signingConfigs.debug
+            }
         }
     }
 }
