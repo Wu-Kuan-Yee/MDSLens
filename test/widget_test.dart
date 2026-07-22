@@ -461,6 +461,71 @@ void main() {
     expect(find.text('Signed out'), findsOneWidget);
   });
 
+  testWidgets('Login and SSH dialogs scroll above a virtual keyboard',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(tester.view.reset);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 700);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Login'));
+    await tester.pumpAndSettle();
+    tester.view.viewInsets = const FakeViewPadding(bottom: 360);
+    await tester.pumpAndSettle();
+
+    final loginScroll = find.descendant(
+      of: find.byKey(const ValueKey('keyboard-safe-dialog-scroll')),
+      matching: find.byType(Scrollable),
+    );
+    expect(loginScroll, findsWidgets);
+    expect(
+      tester.state<ScrollableState>(loginScroll.first).position.maxScrollExtent,
+      greaterThan(0),
+    );
+    expect(tester.getSize(find.byKey(const ValueKey('login-password'))).height,
+        greaterThanOrEqualTo(48));
+    expect(
+      tester
+          .getBottomRight(find.byKey(const ValueKey('login-dialog-login')))
+          .dy,
+      lessThanOrEqualTo(340),
+    );
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    tester.view.viewInsets = FakeViewPadding.zero;
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('SSH tunnel'));
+    await tester.pumpAndSettle();
+    tester.view.viewInsets = const FakeViewPadding(bottom: 360);
+    await tester.pumpAndSettle();
+
+    final sshScroll = find.descendant(
+      of: find.byKey(const ValueKey('keyboard-safe-dialog-scroll')),
+      matching: find.byType(Scrollable),
+    );
+    expect(sshScroll, findsWidgets);
+    expect(
+      tester.state<ScrollableState>(sshScroll.first).position.maxScrollExtent,
+      greaterThan(0),
+    );
+    expect(tester.getSize(find.byKey(const ValueKey('ssh-host'))).height,
+        greaterThanOrEqualTo(48));
+    expect(tester.getSize(find.byKey(const ValueKey('ssh-password'))).height,
+        greaterThanOrEqualTo(48));
+    expect(tester.getBottomRight(find.text('Save')).dy, lessThanOrEqualTo(340));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('SSH button lights only while a reachable tunnel is in use',
       (tester) async {
     final app = AppState();
