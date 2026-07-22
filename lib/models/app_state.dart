@@ -108,7 +108,7 @@ class AppState extends ChangeNotifier {
   }
 
   // Web bookmarks
-  List<Map<String, String>> _webBookmarks = [];
+  final List<Map<String, String>> _webBookmarks = [];
   List<Map<String, String>> get webBookmarks => _webBookmarks;
   void addWebBookmark(String alias, String url) { _webBookmarks.add({alias: url}); notifyListeners(); }
   void removeWebBookmark(int i) { if (i >= 0 && i < _webBookmarks.length) { _webBookmarks.removeAt(i); notifyListeners(); } }

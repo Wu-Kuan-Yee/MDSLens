@@ -3,7 +3,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/app_state.dart';
@@ -546,7 +545,7 @@ class _PlotPanelState extends State<PlotPanel> {
         const PopupMenuItem(value: 'setup', child: Text('Panel Setup')),
       ],
     ).then((value) {
-      if (value == null) return;
+      if (value == null || !mounted) return;
       switch (value) {
         case 'max':
           app.maximizePlot(widget.plotIdx);
@@ -576,10 +575,10 @@ class _PlotPanelState extends State<PlotPanel> {
           _exportCsv(app);
           break;
         case 'dataSource':
-          _showDataSourceSetup(ctx, app);
+          _showDataSourceSetup(context, app);
           break;
         case 'setup':
-          _showPanelSetup(ctx, app);
+          _showPanelSetup(context, app);
           break;
       }
     });
@@ -845,7 +844,7 @@ class _DataSourceDialog extends StatefulWidget {
 class _DataSourceDialogState extends State<_DataSourceDialog> {
   final _rows = <_DSRow>[];
   List<String> _treeNames = [];
-  Map<String, List<String>> _signalCache = {};
+  final Map<String, List<String>> _signalCache = {};
 
   static const _modes = ['Thin', 'Medium', 'Full'];
   static const _presetColors = [0xFF2364aa, 0xFFc44e52, 0xFF2f855a, 0xFF805ad5, 0xFFd97706, 0xFF0f766e, 0xFF9f1239, 0xFF4a5568, 0xFFdb2777, 0xFF16a34a, 0xFFea580c, 0xFF0891b2];
@@ -1006,7 +1005,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
         'experiment': r.tree.text.trim(),
         'server_ip': r.server.text.trim(),
         if (shot.isNotEmpty && shot != widget.defaultShot) 'shot': shot,
-        'color_name': '#${colorValue.value.toRadixString(16).padLeft(8, '0').substring(2)}',
+        'color_name': '#${colorValue.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}',
         'hidden': r.hidden,
         'read_mode': r.readMode,
       });
@@ -1100,7 +1099,7 @@ class _ColorPicker extends StatelessWidget {
         )),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          TextButton(onPressed: () { row.customColor = selected; row.colorIdx = topColors.indexWhere((c) => c == selected.value); if (row.colorIdx < 0) row.colorIdx = 0; onChanged(); Navigator.pop(ctx); }, child: const Text('OK')),
+          TextButton(onPressed: () { row.customColor = selected; row.colorIdx = topColors.indexWhere((c) => c == selected.toARGB32()); if (row.colorIdx < 0) row.colorIdx = 0; onChanged(); Navigator.pop(ctx); }, child: const Text('OK')),
         ],
       );
     }));
