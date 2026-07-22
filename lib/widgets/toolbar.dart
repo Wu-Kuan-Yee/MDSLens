@@ -637,201 +637,210 @@ class ToolbarWidget extends StatelessWidget {
         final contentWidth = (screenSize.width - 64).clamp(240.0, 700.0);
         final contentHeight = (screenSize.height * 0.58).clamp(260.0, 540.0);
 
-        return AlertDialog(
-          insetPadding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
-          title: const Text('Layout Setup'),
-          content: SizedBox(
-            width: contentWidth,
-            height: contentHeight,
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  GestureDetector(
-                    key: const ValueKey('layout-setup-blank-area'),
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => setState(() {
-                      selectedCol = -1;
-                      selectedRow = -1;
-                    }),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Text(
-                        'Overview · ${displayColumns.length} columns · all panels visible',
-                        style: Theme.of(ctx).textTheme.bodySmall,
+        return GestureDetector(
+          key: const ValueKey('layout-setup-surface'),
+          behavior: HitTestBehavior.translucent,
+          onTap: () => setState(() {
+            selectedCol = -1;
+            selectedRow = -1;
+          }),
+          child: AlertDialog(
+            insetPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
+            title: const Text('Layout Setup'),
+            content: SizedBox(
+              width: contentWidth,
+              height: contentHeight,
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    GestureDetector(
+                      key: const ValueKey('layout-setup-blank-area'),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => setState(() {
+                        selectedCol = -1;
+                        selectedRow = -1;
+                      }),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Text(
+                          'Overview · ${displayColumns.length} columns · all panels visible',
+                          style: Theme.of(ctx).textTheme.bodySmall,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (var displayColumn = 0;
-                            displayColumn < displayColumns.length;
-                            displayColumn++) ...[
-                          if (displayColumn > 0) const SizedBox(width: 6),
-                          Expanded(
-                            child: Container(
-                              key: ValueKey(
-                                  'layout-preview-column-$displayColumn'),
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                    color: Theme.of(ctx).dividerColor),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Column(children: [
-                                GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () => setState(() {
-                                    selectedCol = -1;
-                                    selectedRow = -1;
-                                  }),
-                                  child: SizedBox(
-                                    height: 28,
-                                    child: Center(
-                                      child: FittedBox(
-                                        fit: BoxFit.scaleDown,
-                                        child: Text(
-                                          'Column ${displayColumn + 1}',
-                                          style: const TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (var displayColumn = 0;
+                              displayColumn < displayColumns.length;
+                              displayColumn++) ...[
+                            if (displayColumn > 0) const SizedBox(width: 6),
+                            Expanded(
+                              child: Container(
+                                key: ValueKey(
+                                    'layout-preview-column-$displayColumn'),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                      color: Theme.of(ctx).dividerColor),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Column(children: [
+                                  GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () => setState(() {
+                                      selectedCol = -1;
+                                      selectedRow = -1;
+                                    }),
+                                    child: SizedBox(
+                                      height: 28,
+                                      child: Center(
+                                        child: FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          child: Text(
+                                            'Column ${displayColumn + 1}',
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                            ),
                                           ),
                                         ),
                                       ),
                                     ),
                                   ),
-                                ),
-                                Expanded(
-                                  child: Column(
-                                    children: displayColumns[displayColumn]
-                                        .map((cell) {
-                                      final selected =
-                                          selectedCol == cell.sourceColumn &&
-                                              selectedRow == cell.sourceRow;
-                                      final panel =
-                                          draftColumns[cell.sourceColumn]
-                                              [cell.sourceRow];
-                                      return Expanded(
-                                        child: GestureDetector(
-                                          onTap: () => setState(() {
-                                            selectedCol = cell.sourceColumn;
-                                            selectedRow = cell.sourceRow;
-                                          }),
-                                          child: Container(
-                                            key: ValueKey(
-                                                'layout-preview-panel-${cell.plotIndex}'),
-                                            width: double.infinity,
-                                            margin: const EdgeInsets.all(4),
-                                            decoration: BoxDecoration(
-                                              border: Border.all(
-                                                color: selected
-                                                    ? Theme.of(ctx)
-                                                        .colorScheme
-                                                        .primary
-                                                    : Colors.grey.shade400,
-                                                width: selected ? 2 : 1,
+                                  Expanded(
+                                    child: Column(
+                                      children: displayColumns[displayColumn]
+                                          .map((cell) {
+                                        final selected =
+                                            selectedCol == cell.sourceColumn &&
+                                                selectedRow == cell.sourceRow;
+                                        final panel =
+                                            draftColumns[cell.sourceColumn]
+                                                [cell.sourceRow];
+                                        return Expanded(
+                                          child: GestureDetector(
+                                            onTap: () => setState(() {
+                                              selectedCol = cell.sourceColumn;
+                                              selectedRow = cell.sourceRow;
+                                            }),
+                                            child: Container(
+                                              key: ValueKey(
+                                                  'layout-preview-panel-${cell.plotIndex}'),
+                                              width: double.infinity,
+                                              margin: const EdgeInsets.all(4),
+                                              decoration: BoxDecoration(
+                                                border: Border.all(
+                                                  color: selected
+                                                      ? Theme.of(ctx)
+                                                          .colorScheme
+                                                          .primary
+                                                      : Colors.grey.shade400,
+                                                  width: selected ? 2 : 1,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                color: Theme.of(ctx)
+                                                    .colorScheme
+                                                    .primaryContainer
+                                                    .withValues(alpha: 0.3),
                                               ),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                              color: Theme.of(ctx)
-                                                  .colorScheme
-                                                  .primaryContainer
-                                                  .withValues(alpha: 0.3),
-                                            ),
-                                            child: _buildLayoutPanelPreview(
-                                              ctx,
-                                              panel: panel,
-                                              panelNumber: cell.plotIndex + 1,
-                                              selected: selected,
-                                              onEdit: () async {
-                                                final changed =
-                                                    await _editLayoutPanel(
-                                                  ctx,
-                                                  app,
-                                                  panel,
-                                                  cell.plotIndex + 1,
-                                                );
-                                                if (changed && ctx.mounted) {
-                                                  setState(() {});
-                                                }
-                                              },
-                                              onDelete: () {
-                                                final panelCount =
-                                                    draftColumns.fold(
-                                                  0,
-                                                  (count, column) =>
-                                                      count + column.length,
-                                                );
-                                                if (panelCount <= 1) return;
-                                                draftColumns[cell.sourceColumn]
-                                                    .removeAt(cell.sourceRow);
-                                                if (draftColumns[
-                                                        cell.sourceColumn]
-                                                    .isEmpty) {
-                                                  draftColumns.removeAt(
-                                                    cell.sourceColumn,
+                                              child: _buildLayoutPanelPreview(
+                                                ctx,
+                                                panel: panel,
+                                                panelNumber: cell.plotIndex + 1,
+                                                selected: selected,
+                                                onEdit: () async {
+                                                  final changed =
+                                                      await _editLayoutPanel(
+                                                    ctx,
+                                                    app,
+                                                    panel,
+                                                    cell.plotIndex + 1,
                                                   );
-                                                }
-                                                selectedCol = -1;
-                                                selectedRow = -1;
-                                                setState(() {});
-                                              },
+                                                  if (changed && ctx.mounted) {
+                                                    setState(() {});
+                                                  }
+                                                },
+                                                onDelete: () {
+                                                  final panelCount =
+                                                      draftColumns.fold(
+                                                    0,
+                                                    (count, column) =>
+                                                        count + column.length,
+                                                  );
+                                                  if (panelCount <= 1) return;
+                                                  draftColumns[
+                                                          cell.sourceColumn]
+                                                      .removeAt(cell.sourceRow);
+                                                  if (draftColumns[
+                                                          cell.sourceColumn]
+                                                      .isEmpty) {
+                                                    draftColumns.removeAt(
+                                                      cell.sourceColumn,
+                                                    );
+                                                  }
+                                                  selectedCol = -1;
+                                                  selectedRow = -1;
+                                                  setState(() {});
+                                                },
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                      );
-                                    }).toList(),
+                                        );
+                                      }).toList(),
+                                    ),
                                   ),
-                                ),
-                              ]),
+                                ]),
+                              ),
                             ),
-                          ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(spacing: 8, runSpacing: 4, children: [
-                    TextButton.icon(
-                      onPressed: () {
-                        final targetColumn = selectedCol >= 0 &&
-                                selectedCol < draftColumns.length
-                            ? selectedCol
-                            : draftColumns.length - 1;
-                        draftColumns[targetColumn].add(_emptyPanelConfig());
-                        setState(() {});
-                      },
-                      icon: const Icon(Icons.add, size: 16),
-                      label: const Text('Add panel'),
-                    ),
-                    TextButton.icon(
-                      onPressed: () {
-                        draftColumns.add([_emptyPanelConfig()]);
-                        setState(() {});
-                      },
-                      icon: const Icon(Icons.view_column_outlined, size: 16),
-                      label: const Text('Add column'),
-                    ),
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 8, runSpacing: 4, children: [
+                      TextButton.icon(
+                        onPressed: () {
+                          final targetColumn = selectedCol >= 0 &&
+                                  selectedCol < draftColumns.length
+                              ? selectedCol
+                              : draftColumns.length - 1;
+                          draftColumns[targetColumn].add(_emptyPanelConfig());
+                          setState(() {});
+                        },
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('Add panel'),
+                      ),
+                      TextButton.icon(
+                        onPressed: () {
+                          draftColumns.add([_emptyPanelConfig()]);
+                          setState(() {});
+                        },
+                        icon: const Icon(Icons.view_column_outlined, size: 16),
+                        label: const Text('Add column'),
+                      ),
+                    ]),
                   ]),
-                ]),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel')),
-            TextButton(
-              onPressed: () {
-                if (draftColumns.isNotEmpty) {
-                  app.applyLayoutColumns(draftColumns);
-                  app.startRefresh();
-                }
-                Navigator.pop(ctx);
-              },
-              child: const Text('Apply'),
             ),
-          ],
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel')),
+              TextButton(
+                onPressed: () {
+                  if (draftColumns.isNotEmpty) {
+                    app.applyLayoutColumns(draftColumns);
+                    app.startRefresh();
+                  }
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Apply'),
+              ),
+            ],
+          ),
         );
       }),
     );

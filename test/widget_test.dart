@@ -799,7 +799,8 @@ void main() {
     expect(find.byKey(const ValueKey('layout-edit-panel-1')), findsOneWidget);
     expect(find.byKey(const ValueKey('layout-delete-panel-1')), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('layout-setup-blank-area')));
+    final layoutDialog = tester.getRect(find.byType(AlertDialog));
+    await tester.tapAt(Offset(layoutDialog.right - 20, layoutDialog.top + 20));
     await tester.pump();
     expect(find.byKey(const ValueKey('layout-edit-panel-1')), findsNothing);
 
