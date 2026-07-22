@@ -624,6 +624,17 @@ void main() {
             of: toolbar, matching: find.byType(SingleChildScrollView)),
         findsNothing,
       );
+      final themeTop = tester
+          .getTopLeft(find.byKey(const ValueKey('toolbar-theme-actions')))
+          .dy;
+      final appTop = tester
+          .getTopLeft(find.byKey(const ValueKey('toolbar-app-actions')))
+          .dy;
+      final fileTop = tester
+          .getTopLeft(find.byKey(const ValueKey('toolbar-file-actions')))
+          .dy;
+      expect(themeTop, closeTo(appTop, 0.01));
+      expect(themeTop, lessThanOrEqualTo(fileTop + 0.01));
       expect(tester.takeException(), isNull);
     }
   });
@@ -666,6 +677,7 @@ void main() {
     final navigation = find.byKey(const ValueKey('toolbar-shot-navigation'));
     final modes = find.byKey(const ValueKey('toolbar-mode-actions'));
     final themes = find.byKey(const ValueKey('toolbar-theme-actions'));
+    final appActions = find.byKey(const ValueKey('toolbar-app-actions'));
     expectEqualRow(fileActions, elevatedButtons, 3);
     expectEqualRow(navigation, elevatedButtons, 3);
     expectEqualRow(modes, outlinedButtons, 2);
@@ -691,8 +703,8 @@ void main() {
     expect(darkTheme.properties.selected, isTrue);
 
     final orderedGroups = [
-      fileActions,
       themes,
+      fileActions,
       find.byKey(const ValueKey('toolbar-shot-info')),
       find.byKey(const ValueKey('toolbar-shot-entry')),
       navigation,
@@ -701,6 +713,8 @@ void main() {
     for (var i = 1; i < tops.length; i++) {
       expect(tops[i], greaterThan(tops[i - 1]));
     }
+    expect(tester.getTopLeft(appActions).dy,
+        closeTo(tester.getTopLeft(themes).dy, 0.01));
     expect(tester.getTopLeft(modes).dy,
         closeTo(tester.getTopLeft(navigation).dy, 0.01));
     expect(tester.takeException(), isNull);

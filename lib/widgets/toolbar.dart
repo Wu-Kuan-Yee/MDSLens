@@ -233,15 +233,15 @@ class ToolbarWidget extends StatelessWidget {
         if (compact) {
           topActions = Column(children: [
             Row(children: [
-              Expanded(child: fileActions),
+              SizedBox(width: 108, child: themeActions),
               const SizedBox(width: 8),
-              SizedBox(width: 140, child: rateSelector),
+              Expanded(child: appActions),
             ]),
             const SizedBox(height: 8),
             Row(children: [
-              Expanded(flex: 3, child: themeActions),
+              Expanded(child: fileActions),
               const SizedBox(width: 8),
-              Expanded(flex: 4, child: appActions),
+              SizedBox(width: 140, child: rateSelector),
             ]),
           ]);
         } else if (wide) {
@@ -250,25 +250,24 @@ class ToolbarWidget extends StatelessWidget {
             const SizedBox(width: 8),
             SizedBox(width: 150, child: rateSelector),
             const Spacer(),
-            SizedBox(width: 220, child: themeActions),
+            SizedBox(width: 108, child: themeActions),
             const SizedBox(width: 8),
             SizedBox(width: 260, child: appActions),
           ]);
         } else {
           final fileWidth = (width * 0.56).clamp(250.0, 320.0);
-          final themeWidth = (width * 0.42).clamp(210.0, 260.0);
           final appWidth = (width * 0.46).clamp(230.0, 300.0);
           topActions = Column(children: [
+            Row(children: [
+              SizedBox(width: 108, child: themeActions),
+              const Spacer(),
+              SizedBox(width: appWidth, child: appActions),
+            ]),
+            const SizedBox(height: 8),
             Row(children: [
               SizedBox(width: fileWidth, child: fileActions),
               const Spacer(),
               SizedBox(width: 160, child: rateSelector),
-            ]),
-            const SizedBox(height: 8),
-            Row(children: [
-              SizedBox(width: themeWidth, child: themeActions),
-              const Spacer(),
-              SizedBox(width: appWidth, child: appActions),
             ]),
           ]);
         }
