@@ -11,6 +11,27 @@ import 'dropdown_items.dart';
 import 'plot_panel.dart';
 import 'responsive_plot_layout.dart';
 
+List<(String, String)> _shotMetadata(AppState app) {
+  String valueWithUnit(String value, String unit) {
+    if (value.isEmpty) return app.fetching ? '...' : '--';
+    if (RegExp(r'[a-zA-Z]$').hasMatch(value.trim())) return value;
+    return '$value $unit';
+  }
+
+  return [
+    ('Shot', app.shotText.isEmpty ? '--' : app.shotText),
+    ('Ip', valueWithUnit(app.shotInfoIp, 'kA')),
+    ('Pulse', valueWithUnit(app.shotInfoPulse, 's')),
+    ('It', valueWithUnit(app.shotInfoIt, 'A')),
+    (
+      'Time',
+      app.shotInfoTime.isEmpty
+          ? (app.fetching ? '...' : '--')
+          : app.shotInfoTime
+    ),
+  ];
+}
+
 class ResponsiveToolbar extends StatelessWidget {
   const ResponsiveToolbar({super.key});
 
@@ -24,6 +45,96 @@ class ResponsiveToolbar extends StatelessWidget {
         if (!offersCollapse) return const ToolbarWidget();
 
         final theme = Theme.of(context);
+        final metadata = _shotMetadata(app)
+            .map((entry) => '${entry.$1}: ${entry.$2}')
+            .join('   •   ');
+        final collapseBar = app.toolbarCollapsed
+            ? SizedBox(
+                height: 40,
+                child: Row(
+                  children: [
+                    InkWell(
+                      key: const ValueKey('toolbar-collapse-control'),
+                      onTap: () => app.toolbarCollapsed = false,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              size: 22,
+                              color: theme.colorScheme.primary,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Expand controls',
+                              style: TextStyle(
+                                color: theme.colorScheme.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    VerticalDivider(
+                      width: 1,
+                      thickness: 1,
+                      indent: 9,
+                      endIndent: 9,
+                      color: theme.dividerColor,
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        key:
+                            const ValueKey('toolbar-collapsed-metadata-scroll'),
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Center(
+                          child: Text(
+                            metadata,
+                            key: const ValueKey('toolbar-collapsed-summary'),
+                            maxLines: 1,
+                            softWrap: false,
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : InkWell(
+                key: const ValueKey('toolbar-collapse-control'),
+                onTap: () => app.toolbarCollapsed = true,
+                child: SizedBox(
+                  height: 40,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.keyboard_arrow_up_rounded,
+                          size: 22,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Collapse controls',
+                          style: TextStyle(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const Spacer(),
+                      ],
+                    ),
+                  ),
+                ),
+              );
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -37,59 +148,7 @@ class ResponsiveToolbar extends StatelessWidget {
             ),
             Material(
               color: theme.colorScheme.surfaceContainerHigh,
-              child: InkWell(
-                key: const ValueKey('toolbar-collapse-control'),
-                onTap: () => app.toolbarCollapsed = !app.toolbarCollapsed,
-                child: SizedBox(
-                  height: 40,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Row(
-                      children: [
-                        Icon(
-                          app.toolbarCollapsed
-                              ? Icons.keyboard_arrow_down_rounded
-                              : Icons.keyboard_arrow_up_rounded,
-                          size: 22,
-                          color: theme.colorScheme.primary,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          app.toolbarCollapsed
-                              ? 'Expand controls'
-                              : 'Collapse controls',
-                          style: TextStyle(
-                            color: theme.colorScheme.primary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        if (app.toolbarCollapsed) ...[
-                          const SizedBox(width: 12),
-                          Container(
-                            width: 1,
-                            height: 20,
-                            color: theme.dividerColor,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'Shot ${app.shotText.isEmpty ? "--" : app.shotText} · ${app.status}',
-                              key: const ValueKey('toolbar-collapsed-summary'),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.right,
-                              style: TextStyle(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                        ] else
-                          const Spacer(),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+              child: collapseBar,
             ),
           ],
         );
@@ -116,19 +175,7 @@ class ToolbarWidget extends StatelessWidget {
       color: theme.colorScheme.onSurfaceVariant,
       fontWeight: FontWeight.w500,
     );
-    final shot = app.shotText.isNotEmpty ? app.shotText : '--';
-    final ip = app.shotInfoIp.isNotEmpty
-        ? '${app.shotInfoIp} kA'
-        : (app.fetching ? '...' : '--');
-    final pulse = app.shotInfoPulse.isNotEmpty
-        ? '${app.shotInfoPulse} s'
-        : (app.fetching ? '...' : '--');
-    final it = app.shotInfoIt.isNotEmpty
-        ? '${app.shotInfoIt} A'
-        : (app.fetching ? '...' : '--');
-    final time = app.shotInfoTime.isNotEmpty
-        ? app.shotInfoTime
-        : (app.fetching ? '...' : '--');
+    final shotMetadata = _shotMetadata(app);
 
     final fileActions = _equalActionRow(
       key: const ValueKey('toolbar-file-actions'),
@@ -360,13 +407,7 @@ class ToolbarWidget extends StatelessWidget {
         final shotInfo = _shotInfoPanel(
           context,
           compact: compact,
-          entries: [
-            ('Shot', shot),
-            ('Ip', ip),
-            ('Pulse', pulse),
-            ('It', it),
-            ('Time', time),
-          ],
+          entries: shotMetadata,
           labelStyle: infoLabelStyle,
           valueStyle: infoValueStyle,
         );

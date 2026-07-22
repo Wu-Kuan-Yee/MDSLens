@@ -1269,6 +1269,60 @@ void main() {
     expect(find.byKey(const ValueKey('toolbar-root')), findsOneWidget);
   });
 
+  testWidgets('Collapsed toolbar keeps controls fixed and scrolls metadata',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    app.shotText = '163714';
+    addTearDown(tester.view.reset);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(
+          home: Scaffold(body: ResponsiveToolbar()),
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('toolbar-collapsed-metadata-scroll')),
+      findsNothing,
+    );
+    await tester.tap(find.text('Collapse controls'));
+    await tester.pumpAndSettle();
+
+    final summaryFinder =
+        find.byKey(const ValueKey('toolbar-collapsed-summary'));
+    final summary = tester.widget<Text>(summaryFinder).data!;
+    expect(summary, contains('Shot: 163714'));
+    expect(summary, contains('Ip: --'));
+    expect(summary, contains('Pulse: --'));
+    expect(summary, contains('It: --'));
+    expect(summary, contains('Time: --'));
+    expect(RegExp('Shot:').allMatches(summary), hasLength(1));
+    expect(summary, isNot(contains(app.status)));
+
+    final metadataScroll =
+        find.byKey(const ValueKey('toolbar-collapsed-metadata-scroll'));
+    final horizontalScrollable = find.descendant(
+      of: metadataScroll,
+      matching: find.byType(Scrollable),
+    );
+    expect(horizontalScrollable, findsOneWidget);
+    final scrollState =
+        tester.state<ScrollableState>(horizontalScrollable.first);
+    expect(scrollState.position.maxScrollExtent, greaterThan(0));
+    final fixedLeft = tester.getTopLeft(find.text('Expand controls'));
+    await tester.drag(metadataScroll, const Offset(-180, 0));
+    await tester.pumpAndSettle();
+    expect(scrollState.position.pixels, greaterThan(0));
+    expect(tester.getTopLeft(find.text('Expand controls')), fixedLeft);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Comfortable screens do not show the collapse control',
       (tester) async {
     final app = AppState();
