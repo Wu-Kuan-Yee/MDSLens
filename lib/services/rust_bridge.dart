@@ -87,11 +87,19 @@ class RustBridge {
   static String Function(String) _wrap1(DynamicLibrary lib, String name) {
     final f = lib.lookupFunction<Pointer<Utf8> Function(Pointer<Utf8>),
         Pointer<Utf8> Function(Pointer<Utf8>)>(name);
+    final freeResult = _rustStringFree(lib);
     return (a) {
-      final p = f(a.toNativeUtf8());
-      final s = p.toDartString();
-      malloc.free(p);
-      return s;
+      final aPointer = a.toNativeUtf8();
+      Pointer<Utf8> result = nullptr;
+      try {
+        result = f(aPointer);
+        return _readResult(result, name);
+      } finally {
+        malloc.free(aPointer);
+        if (result != nullptr) {
+          freeResult(result);
+        }
+      }
     };
   }
 
@@ -100,11 +108,21 @@ class RustBridge {
     final f = lib.lookupFunction<
         Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>),
         Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>)>(name);
+    final freeResult = _rustStringFree(lib);
     return (a, b) {
-      final p = f(a.toNativeUtf8(), b.toNativeUtf8());
-      final s = p.toDartString();
-      malloc.free(p);
-      return s;
+      final aPointer = a.toNativeUtf8();
+      final bPointer = b.toNativeUtf8();
+      Pointer<Utf8> result = nullptr;
+      try {
+        result = f(aPointer, bPointer);
+        return _readResult(result, name);
+      } finally {
+        malloc.free(aPointer);
+        malloc.free(bPointer);
+        if (result != nullptr) {
+          freeResult(result);
+        }
+      }
     };
   }
 
@@ -114,11 +132,35 @@ class RustBridge {
         Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>),
         Pointer<Utf8> Function(
             Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>)>(name);
+    final freeResult = _rustStringFree(lib);
     return (a, b, c) {
-      final p = f(a.toNativeUtf8(), b.toNativeUtf8(), c.toNativeUtf8());
-      final s = p.toDartString();
-      malloc.free(p);
-      return s;
+      final aPointer = a.toNativeUtf8();
+      final bPointer = b.toNativeUtf8();
+      final cPointer = c.toNativeUtf8();
+      Pointer<Utf8> result = nullptr;
+      try {
+        result = f(aPointer, bPointer, cPointer);
+        return _readResult(result, name);
+      } finally {
+        malloc.free(aPointer);
+        malloc.free(bPointer);
+        malloc.free(cPointer);
+        if (result != nullptr) {
+          freeResult(result);
+        }
+      }
     };
+  }
+
+  static void Function(Pointer<Utf8>) _rustStringFree(DynamicLibrary lib) {
+    return lib.lookupFunction<Void Function(Pointer<Utf8>),
+        void Function(Pointer<Utf8>)>('mds_free_string');
+  }
+
+  static String _readResult(Pointer<Utf8> result, String functionName) {
+    if (result == nullptr) {
+      throw StateError('$functionName returned a null string pointer');
+    }
+    return result.toDartString();
   }
 }
