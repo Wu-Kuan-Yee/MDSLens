@@ -34,7 +34,7 @@ render_opaque() {
 
 # Flutter/About dialog and Linux desktop/window icon.
 render "$SOURCE_ICON" 256 "$ROOT_DIR/assets/app_icon.png"
-render "$SOURCE_ICON" 256 "$ROOT_DIR/linux/runner/app_icon.png"
+render "$SOURCE_ICON" 512 "$ROOT_DIR/linux/runner/app_icon.png"
 
 # macOS asset catalog.
 for size in 16 32 64 128 256 512 1024; do

@@ -20,6 +20,7 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - run: python3 scripts/verify_icons.py
       - run: flutter analyze
       - run: flutter test
 
