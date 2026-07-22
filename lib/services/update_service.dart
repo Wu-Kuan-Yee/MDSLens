@@ -34,8 +34,9 @@ Future<ReleaseUpdate> checkLatestMdsScopeRelease() async {
       );
     }
     final decoded = jsonDecode(body);
-    if (decoded is! Map)
+    if (decoded is! Map) {
       throw const FormatException('Invalid release response');
+    }
     final latest = decoded['tag_name']?.toString().trim() ?? '';
     if (!_parseVersion(latest).isValid) {
       throw const FormatException('Invalid release version');

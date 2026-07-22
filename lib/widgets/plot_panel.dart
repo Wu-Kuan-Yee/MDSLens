@@ -512,8 +512,9 @@ class _PlotPanelState extends State<PlotPanel> {
   String _fmtAxis(double v) {
     final abs = v.abs();
     if (!abs.isFinite) return '';
-    if (abs >= 1000 || (abs > 0 && abs < 0.001))
+    if (abs >= 1000 || (abs > 0 && abs < 0.001)) {
       return v.toStringAsExponential(1);
+    }
     if (abs >= 100) return v.toStringAsFixed(0);
     if (abs >= 10) return v.toStringAsFixed(1);
     // Adaptive: 3 decimals then strip trailing zeros for natural precision
@@ -635,8 +636,9 @@ class _PlotPanelState extends State<PlotPanel> {
     }
     if (lo > 0 &&
         (lo >= spots.length ||
-            (x - spots[lo - 1].x).abs() < (spots[lo].x - x).abs()))
+            (x - spots[lo - 1].x).abs() < (spots[lo].x - x).abs())) {
       return lo - 1;
+    }
     return lo;
   }
 
@@ -649,7 +651,9 @@ class _PlotPanelState extends State<PlotPanel> {
     if (i < sigSpecs.length && sigSpecs[i]['color_name'] != null) {
       final hex = sigSpecs[i]['color_name'].toString().replaceFirst('#', '');
       final c = int.tryParse(hex, radix: 16);
-      if (c != null) return Color(0xFF000000 | c);
+      if (c != null) {
+        return Color(0xFF000000 | c);
+      }
     }
     return _colors[i % _colors.length];
   }
@@ -660,8 +664,9 @@ class _PlotPanelState extends State<PlotPanel> {
     final cb = _chartBox;
     final app = context.read<AppState>();
     final gridLeft = _gridLeftInset(app);
-    if (lb == null || cb == null || cb.size.width <= gridLeft)
+    if (lb == null || cb == null || cb.size.width <= gridLeft) {
       return (_viewMinX + _viewMaxX) / 2;
+    }
     final chartLocal = cb.globalToLocal(lb.localToGlobal(Offset(px, 0)));
     final gx = chartLocal.dx - gridLeft;
     final gw = cb.size.width - gridLeft;
@@ -673,8 +678,9 @@ class _PlotPanelState extends State<PlotPanel> {
     final cb = _chartBox;
     final app = context.read<AppState>();
     final gridBottom = _gridBottomInset(app);
-    if (lb == null || cb == null || cb.size.height <= gridBottom)
+    if (lb == null || cb == null || cb.size.height <= gridBottom) {
       return (_viewMinY + _viewMaxY) / 2;
+    }
     final chartLocal = cb.globalToLocal(lb.localToGlobal(Offset(0, py)));
     final gy = chartLocal.dy;
     final gh = cb.size.height - gridBottom;
@@ -835,8 +841,12 @@ class _PlotPanelState extends State<PlotPanel> {
     final cb = _chartBox;
     setState(() {
       if (_viewMinX.isNaN) _initViewToData(plot);
-      if (lb == null || cb == null || cb.size.width <= 0 || cb.size.height <= 0)
+      if (lb == null ||
+          cb == null ||
+          cb.size.width <= 0 ||
+          cb.size.height <= 0) {
         return;
+      }
       final dx = event.localPosition.dx - _lastMidPanPos!.dx;
       final dy = event.localPosition.dy - _lastMidPanPos!.dy;
       final xScale = (_viewMaxX - _viewMinX) / cb.size.width;
@@ -1197,8 +1207,9 @@ class _PlotPanelState extends State<PlotPanel> {
                 ?.map((s) => Map<String, dynamic>.from(s as Map)) ??
             []);
     final defaultShot = (panel['shot']?.toString() ?? app.shotText).trim();
-    if (sigs.isEmpty)
+    if (sigs.isEmpty) {
       sigs.add({'experiment': 'pcs_east', 'server_ip': '202.127.204.12'});
+    }
     final confirmed = await showDataSourceSetupEditor(
       ctx,
       signals: sigs,

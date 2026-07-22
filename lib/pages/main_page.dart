@@ -102,8 +102,9 @@ class MainPage extends StatelessWidget {
             hi = mid;
           }
         }
-        if (lo > 0 && (cx - pts[lo - 1][0]).abs() < (pts[lo][0] - cx).abs())
+        if (lo > 0 && (cx - pts[lo - 1][0]).abs() < (pts[lo][0] - cx).abs()) {
           lo--;
+        }
         // Step to adjacent sample
         final next = (lo + dir).clamp(0, pts.length - 1);
         app.setCrosshair(pts[next][0]);
