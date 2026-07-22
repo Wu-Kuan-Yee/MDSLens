@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -18,6 +19,7 @@ import 'package:mdsscope/theme/mdsscope_theme.dart';
 import 'package:mdsscope/widgets/dialogs/about.dart';
 import 'package:mdsscope/widgets/plot_panel.dart';
 import 'package:mdsscope/widgets/plot_grid.dart';
+import 'package:mdsscope/widgets/plot_render_cache.dart';
 import 'package:mdsscope/widgets/responsive_plot_layout.dart';
 import 'package:mdsscope/widgets/toolbar.dart';
 import 'package:provider/provider.dart';
@@ -25,6 +27,28 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  test('Waveform render geometry is reused until series data changes', () {
+    final points = List<List<double>>.generate(
+      12000,
+      (index) => [index / 1000, math.sin(index / 80)],
+    );
+    final series = SeriesData(points: points);
+    final cache = PlotRenderCache();
+
+    final first = cache.render(series);
+    final second = cache.render(series);
+    expect(identical(first, second), isTrue);
+    expect(first.spots.length, lessThanOrEqualTo(2000));
+
+    series.points = List<List<double>>.from(points);
+    final replaced = cache.render(series);
+    expect(identical(first, replaced), isFalse);
+
+    series.points!.add([12.0, 0.0]);
+    final extended = cache.render(series);
+    expect(identical(replaced, extended), isFalse);
+  });
 
   test('Release versions are compared semantically', () {
     expect(compareVersions('v7.1.0', '7.0.9'), greaterThan(0));

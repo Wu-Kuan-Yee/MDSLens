@@ -7,6 +7,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dropdown_items.dart';
+import 'plot_render_cache.dart';
 import 'polished_dropdown.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/app_state.dart';
@@ -78,6 +79,7 @@ class PlotPanel extends StatefulWidget {
 class _PlotPanelState extends State<PlotPanel> {
   final _chartAreaKey = GlobalKey();
   final _listenerKey = GlobalKey();
+  final _renderCache = PlotRenderCache();
   double _viewMinX = double.nan,
       _viewMaxX = double.nan,
       _viewMinY = double.nan,
@@ -124,24 +126,24 @@ class _PlotPanelState extends State<PlotPanel> {
 
     // Build line bars with MinMax decimation
     final bars = <LineChartBarData>[];
+    final activeSeries = <SeriesData>[];
     final sigSpecs = (panel['signal_specs'] as List?)?.cast<Map>() ?? [];
     double? viewMinX, viewMaxX, viewMinY, viewMaxY;
     for (var i = 0; i < plot.series.length; i++) {
       final s = plot.series[i];
       if (s?.points == null || s!.points!.isEmpty) continue;
       if (i < sigSpecs.length && sigSpecs[i]['hidden'] == true) continue;
-      final decimated = _decimate(s.points!, 2000);
-      final spots = decimated.map((p) => FlSpot(p[0], p[1])).toList();
-      for (final sp in spots) {
-        viewMinX ??= sp.x;
-        viewMaxX ??= sp.x;
-        viewMinY ??= sp.y;
-        viewMaxY ??= sp.y;
-        if (sp.x < viewMinX) viewMinX = sp.x;
-        if (sp.x > viewMaxX) viewMaxX = sp.x;
-        if (sp.y < viewMinY) viewMinY = sp.y;
-        if (sp.y > viewMaxY) viewMaxY = sp.y;
-      }
+      activeSeries.add(s);
+      final rendered = _renderCache.render(s);
+      final spots = rendered.spots;
+      viewMinX =
+          viewMinX == null ? rendered.minX : math.min(viewMinX, rendered.minX);
+      viewMaxX =
+          viewMaxX == null ? rendered.maxX : math.max(viewMaxX, rendered.maxX);
+      viewMinY =
+          viewMinY == null ? rendered.minY : math.min(viewMinY, rendered.minY);
+      viewMaxY =
+          viewMaxY == null ? rendered.maxY : math.max(viewMaxY, rendered.maxY);
       bars.add(LineChartBarData(
         spots: spots,
         isCurved: false,
@@ -151,6 +153,7 @@ class _PlotPanelState extends State<PlotPanel> {
         belowBarData: BarAreaData(show: false),
       ));
     }
+    _renderCache.retain(activeSeries);
 
     return Stack(children: [
       GestureDetector(
@@ -1327,39 +1330,6 @@ class _PlotPanelState extends State<PlotPanel> {
     final xPad = 0.0;
     final yPad = 0.0;
     return [rMinX - xPad, rMaxX + xPad, rMinY - yPad, rMaxY + yPad];
-  }
-
-  List<List<double>> _decimate(List<List<double>> points, int maxPoints) {
-    if (points.length <= maxPoints) return points;
-    final buckets = (maxPoints / 2).ceil().clamp(1, points.length);
-    final out = <List<double>>[];
-    for (var b = 0; b < buckets; b++) {
-      final start = (b * points.length ~/ buckets);
-      final end = ((b + 1) * points.length ~/ buckets).clamp(0, points.length);
-      if (start >= end) continue;
-      double minY = double.infinity, maxY = double.negativeInfinity;
-      for (var i = start; i < end; i++) {
-        if (points[i][1] < minY) {
-          minY = points[i][1];
-        }
-        if (points[i][1] > maxY) {
-          maxY = points[i][1];
-        }
-      }
-      // Use endpoint X for first/last bucket so the curve reaches grid edges
-      final x = b == 0
-          ? points[0][0]
-          : (b == buckets - 1
-              ? points[points.length - 1][0]
-              : (points[start][0] + points[end - 1][0]) / 2);
-      if (minY == maxY) {
-        out.add([x, minY]);
-      } else {
-        out.add([x, minY]);
-        out.add([x, maxY]);
-      }
-    }
-    return out;
   }
 }
 
