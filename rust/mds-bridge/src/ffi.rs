@@ -42,8 +42,7 @@ pub extern "C" fn mds_write_environment(config_json: *const c_char, path: *const
 
 #[no_mangle]
 pub extern "C" fn mds_request_login(api_url: *const c_char, user: *const c_char, pass: *const c_char) -> *mut c_char {
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    match rt.block_on(a::request_login(to_rust(api_url), to_rust(user), to_rust(pass))) {
+    match a::request_login(to_rust(api_url), to_rust(user), to_rust(pass)) {
         Ok(token) => ffi_string!(format!("{{\"ok\":true,\"token\":\"{}\"}}", token)),
         Err(e) => ffi_string!(format!("{{\"error\":\"{}\"}}", e)),
     }
@@ -51,8 +50,7 @@ pub extern "C" fn mds_request_login(api_url: *const c_char, user: *const c_char,
 
 #[no_mangle]
 pub extern "C" fn mds_fetch_shot(api_url: *const c_char, token: *const c_char) -> *mut c_char {
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    match rt.block_on(a::fetch_shot(to_rust(api_url), to_rust(token))) {
+    match a::fetch_shot(to_rust(api_url), to_rust(token)) {
         Ok(info) => ffi_string!(serde_json::to_string(&info).unwrap_or_default()),
         Err(e) => ffi_string!(format!("{{\"error\":\"{}\"}}", e)),
     }
@@ -60,8 +58,7 @@ pub extern "C" fn mds_fetch_shot(api_url: *const c_char, token: *const c_char) -
 
 #[no_mangle]
 pub extern "C" fn mds_fetch_shot_info(api_url: *const c_char, token: *const c_char, shot: *const c_char) -> *mut c_char {
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    match rt.block_on(a::fetch_shot_info(to_rust(api_url), to_rust(token), to_rust(shot))) {
+    match a::fetch_shot_info(to_rust(api_url), to_rust(token), to_rust(shot)) {
         Ok(info) => ffi_string!(serde_json::to_string(&info).unwrap_or_default()),
         Err(e) => ffi_string!(format!("{{\"error\":\"{}\"}}", e)),
     }

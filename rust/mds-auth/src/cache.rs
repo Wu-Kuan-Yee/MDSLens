@@ -47,6 +47,7 @@ fn machine_id() -> String {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn hostname_cmd() -> String {
     std::process::Command::new("hostname")
         .output()
@@ -256,7 +257,6 @@ pub fn token_expires_soon(token: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
 
     #[test]
     fn test_crypt_roundtrip() {

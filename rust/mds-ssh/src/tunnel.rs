@@ -23,11 +23,7 @@ pub enum TunnelState { Unconfigured, Ready, Connecting, Connected, Error }
 pub enum AuthMethod { PublicKey, Agent, Password, KeyboardInteractive }
 
 struct Tunnel {
-    endpoint: String,
     local_port: u16,
-    #[cfg(feature = "libssh2")]
-    session: Option<Arc<std::sync::Mutex<ssh2::Session>>>,
-    listener: Option<TcpListener>,
     cancel: Arc<AtomicBool>,
 }
 
@@ -130,7 +126,7 @@ impl SshTunnelManager {
             loop {
                 if cc.load(Ordering::Relaxed) { break; }
                 match listener.accept() {
-                    Ok((mut local, _)) => {
+                    Ok((local, _)) => {
                         local.set_nonblocking(false).ok();
                         let s = SshSettings {
                             mode: mds_core::types::SshMode::Always,
@@ -158,10 +154,7 @@ impl SshTunnelManager {
         });
 
         self.tunnels.insert(endpoint.to_string(), Tunnel {
-            endpoint: endpoint.to_string(),
             local_port,
-            session: None,
-            listener: None,
             cancel,
         });
         Ok(())

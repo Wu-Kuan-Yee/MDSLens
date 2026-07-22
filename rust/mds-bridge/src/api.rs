@@ -175,18 +175,18 @@ pub fn write_environment(config: FrbLayoutConfig, path: String) -> Result<(), St
 // ── API Auth ───────────────────────────────────────────────────────────
 
 
-pub async fn request_login(api_url: String, user: String, pass: String) -> Result<String, String> {
-    mds_auth::http::request_api_token(&api_url, &user, &pass).await
+pub fn request_login(api_url: String, user: String, pass: String) -> Result<String, String> {
+    mds_auth::http::request_api_token(&api_url, &user, &pass)
 }
 
 
-pub async fn fetch_shot(api_url: String, token: String) -> Result<FrbShotInfo, String> {
-    let info = mds_auth::http::fetch_latest_shot(&api_url, &token).await?;
+pub fn fetch_shot(api_url: String, token: String) -> Result<FrbShotInfo, String> {
+    let info = mds_auth::http::fetch_latest_shot(&api_url, &token)?;
     Ok(FrbShotInfo { shot: info.shot, ip: info.ip, pulse: info.pulse, it: info.it, time: info.time })
 }
 
-pub async fn fetch_shot_info(api_url: String, token: String, shot: String) -> Result<FrbShotInfo, String> {
-    let info = mds_auth::http::fetch_shot_info(&api_url, &token, &shot).await?;
+pub fn fetch_shot_info(api_url: String, token: String, shot: String) -> Result<FrbShotInfo, String> {
+    let info = mds_auth::http::fetch_shot_info(&api_url, &token, &shot)?;
     Ok(FrbShotInfo { shot: info.shot, ip: info.ip, pulse: info.pulse, it: info.it, time: info.time })
 }
 

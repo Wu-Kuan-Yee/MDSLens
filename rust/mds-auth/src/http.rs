@@ -10,7 +10,7 @@ pub struct ShotInfo {
     pub ip: String, pub pulse: String, pub it: String, pub time: String,
 }
 
-pub async fn request_api_token(api_url: &str, user_name: &str, password: &str) -> Result<String, String> {
+pub fn request_api_token(api_url: &str, user_name: &str, password: &str) -> Result<String, String> {
     let url = format!("{}/login", api_url.trim_end_matches('/'));
     let body = serde_json::json!({ "userName": user_name, "password": password }).to_string();
     let resp = http_post_json(&url, &body, None)?;
@@ -22,7 +22,7 @@ pub async fn request_api_token(api_url: &str, user_name: &str, password: &str) -
     }
 }
 
-pub async fn fetch_latest_shot(api_url: &str, token: &str) -> Result<ShotInfo, String> {
+pub fn fetch_latest_shot(api_url: &str, token: &str) -> Result<ShotInfo, String> {
     let url = format!("{}/treeShot", api_url.trim_end_matches('/'));
     let resp = http_post_json(&url, "{}", Some(token))?;
     if !resp_ok(&resp) { return Err(resp.get("msg").and_then(|m| m.as_str()).unwrap_or("unknown").into()); }
@@ -40,7 +40,7 @@ pub async fn fetch_latest_shot(api_url: &str, token: &str) -> Result<ShotInfo, S
 
 /// Fetch shot summary info (Ip, Pulse, It, Time) for a specific shot.
 /// Calls /pcsEastTree with {shot: shot} — matching C++ scheduleTopInfoUpdate.
-pub async fn fetch_shot_info(api_url: &str, token: &str, shot: &str) -> Result<ShotInfo, String> {
+pub fn fetch_shot_info(api_url: &str, token: &str, shot: &str) -> Result<ShotInfo, String> {
     let url = format!("{}/pcsEastTree", api_url.trim_end_matches('/'));
     let body = format!(r#"{{"treeshot":{}}}"#, shot);
     let resp = http_post_json(&url, &body, Some(token))?;
@@ -107,7 +107,7 @@ fn http_send(host: &str, port: u16, req: &str) -> Result<String, String> {
 fn parse_http_url(url: &str) -> Result<(String, u16, String), String> {
     let s = url.trim().strip_prefix("http://").or_else(|| url.strip_prefix("https://")).unwrap_or(url).trim_start_matches('/');
     let slash = s.find('/').unwrap_or(s.len());
-    let (mut hp, path) = (s[..slash].trim().to_string(), if slash < s.len() { s[slash..].into() } else { "/".into() });
+    let (hp, path) = (s[..slash].trim().to_string(), if slash < s.len() { s[slash..].into() } else { "/".into() });
     if let Some(ci) = hp.rfind(':') {
         let after = hp[ci+1..].to_string();
         if let Some((d, r)) = split_digits(&after) {

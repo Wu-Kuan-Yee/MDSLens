@@ -15,24 +15,14 @@ toml = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# Async runtime
-tokio = { version = "1", features = ["full"] }
-
 # SSH
 ssh2 = { version = "0.9", features = ["vendored-openssl"] }
 
-# Network
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-
 # Utilities
-thiserror = "2"
 tracing = "0.1"
-parking_lot = "0.12"
-bytemuck = "1"
 base64 = "0.22"
 sha2 = "0.10"
 ring = "0.17"
-rayon = "1"
 
 # Internal crates
 mds-core = { path = "mds-core" }
@@ -40,5 +30,10 @@ mds-ip = { path = "mds-ip" }
 mds-ssh = { path = "mds-ssh" }
 mds-auth = { path = "mds-auth" }
 
-# FFI bridge
-flutter_rust_bridge = "2"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = "debuginfo"
