@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:mdsscope/models/app_state.dart';
 import 'package:mdsscope/services/external_url_launcher.dart';
+import 'package:mdsscope/services/update_service.dart';
 import 'package:mdsscope/theme/mdsscope_theme.dart';
+import 'package:mdsscope/widgets/dialogs/about.dart';
 import 'package:mdsscope/widgets/plot_panel.dart';
 import 'package:mdsscope/widgets/plot_grid.dart';
 import 'package:mdsscope/widgets/responsive_plot_layout.dart';
@@ -11,6 +13,12 @@ import 'package:mdsscope/widgets/toolbar.dart';
 import 'package:provider/provider.dart';
 
 void main() {
+  test('Release versions are compared semantically', () {
+    expect(compareVersions('v7.1.0', '7.0.9'), greaterThan(0));
+    expect(compareVersions('7.0', '7.0.0'), 0);
+    expect(compareVersions('6.9.9', '7.0.0'), lessThan(0));
+  });
+
   test('Customize Fonts values are applied to the application theme', () {
     final theme = MdsScopeTheme.light(
       fontFamily: 'Courier New',
@@ -263,5 +271,49 @@ void main() {
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
     }
+  });
+
+  testWidgets('About dialog reflows and opens links on a phone',
+      (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 700);
+    final openedUrls = <Uri>[];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AboutDialogWidget(
+          urlOpener: (uri) async {
+            openedUrls.add(uri);
+            return true;
+          },
+          updateChecker: () async => const ReleaseUpdate(
+            latestVersion: 'v99.0.0',
+            releaseUrl:
+                'https://github.com/wwktz/MdsScope/releases/tag/v99.0.0',
+            updateAvailable: true,
+          ),
+        ),
+      ),
+    );
+
+    await tester.ensureVisible(find.text('GitHub'));
+    await tester.tap(find.text('GitHub'));
+    await tester.pump();
+    expect(openedUrls.single, Uri.parse('https://github.com/wwktz/MdsScope'));
+
+    await tester.ensureVisible(find.text('Update'));
+    await tester.tap(find.text('Update'));
+    await tester.pumpAndSettle();
+    expect(find.text('Open Release'), findsOneWidget);
+    await tester.tap(find.text('Open Release'));
+    await tester.pumpAndSettle();
+
+    expect(
+      openedUrls.last,
+      Uri.parse('https://github.com/wwktz/MdsScope/releases/tag/v99.0.0'),
+    );
+    expect(tester.takeException(), isNull);
   });
 }
