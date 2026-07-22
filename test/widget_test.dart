@@ -318,6 +318,36 @@ void main() {
     expect(app.status, contains('163702'));
   });
 
+  test('Refresh reloads the displayed shot instead of the shot input',
+      () async {
+    final requestedConfigs = <String>[];
+    final app = AppState(
+      signalFetchWorker: (configJson, dataMode, sshSettings) async {
+        requestedConfigs.add(configJson);
+        return '[{"column":0,"row":0,"signal":0,'
+            '"series":{"points":[[0,1],[1,2]],"error":""}}]';
+      },
+    );
+    await app.preferencesReady;
+    app.setLoggedIn(true, 'test-token');
+
+    app.shotText = '163701';
+    app.startRefresh();
+    await Future<void>.delayed(Duration.zero);
+    expect(app.displayedShot, '163701');
+
+    app.shotText = '999999';
+    app.refreshDisplayedShot();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(requestedConfigs, hasLength(2));
+    expect(requestedConfigs.last, contains('163701'));
+    expect(requestedConfigs.last, isNot(contains('999999')));
+    expect(app.shotText, '999999');
+    expect(app.displayedShot, '163701');
+    expect(app.status, contains('163701'));
+  });
+
   testWidgets('Waveform panels show Loading while keeping existing curves',
       (tester) async {
     final pending = Completer<String>();

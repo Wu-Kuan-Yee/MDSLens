@@ -20,7 +20,12 @@ List<(String, String)> _shotMetadata(AppState app) {
   }
 
   return [
-    ('Shot', app.shotText.isEmpty ? '--' : app.shotText),
+    (
+      'Shot',
+      app.displayedShot.isNotEmpty
+          ? app.displayedShot
+          : (app.shotText.isEmpty ? '--' : app.shotText)
+    ),
     ('Ip', valueWithUnit(app.shotInfoIp, 'kA')),
     ('Pulse', valueWithUnit(app.shotInfoPulse, 's')),
     ('It', valueWithUnit(app.shotInfoIt, 'A')),
@@ -197,7 +202,8 @@ class ToolbarWidget extends StatelessWidget {
           context,
           icon: app.fetching ? Icons.stop_circle_outlined : Icons.refresh,
           tooltip: app.fetching ? 'Stop loading' : 'Refresh waveforms',
-          onPressed: () => app.fetching ? app.stopFetch() : app.startRefresh(),
+          onPressed: () =>
+              app.fetching ? app.stopFetch() : app.refreshDisplayedShot(),
           active: app.fetching,
         ),
       ],

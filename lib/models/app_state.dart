@@ -263,6 +263,8 @@ class AppState extends ChangeNotifier {
   // Shot
   String _shotText = '';
   String get shotText => _shotText;
+  String _displayedShot = '';
+  String get displayedShot => _displayedShot;
   final _shotCtrl = TextEditingController();
   TextEditingController get shotCtrl => _shotCtrl;
   set shotText(String v) {
@@ -1149,7 +1151,21 @@ class AppState extends ChangeNotifier {
     _addToHistory(_shotText);
     savePreferences();
     _viewResetId++;
-    _doFetch();
+    _doFetch(shot: _shotText);
+  }
+
+  void refreshDisplayedShot() {
+    if (!_requireActiveSession('refresh waveforms')) return;
+    if (_columns.isEmpty) return;
+    _clearCustomReadModes();
+    final shot = _displayedShot.trim().isNotEmpty
+        ? _displayedShot.trim()
+        : _shotText.trim();
+    if (shot.isEmpty) return;
+    _addToHistory(shot);
+    savePreferences();
+    _viewResetId++;
+    _doFetch(shot: shot);
   }
 
   void startRefreshPreserveView() {
@@ -1161,14 +1177,14 @@ class AppState extends ChangeNotifier {
     }
     _addToHistory(_shotText);
     savePreferences();
-    _doFetch();
+    _doFetch(shot: _shotText);
   }
 
-  String _buildSignalConfigJson() {
+  String _buildSignalConfigJson(String shot) {
     final cols = _columns
         .map((col) => col.map((p) {
               final panel = Map<String, dynamic>.from(p);
-              panel['shot'] = _shotText;
+              panel['shot'] = shot;
               panel['extraction_points'] ??= 2000;
               panel['grid'] ??= true;
               return panel;
@@ -1210,11 +1226,11 @@ class AppState extends ChangeNotifier {
     });
   }
 
-  Future<void> _doFetch() async {
+  Future<void> _doFetch({required String shot}) async {
     if (!_requireActiveSession('load waveforms')) return;
     final generation = ++_fetchGeneration;
-    final requestShot = _shotText;
-    final configJson = _buildSignalConfigJson();
+    final requestShot = shot;
+    final configJson = _buildSignalConfigJson(requestShot);
     final dataMode = _dataMode.toString();
     final sshSettings = _buildSshSettingsJson();
     _fetching = true;
@@ -1258,6 +1274,7 @@ class AppState extends ChangeNotifier {
               sig['signal'] as int, pts, err);
         }
       }
+      _displayedShot = requestShot;
       _fetching = false;
       final loaded = _plots
           .where((p) =>
@@ -1299,7 +1316,10 @@ class AppState extends ChangeNotifier {
     if (targetCol < 0) return;
 
     final generation = ++_fetchGeneration;
-    final configJson = _buildSignalConfigJson();
+    final shot = _displayedShot.trim().isNotEmpty
+        ? _displayedShot.trim()
+        : _shotText.trim();
+    final configJson = _buildSignalConfigJson(shot);
     final dataMode = _dataMode.toString();
     final sshSettings = _buildSshSettingsJson();
     _fetching = true;
