@@ -14,6 +14,25 @@ struct _MyApplication {
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
+static void set_window_icon(GtkWindow* window) {
+  // Desktop packages expose the icon by application ID. The bundled PNG is a
+  // fallback for portable archives and desktop environments that do not use
+  // the installed .desktop metadata.
+  gtk_window_set_icon_name(window, APPLICATION_ID);
+
+  g_autoptr(GError) error = nullptr;
+  g_autofree gchar* executable = g_file_read_link("/proc/self/exe", &error);
+  if (executable == nullptr) {
+    return;
+  }
+  g_autofree gchar* bundle_dir = g_path_get_dirname(executable);
+  g_autofree gchar* icon_path =
+      g_build_filename(bundle_dir, "data", "app_icon.png", nullptr);
+  if (g_file_test(icon_path, G_FILE_TEST_IS_REGULAR)) {
+    gtk_window_set_icon_from_file(window, icon_path, nullptr);
+  }
+}
+
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
@@ -45,13 +64,14 @@ static void my_application_activate(GApplication* application) {
   if (use_header_bar) {
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "mdsscope");
+    gtk_header_bar_set_title(header_bar, "MdsScope");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
   } else {
-    gtk_window_set_title(window, "mdsscope");
+    gtk_window_set_title(window, "MdsScope");
   }
 
+  set_window_icon(window);
   gtk_window_set_default_size(window, 1440, 920);
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
