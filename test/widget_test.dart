@@ -965,6 +965,26 @@ void main() {
     expect(find.byType(PopupMenuDivider), findsNWidgets(3));
   });
 
+  testWidgets('About appears only in the icon-decorated settings menu',
+      (tester) async {
+    final app = AppState();
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+
+    expect(find.byTooltip('About MdsScope'), findsNothing);
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('About MdsScope'), findsOneWidget);
+    expect(find.byIcon(Icons.language_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.dashboard_customize_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.font_download_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.info_outline_rounded), findsOneWidget);
+  });
+
   testWidgets('Toolbar remains bounded with enlarged customized UI fonts',
       (tester) async {
     final app = AppState();

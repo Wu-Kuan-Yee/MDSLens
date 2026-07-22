@@ -134,12 +134,6 @@ class ToolbarWidget extends StatelessWidget {
       spacing: 6,
       children: [
         _settingsMenu(context, app),
-        _iconActionButton(
-          context,
-          icon: Icons.info_outline,
-          tooltip: 'About MdsScope',
-          onPressed: () => AboutDialogWidget.show(context),
-        ),
         _toolbarIconButton(
           context,
           icon: Icons.account_box_rounded,
@@ -304,7 +298,7 @@ class ToolbarWidget extends StatelessWidget {
             const Spacer(),
             SizedBox(width: 108, child: themeActions),
             const SizedBox(width: 8),
-            SizedBox(width: 260, child: appActions),
+            SizedBox(width: 190, child: appActions),
           ]);
         } else {
           final fileWidth = (width * 0.56).clamp(250.0, 320.0);
@@ -473,20 +467,6 @@ class ToolbarWidget extends StatelessWidget {
     );
   }
 
-  Widget _iconActionButton(
-    BuildContext context, {
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback onPressed,
-  }) {
-    return _toolbarIconButton(
-      context,
-      icon: icon,
-      tooltip: tooltip,
-      onPressed: onPressed,
-    );
-  }
-
   Widget _settingsMenu(BuildContext ctx, AppState app) {
     return PopupMenuButton<String>(
       tooltip: 'Settings',
@@ -516,12 +496,45 @@ class ToolbarWidget extends StatelessWidget {
             break;
         }
       },
-      itemBuilder: (_) => separatedPopupMenuItems(const [
-        PopupMenuItem(value: 'web', child: Text('Internal web pages')),
-        PopupMenuItem(value: 'layout', child: Text('Layout setup')),
-        PopupMenuItem(value: 'fonts', child: Text('Customize fonts')),
-        PopupMenuItem(value: 'about', child: Text('About MdsScope')),
+      itemBuilder: (_) => separatedPopupMenuItems([
+        _settingsMenuItem(
+          value: 'web',
+          icon: Icons.language_rounded,
+          label: 'Internal web pages',
+        ),
+        _settingsMenuItem(
+          value: 'layout',
+          icon: Icons.dashboard_customize_rounded,
+          label: 'Layout setup',
+        ),
+        _settingsMenuItem(
+          value: 'fonts',
+          icon: Icons.font_download_outlined,
+          label: 'Customize fonts',
+        ),
+        _settingsMenuItem(
+          value: 'about',
+          icon: Icons.info_outline_rounded,
+          label: 'About MdsScope',
+        ),
       ]),
+    );
+  }
+
+  PopupMenuItem<String> _settingsMenuItem({
+    required String value,
+    required IconData icon,
+    required String label,
+  }) {
+    return PopupMenuItem(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, size: 21),
+          const SizedBox(width: 12),
+          Expanded(child: Text(label)),
+        ],
+      ),
     );
   }
 
