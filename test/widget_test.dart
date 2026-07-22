@@ -73,12 +73,17 @@ void main() {
 
   test('Responsive plot columns preserve order across screen sizes', () {
     final phone = buildResponsivePlotColumns([2, 1, 2], 390);
-    expect(phone, hasLength(1));
-    expect(phone.single.map((cell) => cell.plotIndex), [0, 1, 2, 3, 4]);
+    expect(phone, hasLength(3));
+    expect(phone.map((column) => column.length), [2, 1, 2]);
+    expect(phone.map((column) => column.map((cell) => cell.plotIndex)), [
+      [0, 1],
+      [2],
+      [3, 4],
+    ]);
 
     final tablet = buildResponsivePlotColumns([2, 1, 2], 700);
-    expect(tablet, hasLength(2));
-    expect(tablet.map((column) => column.length), [3, 2]);
+    expect(tablet, hasLength(3));
+    expect(tablet.map((column) => column.length), [2, 1, 2]);
 
     final desktop = buildResponsivePlotColumns([2, 1, 2], 1200);
     expect(desktop, hasLength(3));
@@ -304,24 +309,26 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-      'Touch plots use one finger for scrolling and two fingers for the view',
+  testWidgets('Phone overview keeps every plot visible without scrolling',
       (tester) async {
     final app = AppState();
-    app.applyLayoutList([4]);
-    for (var row = 0; row < 4; row++) {
-      app.updatePlotSeriesByColRow(
-          0,
-          row,
-          0,
-          [
-            [0, 0],
-            [5, 5],
-            [10, 10]
-          ],
-          null);
+    app.applyLayoutList([2, 2]);
+    for (var column = 0; column < 2; column++) {
+      for (var row = 0; row < 2; row++) {
+        app.updatePlotSeriesByColRow(
+            column,
+            row,
+            0,
+            [
+              [0, column * 20 + row * 10],
+              [5, column * 20 + row * 10 + 5],
+              [10, column * 20 + row * 10 + 10]
+            ],
+            null);
+      }
     }
     app.interactionMode = 1;
+    app.setCrosshair(5, sourcePlot: 0, sourceSeries: 0);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     tester.view.devicePixelRatio = 1;
@@ -334,79 +341,47 @@ void main() {
       ),
     );
 
-    final list = find.byKey(const ValueKey('plot-scroll-view'));
-    final scrollable = find.descendant(
-      of: list,
-      matching: find.byType(Scrollable),
+    expect(find.byType(Scrollable), findsNothing);
+    for (var plot = 0; plot < 4; plot++) {
+      expect(find.byKey(ValueKey('plot-panel-$plot')), findsOneWidget);
+      final rect = tester.getRect(find.byKey(ValueKey('plot-panel-$plot')));
+      expect(rect.left, greaterThanOrEqualTo(0));
+      expect(rect.top, greaterThanOrEqualTo(0));
+      expect(rect.right, lessThanOrEqualTo(390));
+      expect(rect.bottom, lessThanOrEqualTo(600));
+    }
+    final charts =
+        tester.widgetList<LineChart>(find.byType(LineChart)).toList();
+    expect(charts, hasLength(4));
+    expect(
+      charts.map((chart) => chart.data.extraLinesData.horizontalLines.single.y),
+      [5, 15, 25, 35],
     );
-    final scrollPosition = tester.state<ScrollableState>(scrollable).position;
-    expect(scrollPosition.maxScrollExtent, greaterThan(0));
+
+    app.interactionMode = 0;
+    await tester.pump();
     LineChart firstChart() =>
         tester.widgetList<LineChart>(find.byType(LineChart)).first;
-    final initialMinX = firstChart().data.minX;
-    final initialMaxX = firstChart().data.maxX;
-    final initialMinY = firstChart().data.minY;
-    final initialMaxY = firstChart().data.maxY;
-
-    final firstPanel = find.byKey(const ValueKey('plot-panel-0'));
-    var center = tester.getCenter(firstPanel);
-    await tester.tapAt(center);
-    await tester.pump();
-    final tappedCrosshair = app.crosshairX;
-    expect(tappedCrosshair, isNotNull);
-
-    final verticalDrag = await tester.startGesture(center, pointer: 10);
-    await tester.pump();
-    await verticalDrag.moveBy(const Offset(0, -40));
-    await tester.pump();
-    await verticalDrag.moveBy(const Offset(0, -40));
-    await tester.pump();
-    await verticalDrag.up();
-    await tester.pumpAndSettle();
-
-    expect(scrollPosition.pixels, greaterThan(0));
-    expect(firstChart().data.minX, initialMinX);
-    expect(firstChart().data.maxX, initialMaxX);
-    expect(firstChart().data.minY, initialMinY);
-    expect(firstChart().data.maxY, initialMaxY);
-    expect(app.crosshairX, tappedCrosshair);
-
-    scrollPosition.jumpTo(0);
-    await tester.pumpAndSettle();
-    center = tester.getCenter(firstPanel);
-    final horizontalDrag = await tester.startGesture(center, pointer: 11);
-    await horizontalDrag.moveBy(const Offset(120, 0));
-    await tester.pump();
-    await horizontalDrag.up();
-    await tester.pumpAndSettle();
-
-    expect(scrollPosition.pixels, 0);
-    expect(firstChart().data.minX, initialMinX);
-    expect(firstChart().data.maxX, initialMaxX);
-    expect(firstChart().data.minY, initialMinY);
-    expect(firstChart().data.maxY, initialMaxY);
-    expect(app.crosshairX, tappedCrosshair);
-
-    center = tester.getCenter(firstPanel);
+    final initialWidth = firstChart().data.maxX - firstChart().data.minX;
+    final center = tester.getCenter(find.byKey(const ValueKey('plot-panel-0')));
     final first = await tester.startGesture(
-      center.translate(-30, 20),
+      center.translate(-20, 10),
       pointer: 12,
     );
     final second = await tester.startGesture(
-      center.translate(30, 20),
+      center.translate(20, 10),
       pointer: 13,
     );
     await tester.pump();
-    await first.moveBy(const Offset(-25, -55));
-    await second.moveBy(const Offset(25, -55));
+    await first.moveBy(const Offset(-15, 0));
+    await second.moveBy(const Offset(15, 0));
     await tester.pump();
     await first.up();
     await second.up();
     await tester.pumpAndSettle();
 
-    expect(scrollPosition.pixels, 0);
     expect(firstChart().data.maxX - firstChart().data.minX,
-        lessThan(initialMaxX - initialMinX));
+        lessThan(initialWidth));
     expect(tester.takeException(), isNull);
   });
 
@@ -531,11 +506,12 @@ void main() {
   testWidgets('Layout Setup preview matches phone and tablet plot columns',
       (tester) async {
     final app = AppState();
+    app.applyLayoutList([2, 1, 2]);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     tester.view.devicePixelRatio = 1;
 
-    for (final (width, expectedColumns) in [(390.0, 1), (800.0, 2)]) {
+    for (final (width, expectedColumns) in [(390.0, 3), (800.0, 3)]) {
       tester.view.physicalSize = Size(width, 900);
       await tester.pumpWidget(
         ChangeNotifierProvider.value(

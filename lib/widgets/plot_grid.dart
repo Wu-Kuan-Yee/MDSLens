@@ -4,22 +4,8 @@ import '../models/app_state.dart';
 import 'plot_panel.dart';
 import 'responsive_plot_layout.dart';
 
-class PlotGrid extends StatefulWidget {
+class PlotGrid extends StatelessWidget {
   const PlotGrid({super.key});
-
-  @override
-  State<PlotGrid> createState() => _PlotGridState();
-}
-
-class _PlotGridState extends State<PlotGrid> {
-  final Set<int> _multiTouchPlots = <int>{};
-
-  void _setMultiTouchActive(int plotIndex, bool active) {
-    final changed = active
-        ? _multiTouchPlots.add(plotIndex)
-        : _multiTouchPlots.remove(plotIndex);
-    if (changed && mounted) setState(() {});
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,26 +25,6 @@ class _PlotGridState extends State<PlotGrid> {
         constraints.maxWidth,
       );
       if (displayColumns.isEmpty) return const SizedBox();
-
-      if (usesScrollablePlotList(constraints.maxWidth)) {
-        final cells = displayColumns.single;
-        return ListView.builder(
-          key: const ValueKey('plot-scroll-view'),
-          physics: _multiTouchPlots.isNotEmpty
-              ? const NeverScrollableScrollPhysics()
-              : null,
-          itemCount: cells.length,
-          itemBuilder: (ctx, i) {
-            final cell = cells[i];
-            return SizedBox(
-              height: cells.length == 1
-                  ? constraints.maxHeight
-                  : (constraints.maxHeight / 2.5).clamp(220.0, 400.0),
-              child: _panelForCell(app, cell),
-            );
-          },
-        );
-      }
 
       return Row(
         children: displayColumns
@@ -84,8 +50,6 @@ class _PlotGridState extends State<PlotGrid> {
       plotIdx: cell.plotIndex,
       selected: selected,
       onTap: () => app.selectPanel(cell.sourceColumn, cell.sourceRow),
-      onMultiTouchChanged: (active) =>
-          _setMultiTouchActive(cell.plotIndex, active),
       onContextAction: (action) {
         switch (action) {
           case 'max':

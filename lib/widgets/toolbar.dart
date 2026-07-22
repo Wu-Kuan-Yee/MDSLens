@@ -633,13 +633,8 @@ class ToolbarWidget extends StatelessWidget {
           layout,
           screenSize.width,
         );
-        final maxRows = displayColumns
-            .map((column) => column.length)
-            .fold(1, (current, rows) => rows > current ? rows : current);
-        final previewHeight = (maxRows * 72.0).clamp(90.0, 430.0);
         final contentWidth = (screenSize.width - 64).clamp(240.0, 700.0);
         final contentHeight = (screenSize.height * 0.58).clamp(260.0, 540.0);
-        final compact = usesScrollablePlotList(screenSize.width);
 
         return AlertDialog(
           insetPadding:
@@ -652,40 +647,35 @@ class ToolbarWidget extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    compact
-                        ? 'Phone preview · single scrollable column'
-                        : 'Responsive preview · ${displayColumns.length} columns',
+                    'Overview · ${displayColumns.length} columns · all panels visible',
                     style: Theme.of(ctx).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 8),
                   Expanded(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: SingleChildScrollView(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            for (var displayColumn = 0;
-                                displayColumn < displayColumns.length;
-                                displayColumn++) ...[
-                              if (displayColumn > 0) const SizedBox(width: 6),
-                              Container(
-                                key: ValueKey(
-                                    'layout-preview-column-$displayColumn'),
-                                width: 118,
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                      color: Theme.of(ctx).dividerColor),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Column(children: [
-                                  SizedBox(
-                                    height: 28,
-                                    child: Center(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (var displayColumn = 0;
+                            displayColumn < displayColumns.length;
+                            displayColumn++) ...[
+                          if (displayColumn > 0) const SizedBox(width: 6),
+                          Expanded(
+                            child: Container(
+                              key: ValueKey(
+                                  'layout-preview-column-$displayColumn'),
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                    color: Theme.of(ctx).dividerColor),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Column(children: [
+                                SizedBox(
+                                  height: 28,
+                                  child: Center(
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
                                       child: Text(
-                                        compact
-                                            ? 'Scroll column'
-                                            : 'Column ${displayColumn + 1}',
+                                        'Column ${displayColumn + 1}',
                                         style: const TextStyle(
                                           fontSize: 10,
                                           fontWeight: FontWeight.bold,
@@ -693,94 +683,92 @@ class ToolbarWidget extends StatelessWidget {
                                       ),
                                     ),
                                   ),
-                                  SizedBox(
-                                    height: previewHeight,
-                                    child: Column(
-                                      children: displayColumns[displayColumn]
-                                          .map((cell) {
-                                        final selected =
-                                            selectedCol == cell.sourceColumn &&
-                                                selectedRow == cell.sourceRow;
-                                        return Expanded(
-                                          child: GestureDetector(
-                                            onTap: () => setState(() {
-                                              selectedCol = cell.sourceColumn;
-                                              selectedRow = cell.sourceRow;
-                                            }),
-                                            child: Container(
-                                              key: ValueKey(
-                                                  'layout-preview-panel-${cell.plotIndex}'),
-                                              width: double.infinity,
-                                              margin: const EdgeInsets.all(4),
-                                              decoration: BoxDecoration(
-                                                border: Border.all(
-                                                  color: selected
-                                                      ? Theme.of(ctx)
-                                                          .colorScheme
-                                                          .primary
-                                                      : Colors.grey.shade400,
-                                                  width: selected ? 2 : 1,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                                color: Theme.of(ctx)
-                                                    .colorScheme
-                                                    .primaryContainer
-                                                    .withValues(alpha: 0.3),
+                                ),
+                                Expanded(
+                                  child: Column(
+                                    children: displayColumns[displayColumn]
+                                        .map((cell) {
+                                      final selected =
+                                          selectedCol == cell.sourceColumn &&
+                                              selectedRow == cell.sourceRow;
+                                      return Expanded(
+                                        child: GestureDetector(
+                                          onTap: () => setState(() {
+                                            selectedCol = cell.sourceColumn;
+                                            selectedRow = cell.sourceRow;
+                                          }),
+                                          child: Container(
+                                            key: ValueKey(
+                                                'layout-preview-panel-${cell.plotIndex}'),
+                                            width: double.infinity,
+                                            margin: const EdgeInsets.all(4),
+                                            decoration: BoxDecoration(
+                                              border: Border.all(
+                                                color: selected
+                                                    ? Theme.of(ctx)
+                                                        .colorScheme
+                                                        .primary
+                                                    : Colors.grey.shade400,
+                                                width: selected ? 2 : 1,
                                               ),
-                                              child: Column(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.center,
-                                                children: [
-                                                  Text(
-                                                    'Panel ${cell.plotIndex + 1}',
-                                                    style: TextStyle(
-                                                      fontSize: 10,
-                                                      color: Theme.of(ctx)
-                                                          .colorScheme
-                                                          .onSurfaceVariant,
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              color: Theme.of(ctx)
+                                                  .colorScheme
+                                                  .primaryContainer
+                                                  .withValues(alpha: 0.3),
+                                            ),
+                                            child: Column(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                Text(
+                                                  'Panel ${cell.plotIndex + 1}',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    color: Theme.of(ctx)
+                                                        .colorScheme
+                                                        .onSurfaceVariant,
+                                                  ),
+                                                ),
+                                                if (selected)
+                                                  TextButton(
+                                                    onPressed: () {
+                                                      if (layout.length == 1 &&
+                                                          layout[0] == 1) {
+                                                        return;
+                                                      }
+                                                      layout[
+                                                          cell.sourceColumn]--;
+                                                      if (layout[cell
+                                                              .sourceColumn] <=
+                                                          0) {
+                                                        layout.removeAt(
+                                                            cell.sourceColumn);
+                                                      }
+                                                      selectedCol = -1;
+                                                      selectedRow = -1;
+                                                      setState(() {});
+                                                    },
+                                                    child: const Text(
+                                                      'Delete',
+                                                      style: TextStyle(
+                                                          fontSize: 9),
                                                     ),
                                                   ),
-                                                  if (selected)
-                                                    TextButton(
-                                                      onPressed: () {
-                                                        if (layout.length ==
-                                                                1 &&
-                                                            layout[0] == 1) {
-                                                          return;
-                                                        }
-                                                        layout[cell
-                                                            .sourceColumn]--;
-                                                        if (layout[cell
-                                                                .sourceColumn] <=
-                                                            0) {
-                                                          layout.removeAt(cell
-                                                              .sourceColumn);
-                                                        }
-                                                        selectedCol = -1;
-                                                        selectedRow = -1;
-                                                        setState(() {});
-                                                      },
-                                                      child: const Text(
-                                                        'Delete',
-                                                        style: TextStyle(
-                                                            fontSize: 9),
-                                                      ),
-                                                    ),
-                                                ],
-                                              ),
+                                              ],
                                             ),
                                           ),
-                                        );
-                                      }).toList(),
-                                    ),
+                                        ),
+                                      );
+                                    }).toList(),
                                   ),
-                                ]),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
+                                ),
+                              ]),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                   const SizedBox(height: 8),

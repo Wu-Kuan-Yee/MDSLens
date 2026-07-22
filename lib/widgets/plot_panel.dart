@@ -28,14 +28,12 @@ class PlotPanel extends StatefulWidget {
   final int plotIdx;
   final bool selected;
   final void Function()? onTap;
-  final ValueChanged<bool>? onMultiTouchChanged;
   final void Function(String action)? onContextAction;
 
   const PlotPanel(
       {super.key,
       required this.plotIdx,
       this.onTap,
-      this.onMultiTouchChanged,
       this.onContextAction,
       this.selected = false});
 
@@ -758,7 +756,6 @@ class _PlotPanelState extends State<PlotPanel> {
     if (_multiTouchActive) return;
     _multiTouchActive = true;
     _cancelLongPressTimer();
-    widget.onMultiTouchChanged?.call(true);
   }
 
   bool _ensureViewInitialized(AppState app) {
@@ -774,7 +771,6 @@ class _PlotPanelState extends State<PlotPanel> {
       _multiTouchActive = false;
       _lastMultiTouchFocalPoint = null;
       _lastMultiTouchSpan = null;
-      widget.onMultiTouchChanged?.call(false);
     } else if (_multiTouchActive) {
       _resetMultiTouchMetrics();
     }
