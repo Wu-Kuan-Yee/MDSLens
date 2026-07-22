@@ -70,8 +70,10 @@
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>MdsScope requires network access to connect to Tokamak MDSplus servers.</string>
+	<string>MdsScope needs local network access to connect to the MDSplus and SSH servers you choose.</string>
 </dict>
 </plist>

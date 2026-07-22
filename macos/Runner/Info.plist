@@ -28,6 +28,8 @@
 	<string>$(PRODUCT_COPYRIGHT)</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>MdsScope needs local network access to connect to the MDSplus and SSH servers you choose.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

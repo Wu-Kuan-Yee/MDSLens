@@ -4,6 +4,7 @@ import FlutterMacOS
 @main
 class AppDelegate: FlutterAppDelegate {
   var themeChannel: FlutterMethodChannel?
+  var permissionsChannel: FlutterMethodChannel?
 
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     return true
@@ -22,6 +23,32 @@ class AppDelegate: FlutterAppDelegate {
         result(self?.isDarkMode() ?? false)
       } else {
         result(FlutterMethodNotImplemented)
+      }
+    }
+    let permissionChannel = FlutterMethodChannel(
+      name: "mdsscope/permissions",
+      binaryMessenger: controller.engine.binaryMessenger
+    )
+    permissionsChannel = permissionChannel
+    permissionChannel.setMethodCallHandler { call, result in
+      guard call.method == "openAppSettings" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      let localNetworkSettings = URL(
+        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork"
+      )
+      let systemSettings = URL(fileURLWithPath: "/System/Applications/System Settings.app")
+      if let localNetworkSettings, NSWorkspace.shared.open(localNetworkSettings) {
+        result(true)
+      } else {
+        let configuration = NSWorkspace.OpenConfiguration()
+        NSWorkspace.shared.openApplication(
+          at: systemSettings,
+          configuration: configuration
+        ) { _, error in
+          result(error == nil)
+        }
       }
     }
     DistributedNotificationCenter.default.addObserver(
