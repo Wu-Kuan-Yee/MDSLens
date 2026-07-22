@@ -18,10 +18,35 @@ class PlotGrid extends StatelessWidget {
       return PlotPanel(plotIdx: idx, selected: true);
     }
 
-    final nCols = app.columns.length;
-
     return LayoutBuilder(builder: (ctx, constraints) {
+      final isMobilePortrait = constraints.maxWidth < 600;
+      final nCols = isMobilePortrait ? 1 : app.columns.length;
       final panelW = constraints.maxWidth / nCols;
+
+      if (isMobilePortrait) {
+        return ListView.builder(
+          itemCount: app.plots.length,
+          itemBuilder: (ctx, i) {
+            final selected = app.selectedCol == 0 && app.selectedRow == i;
+            return SizedBox(
+              height: (constraints.maxHeight / 2.5).clamp(220.0, 400.0),
+              child: PlotPanel(
+                plotIdx: i,
+                selected: selected,
+                onTap: () { app.selectPanel(0, i); },
+                onContextAction: (action) {
+                  switch (action) {
+                    case 'max': app.maximizePlot(i); break;
+                    case 'showAll': app.showAllPanels(); break;
+                    case 'reset': app.plots[i].crosshairX = null; break;
+                    case 'delete': break;
+                  }
+                },
+              ),
+            );
+          },
+        );
+      }
 
       return Row(
         children: List.generate(nCols, (col) => SizedBox(
