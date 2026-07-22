@@ -206,8 +206,8 @@ pub fn fetch_signals(config_json: String, mode: i32) -> Vec<FrbLoadedSignal> {
     fetch_signals_inner(config_json, mode, None)
 }
 
-/// Fetch signals with SSH tunneling. If ssh_settings_json is non-empty and has a
-/// non-empty host, tunnels are created before fetch and kept alive via forget.
+/// Fetch signals with SSH tunneling. The manager stays alive for the duration
+/// of the blocking fetch and is then dropped, stopping its relay listeners.
 pub fn fetch_signals_ssh(config_json: String, mode: i32, ssh_settings_json: String) -> Vec<FrbLoadedSignal> {
     let ssh_settings: Option<FrbSshSettings> = if ssh_settings_json.is_empty() {
         None
@@ -247,7 +247,7 @@ fn fetch_signals_inner(config_json: String, mode: i32, ssh_settings: Option<FrbS
     }
 
     // Set up SSH tunnels if configured
-    let _tunnel_mgr: Option<mds_ssh::tunnel::SshTunnelManager> = if let Some(ssh) = ssh_settings {
+    let _tunnel_manager: Option<mds_ssh::tunnel::SshTunnelManager> = if let Some(ssh) = ssh_settings {
         if !ssh.host.is_empty() && ssh.mode > 0 {
             let mut mgr = mds_ssh::tunnel::SshTunnelManager::new();
             mgr.reload_settings(ssh.into_rust());
@@ -273,11 +273,6 @@ fn fetch_signals_inner(config_json: String, mode: i32, ssh_settings: Option<FrbS
     let callback: mds_ip::pipeline::SignalCallback = Box::new(|_| {});
     let results: Vec<FrbLoadedSignal> = mds_ip::pipeline::fetch_all(&rust_config, read_mode, &callback, &cancel)
         .into_iter().map(FrbLoadedSignal::from).collect();
-
-    // Keep tunnel manager alive — relay threads hold the tunnels open
-    if let Some(mgr) = _tunnel_mgr {
-        std::mem::forget(mgr);
-    }
 
     results
 }

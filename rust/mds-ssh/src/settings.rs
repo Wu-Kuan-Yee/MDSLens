@@ -6,7 +6,7 @@
 use mds_core::types::SshMode;
 
 /// SSH connection configuration.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SshSettings {
     pub mode: SshMode,
     pub host: String,

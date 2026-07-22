@@ -5,8 +5,11 @@
 
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
+use std::sync::{Mutex, OnceLock};
 
 use crate::api as a;
+
+static API_TUNNEL_MANAGER: OnceLock<Mutex<mds_ssh::tunnel::SshTunnelManager>> = OnceLock::new();
 
 macro_rules! ffi_string {
     ($s:expr) => { CString::new($s).unwrap_or_default().into_raw() };
@@ -100,13 +103,15 @@ pub extern "C" fn mds_prepare_url(url: *const c_char, settings_json: *const c_ch
     if settings.host.is_empty() {
         return ffi_string!("{\"error\":\"SSH host is empty\"}");
     }
-    let mut mgr = mds_ssh::tunnel::SshTunnelManager::new();
-    mgr.reload_settings(settings.into_rust());
-    let result = match mgr.prepare_url(&to_rust(url)) {
+    let manager = API_TUNNEL_MANAGER.get_or_init(|| {
+        Mutex::new(mds_ssh::tunnel::SshTunnelManager::new())
+    });
+    let mut manager = manager.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    manager.reload_settings(settings.into_rust());
+    let result = match manager.prepare_url(&to_rust(url)) {
         Ok(tunneled) => tunneled,
         Err(e) => format!("{{\"error\":\"{}\"}}", e),
     };
-    std::mem::forget(mgr);
     ffi_string!(result)
 }
 

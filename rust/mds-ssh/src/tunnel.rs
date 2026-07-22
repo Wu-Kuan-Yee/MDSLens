@@ -48,13 +48,21 @@ impl SshTunnelManager {
     pub fn settings(&self) -> &SshSettings { &self.settings }
 
     pub fn reload_settings(&mut self, settings: SshSettings) {
-        let was_cfg = matches!(self.settings.mode, SshMode::Auto | SshMode::Always);
-        let is_cfg = matches!(settings.mode, SshMode::Auto | SshMode::Always) && !settings.host.is_empty();
-        self.settings = settings;
-        if matches!(self.state, TunnelState::Unconfigured | TunnelState::Error) && is_cfg {
-            self.state = TunnelState::Ready;
-        } else if !is_cfg && was_cfg {
+        let is_configured = matches!(settings.mode, SshMode::Auto | SshMode::Always)
+            && !settings.host.is_empty();
+        if self.settings != settings {
             self.disconnect_all();
+            self.settings = settings;
+            self.state = if is_configured {
+                TunnelState::Ready
+            } else {
+                TunnelState::Unconfigured
+            };
+            return;
+        }
+        if matches!(self.state, TunnelState::Unconfigured | TunnelState::Error) && is_configured {
+            self.state = TunnelState::Ready;
+        } else if !is_configured {
             self.state = TunnelState::Unconfigured;
         }
     }
@@ -373,5 +381,25 @@ mod tests {
         assert_eq!(mgr.state(), TunnelState::Ready);
         mgr.reload_settings(SshSettings { mode: SshMode::Disabled, ..Default::default() });
         assert_eq!(mgr.state(), TunnelState::Unconfigured);
+    }
+
+    #[test]
+    fn test_manager_reconfigures_without_retaining_old_state() {
+        let mut mgr = SshTunnelManager::new();
+        mgr.reload_settings(SshSettings {
+            mode: SshMode::Always,
+            host: "first".into(),
+            user: "one".into(),
+            ..Default::default()
+        });
+        mgr.state = TunnelState::Connected;
+        mgr.reload_settings(SshSettings {
+            mode: SshMode::Always,
+            host: "second".into(),
+            user: "two".into(),
+            ..Default::default()
+        });
+        assert_eq!(mgr.state(), TunnelState::Ready);
+        assert_eq!(mgr.settings().host, "second");
     }
 }
