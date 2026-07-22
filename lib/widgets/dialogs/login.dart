@@ -1,9 +1,6 @@
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/app_state.dart';
-import '../../services/rust_bridge.dart';
 
 class LoginDialog extends StatelessWidget {
   const LoginDialog({super.key});
@@ -19,7 +16,8 @@ class LoginDialog extends StatelessWidget {
     var loading = false;
     var error = '';
 
-    Future<void> doLogin(void Function(void Function()) setState, BuildContext ctx) async {
+    Future<void> doLogin(
+        void Function(void Function()) setState, BuildContext ctx) async {
       final url = apiCtrl.text.trim();
       final user = userCtrl.text.trim();
       final pass = passCtrl.text.trim();
@@ -27,100 +25,92 @@ class LoginDialog extends StatelessWidget {
         setState(() => error = 'Fill API URL and Username');
         return;
       }
-      setState(() { loading = true; error = ''; });
+      setState(() {
+        loading = true;
+        error = '';
+      });
       try {
-        final (token, usedSsh) = await _login(url, user, pass, app);
-        app.setLoginApiUrl(url);
-        app.setLoginUser(user);
-        app.setLoginPass(pass);
-        app.setLoggedIn(true, token);
-        app.setSshConnected(usedSsh);
+        await app.loginAndLoadLatest(
+          apiUrl: url,
+          user: user,
+          password: pass,
+        );
         if (ctx.mounted) Navigator.pop(ctx);
-        app.setStatus('Logged in as $user');
-        app.fetchLatestShot();
       } catch (e) {
-        setState(() { loading = false; error = 'Error: $e'; });
+        if (!ctx.mounted) return;
+        setState(() {
+          loading = false;
+          error = 'Error: $e';
+        });
       }
     }
 
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setState) => AlertDialog(
-        title: Text(loading ? 'Login — Connecting...' : 'Login — EAST API'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          if (error.isNotEmpty) SelectableText(error, style: const TextStyle(color: Colors.red, fontSize: 13)),
-          if (error.isNotEmpty) const SizedBox(height: 8),
-          if (loading)
-            const Row(children: [SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)), SizedBox(width: 12), Text('Logging in...')])
-          else ...[
-            TextField(controller: apiCtrl, decoration: const InputDecoration(labelText: 'API URL'), onSubmitted: (_) => doLogin(setState, ctx)),
-            TextField(controller: userCtrl, decoration: const InputDecoration(labelText: 'Username'), onSubmitted: (_) => doLogin(setState, ctx)),
-            TextField(controller: passCtrl, decoration: const InputDecoration(labelText: 'Password'), obscureText: true, onSubmitted: (_) => doLogin(setState, ctx)),
-            const SizedBox(height: 6),
-            Row(children: [
-              Checkbox(
-                value: app.rememberLogin,
-                onChanged: (v) { if (v != null) setState(() => app.rememberLogin = v); },
-              ),
-              const Text('Remember Credentials', style: TextStyle(fontSize: 13)),
-            ]),
-          ],
-        ]),
-        actions: loading ? [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        ] : [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () => doLogin(setState, ctx), child: const Text('Login')),
-        ],
-      )),
+      builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setState) => AlertDialog(
+                title: Text(
+                    loading ? 'Login — Connecting...' : 'Login — EAST API'),
+                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                  if (error.isNotEmpty)
+                    SelectableText(error,
+                        style:
+                            const TextStyle(color: Colors.red, fontSize: 13)),
+                  if (error.isNotEmpty) const SizedBox(height: 8),
+                  if (loading)
+                    const Row(children: [
+                      SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2)),
+                      SizedBox(width: 12),
+                      Text('Logging in...')
+                    ])
+                  else ...[
+                    TextField(
+                        controller: apiCtrl,
+                        decoration: const InputDecoration(labelText: 'API URL'),
+                        onSubmitted: (_) => doLogin(setState, ctx)),
+                    TextField(
+                        controller: userCtrl,
+                        decoration:
+                            const InputDecoration(labelText: 'Username'),
+                        onSubmitted: (_) => doLogin(setState, ctx)),
+                    TextField(
+                        controller: passCtrl,
+                        decoration:
+                            const InputDecoration(labelText: 'Password'),
+                        obscureText: true,
+                        onSubmitted: (_) => doLogin(setState, ctx)),
+                    const SizedBox(height: 6),
+                    Row(children: [
+                      Checkbox(
+                        value: app.rememberLogin,
+                        onChanged: (v) {
+                          if (v != null) setState(() => app.rememberLogin = v);
+                        },
+                      ),
+                      const Text('Remember Credentials',
+                          style: TextStyle(fontSize: 13)),
+                    ]),
+                  ],
+                ]),
+                actions: loading
+                    ? [
+                        TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text('Cancel')),
+                      ]
+                    : [
+                        TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text('Cancel')),
+                        FilledButton(
+                            onPressed: () => doLogin(setState, ctx),
+                            child: const Text('Login')),
+                      ],
+              )),
     );
-  }
-
-  static Future<(String, bool)> _login(String apiUrl, String user, String pass, AppState app) async {
-    String effectiveUrl = apiUrl;
-    bool usedSsh = false;
-    if (app.sshMode > 0 && app.sshHost.isNotEmpty) {
-      try {
-        final settings = jsonEncode({
-          'host': app.sshHost, 'port': app.sshPort,
-          'user': app.sshUser, 'password': app.sshPass,
-          'identity_file': app.sshIdentity,
-          'mode': 2,
-        });
-        final resp = RustBridge.instance.prepareUrl(apiUrl, settings);
-        if (resp.startsWith('http') && !resp.contains('"error"')) {
-          effectiveUrl = resp;
-          usedSsh = true;
-          await Future.delayed(const Duration(milliseconds: 200));
-        } else {
-          throw 'SSH prepare failed: $resp';
-        }
-      } catch (e) {
-        throw 'SSH: $e';
-      }
-    }
-
-    final url = '${effectiveUrl.replaceAll(RegExp(r'/$'), '')}/login';
-    final uri = Uri.parse(url);
-    final body = jsonEncode({'userName': user, 'password': pass});
-    final client = HttpClient();
-    try {
-      final request = await client.postUrl(uri);
-      request.headers.set('Content-Type', 'application/json');
-      request.write(body);
-      final response = await request.close();
-      final respBody = await response.transform(utf8.decoder).join();
-      final json = jsonDecode(respBody);
-      final code = json['code'];
-      if (code == '20000' || code == 20000) {
-        final token = json['data']?['token'];
-        if (token != null) return (token.toString(), usedSsh);
-        throw 'no token';
-      }
-      throw json['msg']?.toString() ?? 'unknown error';
-    } finally {
-      client.close();
-    }
   }
 }

@@ -19,6 +19,19 @@ typedef ShotInfoFetchWorker = Future<String> Function(
   String shot,
 );
 
+typedef LoginWorker = Future<({String token, bool usedSsh})> Function(
+  String apiUrl,
+  String user,
+  String password,
+  String sshSettingsJson,
+);
+
+typedef LatestShotWorker = Future<dynamic> Function(
+  String apiUrl,
+  String token,
+  String sshSettingsJson,
+);
+
 Future<String> _fetchSignalsInBackground(
   String configJson,
   String dataMode,
@@ -43,9 +56,80 @@ Future<String> _fetchShotInfoInBackground(
   );
 }
 
+Future<({String url, bool usedSsh})> _prepareApiUrl(
+  String apiUrl,
+  String sshSettingsJson,
+) async {
+  if (sshSettingsJson.isEmpty) return (url: apiUrl, usedSsh: false);
+  final prepared = await Isolate.run(
+    () => RustBridge.instance.prepareUrl(apiUrl, sshSettingsJson),
+  );
+  if (!prepared.startsWith('http') || prepared.contains('"error"')) {
+    throw 'SSH prepare failed: $prepared';
+  }
+  await Future<void>.delayed(const Duration(milliseconds: 200));
+  return (url: prepared, usedSsh: true);
+}
+
+Future<({String token, bool usedSsh})> _loginToApi(
+  String apiUrl,
+  String user,
+  String password,
+  String sshSettingsJson,
+) async {
+  final prepared = await _prepareApiUrl(apiUrl, sshSettingsJson);
+  final base = prepared.url.replaceAll(RegExp(r'/$'), '');
+  final client = HttpClient();
+  try {
+    final request = await client.postUrl(Uri.parse('$base/login'));
+    request.headers.set('Content-Type', 'application/json');
+    request.write(jsonEncode({'userName': user, 'password': password}));
+    final response = await request.close();
+    final body = await response.transform(utf8.decoder).join();
+    final decoded = jsonDecode(body);
+    if (decoded is! Map) throw 'Unexpected login response';
+    if (decoded['code'] != '20000' && decoded['code'] != 20000) {
+      throw decoded['msg']?.toString() ?? 'Login failed';
+    }
+    final token = decoded['data']?['token']?.toString();
+    if (token == null || token.isEmpty) throw 'Login returned no token';
+    return (token: token, usedSsh: prepared.usedSsh);
+  } finally {
+    client.close();
+  }
+}
+
+Future<dynamic> _fetchLatestShotFromApi(
+  String apiUrl,
+  String token,
+  String sshSettingsJson,
+) async {
+  final prepared = await _prepareApiUrl(apiUrl, sshSettingsJson);
+  final base = prepared.url.replaceAll(RegExp(r'/$'), '');
+  final client = HttpClient();
+  try {
+    final request = await client.postUrl(Uri.parse('$base/treeShot'));
+    request.headers.set('Content-Type', 'application/json');
+    request.headers.set('Authorization', 'Bearer $token');
+    request.write('{}');
+    final response = await request.close();
+    final body = await response.transform(utf8.decoder).join();
+    final decoded = jsonDecode(body);
+    if (decoded is! Map) throw 'Unexpected latest-shot response';
+    if (decoded['code'] != '20000' && decoded['code'] != 20000) {
+      throw decoded['msg']?.toString() ?? 'Latest-shot request failed';
+    }
+    return decoded['data'];
+  } finally {
+    client.close();
+  }
+}
+
 class AppState extends ChangeNotifier {
   final SignalFetchWorker _signalFetchWorker;
   final ShotInfoFetchWorker _shotInfoFetchWorker;
+  final LoginWorker _loginWorker;
+  final LatestShotWorker _latestShotWorker;
   bool _disposed = false;
 
   // Config
@@ -122,9 +206,13 @@ class AppState extends ChangeNotifier {
   AppState({
     SignalFetchWorker? signalFetchWorker,
     ShotInfoFetchWorker? shotInfoFetchWorker,
+    LoginWorker? loginWorker,
+    LatestShotWorker? latestShotWorker,
   })  : _signalFetchWorker = signalFetchWorker ?? _fetchSignalsInBackground,
         _shotInfoFetchWorker =
-            shotInfoFetchWorker ?? _fetchShotInfoInBackground {
+            shotInfoFetchWorker ?? _fetchShotInfoInBackground,
+        _loginWorker = loginWorker ?? _loginToApi,
+        _latestShotWorker = latestShotWorker ?? _fetchLatestShotFromApi {
     _shotCtrl.addListener(() {
       if (_shotCtrl.text != _shotText) {
         _invalidateFetchForSettingsChange();
@@ -300,6 +388,7 @@ class AppState extends ChangeNotifier {
   bool _rememberLogin = true;
   bool get rememberLogin => _rememberLogin;
   set rememberLogin(bool v) {
+    _sessionGeneration++;
     _rememberLogin = v;
     savePreferences();
     notifyListeners();
@@ -315,6 +404,7 @@ class AppState extends ChangeNotifier {
   String get loginUser => _loginUser;
   String _loginPass = '';
   String get loginPass => _loginPass;
+  int _sessionGeneration = 0;
 
   // SSH
   String _sshHost = '';
@@ -323,6 +413,7 @@ class AppState extends ChangeNotifier {
   int get sshMode => _sshMode;
   set sshMode(int v) {
     if (v == _sshMode) return;
+    _sessionGeneration++;
     _invalidateFetchForSettingsChange();
     _sshMode = v;
     savePreferences();
@@ -415,23 +506,29 @@ class AppState extends ChangeNotifier {
 
   void setLoginApiUrl(String v) {
     if (v == _loginApiUrl) return;
+    _sessionGeneration++;
     _invalidateFetchForSettingsChange();
     _loginApiUrl = v;
     savePreferences();
   }
 
   void setLoginUser(String v) {
+    if (v == _loginUser) return;
+    _sessionGeneration++;
     _loginUser = v;
     savePreferences();
   }
 
   void setLoginPass(String v) {
+    if (v == _loginPass) return;
+    _sessionGeneration++;
     _loginPass = v;
     savePreferences();
   }
 
   void setSshHost(String v) {
     if (v == _sshHost) return;
+    _sessionGeneration++;
     _invalidateFetchForSettingsChange();
     _sshHost = v;
     savePreferences();
@@ -440,6 +537,7 @@ class AppState extends ChangeNotifier {
 
   void setSshPort(int v) {
     if (v == _sshPort) return;
+    _sessionGeneration++;
     _invalidateFetchForSettingsChange();
     _sshPort = v;
     savePreferences();
@@ -447,6 +545,7 @@ class AppState extends ChangeNotifier {
 
   void setSshUser(String v) {
     if (v == _sshUser) return;
+    _sessionGeneration++;
     _invalidateFetchForSettingsChange();
     _sshUser = v;
     savePreferences();
@@ -454,6 +553,7 @@ class AppState extends ChangeNotifier {
 
   void setSshPass(String v) {
     if (v == _sshPass) return;
+    _sessionGeneration++;
     _invalidateFetchForSettingsChange();
     _sshPass = v;
     savePreferences();
@@ -461,6 +561,7 @@ class AppState extends ChangeNotifier {
 
   void setSshIdentity(String v) {
     if (v == _sshIdentity) return;
+    _sessionGeneration++;
     _invalidateFetchForSettingsChange();
     _sshIdentity = v;
     savePreferences();
@@ -478,6 +579,7 @@ class AppState extends ChangeNotifier {
 
   void setLoggedIn(bool v, String token) {
     if (v == _loggedIn && token == _authToken) return;
+    _sessionGeneration++;
     _invalidateFetchForSettingsChange();
     _loggedIn = v;
     _authToken = token;
@@ -486,6 +588,8 @@ class AppState extends ChangeNotifier {
   }
 
   void logout() {
+    _sessionGeneration++;
+    _invalidateFetchForSettingsChange();
     _loggedIn = false;
     _authToken = '';
     savePreferences();
@@ -500,6 +604,67 @@ class AppState extends ChangeNotifier {
   void setSshConnected(bool v) {
     _sshConnected = v;
     notifyListeners();
+  }
+
+  Future<void> loginAndLoadLatest({
+    required String apiUrl,
+    required String user,
+    required String password,
+    bool automatic = false,
+  }) async {
+    final generation = ++_sessionGeneration;
+    _status = automatic ? 'Signing in automatically...' : 'Signing in...';
+    notifyListeners();
+    try {
+      final result = await _loginWorker(
+        apiUrl,
+        user,
+        password,
+        _buildSshSettingsJson(),
+      );
+      if (_disposed || generation != _sessionGeneration) return;
+      _loginApiUrl = apiUrl;
+      _loginUser = user;
+      _loginPass = password;
+      _loggedIn = true;
+      _authToken = result.token;
+      _sshConnected = result.usedSsh;
+      _status = 'Logged in as $user';
+      await savePreferences();
+      if (_disposed || generation != _sessionGeneration) return;
+      notifyListeners();
+      await fetchLatestShot();
+    } catch (error) {
+      if (_disposed || generation != _sessionGeneration) return;
+      _loggedIn = false;
+      _authToken = '';
+      _status =
+          automatic ? 'Automatic login failed: $error' : 'Login failed: $error';
+      await savePreferences();
+      if (!_disposed) notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> initializeStartupSession() async {
+    await preferencesReady;
+    if (_disposed || !_rememberLogin) return;
+    if (_loginUser.trim().isNotEmpty) {
+      try {
+        await loginAndLoadLatest(
+          apiUrl: _loginApiUrl,
+          user: _loginUser,
+          password: _loginPass,
+          automatic: true,
+        );
+      } catch (_) {}
+      return;
+    }
+    if (_loggedIn && _authToken.isNotEmpty) {
+      _status = 'Restoring saved session...';
+      notifyListeners();
+      await fetchLatestShot();
+    }
   }
 
   Future<void> initPreferences() async {
@@ -1021,64 +1186,33 @@ class AppState extends ChangeNotifier {
 
   Future<void> fetchLatestShot() async {
     final generation = ++_fetchGeneration;
+    final apiUrl = _loginApiUrl;
+    final token = _authToken;
+    final sshSettings = _buildSshSettingsJson();
     _fetching = true;
     _status = 'Fetching latest shot...';
     notifyListeners();
     try {
-      String apiUrl = _loginApiUrl;
-      // Route through SSH if configured
-      if (_sshMode > 0 && _sshHost.isNotEmpty) {
-        try {
-          final settings = jsonEncode({
-            'host': _sshHost,
-            'port': _sshPort,
-            'user': _sshUser,
-            'password': _sshPass,
-            'identity_file': _sshIdentity,
-            'mode': 2
-          });
-          final resp = RustBridge.instance.prepareUrl(_loginApiUrl, settings);
-          if (resp.startsWith('http') && !resp.contains('"error"'))
-            apiUrl = resp;
-        } catch (_) {}
-      }
-      final base = apiUrl.replaceAll(RegExp(r'/$'), '');
-      final uri = Uri.parse('$base/treeShot');
-      final client = HttpClient();
-      try {
-        final req = await client.postUrl(uri);
-        req.headers.set('Content-Type', 'application/json');
-        req.headers.set('Authorization', 'Bearer $_authToken');
-        req.write('{}');
-        final resp = await req.close();
-        final body = await resp.transform(utf8.decoder).join();
-        if (!_isCurrentFetch(generation)) return;
-        final json = jsonDecode(body);
-        if (json is! Map) throw 'unexpected: $body';
-        if (json['code'] != '20000' && json['code'] != 20000)
-          throw json['msg'] ?? 'failed';
-        final data = json['data'];
-        final shot =
-            data is Map ? (data['shot'] ?? _findShot(data)) : _findShot(data);
-        if (shot != null) {
-          setShotFromApi(shot.toString());
-          if (data is Map) {
-            _shotInfoIp = data['ip']?.toString() ?? '';
-            _shotInfoPulse =
-                data['pulseLength'] != null ? '${data['pulseLength']}s' : '';
-            _shotInfoIt = data['it'] != null ? '${data['it']}kA' : '';
-            _shotInfoTime = data['currentTime']?.toString() ?? '';
-          }
-          _status = 'Shot $shot';
-          notifyListeners();
-          startRefresh();
-        } else {
-          _fetching = false;
-          _status = 'No shot found';
-          notifyListeners();
+      final data = await _latestShotWorker(apiUrl, token, sshSettings);
+      if (!_isCurrentFetch(generation)) return;
+      final shot =
+          data is Map ? (data['shot'] ?? _findShot(data)) : _findShot(data);
+      if (shot != null) {
+        setShotFromApi(shot.toString());
+        if (data is Map) {
+          _shotInfoIp = data['ip']?.toString() ?? '';
+          _shotInfoPulse =
+              data['pulseLength'] != null ? '${data['pulseLength']}s' : '';
+          _shotInfoIt = data['it'] != null ? '${data['it']}kA' : '';
+          _shotInfoTime = data['currentTime']?.toString() ?? '';
         }
-      } finally {
-        client.close();
+        _status = 'Shot $shot';
+        notifyListeners();
+        startRefresh();
+      } else {
+        _fetching = false;
+        _status = 'No shot found';
+        notifyListeners();
       }
     } catch (e) {
       if (!_isCurrentFetch(generation)) return;
@@ -1135,6 +1269,7 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _sessionGeneration++;
     _fetchGeneration++;
     _shotCtrl.dispose();
     super.dispose();

@@ -132,6 +132,58 @@ void main() {
     expect(app.status, contains('163702'));
   });
 
+  test('Startup signs in, fetches the latest shot, and loads its waveforms',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'rememberLogin': true,
+      'loginApiUrl': 'http://east.example/api',
+      'loginUser': 'saved-user',
+      'loginPass': 'saved-password',
+      'loggedIn': false,
+    });
+    final loginRequests = <String>[];
+    final latestRequests = <String>[];
+    final signalRequests = <String>[];
+    final app = AppState(
+      loginWorker: (apiUrl, user, password, sshSettings) async {
+        loginRequests.add('$apiUrl|$user|$password|$sshSettings');
+        return (token: 'fresh-token', usedSsh: false);
+      },
+      latestShotWorker: (apiUrl, token, sshSettings) async {
+        latestRequests.add('$apiUrl|$token|$sshSettings');
+        return {
+          'shot': 170001,
+          'ip': 502.13,
+          'pulseLength': 5.66,
+          'it': 10995,
+          'currentTime': '2026-07-23 08:00:00',
+        };
+      },
+      signalFetchWorker: (configJson, dataMode, sshSettings) async {
+        signalRequests.add(configJson);
+        return '[{"column":0,"row":0,"signal":0,'
+            '"series":{"points":[[0,12],[1,13]],"error":""}}]';
+      },
+    );
+
+    await app.initializeStartupSession();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(loginRequests, [
+      'http://east.example/api|saved-user|saved-password|',
+    ]);
+    expect(latestRequests, [
+      'http://east.example/api|fresh-token|',
+    ]);
+    expect(signalRequests.single, contains('170001'));
+    expect(app.loggedIn, isTrue);
+    expect(app.authToken, 'fresh-token');
+    expect(app.shotText, '170001');
+    expect(app.shotInfoIp, '502.13');
+    expect(app.plots[0].series[0]!.points![0], [0, 12]);
+    expect(app.status, contains('170001'));
+  });
+
   test('Responsive plot columns preserve order across screen sizes', () {
     final phone = buildResponsivePlotColumns([2, 1, 2], 390);
     expect(phone, hasLength(3));
