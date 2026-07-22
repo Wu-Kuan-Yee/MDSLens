@@ -604,6 +604,18 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool handleEscapeKey() {
+    if (_maximizedPlot != null) {
+      showAllPanels();
+      return true;
+    }
+    if (_interactionMode == 1 && crosshairX != null) {
+      pointLocked = true;
+      return true;
+    }
+    return false;
+  }
+
   // Dialogs
   bool _showLogin = false;
   bool get showLogin => _showLogin;

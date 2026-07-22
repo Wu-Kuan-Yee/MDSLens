@@ -25,14 +25,7 @@ class MainPage extends StatelessWidget {
         SingleActivator(LogicalKeyboardKey.keyP,
             control: !Platform.isMacOS,
             meta: Platform.isMacOS): () => app.interactionMode = 1,
-        SingleActivator(LogicalKeyboardKey.escape): () {
-          if (app.maximizedPlot != null) {
-            app.showAllPanels();
-            return;
-          }
-          if (app.interactionMode == 1 && app.crosshairX != null)
-            app.pointLocked = true;
-        },
+        SingleActivator(LogicalKeyboardKey.escape): app.handleEscapeKey,
         SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
             _stepCrosshair(app, -1),
         SingleActivator(LogicalKeyboardKey.arrowRight): () =>

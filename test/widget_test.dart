@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:mdsscope/app.dart';
 import 'package:mdsscope/pages/main_page.dart';
@@ -858,6 +859,42 @@ void main() {
     await drag.up();
     await tester.pump();
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Escape locks Point mode globally and a plot click unlocks it',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 0],
+          [1, 1],
+          [2, 2],
+        ],
+        null);
+    app.interactionMode = 1;
+    app.setCrosshair(0.5, sourcePlot: 0);
+    addTearDown(tester.view.reset);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1000, 800);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MdsScopeApp(),
+      ),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(app.pointLocked, isTrue);
+
+    await tester.tap(find.byKey(const ValueKey('plot-panel-0')));
+    await tester.pump();
+    expect(app.pointLocked, isFalse);
+    expect(app.crosshairX, isNotNull);
   });
 
   testWidgets('Plot title, axes, and units use customized fonts',

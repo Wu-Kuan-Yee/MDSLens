@@ -36,9 +36,14 @@ class _MdsScopeAppState extends State<MdsScopeApp> with WidgetsBindingObserver {
   }
 
   bool _onAppKey(KeyEvent event) {
+    final app = context.read<AppState>();
     if (event.logicalKey == LogicalKeyboardKey.shiftLeft ||
         event.logicalKey == LogicalKeyboardKey.shiftRight) {
-      context.read<AppState>().shiftHeld = event is KeyDownEvent;
+      app.shiftHeld = event is KeyDownEvent;
+    }
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape) {
+      return app.handleEscapeKey();
     }
     return false; // Don't absorb key events
   }
