@@ -30,21 +30,40 @@ class RustBridge {
   static RustBridge get instance => _i ??= RustBridge._(_openLib());
 
   static DynamicLibrary _openLib() {
-    // Try dynamic library in standard locations first
-    final exeDir = File(Platform.resolvedExecutable).parent;
+    final exeDir = File(Platform.resolvedExecutable).parent.path;
+    final errors = <String>[];
     final names = Platform.isMacOS ? [
       '$exeDir/../Frameworks/libmds_bridge.dylib',
       '$exeDir/libmds_bridge.dylib',
+      'libmds_bridge.dylib',
       'rust/target/release/libmds_bridge.dylib',
       'rust/target/debug/libmds_bridge.dylib',
-    ] : Platform.isLinux ? ['$exeDir/lib/libmds_bridge.so', 'rust/target/release/libmds_bridge.so', 'rust/target/debug/libmds_bridge.so']
-      : ['$exeDir/mds_bridge.dll'];
+    ] : Platform.isLinux ? [
+      '$exeDir/lib/libmds_bridge.so',
+      '$exeDir/libmds_bridge.so',
+      'libmds_bridge.so',
+      'rust/target/release/libmds_bridge.so',
+      'rust/target/debug/libmds_bridge.so',
+    ] : [
+      '$exeDir/mds_bridge.dll',
+      'mds_bridge.dll',
+      'rust/target/release/mds_bridge.dll',
+      'rust/target/debug/mds_bridge.dll',
+    ];
+
     for (final name in names) {
-      try { return DynamicLibrary.open(name); } catch (_) {}
+      try {
+        return DynamicLibrary.open(name);
+      } catch (e) {
+        errors.add('$name -> $e');
+      }
     }
-    // Fallback: try static linking
-    try { return DynamicLibrary.process(); } catch (_) {}
-    throw Exception('Cannot find libmds_bridge. Run: cargo build');
+
+    if (Platform.isIOS || Platform.isAndroid) {
+      try { return DynamicLibrary.process(); } catch (_) {}
+    }
+
+    throw Exception('Failed to load libmds_bridge library:\n${errors.join("\n")}');
   }
 
   static String Function(String) _wrap1(DynamicLibrary lib, String name) {
