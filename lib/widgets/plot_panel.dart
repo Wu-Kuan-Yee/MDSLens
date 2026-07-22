@@ -614,6 +614,8 @@ class _PlotPanelState extends State<PlotPanel> {
       if (_touchPositions.length >= 2) {
         _beginMultiTouch();
         _resetMultiTouchMetrics();
+      } else {
+        _updateTouchCrosshair(event.localPosition, unlock: true);
       }
       return;
     }
@@ -643,6 +645,8 @@ class _PlotPanelState extends State<PlotPanel> {
       _touchPositions[event.pointer] = event.localPosition;
       if (_multiTouchActive && _touchPositions.length >= 2) {
         _applyMultiTouchTransform();
+      } else {
+        _updateTouchCrosshair(event.localPosition);
       }
       return;
     }
@@ -748,6 +752,17 @@ class _PlotPanelState extends State<PlotPanel> {
     }
     app.setCrosshair(
       _pxToDataX(event.localPosition.dx),
+      sourcePlot: widget.plotIdx,
+    );
+  }
+
+  void _updateTouchCrosshair(Offset localPosition, {bool unlock = false}) {
+    final app = context.read<AppState>();
+    if (app.interactionMode != 1) return;
+    if (unlock && app.pointLocked) app.pointLocked = false;
+    if (app.pointLocked || !_ensureViewInitialized(app)) return;
+    app.setCrosshair(
+      _pxToDataX(localPosition.dx),
       sourcePlot: widget.plotIdx,
     );
   }

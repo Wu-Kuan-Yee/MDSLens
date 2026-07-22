@@ -150,6 +150,51 @@ void main() {
     expect(charts[1].data.extraLinesData.horizontalLines.single.y, 22);
   });
 
+  testWidgets('Point mode continuously follows a held touch drag',
+      (tester) async {
+    final app = AppState();
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 0],
+          [5, 5],
+          [10, 10]
+        ],
+        null);
+    app.interactionMode = 1;
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 500,
+              height: 400,
+              child: PlotPanel(plotIdx: 0),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final drag = await tester.startGesture(const Offset(180, 180));
+    await tester.pump();
+    final initialX = app.crosshairX;
+    expect(initialX, isNotNull);
+
+    await drag.moveTo(const Offset(360, 180));
+    await tester.pump();
+    expect(app.crosshairX, isNotNull);
+    expect(app.crosshairX!, greaterThan(initialX!));
+
+    await drag.up();
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Plot title, axes, and units use customized fonts',
       (tester) async {
     final app = AppState();
