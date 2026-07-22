@@ -1,350 +1,405 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+"""Build and package MdsScope on the current native build host.
 
+Flutter desktop targets must be built on their native operating system. Android
+can be built on every Flutter host; Apple targets require macOS and Xcode. The
+GitHub release workflow runs this entry point on each required host.
 """
-MdsScope Multi-Platform Automated Build & Packaging Script
-===========================================================
 
-This script automates building the Flutter + Rust rewrite of MdsScope into fully
-statically-linked binaries and packages for Desktop and Mobile platforms.
-
-Package Naming Specification:
-  mdsscope-<platform>-<arch>.<format>
-
-Supported Formats per Platform:
-  - Windows   : .exe, .msi, .zip, .exe (portable)
-  - macOS     : .dmg, .pkg, .tar.gz, .tar.xz, .tar.bz2, .zip, .app (portable)
-  - Linux     : .deb, .rpm, .pkg.tar.zst, .pkg.tar.xz, .tar.gz, .tar.xz, .tar.bz2, .zip, .AppImage
-  - Android   : .apk
-  - iOS/iPadOS: .ipa
-  - HarmonyOS : .app, .hap
-"""
+from __future__ import annotations
 
 import argparse
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
 import tarfile
-import zipfile
+import tempfile
 from pathlib import Path
 
-VERSION = "7.0.0"
-APP_NAME = "mdsscope"
-BASE_DIR = Path(__file__).resolve().parent
 
-# Check for workspace folders
-FLUTTER_DIR = BASE_DIR / "mdsscope-flutter"
-if not FLUTTER_DIR.exists():
-    FLUTTER_DIR = BASE_DIR / "MdsScope"
-RUST_DIR = FLUTTER_DIR / "rust" / "mds-bridge"
+ROOT = Path(__file__).resolve().parent
+DIST = ROOT / "build" / "dist"
+APP = "mdsscope"
 
 
-def log(msg: str, prefix: str = "[INFO]") -> None:
-    print(f"{prefix} {msg}", flush=True)
+def log(message: str) -> None:
+    print(f"[MdsScope] {message}", flush=True)
 
 
-def log_err(msg: str) -> None:
-    print(f"[ERROR] {msg}", file=sys.stderr, flush=True)
+def fail(message: str) -> "NoReturn":
+    raise SystemExit(f"[MdsScope] ERROR: {message}")
 
 
-def run_cmd(cmd: list[str], cwd: Path = None, check: bool = True) -> int:
-    cmd_str = " ".join(cmd)
-    log(f"Executing: {cmd_str}")
-    res = subprocess.run(cmd, cwd=cwd or FLUTTER_DIR)
-    if check and res.returncode != 0:
-        log_err(f"Command failed with exit code {res.returncode}: {cmd_str}")
-        sys.exit(res.returncode)
-    return res.returncode
+def run(*command: str, cwd: Path = ROOT, check: bool = True) -> subprocess.CompletedProcess[str]:
+    log("Running: " + " ".join(command))
+    return subprocess.run(command, cwd=cwd, check=check, text=True)
 
 
-def detect_platform() -> str:
-    system = platform.system().lower()
-    if system == "darwin":
-        return "macos"
-    elif system == "windows":
-        return "windows"
-    elif system == "linux":
-        return "linux"
-    return system
+def tool(name: str) -> str | None:
+    return shutil.which(name)
 
 
-def detect_arch() -> str:
+def format_tool(name: str, formats: set[str], package_format: str) -> str | None:
+    found = tool(name)
+    if found is not None:
+        return found
+    if "all" in formats:
+        log(f"Skipping {package_format}: optional tool '{name}' is not installed")
+        return None
+    fail(f"'{name}' is required for {package_format}")
+
+
+def host_platform() -> str:
+    return {"Darwin": "macos", "Windows": "windows", "Linux": "linux"}.get(
+        platform.system(), platform.system().lower()
+    )
+
+
+def host_arch() -> str:
     machine = platform.machine().lower()
-    if machine in ("x86_64", "amd64"):
+    if machine in {"x86_64", "amd64"}:
         return "x64"
-    elif machine in ("arm64", "aarch64"):
+    if machine in {"arm64", "aarch64"}:
         return "arm64"
-    elif machine in ("i386", "i686", "x86"):
-        return "x86"
     return machine
 
 
-def build_rust_static(mode: str) -> None:
-    log("Building Rust engine (mds-bridge) static library...", "[RUST]")
-    cmd = ["cargo", "build"]
-    if mode == "release":
-        cmd.append("--release")
-    cmd.extend(["--manifest-path", str(RUST_DIR / "Cargo.toml")])
-    run_cmd(cmd, cwd=FLUTTER_DIR)
+def project_version() -> str:
+    match = re.search(
+        r"^version:\s*([^+\s]+)",
+        (ROOT / "pubspec.yaml").read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    if match is None:
+        fail("pubspec.yaml has no version")
+    return match.group(1)
 
 
-def clean_build() -> None:
-    log("Cleaning previous build artifacts...", "[CLEAN]")
-    run_cmd(["flutter", "clean"], cwd=FLUTTER_DIR, check=False)
-    run_cmd(["cargo", "clean", "--manifest-path", str(RUST_DIR / "Cargo.toml")], cwd=FLUTTER_DIR, check=False)
+def replace_tree(source: Path, destination: Path) -> None:
+    if destination.exists():
+        shutil.rmtree(destination)
+    shutil.copytree(source, destination, symlinks=True)
 
 
-def create_tar_archive(src_dir: Path, out_path: Path, compression: str = "gz") -> None:
-    mode = f"w:{compression}" if compression else "w"
-    log(f"Creating tar archive: {out_path.name}")
-    with tarfile.open(out_path, mode) as tar:
-        tar.add(src_dir, arcname=src_dir.name)
+def make_tar(source: Path, output: Path, arcname: str, mode: str) -> None:
+    with tarfile.open(output, mode, dereference=False) as archive:
+        archive.add(source, arcname=arcname, recursive=True)
+    log(f"Created {output.name}")
 
 
-def create_zip_archive(src_dir: Path, out_path: Path) -> None:
-    log(f"Creating zip archive: {out_path.name}")
-    with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-        for root, _, files in os.walk(src_dir):
-            for file in files:
-                filepath = Path(root) / file
-                arcname = filepath.relative_to(src_dir.parent)
-                zipf.write(filepath, arcname)
+def make_zip(source: Path, output: Path, arcname: str) -> None:
+    if host_platform() == "macos" and source.suffix == ".app":
+        # ditto preserves macOS resource forks, permissions and framework links.
+        run("ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(source), str(output))
+    else:
+        with tempfile.TemporaryDirectory(prefix="mdsscope-zip-") as temporary:
+            staged = Path(temporary) / arcname
+            replace_tree(source, staged)
+            archive_base = output.with_suffix("")
+            made = Path(shutil.make_archive(str(archive_base), "zip", temporary))
+            if made != output:
+                made.replace(output)
+    log(f"Created {output.name}")
 
 
-def pack_macos(out_dir: Path, arch: str, formats: list[str]) -> None:
-    build_dir = FLUTTER_DIR / "build" / "macos" / "Build" / "Products" / "Release"
-    app_path = build_dir / "mdsscope.app"
+def selected(formats: set[str], name: str) -> bool:
+    return "all" in formats or name in formats
 
-    if not app_path.exists():
-        log_err(f"Build output missing: {app_path}")
+
+def flutter_build(target: str, *arguments: str) -> None:
+    run("flutter", "pub", "get")
+    run("flutter", "build", target, "--release", *arguments)
+
+
+def package_macos(formats: set[str], no_build: bool) -> None:
+    if host_platform() != "macos":
+        fail("macOS packages can only be built on macOS")
+    if not no_build:
+        flutter_build("macos")
+
+    app = ROOT / "build/macos/Build/Products/Release/MdsScope.app"
+    if not app.is_dir():
+        fail(f"macOS application bundle not found: {app}")
+    base = "mdsscope-macos-universal"
+
+    if selected(formats, "app"):
+        replace_tree(app, DIST / f"{base}.app")
+        log(f"Created {base}.app")
+    if selected(formats, "zip"):
+        make_zip(app, DIST / f"{base}.zip", app.name)
+    if selected(formats, "tar.gz"):
+        make_tar(app, DIST / f"{base}.tar.gz", app.name, "w:gz")
+    if selected(formats, "tar.xz"):
+        make_tar(app, DIST / f"{base}.tar.xz", app.name, "w:xz")
+    if selected(formats, "tar.bz2"):
+        make_tar(app, DIST / f"{base}.tar.bz2", app.name, "w:bz2")
+    if selected(formats, "dmg"):
+        run(
+            "hdiutil", "create", "-quiet", "-volname", "MdsScope",
+            "-srcfolder", str(app), "-ov", "-format", "UDZO", str(DIST / f"{base}.dmg"),
+        )
+    if selected(formats, "pkg"):
+        run(
+            "pkgbuild", "--component", str(app), "--install-location", "/Applications",
+            str(DIST / f"{base}.pkg"),
+        )
+
+
+def windows_bundle(arch: str) -> Path:
+    return ROOT / f"build/windows/{arch}/runner/Release"
+
+
+def package_windows(formats: set[str], no_build: bool, arch: str) -> None:
+    if host_platform() != "windows":
+        fail("Windows packages can only be built on Windows")
+    if arch not in {"x64", "arm64"}:
+        fail("Flutter supports Windows x64 and arm64, not " + arch)
+    if not no_build:
+        flutter_build("windows", "--target-platform", f"windows-{arch}")
+
+    bundle = windows_bundle(arch)
+    if not (bundle / "mdsscope.exe").is_file():
+        fail(f"Windows application bundle not found: {bundle}")
+    base = f"mdsscope-windows-{arch}"
+
+    if selected(formats, "zip"):
+        make_zip(bundle, DIST / f"{base}.zip", base)
+    if selected(formats, "tar.gz"):
+        make_tar(bundle, DIST / f"{base}.tar.gz", base, "w:gz")
+    if selected(formats, "tar.xz"):
+        make_tar(bundle, DIST / f"{base}.tar.xz", base, "w:xz")
+    if selected(formats, "tar.bz2"):
+        make_tar(bundle, DIST / f"{base}.tar.bz2", base, "w:bz2")
+    if selected(formats, "exe"):
+        iscc = format_tool("ISCC", formats, "exe")
+        if iscc is not None:
+            run(
+                iscc,
+                f"/DBundleDir={bundle}",
+                f"/DOutputDir={DIST}",
+                f"/DOutputBase={base}",
+                f"/DAppVersion={project_version()}",
+                str(ROOT / "packaging/windows/mdsscope.iss"),
+            )
+    if "msi" in formats:
+        fail("MSI generation needs a separately maintained WiX installer definition; use the signed EXE installer")
+
+
+def linux_bundle(arch: str) -> Path:
+    return ROOT / f"build/linux/{arch}/release/bundle"
+
+
+def stage_linux_root(bundle: Path, root: Path) -> None:
+    app_dir = root / "usr/lib/mdsscope"
+    replace_tree(bundle, app_dir)
+    bin_dir = root / "usr/bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    os.symlink("../lib/mdsscope/mdsscope", bin_dir / "mdsscope")
+    applications = root / "usr/share/applications"
+    applications.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(ROOT / "packaging/linux/com.mdsscope.app.desktop", applications)
+    icons = root / "usr/share/icons/hicolor/scalable/apps"
+    icons.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(ROOT / "assets/app_icon.svg", icons / "com.mdsscope.app.svg")
+
+
+def package_linux(formats: set[str], no_build: bool, arch: str, version: str) -> None:
+    if host_platform() != "linux":
+        fail("Linux packages can only be built on Linux")
+    if arch not in {"x64", "arm64"}:
+        fail("Flutter supports Linux x64 and arm64, not " + arch)
+    if arch != host_arch():
+        fail("Linux packages must be built on a matching native host architecture")
+    if not no_build:
+        flutter_build("linux")
+
+    bundle = linux_bundle(arch)
+    if not (bundle / "mdsscope").is_file():
+        fail(f"Linux application bundle not found: {bundle}")
+    base = f"mdsscope-linux-{arch}"
+    if selected(formats, "zip"):
+        make_zip(bundle, DIST / f"{base}.zip", base)
+    if selected(formats, "tar.gz"):
+        make_tar(bundle, DIST / f"{base}.tar.gz", base, "w:gz")
+    if selected(formats, "tar.xz"):
+        make_tar(bundle, DIST / f"{base}.tar.xz", base, "w:xz")
+    if selected(formats, "tar.bz2"):
+        make_tar(bundle, DIST / f"{base}.tar.bz2", base, "w:bz2")
+
+    with tempfile.TemporaryDirectory(prefix="mdsscope-linux-") as temporary:
+        staging = Path(temporary) / "root"
+        stage_linux_root(bundle, staging)
+        deb_arch = {"x64": "amd64", "arm64": "arm64"}[arch]
+        rpm_arch = {"x64": "x86_64", "arm64": "aarch64"}[arch]
+
+        if selected(formats, "deb"):
+            dpkg_deb = format_tool("dpkg-deb", formats, "deb")
+            if dpkg_deb is not None:
+                control = staging / "DEBIAN"
+                control.mkdir()
+                (control / "control").write_text(
+                    "\n".join([
+                        "Package: mdsscope", f"Version: {version}", f"Architecture: {deb_arch}",
+                        "Maintainer: MdsScope Contributors",
+                        "Depends: libc6, libgtk-3-0, libstdc++6",
+                        "Section: science", "Priority: optional",
+                        "Description: MDSplus signal waveform viewer", "",
+                    ]),
+                    encoding="utf-8",
+                )
+                run(dpkg_deb, "--root-owner-group", "--build", str(staging), str(DIST / f"{base}.deb"))
+                shutil.rmtree(control)
+
+        for package_format, compression in (("pkg.tar.zst", "--zstd"), ("pkg.tar.xz", "-J")):
+            if selected(formats, package_format):
+                package_info = staging / ".PKGINFO"
+                installed_size = sum(path.stat().st_size for path in staging.rglob("*") if path.is_file())
+                package_info.write_text(
+                    f"pkgname = mdsscope\npkgver = {version}-1\npkgdesc = MDSplus signal waveform viewer\n"
+                    f"arch = {rpm_arch}\nsize = {installed_size}\ndepend = gtk3\n",
+                    encoding="utf-8",
+                )
+                run("tar", "-C", str(staging), compression, "-cf", str(DIST / f"{base}.{package_format}"), ".")
+                package_info.unlink()
+
+        if selected(formats, "rpm"):
+            rpmbuild = format_tool("rpmbuild", formats, "rpm")
+            if rpmbuild is not None:
+                top = Path(temporary) / "rpmbuild"
+                for directory in ("BUILD", "BUILDROOT", "RPMS", "SOURCES", "SPECS", "SRPMS"):
+                    (top / directory).mkdir(parents=True)
+                source_root = top / "SOURCES/root"
+                replace_tree(staging, source_root)
+                run(
+                    rpmbuild, "-bb", "--define", f"_topdir {top}", "--define", f"mdsscope_version {version}",
+                    "--define", f"mdsscope_arch {rpm_arch}", str(ROOT / "packaging/linux/mdsscope.spec"),
+                )
+                rpms = list((top / "RPMS").rglob("*.rpm"))
+                if len(rpms) != 1:
+                    fail("rpmbuild did not produce exactly one RPM")
+                shutil.copy2(rpms[0], DIST / f"{base}.rpm")
+
+        if selected(formats, "AppImage"):
+            appimagetool = format_tool("appimagetool", formats, "AppImage")
+            if appimagetool is not None:
+                app_dir = Path(temporary) / "MdsScope.AppDir"
+                stage_linux_root(bundle, app_dir)
+                os.symlink("usr/lib/mdsscope/mdsscope", app_dir / "AppRun")
+                shutil.copy2(ROOT / "packaging/linux/com.mdsscope.app.desktop", app_dir)
+                shutil.copy2(ROOT / "assets/app_icon.svg", app_dir / "com.mdsscope.app.svg")
+                environment = dict(os.environ)
+                environment["ARCH"] = rpm_arch
+                log(f"Running: {appimagetool} {app_dir} {DIST / (base + '.AppImage')}")
+                subprocess.run([appimagetool, str(app_dir), str(DIST / f"{base}.AppImage")], check=True, env=environment)
+
+
+def package_android(formats: set[str], no_build: bool) -> None:
+    apk_dir = ROOT / "build/app/outputs/flutter-apk"
+    bundle_dir = ROOT / "build/app/outputs/bundle/release"
+    if not no_build:
+        run("flutter", "pub", "get")
+        if selected(formats, "apk"):
+            run(
+                "flutter", "build", "apk", "--release", "--split-per-abi",
+                "--target-platform", "android-arm,android-arm64,android-x64",
+            )
+            run(
+                "flutter", "build", "apk", "--release",
+                "--target-platform", "android-arm,android-arm64,android-x64",
+            )
+        if selected(formats, "aab"):
+            run(
+                "flutter", "build", "appbundle", "--release",
+                "--target-platform", "android-arm,android-arm64,android-x64",
+            )
+
+    if selected(formats, "apk"):
+        outputs = {
+            "app-armeabi-v7a-release.apk": "mdsscope-android-armv7.apk",
+            "app-arm64-v8a-release.apk": "mdsscope-android-arm64.apk",
+            "app-x86_64-release.apk": "mdsscope-android-x64.apk",
+            "app-release.apk": "mdsscope-android-universal.apk",
+        }
+        for source, destination in outputs.items():
+            path = apk_dir / source
+            if not path.is_file():
+                fail(f"Android APK not found: {path}")
+            shutil.copy2(path, DIST / destination)
+    if selected(formats, "aab"):
+        source = bundle_dir / "app-release.aab"
+        if not source.is_file():
+            fail(f"Android App Bundle not found: {source}")
+        shutil.copy2(source, DIST / "mdsscope-android-universal.aab")
+
+
+def package_ios(formats: set[str], no_build: bool) -> None:
+    if host_platform() != "macos":
+        fail("iOS/iPadOS packages can only be built on macOS")
+    if not selected(formats, "ipa"):
         return
-
-    base_name = f"{APP_NAME}-macos-{arch}"
-
-    if "app" in formats or "all" in formats:
-        dest_app = out_dir / f"{base_name}.app"
-        if dest_app.exists():
-            shutil.rmtree(dest_app)
-        shutil.copytree(app_path, dest_app)
-        log(f"Generated: {dest_app.name}")
-
-    if "zip" in formats or "all" in formats:
-        create_zip_archive(app_path, out_dir / f"{base_name}.zip")
-
-    if "tar.gz" in formats or "all" in formats:
-        create_tar_archive(app_path, out_dir / f"{base_name}.tar.gz", "gz")
-
-    if "tar.xz" in formats or "all" in formats:
-        create_tar_archive(app_path, out_dir / f"{base_name}.tar.xz", "xz")
-
-    if "tar.bz2" in formats or "all" in formats:
-        create_tar_archive(app_path, out_dir / f"{base_name}.tar.bz2", "bz2")
-
-    if "dmg" in formats or "all" in formats:
-        dmg_path = out_dir / f"{base_name}.dmg"
-        cmd = ["hdiutil", "create", "-volname", "MdsScope", "-srcfolder", str(app_path), "-ov", "-format", "UDZO", str(dmg_path)]
-        run_cmd(cmd, check=False)
-
-    if "pkg" in formats or "all" in formats:
-        pkg_path = out_dir / f"{base_name}.pkg"
-        cmd = ["pkgbuild", "--component", str(app_path), "--install-location", "/Applications", str(pkg_path)]
-        run_cmd(cmd, check=False)
-
-
-def pack_windows(out_dir: Path, arch: str, formats: list[str]) -> None:
-    bundle_dir = FLUTTER_DIR / "build" / "windows" / "x64" / "runner" / "Release"
-    if not bundle_dir.exists():
-        log_err(f"Windows build bundle missing: {bundle_dir}")
-        return
-
-    base_name = f"{APP_NAME}-windows-{arch}"
-
-    if "zip" in formats or "all" in formats:
-        create_zip_archive(bundle_dir, out_dir / f"{base_name}.zip")
-
-    if "exe" in formats or "all" in formats:
-        exe_src = bundle_dir / "mdsscope.exe"
-        if exe_src.exists():
-            shutil.copy2(exe_src, out_dir / f"{base_name}-portable.exe")
-            log(f"Generated: {base_name}-portable.exe")
-
-    # If ISCC (Inno Setup) is available, build setup.exe / .msi installer
-    iscc = shutil.which("iscc")
-    iss_file = FLUTTER_DIR / "packaging" / "windows" / "setup.iss"
-    if iscc and iss_file.exists():
-        log("Building Inno Setup installer...", "[INSTALLER]")
-        run_cmd([iscc, str(iss_file)], check=False)
-
-
-def pack_linux(out_dir: Path, arch: str, formats: list[str]) -> None:
-    bundle_dir = FLUTTER_DIR / "build" / "linux" / "x64" / "release" / "bundle"
-    if not bundle_dir.exists():
-        log_err(f"Linux build bundle missing: {bundle_dir}")
-        return
-
-    base_name = f"{APP_NAME}-linux-{arch}"
-
-    if "tar.gz" in formats or "all" in formats:
-        create_tar_archive(bundle_dir, out_dir / f"{base_name}.tar.gz", "gz")
-
-    if "tar.xz" in formats or "all" in formats:
-        create_tar_archive(bundle_dir, out_dir / f"{base_name}.tar.xz", "xz")
-
-    if "tar.bz2" in formats or "all" in formats:
-        create_tar_archive(bundle_dir, out_dir / f"{base_name}.tar.bz2", "bz2")
-
-    if "zip" in formats or "all" in formats:
-        create_zip_archive(bundle_dir, out_dir / f"{base_name}.zip")
-
-    if "pkg.tar.zst" in formats or "all" in formats:
-        zst_path = out_dir / f"{base_name}.pkg.tar.zst"
-        log(f"Creating Arch Linux package: {zst_path.name}")
-        with tarfile.open(zst_path, "w:gz") as tar:  # Fallback to tar.gz if zstd not available
-            tar.add(bundle_dir, arcname=".")
-
-    if "deb" in formats or "all" in formats:
-        deb_dir = FLUTTER_DIR / "build" / "deb" / base_name
-        usr_bin = deb_dir / "usr" / "bin"
-        usr_lib = deb_dir / "usr" / "lib" / "mdsscope"
-        debian_dir = deb_dir / "DEBIAN"
-
-        usr_bin.mkdir(parents=True, exist_ok=True)
-        usr_lib.mkdir(parents=True, exist_ok=True)
-        debian_dir.mkdir(parents=True, exist_ok=True)
-
-        shutil.copytree(bundle_dir, usr_lib, dirs_exist_ok=True)
-        link_target = usr_bin / "mdsscope"
-        if link_target.exists():
-            link_target.unlink()
-        os.symlink("/usr/lib/mdsscope/mdsscope", link_target)
-
-        control_content = f"""Package: mdsscope
-Version: {VERSION}
-Architecture: amd64
-Maintainer: MdsScope Contributors
-Description: Signal data plotting for MDSplus experiments
-"""
-        (debian_dir / "control").write_text(control_content, encoding="utf-8")
-        os.chmod(debian_dir, 0o755)
-        os.chmod(debian_dir / "control", 0o755)
-
-        deb_out = out_dir / f"{base_name}.deb"
-        run_cmd(["dpkg-deb", "--build", str(deb_dir), str(deb_out)], check=False)
-
-
-def pack_android(out_dir: Path, arch: str, formats: list[str]) -> None:
-    apk_path = FLUTTER_DIR / "build" / "app" / "outputs" / "flutter-apk" / "app-release.apk"
-    if apk_path.exists():
-        dest = out_dir / f"{APP_NAME}-android-{arch}.apk"
-        shutil.copy2(apk_path, dest)
-        log(f"Generated: {dest.name}")
+    if not no_build:
+        flutter_build("ipa")
+    ipas = sorted((ROOT / "build/ios/ipa").glob("*.ipa"))
+    if len(ipas) != 1:
+        fail("A signed IPA was not produced. Configure Apple signing in Xcode first.")
+    # One universal Apple mobile binary supports both iPhone and iPad. Both
+    # names are published as aliases so platform-filtered release clients find it.
+    shutil.copy2(ipas[0], DIST / "mdsscope-ios-arm64.ipa")
+    shutil.copy2(ipas[0], DIST / "mdsscope-ipados-arm64.ipa")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        prog="build_app.py",
-        description="MdsScope Multi-Platform Build & Package Script (Statically-Linked Rust + Flutter Engine)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python3 build_app.py                          # Build for current host platform with default formats
-  python3 build_app.py -p macos -f dmg zip app  # Build macOS DMG, Zip, and App Bundle
-  python3 build_app.py -p windows -f zip exe    # Build Windows Zip and Portable EXE
-  python3 build_app.py -p linux -f deb tar.gz   # Build Linux Debian Package and Tar.gz
-  python3 build_app.py -p android -f apk        # Build Android APK
-  python3 build_app.py --clean                  # Clean build cache before building
-""",
-    )
+    global DIST
 
+    parser = argparse.ArgumentParser(description="Build real, installable MdsScope release packages")
     parser.add_argument(
-        "-p", "--platform",
-        choices=["windows", "macos", "linux", "android", "ios", "harmonyos", "auto"],
-        default="auto",
-        help="Target platform (default: auto-detect host OS)",
+        "-p", "--platform", action="append",
+        choices=["auto", "windows", "macos", "linux", "android", "ios", "ipados", "harmonyos"],
+        help="target platform; repeat to build several (default: native desktop)",
     )
+    parser.add_argument("-a", "--arch", choices=["auto", "x64", "arm64"], default="auto")
     parser.add_argument(
-        "-a", "--arch",
-        choices=["x64", "arm64", "x86", "armv7", "auto"],
-        default="auto",
-        help="Target CPU architecture (default: auto-detect host CPU)",
+        "-f", "--format", nargs="+", default=["all"],
+        help="package formats; 'all' builds every format whose tool is installed",
     )
-    parser.add_argument(
-        "-f", "--format",
-        nargs="+",
-        default=["all"],
-        help="Output package formats (e.g. exe msi zip dmg pkg app deb rpm tar.gz tar.xz apk ipa hap all)",
-    )
-    parser.add_argument(
-        "-o", "--out-dir",
-        default=str(BASE_DIR / "dist"),
-        help="Directory to save output packages (default: ./dist)",
-    )
-    parser.add_argument(
-        "--mode",
-        choices=["release", "debug"],
-        default="release",
-        help="Build mode (default: release)",
-    )
-    parser.add_argument(
-        "--clean",
-        action="store_true",
-        help="Run flutter clean and cargo clean before building",
-    )
-    parser.add_argument(
-        "-v", "--version",
-        default=VERSION,
-        help=f"Software version override (default: {VERSION})",
-    )
-
+    parser.add_argument("--no-build", action="store_true", help="package existing release outputs")
+    parser.add_argument("--clean", action="store_true", help="run flutter clean first")
+    parser.add_argument("--dist", type=Path, default=DIST, help="artifact output directory")
     args = parser.parse_args()
 
-    target_platform = detect_platform() if args.platform == "auto" else args.platform
-    target_arch = detect_arch() if args.arch == "auto" else args.arch
-    out_dir = Path(args.out_dir).resolve()
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    log("=" * 65)
-    log(f"MdsScope Build System v{args.version}")
-    log(f"Target Platform    : {target_platform}")
-    log(f"Target Architecture: {target_arch}")
-    log(f"Build Mode         : {args.mode}")
-    log(f"Formats Requested  : {', '.join(args.format)}")
-    log(f"Output Directory   : {out_dir}")
-    log("=" * 65)
-
+    DIST = args.dist.resolve()
+    DIST.mkdir(parents=True, exist_ok=True)
     if args.clean:
-        clean_build()
+        run("flutter", "clean")
 
-    # Step 1: Build Rust static engine
-    build_rust_static(args.mode)
+    platforms = args.platform or ["auto"]
+    platforms = [host_platform() if target == "auto" else target for target in platforms]
+    arch = host_arch() if args.arch == "auto" else args.arch
+    formats = set(args.format)
+    version = project_version()
 
-    # Step 2: Build Flutter target
-    log(f"Building Flutter target for {target_platform}...", "[FLUTTER]")
-    if target_platform in ("macos", "windows", "linux"):
-        run_cmd(["flutter", "build", target_platform, f"--{args.mode}"])
-    elif target_platform == "android":
-        run_cmd(["flutter", "build", "apk", f"--{args.mode}"])
-    elif target_platform == "ios":
-        run_cmd(["flutter", "build", "ipa", f"--{args.mode}"])
-    else:
-        log(f"Target platform '{target_platform}' requires specific native toolchain setup.")
-
-    # Step 3: Packaging
-    log(f"Packaging for {target_platform} ({target_arch})...", "[PACKAGING]")
-    if target_platform == "macos":
-        pack_macos(out_dir, target_arch, args.format)
-    elif target_platform == "windows":
-        pack_windows(out_dir, target_arch, args.format)
-    elif target_platform == "linux":
-        pack_linux(out_dir, target_arch, args.format)
-    elif target_platform == "android":
-        pack_android(out_dir, target_arch, args.format)
-
-    log("=" * 65)
-    log(f"Build & Packaging Completed Successfully! Artifacts saved in: {out_dir}", "[SUCCESS]")
-    log("=" * 65)
+    if "harmonyos" in platforms:
+        fail("HarmonyOS NEXT is not an upstream Flutter target; no valid HAP can be generated from this project")
+    if "ipados" in platforms and "ios" not in platforms:
+        platforms.append("ios")
+    for target in dict.fromkeys(platforms):
+        log(f"Building {target} ({arch}), version {version}")
+        if target == "macos":
+            package_macos(formats, args.no_build)
+        elif target == "windows":
+            package_windows(formats, args.no_build, arch)
+        elif target == "linux":
+            package_linux(formats, args.no_build, arch, version)
+        elif target == "android":
+            package_android(formats, args.no_build)
+        elif target == "ios":
+            package_ios(formats, args.no_build)
+        elif target != "ipados":
+            fail(f"Unsupported platform: {target}")
+    log(f"Finished. Artifacts: {DIST}")
 
 
 if __name__ == "__main__":
