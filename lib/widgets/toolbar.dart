@@ -17,10 +17,15 @@ class ToolbarWidget extends StatelessWidget {
     final app = context.watch<AppState>();
     final theme = Theme.of(context);
     final uiSize = app.fontUiSize.toDouble();
-    final infoStyle = TextStyle(
+    final infoValueStyle = TextStyle(
       fontFamily: app.effectiveFontFamily,
       fontSize: (uiSize - 1).clamp(6, 28).toDouble(),
       color: theme.colorScheme.primary,
+      fontWeight: FontWeight.w600,
+    );
+    final infoLabelStyle = infoValueStyle.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+      fontWeight: FontWeight.w500,
     );
     final shot = app.shotText.isNotEmpty ? app.shotText : '--';
     final ip = app.shotInfoIp.isNotEmpty
@@ -36,79 +41,90 @@ class ToolbarWidget extends StatelessWidget {
         ? app.shotInfoTime
         : (app.fetching ? '...' : '--');
 
-    final fileActions = Row(mainAxisSize: MainAxisSize.min, children: [
-      _btn(context, 'Open', () => app.openFile()),
-      _btn(context, 'Save', () => app.saveFile()),
-      _btn(context, app.fetching ? 'Stop' : 'Refresh',
-          () => app.fetching ? app.stopFetch() : app.startRefresh()),
-    ]);
-    final rateSelector = Row(mainAxisSize: MainAxisSize.min, children: [
+    final fileActions = _equalActionRow(
+      key: const ValueKey('toolbar-file-actions'),
+      children: [
+        _btn(context, 'Open', () => app.openFile()),
+        _btn(context, 'Save', () => app.saveFile()),
+        _btn(context, app.fetching ? 'Stop' : 'Refresh',
+            () => app.fetching ? app.stopFetch() : app.startRefresh()),
+      ],
+    );
+    final rateSelector = Row(key: const ValueKey('toolbar-rate'), children: [
       Text('Rate:',
           style:
               TextStyle(fontSize: uiSize, color: theme.colorScheme.onSurface)),
-      const SizedBox(width: 4),
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-            border: Border.all(color: theme.dividerColor),
-            borderRadius: BorderRadius.circular(4)),
-        child: DropdownButton<int>(
-          value: app.dataMode,
-          underline: const SizedBox(),
-          isDense: true,
-          style:
-              TextStyle(fontSize: uiSize, color: theme.colorScheme.onSurface),
-          dropdownColor: theme.colorScheme.surface,
-          items: [
-            DropdownMenuItem(
-                value: 0,
-                child: Text('Thin',
-                    style: TextStyle(
-                        fontSize: uiSize, color: theme.colorScheme.onSurface))),
-            DropdownMenuItem(
-                value: 1,
-                child: Text('Medium',
-                    style: TextStyle(
-                        fontSize: uiSize, color: theme.colorScheme.onSurface))),
-            DropdownMenuItem(
-                value: 2,
-                child: Text('Full',
-                    style: TextStyle(
-                        fontSize: uiSize, color: theme.colorScheme.onSurface))),
-          ],
-          onChanged: (v) {
-            if (v != null) {
-              app.dataMode = v;
-              app.startRefresh();
-            }
-          },
+      const SizedBox(width: 6),
+      Expanded(
+        child: Container(
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: BoxDecoration(
+              border: Border.all(color: theme.dividerColor),
+              borderRadius: BorderRadius.circular(6)),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<int>(
+              value: app.dataMode,
+              isExpanded: true,
+              isDense: true,
+              iconSize: 18,
+              style: TextStyle(
+                  fontSize: uiSize, color: theme.colorScheme.onSurface),
+              dropdownColor: theme.colorScheme.surface,
+              items: [
+                DropdownMenuItem(
+                    value: 0,
+                    child: Text('Thin',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: uiSize,
+                            color: theme.colorScheme.onSurface))),
+                DropdownMenuItem(
+                    value: 1,
+                    child: Text('Medium',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: uiSize,
+                            color: theme.colorScheme.onSurface))),
+                DropdownMenuItem(
+                    value: 2,
+                    child: Text('Full',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: uiSize,
+                            color: theme.colorScheme.onSurface))),
+              ],
+              onChanged: (v) {
+                if (v != null) {
+                  app.dataMode = v;
+                  app.startRefresh();
+                }
+              },
+            ),
+          ),
         ),
       ),
     ]);
-    final shotInfo = Wrap(
-        spacing: 8,
-        runSpacing: 4,
-        alignment: WrapAlignment.center,
-        children: [
-          Text('Shot: $shot', style: infoStyle),
-          Text('Ip: $ip', style: infoStyle),
-          Text('Pulse: $pulse', style: infoStyle),
-          Text('It: $it', style: infoStyle),
-          Text('Time: $time', style: infoStyle),
-        ]);
-    final appActions = Row(mainAxisSize: MainAxisSize.min, children: [
-      _settingsMenu(context, app),
-      IconButton(
-        icon: Icon(Icons.info_outline,
-            size: 18, color: theme.colorScheme.onSurface),
-        tooltip: 'About MdsScope',
-        onPressed: () => AboutDialogWidget.show(context),
-      ),
-      _btn(context, app.loggedIn ? 'Logout' : 'Login',
-          () => app.loggedIn ? app.logout() : LoginDialog.show(context)),
-      _sshBtn(context, app),
-    ]);
-    final shotEntry = Row(mainAxisSize: MainAxisSize.min, children: [
+    final appActions = _equalActionRow(
+      key: const ValueKey('toolbar-app-actions'),
+      spacing: 6,
+      children: [
+        _settingsMenu(context, app),
+        _iconActionButton(
+          context,
+          icon: Icons.info_outline,
+          tooltip: 'About MdsScope',
+          onPressed: () => AboutDialogWidget.show(context),
+        ),
+        _btn(context, app.loggedIn ? 'Logout' : 'Login',
+            () => app.loggedIn ? app.logout() : LoginDialog.show(context)),
+        _sshBtn(context, app),
+      ],
+    );
+    final shotEntry = Row(key: const ValueKey('toolbar-shot-entry'), children: [
       Text('Shot:',
           style:
               TextStyle(fontSize: uiSize, color: theme.colorScheme.onSurface)),
@@ -128,50 +144,66 @@ class ToolbarWidget extends StatelessWidget {
                   value: s, child: Text(s, style: TextStyle(fontSize: uiSize))))
               .toList(),
         ),
-      const SizedBox(width: 4),
-      SizedBox(
-        width: 95,
+      const SizedBox(width: 6),
+      Expanded(
+        flex: 3,
         child: TextField(
           controller: app.shotCtrl,
           style: TextStyle(fontSize: uiSize),
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
               isDense: true,
-              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              border: OutlineInputBorder()),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(6))),
           onSubmitted: (_) => app.startRefresh(),
         ),
       ),
-      _btn(context, 'Apply', () => app.startRefresh()),
+      const SizedBox(width: 6),
+      Expanded(
+        flex: 2,
+        child: _btn(context, 'Apply', () => app.startRefresh()),
+      ),
     ]);
-    final shotNavigation = Row(mainAxisSize: MainAxisSize.min, children: [
-      _btn(context, 'Prev', () {
-        final cur = app.shotCtrl.text.trim().isNotEmpty
-            ? app.shotCtrl.text.trim()
-            : app.shotText;
-        final s = int.tryParse(cur);
-        if (s != null) {
-          app.shotText = (s - 1).toString();
-          app.startRefresh();
-        }
-      }),
-      _btn(context, 'Next', () {
-        final cur = app.shotCtrl.text.trim().isNotEmpty
-            ? app.shotCtrl.text.trim()
-            : app.shotText;
-        final s = int.tryParse(cur);
-        if (s != null) {
-          app.shotText = (s + 1).toString();
-          app.startRefresh();
-        }
-      }),
-      _btn(context, 'Latest', () async => app.fetchLatestShot()),
-    ]);
-    final modeActions = Row(mainAxisSize: MainAxisSize.min, children: [
-      _modeBtn(context, 'Zoom/Move', app.interactionMode == 0,
-          () => app.interactionMode = 0),
-      _modeBtn(context, 'Point', app.interactionMode == 1,
-          () => app.interactionMode = 1),
-    ]);
+    final shotNavigation = _equalActionRow(
+      key: const ValueKey('toolbar-shot-navigation'),
+      children: [
+        _btn(context, 'Prev', () {
+          final cur = app.shotCtrl.text.trim().isNotEmpty
+              ? app.shotCtrl.text.trim()
+              : app.shotText;
+          final s = int.tryParse(cur);
+          if (s != null) {
+            app.shotText = (s - 1).toString();
+            app.startRefresh();
+          }
+        }),
+        _btn(context, 'Next', () {
+          final cur = app.shotCtrl.text.trim().isNotEmpty
+              ? app.shotCtrl.text.trim()
+              : app.shotText;
+          final s = int.tryParse(cur);
+          if (s != null) {
+            app.shotText = (s + 1).toString();
+            app.startRefresh();
+          }
+        }),
+        _btn(context, 'Latest', () async => app.fetchLatestShot()),
+      ],
+    );
+    final modeActions = _equalActionRow(
+      key: const ValueKey('toolbar-mode-actions'),
+      children: [
+        _modeBtn(context, 'Zoom/Move', app.interactionMode == 0,
+            () => app.interactionMode = 0),
+        _modeBtn(context, 'Point', app.interactionMode == 1,
+            () => app.interactionMode = 1),
+      ],
+    );
+    final themeActions = KeyedSubtree(
+      key: const ValueKey('toolbar-theme-actions'),
+      child: _themeBtns(context, app),
+    );
 
     return Container(
       key: const ValueKey('toolbar-root'),
@@ -179,56 +211,251 @@ class ToolbarWidget extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       color: theme.colorScheme.surfaceContainerHighest,
       child: LayoutBuilder(builder: (context, constraints) {
-        final isWide = constraints.maxWidth >= 1180;
-        final wrapAlignment = constraints.maxWidth < 600
-            ? WrapAlignment.center
-            : WrapAlignment.spaceBetween;
+        final width = constraints.maxWidth;
+        final compact = width < 560;
+        final wide = width >= 940;
+        final shotInfo = _shotInfoPanel(
+          context,
+          compact: compact,
+          entries: [
+            ('Shot', shot),
+            ('Ip', ip),
+            ('Pulse', pulse),
+            ('It', it),
+            ('Time', time),
+          ],
+          labelStyle: infoLabelStyle,
+          valueStyle: infoValueStyle,
+        );
+
+        Widget topActions;
+        if (compact) {
+          topActions = Column(children: [
+            Row(children: [
+              Expanded(child: fileActions),
+              const SizedBox(width: 8),
+              SizedBox(width: 140, child: rateSelector),
+            ]),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(flex: 3, child: themeActions),
+              const SizedBox(width: 8),
+              Expanded(flex: 4, child: appActions),
+            ]),
+          ]);
+        } else if (wide) {
+          topActions = Row(children: [
+            SizedBox(width: 280, child: fileActions),
+            const SizedBox(width: 8),
+            SizedBox(width: 150, child: rateSelector),
+            const Spacer(),
+            SizedBox(width: 220, child: themeActions),
+            const SizedBox(width: 8),
+            SizedBox(width: 260, child: appActions),
+          ]);
+        } else {
+          final fileWidth = (width * 0.56).clamp(250.0, 320.0);
+          final themeWidth = (width * 0.42).clamp(210.0, 260.0);
+          final appWidth = (width * 0.46).clamp(230.0, 300.0);
+          topActions = Column(children: [
+            Row(children: [
+              SizedBox(width: fileWidth, child: fileActions),
+              const Spacer(),
+              SizedBox(width: 160, child: rateSelector),
+            ]),
+            const SizedBox(height: 8),
+            Row(children: [
+              SizedBox(width: themeWidth, child: themeActions),
+              const Spacer(),
+              SizedBox(width: appWidth, child: appActions),
+            ]),
+          ]);
+        }
+
+        Widget shotControls;
+        if (compact) {
+          shotControls = Column(children: [
+            SizedBox(width: double.infinity, child: shotEntry),
+            const SizedBox(height: 8),
+            if (width >= 340)
+              Row(children: [
+                Expanded(flex: 3, child: shotNavigation),
+                const SizedBox(width: 8),
+                Expanded(flex: 2, child: modeActions),
+              ])
+            else ...[
+              SizedBox(width: double.infinity, child: shotNavigation),
+              const SizedBox(height: 8),
+              SizedBox(width: double.infinity, child: modeActions),
+            ],
+          ]);
+        } else if (wide) {
+          shotControls = Row(children: [
+            SizedBox(width: 300, child: shotEntry),
+            const SizedBox(width: 8),
+            SizedBox(width: 260, child: shotNavigation),
+            const SizedBox(width: 8),
+            SizedBox(width: 220, child: modeActions),
+            const Spacer(),
+          ]);
+        } else {
+          shotControls = Row(children: [
+            Expanded(flex: 4, child: shotEntry),
+            const SizedBox(width: 8),
+            Expanded(flex: 3, child: shotNavigation),
+            const SizedBox(width: 8),
+            Expanded(flex: 3, child: modeActions),
+          ]);
+        }
+
         return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (isWide)
-                Row(children: [
-                  fileActions,
-                  const SizedBox(width: 8),
-                  rateSelector,
-                  const SizedBox(width: 12),
-                  Expanded(child: shotInfo),
-                  const SizedBox(width: 12),
-                  _themeBtns(context, app),
-                  appActions,
-                ])
-              else
-                Wrap(
-                  alignment: wrapAlignment,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: [
-                    fileActions,
-                    rateSelector,
-                    shotInfo,
-                    _themeBtns(context, app),
-                    appActions
-                  ],
-                ),
-              const SizedBox(height: 6),
-              Wrap(
-                alignment: isWide ? WrapAlignment.start : wrapAlignment,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 10,
-                runSpacing: 6,
-                children: [shotEntry, shotNavigation, modeActions],
-              ),
-            ]);
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            topActions,
+            const SizedBox(height: 8),
+            shotInfo,
+            Divider(height: 17, color: theme.dividerColor),
+            shotControls,
+          ],
+        );
       }),
+    );
+  }
+
+  Widget _equalActionRow({
+    Key? key,
+    required List<Widget> children,
+    double spacing = 6,
+  }) {
+    return Row(
+      key: key,
+      children: [
+        for (var i = 0; i < children.length; i++) ...[
+          if (i > 0) SizedBox(width: spacing),
+          Expanded(child: children[i]),
+        ],
+      ],
+    );
+  }
+
+  Widget _shotInfoPanel(
+    BuildContext context, {
+    required bool compact,
+    required List<(String, String)> entries,
+    required TextStyle labelStyle,
+    required TextStyle valueStyle,
+  }) {
+    final theme = Theme.of(context);
+    final divider = theme.dividerColor.withValues(alpha: 0.65);
+
+    Widget infoCell(int index) => _infoCell(
+          entries[index].$1,
+          entries[index].$2,
+          labelStyle,
+          valueStyle,
+        );
+
+    Widget compactRow(List<int> indices, {int lastFlex = 1}) {
+      return IntrinsicHeight(
+        child: Row(
+          children: [
+            for (var i = 0; i < indices.length; i++) ...[
+              if (i > 0)
+                VerticalDivider(width: 1, thickness: 1, color: divider),
+              Expanded(
+                flex: i == indices.length - 1 ? lastFlex : 1,
+                child: infoCell(indices[i]),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      key: const ValueKey('toolbar-shot-info'),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.36),
+        border: Border.all(color: divider),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: compact
+          ? Column(children: [
+              compactRow([0, 1, 2]),
+              Divider(height: 1, thickness: 1, color: divider),
+              compactRow([3, 4], lastFlex: 2),
+            ])
+          : IntrinsicHeight(
+              child: Row(children: [
+                for (var i = 0; i < entries.length; i++) ...[
+                  if (i > 0)
+                    VerticalDivider(width: 1, thickness: 1, color: divider),
+                  Expanded(flex: i == 4 ? 2 : 1, child: infoCell(i)),
+                ],
+              ]),
+            ),
+    );
+  }
+
+  Widget _infoCell(
+    String label,
+    String value,
+    TextStyle labelStyle,
+    TextStyle valueStyle,
+  ) {
+    final message = '$label: $value';
+    return Tooltip(
+      message: message,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Text.rich(
+          TextSpan(children: [
+            TextSpan(text: '$label: ', style: labelStyle),
+            TextSpan(text: value, style: valueStyle),
+          ]),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+
+  Widget _iconActionButton(
+    BuildContext context, {
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(0, 40),
+          padding: EdgeInsets.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        ),
+        child: Icon(icon,
+            size: 19, color: Theme.of(context).colorScheme.onSurface),
+      ),
     );
   }
 
   Widget _settingsMenu(BuildContext ctx, AppState app) {
     return PopupMenuButton<String>(
       tooltip: 'Settings',
-      icon: Icon(Icons.settings,
-          size: 18, color: Theme.of(ctx).colorScheme.onSurface),
+      child: Container(
+        height: 40,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          border: Border.all(color: Theme.of(ctx).colorScheme.outline),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Icon(Icons.settings,
+            size: 19, color: Theme.of(ctx).colorScheme.onSurface),
+      ),
       onSelected: (v) {
         switch (v) {
           case 'web':
@@ -691,97 +918,98 @@ class ToolbarWidget extends StatelessWidget {
 
   Widget _btn(BuildContext ctx, String label, VoidCallback onTap) {
     final app = ctx.read<AppState>();
-    return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 3),
-        child: ElevatedButton(
-            onPressed: onTap,
-            style: ElevatedButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(4)),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                textStyle: TextStyle(
-                    fontFamily: app.effectiveFontFamily,
-                    fontSize: app.fontUiSize.toDouble(),
-                    fontWeight: FontWeight.w500)),
-            child: Text(label)));
+    return ElevatedButton(
+        onPressed: onTap,
+        style: ElevatedButton.styleFrom(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            minimumSize: const Size(0, 40),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            textStyle: TextStyle(
+                fontFamily: app.effectiveFontFamily,
+                fontSize: app.fontUiSize.toDouble(),
+                fontWeight: FontWeight.w500)),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(label, maxLines: 1),
+        ));
   }
 
   Widget _modeBtn(
       BuildContext ctx, String label, bool active, VoidCallback onTap) {
     final app = ctx.read<AppState>();
-    return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 3),
-        child: OutlinedButton(
-            onPressed: onTap,
-            style: OutlinedButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(4)),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                textStyle: TextStyle(
-                    fontFamily: app.effectiveFontFamily,
-                    fontSize: app.fontUiSize.toDouble(),
-                    fontWeight: active ? FontWeight.bold : FontWeight.w500),
-                backgroundColor:
-                    active ? Theme.of(ctx).colorScheme.primaryContainer : null),
-            child: Text(label)));
+    return OutlinedButton(
+        onPressed: onTap,
+        style: OutlinedButton.styleFrom(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            minimumSize: const Size(0, 40),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            textStyle: TextStyle(
+                fontFamily: app.effectiveFontFamily,
+                fontSize: app.fontUiSize.toDouble(),
+                fontWeight: active ? FontWeight.bold : FontWeight.w500),
+            backgroundColor:
+                active ? Theme.of(ctx).colorScheme.primaryContainer : null),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(label, maxLines: 1),
+        ));
   }
 
   Widget _sshBtn(BuildContext ctx, AppState app) {
-    return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 3),
-        child: ElevatedButton(
-            onPressed: () => SshDialog.show(ctx),
-            style: ElevatedButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(4)),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                textStyle: TextStyle(
-                    fontFamily: app.effectiveFontFamily,
-                    fontSize: app.fontUiSize.toDouble(),
-                    color: app.sshConnected ? Colors.green : null)),
-            child: const Text('SSH')));
+    return ElevatedButton(
+        onPressed: () => SshDialog.show(ctx),
+        style: ElevatedButton.styleFrom(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            minimumSize: const Size(0, 40),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            textStyle: TextStyle(
+                fontFamily: app.effectiveFontFamily,
+                fontSize: app.fontUiSize.toDouble(),
+                color: app.sshConnected ? Colors.green : null)),
+        child: const FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text('SSH', maxLines: 1),
+        ));
   }
 
   Widget _themeBtns(BuildContext ctx, AppState app) {
-    return Row(children: [
+    return _equalActionRow(children: [
       _themeBtn(ctx, 'Auto', app.themeMode == 2, () => app.themeMode = 2),
       _themeBtn(ctx, 'Light', app.themeMode == 0, () => app.themeMode = 0),
       _themeBtn(ctx, 'Dark', app.themeMode == 1, () => app.themeMode = 1),
-    ]);
+    ], spacing: 4);
   }
 
   Widget _themeBtn(
       BuildContext ctx, String label, bool active, VoidCallback onTap) {
     final theme = Theme.of(ctx);
     final app = ctx.read<AppState>();
-    return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2),
-        child: OutlinedButton(
-            onPressed: onTap,
-            style: OutlinedButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(4)),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                textStyle: TextStyle(
-                    fontFamily: app.effectiveFontFamily,
-                    fontSize: app.fontUiSize.toDouble(),
-                    fontWeight: active ? FontWeight.bold : FontWeight.normal,
-                    color: active
-                        ? theme.colorScheme.onPrimaryContainer
-                        : theme.colorScheme.onSurface),
-                backgroundColor:
-                    active ? theme.colorScheme.primaryContainer : null),
-            child: Text(label)));
+    return OutlinedButton(
+        onPressed: onTap,
+        style: OutlinedButton.styleFrom(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            minimumSize: const Size(0, 40),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            textStyle: TextStyle(
+                fontFamily: app.effectiveFontFamily,
+                fontSize: app.fontUiSize.toDouble(),
+                fontWeight: active ? FontWeight.bold : FontWeight.normal,
+                color: active
+                    ? theme.colorScheme.onPrimaryContainer
+                    : theme.colorScheme.onSurface),
+            backgroundColor:
+                active ? theme.colorScheme.primaryContainer : null),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(label, maxLines: 1),
+        ));
   }
 }

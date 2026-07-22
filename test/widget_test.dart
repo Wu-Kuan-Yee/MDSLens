@@ -208,14 +208,23 @@ void main() {
     expect(centerAfterPan, lessThan(centerBeforePan));
   });
 
-  testWidgets('Toolbar fills and reflows at phone, tablet, and desktop widths',
+  testWidgets('Toolbar keeps ordered groups across responsive screen widths',
       (tester) async {
     final app = AppState();
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     tester.view.devicePixelRatio = 1;
 
-    for (final width in [320.0, 768.0, 1440.0]) {
+    for (final width in [
+      280.0,
+      320.0,
+      390.0,
+      600.0,
+      768.0,
+      1024.0,
+      1440.0,
+      1920.0,
+    ]) {
       tester.view.physicalSize = Size(width, 900);
       await tester.pumpWidget(
         ChangeNotifierProvider.value(
@@ -231,6 +240,88 @@ void main() {
             of: toolbar, matching: find.byType(SingleChildScrollView)),
         findsNothing,
       );
+      expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets('Phone toolbar button groups are aligned and equally sized',
+      (tester) async {
+    final app = AppState();
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 900);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+
+    void expectEqualRow(
+        Finder group, Finder Function(Finder) buttonFinder, int count) {
+      final buttons = buttonFinder(group);
+      expect(buttons, findsNWidgets(count));
+      final rects = [
+        for (var i = 0; i < count; i++) tester.getRect(buttons.at(i))
+      ];
+      for (final rect in rects.skip(1)) {
+        expect(rect.top, closeTo(rects.first.top, 0.01));
+        expect(rect.height, closeTo(rects.first.height, 0.01));
+        expect(rect.width, closeTo(rects.first.width, 0.01));
+      }
+    }
+
+    Finder elevatedButtons(Finder group) =>
+        find.descendant(of: group, matching: find.byType(ElevatedButton));
+    Finder outlinedButtons(Finder group) =>
+        find.descendant(of: group, matching: find.byType(OutlinedButton));
+
+    final fileActions = find.byKey(const ValueKey('toolbar-file-actions'));
+    final navigation = find.byKey(const ValueKey('toolbar-shot-navigation'));
+    final modes = find.byKey(const ValueKey('toolbar-mode-actions'));
+    final themes = find.byKey(const ValueKey('toolbar-theme-actions'));
+    expectEqualRow(fileActions, elevatedButtons, 3);
+    expectEqualRow(navigation, elevatedButtons, 3);
+    expectEqualRow(modes, outlinedButtons, 2);
+    expectEqualRow(themes, outlinedButtons, 3);
+
+    final orderedGroups = [
+      fileActions,
+      themes,
+      find.byKey(const ValueKey('toolbar-shot-info')),
+      find.byKey(const ValueKey('toolbar-shot-entry')),
+      navigation,
+    ];
+    final tops = orderedGroups.map(tester.getTopLeft).map((p) => p.dy).toList();
+    for (var i = 1; i < tops.length; i++) {
+      expect(tops[i], greaterThan(tops[i - 1]));
+    }
+    expect(tester.getTopLeft(modes).dy,
+        closeTo(tester.getTopLeft(navigation).dy, 0.01));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Toolbar remains bounded with enlarged customized UI fonts',
+      (tester) async {
+    final app = AppState();
+    app.applyFontSettings('System', 20, 20, 20, 24);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+
+    for (final width in [280.0, 390.0, 768.0]) {
+      tester.view.physicalSize = Size(width, 900);
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: app,
+          child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+        ),
+      );
+
+      expect(tester.getSize(find.byKey(const ValueKey('toolbar-root'))).width,
+          width);
       expect(tester.takeException(), isNull);
     }
   });
