@@ -18,8 +18,8 @@ Future<String?> saveBytesWithFilePicker({
       (Uint8List? payload) => FilePicker.platform.saveFile(
             dialogTitle: dialogTitle,
             fileName: fileName,
-            type: FileType.custom,
-            allowedExtensions: allowedExtensions,
+            type: Platform.isAndroid ? FileType.any : FileType.custom,
+            allowedExtensions: Platform.isAndroid ? null : allowedExtensions,
             bytes: payload,
             lockParentWindow: !mobile,
           );

@@ -30,32 +30,47 @@ class RustBridge {
   static RustBridge get instance => _i ??= RustBridge._(_openLib());
 
   static DynamicLibrary _openLib() {
-    if (Platform.isIOS || Platform.isAndroid) {
+    if (Platform.isIOS) {
       try {
         return DynamicLibrary.process();
       } catch (_) {}
     }
 
+    if (Platform.isAndroid) {
+      try {
+        return DynamicLibrary.open('libmds_bridge.so');
+      } catch (error) {
+        throw Exception(
+          'Failed to load the bundled Android Rust library '
+          '(libmds_bridge.so): $error',
+        );
+      }
+    }
+
     final exeDir = File(Platform.resolvedExecutable).parent.path;
     final errors = <String>[];
-    final names = Platform.isMacOS ? [
-      '$exeDir/../Frameworks/libmds_bridge.dylib',
-      '$exeDir/libmds_bridge.dylib',
-      'libmds_bridge.dylib',
-      'rust/target/release/libmds_bridge.dylib',
-      'rust/target/debug/libmds_bridge.dylib',
-    ] : Platform.isLinux ? [
-      '$exeDir/lib/libmds_bridge.so',
-      '$exeDir/libmds_bridge.so',
-      'libmds_bridge.so',
-      'rust/target/release/libmds_bridge.so',
-      'rust/target/debug/libmds_bridge.so',
-    ] : [
-      '$exeDir/mds_bridge.dll',
-      'mds_bridge.dll',
-      'rust/target/release/mds_bridge.dll',
-      'rust/target/debug/mds_bridge.dll',
-    ];
+    final names = Platform.isMacOS
+        ? [
+            '$exeDir/../Frameworks/libmds_bridge.dylib',
+            '$exeDir/libmds_bridge.dylib',
+            'libmds_bridge.dylib',
+            'rust/target/release/libmds_bridge.dylib',
+            'rust/target/debug/libmds_bridge.dylib',
+          ]
+        : Platform.isLinux
+            ? [
+                '$exeDir/lib/libmds_bridge.so',
+                '$exeDir/libmds_bridge.so',
+                'libmds_bridge.so',
+                'rust/target/release/libmds_bridge.so',
+                'rust/target/debug/libmds_bridge.so',
+              ]
+            : [
+                '$exeDir/mds_bridge.dll',
+                'mds_bridge.dll',
+                'rust/target/release/mds_bridge.dll',
+                'rust/target/debug/mds_bridge.dll',
+              ];
 
     for (final name in names) {
       try {
@@ -65,19 +80,45 @@ class RustBridge {
       }
     }
 
-    throw Exception('Failed to load libmds_bridge library:\n${errors.join("\n")}');
+    throw Exception(
+        'Failed to load libmds_bridge library:\n${errors.join("\n")}');
   }
 
   static String Function(String) _wrap1(DynamicLibrary lib, String name) {
-    final f = lib.lookupFunction<Pointer<Utf8> Function(Pointer<Utf8>), Pointer<Utf8> Function(Pointer<Utf8>)>(name);
-    return (a) { final p = f(a.toNativeUtf8()); final s = p.toDartString(); malloc.free(p); return s; };
+    final f = lib.lookupFunction<Pointer<Utf8> Function(Pointer<Utf8>),
+        Pointer<Utf8> Function(Pointer<Utf8>)>(name);
+    return (a) {
+      final p = f(a.toNativeUtf8());
+      final s = p.toDartString();
+      malloc.free(p);
+      return s;
+    };
   }
-  static String Function(String, String) _wrap2(DynamicLibrary lib, String name) {
-    final f = lib.lookupFunction<Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>), Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>)>(name);
-    return (a, b) { final p = f(a.toNativeUtf8(), b.toNativeUtf8()); final s = p.toDartString(); malloc.free(p); return s; };
+
+  static String Function(String, String) _wrap2(
+      DynamicLibrary lib, String name) {
+    final f = lib.lookupFunction<
+        Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>),
+        Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>)>(name);
+    return (a, b) {
+      final p = f(a.toNativeUtf8(), b.toNativeUtf8());
+      final s = p.toDartString();
+      malloc.free(p);
+      return s;
+    };
   }
-  static String Function(String, String, String) _wrap3(DynamicLibrary lib, String name) {
-    final f = lib.lookupFunction<Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>), Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>)>(name);
-    return (a, b, c) { final p = f(a.toNativeUtf8(), b.toNativeUtf8(), c.toNativeUtf8()); final s = p.toDartString(); malloc.free(p); return s; };
+
+  static String Function(String, String, String) _wrap3(
+      DynamicLibrary lib, String name) {
+    final f = lib.lookupFunction<
+        Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>),
+        Pointer<Utf8> Function(
+            Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>)>(name);
+    return (a, b, c) {
+      final p = f(a.toNativeUtf8(), b.toNativeUtf8(), c.toNativeUtf8());
+      final s = p.toDartString();
+      malloc.free(p);
+      return s;
+    };
   }
 }

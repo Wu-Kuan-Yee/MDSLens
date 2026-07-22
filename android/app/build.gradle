@@ -25,6 +25,7 @@ if (flutterVersionName == null) {
 android {
     namespace "com.mdsscope.app"
     compileSdk 36
+    ndkVersion "27.0.12077973"
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -37,6 +38,7 @@ android {
 
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
+        main.jniLibs.srcDirs += layout.buildDirectory.dir('rustJniLibs').get().asFile
     }
 
     defaultConfig {
@@ -56,4 +58,44 @@ android {
 
 flutter {
     source '../..'
+}
+
+def rustJniOutput = layout.buildDirectory.dir('rustJniLibs')
+def rustBuildScript = rootProject.file('../scripts/build_android_rust.sh')
+def flutterTargetPlatforms = providers.gradleProperty('target-platform')
+    .orElse('android-arm64')
+
+tasks.register('buildRustAndroid', Exec) {
+    group = 'build'
+    description = 'Builds and stages the Rust FFI library for Android.'
+    inputs.files(rootProject.fileTree('../rust') {
+        include '**/*.rs'
+        include '**/Cargo.toml'
+        include 'Cargo.lock'
+    })
+    inputs.file(rustBuildScript)
+    inputs.property('flutterTargetPlatforms', flutterTargetPlatforms)
+    outputs.dir(rustJniOutput)
+
+    doFirst {
+        def sdkDir = localProperties.getProperty('sdk.dir')
+        if (sdkDir == null || sdkDir.trim().isEmpty()) {
+            throw new GradleException('Android SDK path is missing from local.properties')
+        }
+        def ndkDir = new File(sdkDir, "ndk/${android.ndkVersion}")
+        if (!ndkDir.isDirectory()) {
+            throw new GradleException("Required Android NDK was not found: ${ndkDir}")
+        }
+        commandLine(
+            'bash',
+            rustBuildScript.absolutePath,
+            ndkDir.absolutePath,
+            rustJniOutput.get().asFile.absolutePath,
+            flutterTargetPlatforms.get(),
+        )
+    }
+}
+
+tasks.named('preBuild') {
+    dependsOn tasks.named('buildRustAndroid')
 }

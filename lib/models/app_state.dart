@@ -56,15 +56,22 @@ typedef LatestShotWorker = Future<dynamic> Function(
 
 Future<ConfigOpenSelection?> _pickConfigurationFile() async {
   final mobile = Platform.isAndroid || Platform.isIOS;
+  final android = Platform.isAndroid;
   final result = await FilePicker.platform.pickFiles(
     dialogTitle: 'Open MdsScope configuration',
-    type: FileType.custom,
-    allowedExtensions: const ['toml', 'webscp'],
+    type: android ? FileType.any : FileType.custom,
+    allowedExtensions: android ? null : const ['toml', 'webscp'],
     withData: mobile,
     lockParentWindow: !mobile,
   );
   if (result == null || result.files.isEmpty) return null;
   final file = result.files.single;
+  final lowerName = file.name.toLowerCase();
+  if (!lowerName.endsWith('.toml') && !lowerName.endsWith('.webscp')) {
+    throw const FormatException(
+      'Please choose an MdsScope .toml or .webscp configuration file.',
+    );
+  }
   return ConfigOpenSelection(
     name: file.name,
     path: mobile ? null : file.path,
