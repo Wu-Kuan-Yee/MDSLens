@@ -688,6 +688,54 @@ void main() {
     expect(app.status, contains('170001'));
   });
 
+  test('Automatic login falls back from direct access to an SSH tunnel',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'rememberLogin': true,
+      'loginApiUrl': 'http://east.example/api',
+      'loginUser': 'saved-user',
+      'loginPass': 'saved-password',
+      'loggedIn': false,
+      'sshMode': 1,
+      'sshHost': 'gateway.example',
+      'sshUser': 'ssh-user',
+    });
+    final loginSettings = <String>[];
+    final laterSettings = <String>[];
+    final app = AppState(
+      loginWorker: (apiUrl, user, password, sshSettings) async {
+        loginSettings.add(sshSettings);
+        if (sshSettings.isEmpty) throw 'direct route unavailable';
+        final settings = jsonDecode(sshSettings) as Map<String, dynamic>;
+        expect(settings['mode'], 2);
+        return (token: 'ssh-token', usedSsh: true);
+      },
+      latestShotWorker: (apiUrl, token, sshSettings) async {
+        laterSettings.add(sshSettings);
+        return {'shot': 170002};
+      },
+      signalFetchWorker: (configJson, dataMode, sshSettings) async {
+        laterSettings.add(sshSettings);
+        return '[{"column":0,"row":0,"signal":0,'
+            '"series":{"points":[[0,1],[1,2]],"error":""}}]';
+      },
+    );
+
+    await app.initializeStartupSession();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(loginSettings, hasLength(2));
+    expect(loginSettings.first, isEmpty);
+    expect(jsonDecode(loginSettings.last)['mode'], 2);
+    expect(laterSettings, hasLength(2));
+    expect(
+        laterSettings.every((value) => jsonDecode(value)['mode'] == 2), isTrue);
+    expect(app.hasActiveSession, isTrue);
+    expect(app.sshConnected, isTrue);
+    expect(app.authToken, 'ssh-token');
+    expect(app.displayedShot, '170002');
+  });
+
   test('Responsive plot columns preserve order across screen sizes', () {
     final phone = buildResponsivePlotColumns([2, 1, 2], 390);
     expect(phone, hasLength(3));

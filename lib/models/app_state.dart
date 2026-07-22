@@ -745,12 +745,36 @@ class AppState extends ChangeNotifier {
     _status = automatic ? 'Signing in automatically...' : 'Signing in...';
     notifyListeners();
     try {
-      final result = await _loginWorker(
-        apiUrl,
-        user,
-        password,
-        _buildSshSettingsJson(),
-      );
+      late ({String token, bool usedSsh}) result;
+      if (_sshMode == 1 && _sshHost.trim().isNotEmpty) {
+        try {
+          result = await _loginWorker(apiUrl, user, password, '');
+        } catch (directError) {
+          if (_disposed || generation != _sessionGeneration) return;
+          _status = automatic
+              ? 'Direct automatic login failed; trying SSH tunnel...'
+              : 'Direct login failed; trying SSH tunnel...';
+          notifyListeners();
+          try {
+            result = await _loginWorker(
+              apiUrl,
+              user,
+              password,
+              _buildSshSettingsJson(forceTunnel: true),
+            );
+          } catch (sshError) {
+            throw 'Direct login failed: $directError; '
+                'SSH fallback failed: $sshError';
+          }
+        }
+      } else {
+        result = await _loginWorker(
+          apiUrl,
+          user,
+          password,
+          _buildSshSettingsJson(),
+        );
+      }
       if (_disposed || generation != _sessionGeneration) return;
       _loginApiUrl = apiUrl;
       _loginUser = user;
@@ -1214,7 +1238,7 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  String _buildSshSettingsJson() {
+  String _buildSshSettingsJson({bool forceTunnel = false}) {
     if (_sshMode <= 0 || _sshHost.isEmpty) return '';
     return jsonEncode({
       'host': _sshHost,
@@ -1222,7 +1246,7 @@ class AppState extends ChangeNotifier {
       'user': _sshUser,
       'password': _sshPass,
       'identity_file': _sshIdentity,
-      'mode': _sshMode,
+      'mode': forceTunnel || (_sshMode == 1 && _sshInUse) ? 2 : _sshMode,
     });
   }
 
