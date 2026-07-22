@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/app_state.dart';
 import 'plot_panel.dart';
+import 'responsive_plot_layout.dart';
 
 class PlotGrid extends StatelessWidget {
   const PlotGrid({super.key});
@@ -19,62 +20,67 @@ class PlotGrid extends StatelessWidget {
     }
 
     return LayoutBuilder(builder: (ctx, constraints) {
-      final isMobilePortrait = constraints.maxWidth < 600;
-      final nCols = isMobilePortrait ? 1 : app.columns.length;
-      final panelW = constraints.maxWidth / nCols;
+      final displayColumns = buildResponsivePlotColumns(
+        app.columns.map((column) => column.length).toList(),
+        constraints.maxWidth,
+      );
+      if (displayColumns.isEmpty) return const SizedBox();
 
-      if (isMobilePortrait) {
+      if (usesScrollablePlotList(constraints.maxWidth)) {
+        final cells = displayColumns.single;
         return ListView.builder(
-          itemCount: app.plots.length,
+          itemCount: cells.length,
           itemBuilder: (ctx, i) {
-            final selected = app.selectedCol == 0 && app.selectedRow == i;
+            final cell = cells[i];
             return SizedBox(
-              height: (constraints.maxHeight / 2.5).clamp(220.0, 400.0),
-              child: PlotPanel(
-                plotIdx: i,
-                selected: selected,
-                onTap: () { app.selectPanel(0, i); },
-                onContextAction: (action) {
-                  switch (action) {
-                    case 'max': app.maximizePlot(i); break;
-                    case 'showAll': app.showAllPanels(); break;
-                    case 'reset': app.plots[i].crosshairX = null; break;
-                    case 'delete': break;
-                  }
-                },
-              ),
+              height: cells.length == 1
+                  ? constraints.maxHeight
+                  : (constraints.maxHeight / 2.5).clamp(220.0, 400.0),
+              child: _panelForCell(app, cell),
             );
           },
         );
       }
 
       return Row(
-        children: List.generate(nCols, (col) => SizedBox(
-          width: panelW,
-          child: Column(
-            children: List.generate(app.columns[col].length, (row) {
-              final plotIdx = app.columns.take(col).map((c) => c.length).fold(0, (a, b) => a + b) + row;
-              if (plotIdx >= app.plots.length) return const SizedBox();
-              final selected = app.selectedCol == col && app.selectedRow == row;
-              return Expanded(
-                child: PlotPanel(
-                  plotIdx: plotIdx,
-                  selected: selected,
-                  onTap: () { app.selectPanel(col, row); },
-                  onContextAction: (action) {
-                    switch (action) {
-                      case 'max': app.maximizePlot(plotIdx); break;
-                      case 'showAll': app.showAllPanels(); break;
-                      case 'reset': app.plots[plotIdx].crosshairX = null; break;
-                      case 'delete': break;
-                    }
-                  },
-                ),
-              );
-            }),
-          ),
-        )),
+        children: displayColumns
+            .map((column) => Expanded(
+                  child: Column(
+                    children: column
+                        .map(
+                            (cell) => Expanded(child: _panelForCell(app, cell)))
+                        .toList(),
+                  ),
+                ))
+            .toList(),
       );
     });
+  }
+
+  Widget _panelForCell(AppState app, ResponsivePlotCell cell) {
+    if (cell.plotIndex >= app.plots.length) return const SizedBox();
+    final selected = app.selectedCol == cell.sourceColumn &&
+        app.selectedRow == cell.sourceRow;
+    return PlotPanel(
+      key: ValueKey('plot-panel-${cell.plotIndex}'),
+      plotIdx: cell.plotIndex,
+      selected: selected,
+      onTap: () => app.selectPanel(cell.sourceColumn, cell.sourceRow),
+      onContextAction: (action) {
+        switch (action) {
+          case 'max':
+            app.maximizePlot(cell.plotIndex);
+            break;
+          case 'showAll':
+            app.showAllPanels();
+            break;
+          case 'reset':
+            app.plots[cell.plotIndex].crosshairX = null;
+            break;
+          case 'delete':
+            break;
+        }
+      },
+    );
   }
 }

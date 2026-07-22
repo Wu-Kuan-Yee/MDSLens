@@ -7,6 +7,7 @@ import '../services/rust_bridge.dart';
 import 'dialogs/login.dart';
 import 'dialogs/ssh.dart';
 import 'dialogs/about.dart';
+import 'responsive_plot_layout.dart';
 
 class ToolbarWidget extends StatelessWidget {
   const ToolbarWidget({super.key});
@@ -392,158 +393,206 @@ class ToolbarWidget extends StatelessWidget {
 
     showDialog(
       context: ctx,
-      builder: (ctx) => StatefulBuilder(
-          builder: (ctx, setState) => AlertDialog(
-                title: Row(children: [
-                  const Text('Layout Setup'),
-                  const Spacer(),
-                  IconButton(
-                      icon: const Icon(Icons.add, size: 18),
-                      tooltip: 'Add Panel After Selected',
-                      onPressed: () {
-                        if (selectedCol >= 0 &&
-                            selectedCol < layout.length &&
-                            selectedRow >= 0 &&
-                            selectedRow < layout[selectedCol]) {
-                          layout[selectedCol] = layout[selectedCol] + 1;
-                          setState(() {});
-                        }
-                      }),
-                ]),
-                content: SizedBox(
-                  width: (layout.length * 120.0 + 16).clamp(200.0, 700.0),
-                  height: (layout.reduce((a, b) => a > b ? a : b) * 90.0 + 16)
-                      .clamp(100.0, 500.0),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setState) {
+        final screenSize = MediaQuery.sizeOf(ctx);
+        final displayColumns = buildResponsivePlotColumns(
+          layout,
+          screenSize.width,
+        );
+        final maxRows = displayColumns
+            .map((column) => column.length)
+            .fold(1, (current, rows) => rows > current ? rows : current);
+        final previewHeight = (maxRows * 72.0).clamp(90.0, 430.0);
+        final contentWidth = (screenSize.width - 64).clamp(240.0, 700.0);
+        final contentHeight = (screenSize.height * 0.58).clamp(260.0, 540.0);
+        final compact = usesScrollablePlotList(screenSize.width);
+
+        return AlertDialog(
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
+          title: const Text('Layout Setup'),
+          content: SizedBox(
+            width: contentWidth,
+            height: contentHeight,
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    compact
+                        ? 'Phone preview · single scrollable column'
+                        : 'Responsive preview · ${displayColumns.length} columns',
+                    style: Theme.of(ctx).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
                     child: SingleChildScrollView(
-                      child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                      scrollDirection: Axis.horizontal,
+                      child: SingleChildScrollView(
+                        child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            for (var c = 0; c < layout.length; c++) ...[
-                              if (c > 0) const VerticalDivider(width: 1),
-                              Column(mainAxisSize: MainAxisSize.min, children: [
-                                // Column header with delete button
-                                SizedBox(
+                            for (var displayColumn = 0;
+                                displayColumn < displayColumns.length;
+                                displayColumn++) ...[
+                              if (displayColumn > 0) const SizedBox(width: 6),
+                              Container(
+                                key: ValueKey(
+                                    'layout-preview-column-$displayColumn'),
+                                width: 118,
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                      color: Theme.of(ctx).dividerColor),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Column(children: [
+                                  SizedBox(
                                     height: 28,
                                     child: Center(
-                                        child: Text('Col ${c + 1}',
-                                            style: const TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.bold)))),
-                                for (var r = 0; r < layout[c]; r++)
-                                  GestureDetector(
-                                    onTap: () => setState(() {
-                                      selectedCol = c;
-                                      selectedRow = r;
-                                    }),
-                                    child: Container(
-                                      width: 110,
-                                      height: 80,
-                                      margin: const EdgeInsets.all(4),
-                                      decoration: BoxDecoration(
-                                        border: Border.all(
-                                            color: selectedCol == c &&
-                                                    selectedRow == r
-                                                ? Theme.of(ctx)
-                                                    .colorScheme
-                                                    .primary
-                                                : Colors.grey.shade400,
-                                            width: selectedCol == c &&
-                                                    selectedRow == r
-                                                ? 2
-                                                : 1),
-                                        borderRadius: BorderRadius.circular(4),
-                                        color: Theme.of(ctx)
-                                            .colorScheme
-                                            .primaryContainer
-                                            .withValues(alpha: 0.3),
+                                      child: Text(
+                                        compact
+                                            ? 'Scroll column'
+                                            : 'Column ${displayColumn + 1}',
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
-                                      child: Column(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Text(
-                                                'Panel ${_panelIndex(app, c, r) + 1}',
-                                                style: TextStyle(
-                                                    fontSize: 10,
-                                                    color: Theme.of(ctx)
-                                                        .colorScheme
-                                                        .onSurface
-                                                        .withValues(
-                                                            alpha: 0.7))),
-                                            if (selectedCol == c &&
-                                                selectedRow == r)
-                                              TextButton(
-                                                  onPressed: () {
-                                                    if (layout.length == 1 &&
-                                                        layout[0] == 1)
-                                                      return; // keep at least 1
-                                                    layout[c] = layout[c] - 1;
-                                                    if (layout[c] <= 0)
-                                                      layout.removeAt(c);
-                                                    selectedCol = -1;
-                                                    selectedRow = -1;
-                                                    setState(() {});
-                                                  },
-                                                  child: const Text('Delete',
-                                                      style: TextStyle(
-                                                          fontSize: 9))),
-                                          ]),
                                     ),
                                   ),
-                                // Add panel button at bottom of column
-                                TextButton(
-                                    onPressed: () {
-                                      layout[c] = layout[c] + 1;
-                                      setState(() {});
-                                    },
-                                    child: const Text('+ Add',
-                                        style: TextStyle(fontSize: 10))),
-                              ]),
+                                  SizedBox(
+                                    height: previewHeight,
+                                    child: Column(
+                                      children: displayColumns[displayColumn]
+                                          .map((cell) {
+                                        final selected =
+                                            selectedCol == cell.sourceColumn &&
+                                                selectedRow == cell.sourceRow;
+                                        return Expanded(
+                                          child: GestureDetector(
+                                            onTap: () => setState(() {
+                                              selectedCol = cell.sourceColumn;
+                                              selectedRow = cell.sourceRow;
+                                            }),
+                                            child: Container(
+                                              key: ValueKey(
+                                                  'layout-preview-panel-${cell.plotIndex}'),
+                                              width: double.infinity,
+                                              margin: const EdgeInsets.all(4),
+                                              decoration: BoxDecoration(
+                                                border: Border.all(
+                                                  color: selected
+                                                      ? Theme.of(ctx)
+                                                          .colorScheme
+                                                          .primary
+                                                      : Colors.grey.shade400,
+                                                  width: selected ? 2 : 1,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                color: Theme.of(ctx)
+                                                    .colorScheme
+                                                    .primaryContainer
+                                                    .withValues(alpha: 0.3),
+                                              ),
+                                              child: Column(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Text(
+                                                    'Panel ${cell.plotIndex + 1}',
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      color: Theme.of(ctx)
+                                                          .colorScheme
+                                                          .onSurfaceVariant,
+                                                    ),
+                                                  ),
+                                                  if (selected)
+                                                    TextButton(
+                                                      onPressed: () {
+                                                        if (layout.length ==
+                                                                1 &&
+                                                            layout[0] == 1) {
+                                                          return;
+                                                        }
+                                                        layout[cell
+                                                            .sourceColumn]--;
+                                                        if (layout[cell
+                                                                .sourceColumn] <=
+                                                            0) {
+                                                          layout.removeAt(cell
+                                                              .sourceColumn);
+                                                        }
+                                                        selectedCol = -1;
+                                                        selectedRow = -1;
+                                                        setState(() {});
+                                                      },
+                                                      child: const Text(
+                                                        'Delete',
+                                                        style: TextStyle(
+                                                            fontSize: 9),
+                                                      ),
+                                                    ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ),
+                                ]),
+                              ),
                             ],
-                            const SizedBox(width: 8),
-                            // Add column button
-                            Column(children: [
-                              const SizedBox(height: 28),
-                              TextButton(
-                                  onPressed: () {
-                                    layout.add(1);
-                                    setState(() {});
-                                  },
-                                  child: const Text('+ Col',
-                                      style: TextStyle(fontSize: 10))),
-                            ]),
-                          ]),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                ),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Cancel')),
-                  TextButton(
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 8, runSpacing: 4, children: [
+                    TextButton.icon(
                       onPressed: () {
-                        final cols = layout.where((n) => n > 0).toList();
-                        if (cols.isNotEmpty) {
-                          app.applyLayoutList(cols);
-                          app.startRefresh();
-                        }
-                        Navigator.pop(ctx);
+                        final targetColumn =
+                            selectedCol >= 0 && selectedCol < layout.length
+                                ? selectedCol
+                                : layout.length - 1;
+                        layout[targetColumn]++;
+                        setState(() {});
                       },
-                      child: const Text('Apply')),
-                ],
-              )),
+                      icon: const Icon(Icons.add, size: 16),
+                      label: const Text('Add panel'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () {
+                        layout.add(1);
+                        setState(() {});
+                      },
+                      icon: const Icon(Icons.view_column_outlined, size: 16),
+                      label: const Text('Add column'),
+                    ),
+                  ]),
+                ]),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            TextButton(
+              onPressed: () {
+                final columns = layout.where((count) => count > 0).toList();
+                if (columns.isNotEmpty) {
+                  app.applyLayoutList(columns);
+                  app.startRefresh();
+                }
+                Navigator.pop(ctx);
+              },
+              child: const Text('Apply'),
+            ),
+          ],
+        );
+      }),
     );
-  }
-
-  int _panelIndex(AppState app, int col, int row) {
-    var idx = 0;
-    for (var c = 0; c < col; c++) {
-      idx += app.columns.length > c ? app.columns[c].length : 0;
-    }
-    return idx + row;
   }
 
   void _showFontDialog(BuildContext ctx, AppState app) {

@@ -5,10 +5,25 @@ import 'package:mdsscope/models/app_state.dart';
 import 'package:mdsscope/services/external_url_launcher.dart';
 import 'package:mdsscope/widgets/plot_panel.dart';
 import 'package:mdsscope/widgets/plot_grid.dart';
+import 'package:mdsscope/widgets/responsive_plot_layout.dart';
 import 'package:mdsscope/widgets/toolbar.dart';
 import 'package:provider/provider.dart';
 
 void main() {
+  test('Responsive plot columns preserve order across screen sizes', () {
+    final phone = buildResponsivePlotColumns([2, 1, 2], 390);
+    expect(phone, hasLength(1));
+    expect(phone.single.map((cell) => cell.plotIndex), [0, 1, 2, 3, 4]);
+
+    final tablet = buildResponsivePlotColumns([2, 1, 2], 700);
+    expect(tablet, hasLength(2));
+    expect(tablet.map((column) => column.length), [3, 2]);
+
+    final desktop = buildResponsivePlotColumns([2, 1, 2], 1200);
+    expect(desktop, hasLength(3));
+    expect(desktop.map((column) => column.length), [2, 1, 2]);
+  });
+
   test('External web URLs are normalized before cross-platform launch',
       () async {
     Uri? launchedUri;
@@ -155,6 +170,44 @@ void main() {
         findsNothing,
       );
       expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets('Layout Setup preview matches phone and tablet plot columns',
+      (tester) async {
+    final app = AppState();
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+
+    for (final (width, expectedColumns) in [(390.0, 1), (800.0, 2)]) {
+      tester.view.physicalSize = Size(width, 900);
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: app,
+          child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+        ),
+      );
+
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Layout setup'));
+      await tester.pumpAndSettle();
+
+      for (var column = 0; column < expectedColumns; column++) {
+        expect(
+          find.byKey(ValueKey('layout-preview-column-$column')),
+          findsOneWidget,
+        );
+      }
+      expect(
+        find.byKey(ValueKey('layout-preview-column-$expectedColumns')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
     }
   });
 }
