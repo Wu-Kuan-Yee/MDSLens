@@ -30,13 +30,15 @@ class RustBridge {
   static RustBridge get instance => _i ??= RustBridge._(_openLib());
 
   static DynamicLibrary _openLib() {
+    if (Platform.isIOS || Platform.isAndroid) {
+      try {
+        return DynamicLibrary.process();
+      } catch (_) {}
+    }
+
     final exeDir = File(Platform.resolvedExecutable).parent.path;
     final errors = <String>[];
-    final names = Platform.isIOS ? [
-      '$exeDir/Frameworks/libmds_bridge.dylib',
-      '$exeDir/libmds_bridge.dylib',
-      'libmds_bridge.dylib',
-    ] : Platform.isMacOS ? [
+    final names = Platform.isMacOS ? [
       '$exeDir/../Frameworks/libmds_bridge.dylib',
       '$exeDir/libmds_bridge.dylib',
       'libmds_bridge.dylib',
@@ -61,10 +63,6 @@ class RustBridge {
       } catch (e) {
         errors.add('$name -> $e');
       }
-    }
-
-    if (Platform.isIOS || Platform.isAndroid) {
-      try { return DynamicLibrary.process(); } catch (_) {}
     }
 
     throw Exception('Failed to load libmds_bridge library:\n${errors.join("\n")}');
