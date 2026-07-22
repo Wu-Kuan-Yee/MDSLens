@@ -1184,37 +1184,135 @@ class ToolbarWidget extends StatelessWidget {
   }
 
   Widget _themeBtns(BuildContext ctx, AppState app) {
-    return _equalActionRow(children: [
-      _themeBtn(ctx, 'Auto', app.themeMode == 2, () => app.themeMode = 2),
-      _themeBtn(ctx, 'Light', app.themeMode == 0, () => app.themeMode = 0),
-      _themeBtn(ctx, 'Dark', app.themeMode == 1, () => app.themeMode = 1),
-    ], spacing: 4);
+    const switchWidth = 108.0;
+    const modes = [0, 2, 1];
+    final theme = Theme.of(ctx);
+    final selectedIndex = modes.indexOf(app.themeMode).clamp(0, 2);
+    final selectedColor = switch (app.themeMode) {
+      0 => const Color(0xFFF59E0B),
+      1 => const Color(0xFF60A5FA),
+      _ => const Color(0xFF22C55E),
+    };
+
+    void selectAt(double x) {
+      final index =
+          (x.clamp(0.0, switchWidth - 0.01) / (switchWidth / modes.length))
+              .floor();
+      app.themeMode = modes[index];
+    }
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: GestureDetector(
+        onHorizontalDragStart: (details) => selectAt(details.localPosition.dx),
+        onHorizontalDragUpdate: (details) => selectAt(details.localPosition.dx),
+        child: Container(
+          key: const ValueKey('theme-mode-switch'),
+          width: switchWidth,
+          height: 40,
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerLow,
+            border: Border.all(color: theme.dividerColor),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Stack(
+            children: [
+              AnimatedPositioned(
+                key: const ValueKey('theme-mode-thumb'),
+                duration: const Duration(milliseconds: 150),
+                curve: Curves.easeOutCubic,
+                left: selectedIndex * 34.0 + 1,
+                top: 1,
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: theme.colorScheme.surface,
+                    border: Border.all(color: selectedColor, width: 1.4),
+                    boxShadow: [
+                      BoxShadow(
+                        color: selectedColor.withValues(alpha: 0.42),
+                        blurRadius: 10,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  _themeSegment(
+                    ctx,
+                    key: const ValueKey('theme-mode-light'),
+                    label: 'Light theme',
+                    icon: Icons.light_mode_rounded,
+                    active: app.themeMode == 0,
+                    activeColor: const Color(0xFFF59E0B),
+                    onTap: () => app.themeMode = 0,
+                  ),
+                  _themeSegment(
+                    ctx,
+                    key: const ValueKey('theme-mode-auto'),
+                    label: 'Automatic system theme',
+                    icon: Icons.computer_rounded,
+                    active: app.themeMode == 2,
+                    activeColor: const Color(0xFF22C55E),
+                    onTap: () => app.themeMode = 2,
+                  ),
+                  _themeSegment(
+                    ctx,
+                    key: const ValueKey('theme-mode-dark'),
+                    label: 'Dark theme',
+                    icon: Icons.dark_mode_rounded,
+                    active: app.themeMode == 1,
+                    activeColor: const Color(0xFF60A5FA),
+                    onTap: () => app.themeMode = 1,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
-  Widget _themeBtn(
-      BuildContext ctx, String label, bool active, VoidCallback onTap) {
-    final theme = Theme.of(ctx);
-    final app = ctx.read<AppState>();
-    return OutlinedButton(
-        onPressed: onTap,
-        style: OutlinedButton.styleFrom(
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            minimumSize: const Size(0, 40),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            textStyle: TextStyle(
-                fontFamily: app.effectiveFontFamily,
-                fontSize: app.fontUiSize.toDouble(),
-                fontWeight: active ? FontWeight.bold : FontWeight.normal,
+  Widget _themeSegment(
+    BuildContext ctx, {
+    required Key key,
+    required String label,
+    required IconData icon,
+    required bool active,
+    required Color activeColor,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: Semantics(
+        key: key,
+        button: true,
+        selected: active,
+        label: label,
+        child: Tooltip(
+          message: label,
+          child: InkResponse(
+            onTap: onTap,
+            radius: 18,
+            containedInkWell: true,
+            customBorder: const CircleBorder(),
+            child: Center(
+              child: Icon(
+                icon,
+                size: 18,
                 color: active
-                    ? theme.colorScheme.onPrimaryContainer
-                    : theme.colorScheme.onSurface),
-            backgroundColor:
-                active ? theme.colorScheme.primaryContainer : null),
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(label, maxLines: 1),
-        ));
+                    ? activeColor
+                    : Theme.of(ctx).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

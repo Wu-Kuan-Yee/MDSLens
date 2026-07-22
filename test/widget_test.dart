@@ -669,7 +669,26 @@ void main() {
     expectEqualRow(fileActions, elevatedButtons, 3);
     expectEqualRow(navigation, elevatedButtons, 3);
     expectEqualRow(modes, outlinedButtons, 2);
-    expectEqualRow(themes, outlinedButtons, 3);
+    expect(
+      find.descendant(of: themes, matching: find.byType(OutlinedButton)),
+      findsNothing,
+    );
+    expect(find.byKey(const ValueKey('theme-mode-switch')), findsOneWidget);
+    expect(find.byIcon(Icons.light_mode_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.computer_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.dark_mode_rounded), findsOneWidget);
+
+    final autoTheme = tester.widget<Semantics>(
+      find.byKey(const ValueKey('theme-mode-auto')),
+    );
+    expect(autoTheme.properties.selected, isTrue);
+    await tester.tap(find.byKey(const ValueKey('theme-mode-dark')));
+    await tester.pumpAndSettle();
+    expect(app.themeMode, 1);
+    final darkTheme = tester.widget<Semantics>(
+      find.byKey(const ValueKey('theme-mode-dark')),
+    );
+    expect(darkTheme.properties.selected, isTrue);
 
     final orderedGroups = [
       fileActions,
