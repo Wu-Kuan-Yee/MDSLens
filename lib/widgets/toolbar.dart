@@ -1236,57 +1236,28 @@ class ToolbarWidget extends StatelessWidget {
                   Row(children: [
                     const SizedBox(width: 100, child: Text('Font')),
                     Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: families.contains(fontFamily)
+                      child: PolishedDropdown<String>(
+                        key: const ValueKey('font-family-dropdown'),
+                        id: 'font-family',
+                        value: families.contains(fontFamily)
                             ? fontFamily
                             : 'System',
-                        isDense: true,
-                        itemHeight: 48,
+                        leadingIcon: Icons.font_download_outlined,
+                        fontSize: 12,
+                        minimumMenuWidth: 220,
                         menuMaxHeight: 360,
-                        elevation: 12,
-                        borderRadius: BorderRadius.circular(12),
-                        selectedItemBuilder: (_) => families
-                            .map((family) => Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Text(
-                                    family,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontFamily:
-                                          family == 'System' ? null : family,
-                                    ),
-                                  ),
-                                ))
-                            .toList(),
-                        decoration: InputDecoration(
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 8),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        items: [
-                          for (var index = 0; index < families.length; index++)
-                            DropdownMenuItem(
-                              value: families[index],
-                              child: separatedDropdownItem(
-                                ctx,
-                                isLast: index == families.length - 1,
-                                child: Text(
-                                  families[index],
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontFamily: families[index] == 'System'
-                                        ? null
-                                        : families[index],
-                                  ),
-                                ),
-                              ),
+                        options: [
+                          for (final family in families)
+                            PolishedDropdownOption(
+                              value: family,
+                              label: family,
+                              icon: family == 'System'
+                                  ? Icons.devices_rounded
+                                  : Icons.text_fields_rounded,
                             ),
                         ],
-                        onChanged: (v) {
-                          if (v != null) setState(() => fontFamily = v);
-                        },
+                        onChanged: (value) =>
+                            setState(() => fontFamily = value),
                       ),
                     ),
                   ]),

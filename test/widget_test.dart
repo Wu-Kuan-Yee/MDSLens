@@ -1442,6 +1442,43 @@ void main() {
     expect(find.byType(PopupMenuDivider), findsNWidgets(3));
   });
 
+  testWidgets('SSH mode and font family use polished dropdown menus',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('SSH tunnel'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('ssh-mode-dropdown')), findsOneWidget);
+    expect(find.byType(DropdownButtonFormField<int>), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('ssh-mode-dropdown')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('ssh-mode-divider-1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('ssh-mode-divider-2')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('ssh-mode-option-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Customize fonts'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('font-family-dropdown')), findsOneWidget);
+    expect(find.byType(DropdownButtonFormField<String>), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('font-family-dropdown')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('font-family-divider-1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('font-family-divider-7')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('About appears only in the icon-decorated settings menu',
       (tester) async {
     final app = AppState();

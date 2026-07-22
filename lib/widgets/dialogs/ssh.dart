@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../models/app_state.dart';
 import '../../services/rust_bridge.dart';
-import '../dropdown_items.dart';
+import '../polished_dropdown.dart';
 import 'keyboard_safe_dialog.dart';
 
 class SshDialog extends StatelessWidget {
@@ -48,45 +48,41 @@ class SshDialog extends StatelessWidget {
               SelectableText('Error: $result',
                   style: const TextStyle(fontSize: 13, color: Colors.red)),
             const SizedBox(height: 8),
-            DropdownButtonFormField<int>(
-              initialValue: mode,
-              decoration: const InputDecoration(labelText: 'Mode'),
-              itemHeight: 48,
-              menuMaxHeight: 240,
-              elevation: 12,
-              borderRadius: BorderRadius.circular(12),
-              style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-              dropdownColor: Theme.of(context).colorScheme.surfaceContainerHigh,
-              selectedItemBuilder: (_) => const [
-                'Disabled',
-                'Auto (direct first)',
-                'Always SSH',
-              ]
-                  .map((label) => Align(
-                      alignment: Alignment.centerLeft, child: Text(label)))
-                  .toList(),
-              items: [
-                for (var index = 0; index < 3; index++)
-                  DropdownMenuItem(
-                    value: index,
-                    child: separatedDropdownItem(
-                      ctx,
-                      isLast: index == 2,
-                      child: Text(
-                        const [
-                          'Disabled',
-                          'Auto (direct first)',
-                          'Always SSH'
-                        ][index],
-                        style: TextStyle(
-                            color: Theme.of(context).colorScheme.onSurface),
-                      ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Mode',
+                style: Theme.of(ctx).textTheme.labelMedium?.copyWith(
+                      color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
                     ),
-                  ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            PolishedDropdown<int>(
+              key: const ValueKey('ssh-mode-dropdown'),
+              id: 'ssh-mode',
+              value: mode,
+              leadingIcon: Icons.route_rounded,
+              minimumMenuWidth: 260,
+              options: const [
+                PolishedDropdownOption(
+                  value: 0,
+                  label: 'Disabled',
+                  icon: Icons.block_rounded,
+                ),
+                PolishedDropdownOption(
+                  value: 1,
+                  label: 'Auto (direct first)',
+                  icon: Icons.alt_route_rounded,
+                ),
+                PolishedDropdownOption(
+                  value: 2,
+                  label: 'Always SSH',
+                  icon: Icons.vpn_lock_rounded,
+                ),
               ],
-              onChanged: (v) {
-                if (v != null) setState(() => mode = v);
-              },
+              onChanged: (value) => setState(() => mode = value),
             ),
             TextField(
                 key: const ValueKey('ssh-host'),
