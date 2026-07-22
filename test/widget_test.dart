@@ -1188,9 +1188,13 @@ void main() {
       findsNothing,
     );
     expect(find.byKey(const ValueKey('theme-mode-switch')), findsOneWidget);
-    expect(find.byIcon(Icons.light_mode_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.computer_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.dark_mode_rounded), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('theme-mode-switch')),
+        matching: find.byType(CustomPaint),
+      ),
+      findsNWidgets(3),
+    );
     expect(find.byTooltip('Open configuration'), findsOneWidget);
     expect(find.byTooltip('Save configuration'), findsOneWidget);
     expect(find.byTooltip('Refresh waveforms'), findsOneWidget);
@@ -1213,6 +1217,28 @@ void main() {
       find.byKey(const ValueKey('theme-mode-dark')),
     );
     expect(darkTheme.properties.selected, isTrue);
+
+    for (final key in const [
+      'theme-mode-light',
+      'theme-mode-auto',
+      'theme-mode-dark',
+    ]) {
+      await tester.tap(find.byKey(ValueKey(key)));
+      await tester.pumpAndSettle();
+      final segmentCenter = tester.getCenter(find.byKey(ValueKey(key)));
+      final glyphCenter = tester.getCenter(
+        find.descendant(
+          of: find.byKey(ValueKey(key)),
+          matching: find.byType(CustomPaint),
+        ),
+      );
+      final thumbCenter =
+          tester.getCenter(find.byKey(const ValueKey('theme-mode-thumb')));
+      expect(glyphCenter.dx, closeTo(segmentCenter.dx, 0.01));
+      expect(glyphCenter.dy, closeTo(segmentCenter.dy, 0.01));
+      expect(thumbCenter.dx, closeTo(glyphCenter.dx, 0.01));
+      expect(thumbCenter.dy, closeTo(glyphCenter.dy, 0.01));
+    }
 
     final orderedGroups = [
       themes,

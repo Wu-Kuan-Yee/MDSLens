@@ -1401,6 +1401,13 @@ class ToolbarWidget extends StatelessWidget {
 
   Widget _themeBtns(BuildContext ctx, AppState app) {
     const switchWidth = 108.0;
+    const trackPadding = 4.0;
+    const trackBorderWidth = 1.0;
+    const thumbSize = 30.0;
+    const trackContentWidth =
+        switchWidth - (trackPadding + trackBorderWidth) * 2;
+    const trackContentHeight = 44.0 - (trackPadding + trackBorderWidth) * 2;
+    const segmentWidth = trackContentWidth / 3;
     const modes = [0, 2, 1];
     final theme = Theme.of(ctx);
     final selectedIndex = modes.indexOf(app.themeMode).clamp(0, 2);
@@ -1439,11 +1446,12 @@ class ToolbarWidget extends StatelessWidget {
                 key: const ValueKey('theme-mode-thumb'),
                 duration: const Duration(milliseconds: 150),
                 curve: Curves.easeOutCubic,
-                left: selectedIndex * (100 / 3) - 1 / 3,
-                top: 1,
+                left: selectedIndex * segmentWidth +
+                    (segmentWidth - thumbSize) / 2,
+                top: (trackContentHeight - thumbSize) / 2,
                 child: Container(
-                  width: 34,
-                  height: 34,
+                  width: thumbSize,
+                  height: thumbSize,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: theme.colorScheme.surface,
@@ -1464,7 +1472,7 @@ class ToolbarWidget extends StatelessWidget {
                     ctx,
                     key: const ValueKey('theme-mode-light'),
                     label: 'Light theme',
-                    icon: Icons.light_mode_rounded,
+                    glyph: _ThemeGlyph.light,
                     active: app.themeMode == 0,
                     activeColor: const Color(0xFFF59E0B),
                     onTap: () => app.themeMode = 0,
@@ -1473,7 +1481,7 @@ class ToolbarWidget extends StatelessWidget {
                     ctx,
                     key: const ValueKey('theme-mode-auto'),
                     label: 'Automatic system theme',
-                    icon: Icons.computer_rounded,
+                    glyph: _ThemeGlyph.auto,
                     active: app.themeMode == 2,
                     activeColor: const Color(0xFF22C55E),
                     onTap: () => app.themeMode = 2,
@@ -1482,7 +1490,7 @@ class ToolbarWidget extends StatelessWidget {
                     ctx,
                     key: const ValueKey('theme-mode-dark'),
                     label: 'Dark theme',
-                    icon: Icons.dark_mode_rounded,
+                    glyph: _ThemeGlyph.dark,
                     active: app.themeMode == 1,
                     activeColor: const Color(0xFF60A5FA),
                     onTap: () => app.themeMode = 1,
@@ -1500,7 +1508,7 @@ class ToolbarWidget extends StatelessWidget {
     BuildContext ctx, {
     required Key key,
     required String label,
-    required IconData icon,
+    required _ThemeGlyph glyph,
     required bool active,
     required Color activeColor,
     required VoidCallback onTap,
@@ -1519,12 +1527,15 @@ class ToolbarWidget extends StatelessWidget {
             containedInkWell: true,
             customBorder: const CircleBorder(),
             child: Center(
-              child: Icon(
-                icon,
-                size: 18,
-                color: active
-                    ? activeColor
-                    : Theme.of(ctx).colorScheme.onSurfaceVariant,
+              child: CustomPaint(
+                size: const Size.square(22),
+                painter: _ThemeGlyphPainter(
+                  glyph,
+                  active
+                      ? activeColor
+                      : Theme.of(ctx).colorScheme.onSurfaceVariant,
+                  filled: active,
+                ),
               ),
             ),
           ),
@@ -1532,4 +1543,105 @@ class ToolbarWidget extends StatelessWidget {
       ),
     );
   }
+}
+
+enum _ThemeGlyph { light, auto, dark }
+
+class _ThemeGlyphPainter extends CustomPainter {
+  const _ThemeGlyphPainter(this.glyph, this.color, {required this.filled});
+
+  final _ThemeGlyph glyph;
+  final Color color;
+  final bool filled;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    switch (glyph) {
+      case _ThemeGlyph.light:
+        _paintSun(canvas, center);
+      case _ThemeGlyph.auto:
+        _paintSystem(canvas, center);
+      case _ThemeGlyph.dark:
+        _paintMoon(canvas, center);
+    }
+  }
+
+  void _paintSun(Canvas canvas, Offset center) {
+    final paint = Paint()
+      ..color = color
+      ..style = filled ? PaintingStyle.fill : PaintingStyle.stroke
+      ..strokeWidth = 1.7
+      ..strokeCap = StrokeCap.round;
+    canvas.drawCircle(center, 4.6, paint);
+    paint.style = PaintingStyle.stroke;
+    for (var i = 0; i < 8; i++) {
+      final angle = 3.14159265358979323846 / 4 * i;
+      final direction = Offset.fromDirection(angle);
+      canvas.drawLine(
+        center + direction * 7.8,
+        center + direction * 10.4,
+        paint,
+      );
+    }
+  }
+
+  void _paintSystem(Canvas canvas, Offset center) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.7
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(center.dx - 8, center.dy - 6.8, 16, 10.8),
+        const Radius.circular(2),
+      ),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(center.dx, center.dy + 4.2),
+      Offset(center.dx, center.dy + 7.6),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(center.dx - 5.2, center.dy + 7.6),
+      Offset(center.dx + 5.2, center.dy + 7.6),
+      paint,
+    );
+  }
+
+  void _paintMoon(Canvas canvas, Offset center) {
+    final path = Path()
+      ..moveTo(center.dx + 3.5, center.dy - 8.7)
+      ..cubicTo(
+        center.dx - 5.8,
+        center.dy - 6,
+        center.dx - 6.3,
+        center.dy + 6.1,
+        center.dx + 3.4,
+        center.dy + 8.7,
+      )
+      ..cubicTo(
+        center.dx - 0.9,
+        center.dy + 4.7,
+        center.dx - 0.9,
+        center.dy - 4.7,
+        center.dx + 3.5,
+        center.dy - 8.7,
+      );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.fill,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ThemeGlyphPainter oldDelegate) =>
+      oldDelegate.glyph != glyph ||
+      oldDelegate.color != color ||
+      oldDelegate.filled != filled;
 }
