@@ -45,6 +45,7 @@ class MainPage extends StatelessWidget {
               child: GestureDetector(
                 behavior: HitTestBehavior.translucent,
                 onTap: () {
+                  FocusManager.instance.primaryFocus?.unfocus();
                   app.clearSelectedPanel();
                 },
                 child: Column(

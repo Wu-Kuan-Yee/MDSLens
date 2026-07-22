@@ -297,6 +297,7 @@ class ToolbarWidget extends StatelessWidget {
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
               border:
                   OutlineInputBorder(borderRadius: BorderRadius.circular(6))),
+          onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
           onSubmitted: (_) => app.startRefresh(),
         ),
       ),

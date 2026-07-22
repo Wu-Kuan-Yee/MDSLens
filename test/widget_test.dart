@@ -76,6 +76,51 @@ void main() {
         ThemeMode.light);
   });
 
+  testWidgets('Tapping empty main-page space dismisses the Shot keyboard',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(tester.view.reset);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: MainPage()),
+      ),
+    );
+
+    final shotField = find.descendant(
+      of: find.byKey(const ValueKey('toolbar-shot-entry')),
+      matching: find.byType(TextField),
+    );
+    final shotEditable = find.descendant(
+      of: shotField,
+      matching: find.byType(EditableText),
+    );
+    await tester.tap(shotField);
+    await tester.pump();
+    expect(
+      tester.widget<EditableText>(shotEditable).focusNode.hasFocus,
+      isTrue,
+    );
+    expect(tester.testTextInput.isVisible, isTrue);
+
+    final toolbarDivider = find.descendant(
+      of: find.byKey(const ValueKey('toolbar-root')),
+      matching: find.byType(Divider),
+    );
+    await tester.tap(toolbarDivider.first);
+    await tester.pump();
+
+    expect(
+      tester.widget<EditableText>(shotEditable).focusNode.hasFocus,
+      isFalse,
+    );
+    expect(tester.testTextInput.isVisible, isFalse);
+  });
+
   test('Manual application settings survive an application restart', () async {
     SharedPreferences.setMockInitialValues({
       'shotHistory': '["163700","163699"]',
