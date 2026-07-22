@@ -701,8 +701,6 @@ void main() {
       }
     }
 
-    Finder elevatedButtons(Finder group) =>
-        find.descendant(of: group, matching: find.byType(ElevatedButton));
     Finder outlinedButtons(Finder group) =>
         find.descendant(of: group, matching: find.byType(OutlinedButton));
 
@@ -711,8 +709,8 @@ void main() {
     final modes = find.byKey(const ValueKey('toolbar-mode-actions'));
     final themes = find.byKey(const ValueKey('toolbar-theme-actions'));
     final appActions = find.byKey(const ValueKey('toolbar-app-actions'));
-    expectEqualRow(fileActions, elevatedButtons, 3);
-    expectEqualRow(navigation, elevatedButtons, 3);
+    expectEqualRow(fileActions, outlinedButtons, 3);
+    expectEqualRow(navigation, outlinedButtons, 3);
     expectEqualRow(modes, outlinedButtons, 2);
     expect(
       find.descendant(of: themes, matching: find.byType(OutlinedButton)),
@@ -722,6 +720,16 @@ void main() {
     expect(find.byIcon(Icons.light_mode_rounded), findsOneWidget);
     expect(find.byIcon(Icons.computer_rounded), findsOneWidget);
     expect(find.byIcon(Icons.dark_mode_rounded), findsOneWidget);
+    expect(find.byTooltip('Open configuration'), findsOneWidget);
+    expect(find.byTooltip('Save configuration'), findsOneWidget);
+    expect(find.byTooltip('Refresh waveforms'), findsOneWidget);
+    expect(find.byTooltip('Previous shot'), findsOneWidget);
+    expect(find.byTooltip('Next shot'), findsOneWidget);
+    expect(find.byTooltip('Latest shot'), findsOneWidget);
+    expect(find.byTooltip('Zoom and move mode'), findsOneWidget);
+    expect(find.byTooltip('Point mode'), findsOneWidget);
+    expect(tester.getSize(find.byTooltip('Open configuration')).height,
+        greaterThanOrEqualTo(44));
 
     final autoTheme = tester.widget<Semantics>(
       find.byKey(const ValueKey('theme-mode-auto')),

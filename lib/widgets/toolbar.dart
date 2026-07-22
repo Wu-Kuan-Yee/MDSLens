@@ -45,10 +45,25 @@ class ToolbarWidget extends StatelessWidget {
     final fileActions = _equalActionRow(
       key: const ValueKey('toolbar-file-actions'),
       children: [
-        _btn(context, 'Open', () => app.openFile()),
-        _btn(context, 'Save', () => app.saveFile()),
-        _btn(context, app.fetching ? 'Stop' : 'Refresh',
-            () => app.fetching ? app.stopFetch() : app.startRefresh()),
+        _toolbarIconButton(
+          context,
+          icon: Icons.folder_open_rounded,
+          tooltip: 'Open configuration',
+          onPressed: () => app.openFile(),
+        ),
+        _toolbarIconButton(
+          context,
+          icon: Icons.save_rounded,
+          tooltip: 'Save configuration',
+          onPressed: () => app.saveFile(),
+        ),
+        _toolbarIconButton(
+          context,
+          icon: app.fetching ? Icons.stop_circle_outlined : Icons.refresh,
+          tooltip: app.fetching ? 'Stop loading' : 'Refresh waveforms',
+          onPressed: () => app.fetching ? app.stopFetch() : app.startRefresh(),
+          active: app.fetching,
+        ),
       ],
     );
     final rateSelector = Row(key: const ValueKey('toolbar-rate'), children: [
@@ -163,13 +178,20 @@ class ToolbarWidget extends StatelessWidget {
       const SizedBox(width: 6),
       Expanded(
         flex: 2,
-        child: _btn(context, 'Apply', () => app.startRefresh()),
+        child: _toolbarIconButton(
+          context,
+          icon: Icons.play_arrow_rounded,
+          tooltip: 'Load shot',
+          onPressed: () => app.startRefresh(),
+        ),
       ),
     ]);
     final shotNavigation = _equalActionRow(
       key: const ValueKey('toolbar-shot-navigation'),
       children: [
-        _btn(context, 'Prev', () {
+        _toolbarIconButton(context,
+            icon: Icons.skip_previous_rounded,
+            tooltip: 'Previous shot', onPressed: () {
           final cur = app.shotCtrl.text.trim().isNotEmpty
               ? app.shotCtrl.text.trim()
               : app.shotText;
@@ -179,7 +201,8 @@ class ToolbarWidget extends StatelessWidget {
             app.startRefresh();
           }
         }),
-        _btn(context, 'Next', () {
+        _toolbarIconButton(context,
+            icon: Icons.skip_next_rounded, tooltip: 'Next shot', onPressed: () {
           final cur = app.shotCtrl.text.trim().isNotEmpty
               ? app.shotCtrl.text.trim()
               : app.shotText;
@@ -189,16 +212,31 @@ class ToolbarWidget extends StatelessWidget {
             app.startRefresh();
           }
         }),
-        _btn(context, 'Latest', () async => app.fetchLatestShot()),
+        _toolbarIconButton(
+          context,
+          icon: Icons.last_page_rounded,
+          tooltip: 'Latest shot',
+          onPressed: () => app.fetchLatestShot(),
+        ),
       ],
     );
     final modeActions = _equalActionRow(
       key: const ValueKey('toolbar-mode-actions'),
       children: [
-        _modeBtn(context, 'Zoom/Move', app.interactionMode == 0,
-            () => app.interactionMode = 0),
-        _modeBtn(context, 'Point', app.interactionMode == 1,
-            () => app.interactionMode = 1),
+        _toolbarIconButton(
+          context,
+          icon: Icons.pan_tool_alt_rounded,
+          tooltip: 'Zoom and move mode',
+          active: app.interactionMode == 0,
+          onPressed: () => app.interactionMode = 0,
+        ),
+        _toolbarIconButton(
+          context,
+          icon: Icons.gps_fixed_rounded,
+          tooltip: 'Point mode',
+          active: app.interactionMode == 1,
+          onPressed: () => app.interactionMode = 1,
+        ),
       ],
     );
     final themeActions = KeyedSubtree(
@@ -427,19 +465,11 @@ class ToolbarWidget extends StatelessWidget {
     required String tooltip,
     required VoidCallback onPressed,
   }) {
-    return Tooltip(
-      message: tooltip,
-      child: OutlinedButton(
-        onPressed: onPressed,
-        style: OutlinedButton.styleFrom(
-          minimumSize: const Size(0, 40),
-          padding: EdgeInsets.zero,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-        ),
-        child: Icon(icon,
-            size: 19, color: Theme.of(context).colorScheme.onSurface),
-      ),
+    return _toolbarIconButton(
+      context,
+      icon: icon,
+      tooltip: tooltip,
+      onPressed: onPressed,
     );
   }
 
@@ -447,14 +477,14 @@ class ToolbarWidget extends StatelessWidget {
     return PopupMenuButton<String>(
       tooltip: 'Settings',
       child: Container(
-        height: 40,
+        height: 44,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           border: Border.all(color: Theme.of(ctx).colorScheme.outline),
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(10),
         ),
         child: Icon(Icons.settings,
-            size: 19, color: Theme.of(ctx).colorScheme.onSurface),
+            size: 22, color: Theme.of(ctx).colorScheme.onSurface),
       ),
       onSelected: (v) {
         switch (v) {
@@ -1128,7 +1158,7 @@ class ToolbarWidget extends StatelessWidget {
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            minimumSize: const Size(0, 40),
+            minimumSize: const Size(0, 44),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             textStyle: TextStyle(
                 fontFamily: app.effectiveFontFamily,
@@ -1140,27 +1170,40 @@ class ToolbarWidget extends StatelessWidget {
         ));
   }
 
-  Widget _modeBtn(
-      BuildContext ctx, String label, bool active, VoidCallback onTap) {
-    final app = ctx.read<AppState>();
-    return OutlinedButton(
-        onPressed: onTap,
-        style: OutlinedButton.styleFrom(
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            minimumSize: const Size(0, 40),
+  Widget _toolbarIconButton(
+    BuildContext context, {
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+    bool active = false,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+    return Semantics(
+      button: true,
+      selected: active,
+      label: tooltip,
+      child: Tooltip(
+        message: tooltip,
+        child: OutlinedButton(
+          onPressed: onPressed,
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(44, 44),
+            padding: EdgeInsets.zero,
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            textStyle: TextStyle(
-                fontFamily: app.effectiveFontFamily,
-                fontSize: app.fontUiSize.toDouble(),
-                fontWeight: active ? FontWeight.bold : FontWeight.w500),
-            backgroundColor:
-                active ? Theme.of(ctx).colorScheme.primaryContainer : null),
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(label, maxLines: 1),
-        ));
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            side: BorderSide(
+              color: active ? colors.primary : colors.outlineVariant,
+              width: active ? 1.5 : 1,
+            ),
+            backgroundColor: active ? colors.primaryContainer : null,
+            foregroundColor:
+                active ? colors.onPrimaryContainer : colors.onSurface,
+          ),
+          child: Icon(icon, size: 22),
+        ),
+      ),
+    );
   }
 
   Widget _sshBtn(BuildContext ctx, AppState app) {
@@ -1170,7 +1213,7 @@ class ToolbarWidget extends StatelessWidget {
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            minimumSize: const Size(0, 40),
+            minimumSize: const Size(0, 44),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             textStyle: TextStyle(
                 fontFamily: app.effectiveFontFamily,
