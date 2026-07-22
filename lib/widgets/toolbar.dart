@@ -373,31 +373,24 @@ class ToolbarWidget extends StatelessWidget {
 
         Widget topActions;
         if (compact) {
-          if (width < rateSelectorWidth + 152) {
-            topActions = Column(children: [
-              Align(alignment: Alignment.centerLeft, child: themeActions),
-              const SizedBox(height: 8),
-              SizedBox(width: double.infinity, child: appActions),
-              const SizedBox(height: 8),
+          topActions = Column(children: [
+            Row(children: [
+              SizedBox(width: 108, child: themeActions),
+              const SizedBox(width: 8),
+              Expanded(child: appActions),
+            ]),
+            const SizedBox(height: 8),
+            if (width < rateSelectorWidth + 152) ...[
               SizedBox(width: double.infinity, child: fileActions),
               const SizedBox(height: 8),
               SizedBox(width: double.infinity, child: rateSelector),
-            ]);
-          } else {
-            topActions = Column(children: [
-              Row(children: [
-                SizedBox(width: 108, child: themeActions),
-                const SizedBox(width: 8),
-                Expanded(child: appActions),
-              ]),
-              const SizedBox(height: 8),
+            ] else
               Row(children: [
                 Expanded(child: fileActions),
                 const SizedBox(width: 8),
                 SizedBox(width: rateSelectorWidth, child: rateSelector),
               ]),
-            ]);
-          }
+          ]);
         } else if (wide) {
           topActions = Row(children: [
             SizedBox(width: 280, child: fileActions),
