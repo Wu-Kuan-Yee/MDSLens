@@ -92,6 +92,8 @@ class _PlotPanelState extends State<PlotPanel> {
   bool _multiTouchActive = false;
   Offset? _lastMultiTouchFocalPoint;
   double? _lastMultiTouchSpan;
+  bool _trackpadGestureActive = false;
+  double _lastTrackpadScale = 1;
   Timer? _longPressTimer;
   Offset? _longPressStartPos;
 
@@ -170,6 +172,9 @@ class _PlotPanelState extends State<PlotPanel> {
         child: Listener(
           key: _listenerKey,
           onPointerSignal: _handleScrollWheel,
+          onPointerPanZoomStart: _handleTrackpadGestureStart,
+          onPointerPanZoomUpdate: _handleTrackpadGestureUpdate,
+          onPointerPanZoomEnd: _handleTrackpadGestureEnd,
           onPointerDown: (e) {
             _handlePointerDown(e);
             if (!_multiTouchActive) _startLongPressTimer(e);
@@ -691,6 +696,65 @@ class _PlotPanelState extends State<PlotPanel> {
       _viewMaxY = cy + (_viewMaxY - cy) * factor;
       _storeView(plot);
     });
+  }
+
+  void _handleTrackpadGestureStart(PointerPanZoomStartEvent event) {
+    final app = context.read<AppState>();
+    _trackpadGestureActive =
+        app.interactionMode == 0 && _ensureViewInitialized(app);
+    _lastTrackpadScale = 1;
+  }
+
+  void _handleTrackpadGestureUpdate(PointerPanZoomUpdateEvent event) {
+    if (!_trackpadGestureActive) return;
+    final app = context.read<AppState>();
+    if (app.interactionMode != 0 || !_ensureViewInitialized(app)) {
+      _trackpadGestureActive = false;
+      return;
+    }
+    final plot = app.plots[widget.plotIdx];
+    final cb = _chartBox;
+    final gridLeft = _gridLeftInset(app);
+    final gridBottom = _gridBottomInset(app);
+    if (cb == null ||
+        cb.size.width <= gridLeft ||
+        cb.size.height <= gridBottom) {
+      return;
+    }
+
+    final previousScale = _lastTrackpadScale;
+    _lastTrackpadScale = event.scale;
+    final incrementalScale =
+        previousScale > 0 ? event.scale / previousScale : 1.0;
+    final canScale = incrementalScale.isFinite && incrementalScale > 0;
+    final panDelta = event.localPanDelta;
+
+    setState(() {
+      final gridWidth = cb.size.width - gridLeft;
+      final gridHeight = cb.size.height - gridBottom;
+      final xScale = (_viewMaxX - _viewMinX) / gridWidth;
+      final yScale = (_viewMaxY - _viewMinY) / gridHeight;
+      _viewMinX -= panDelta.dx * xScale;
+      _viewMaxX -= panDelta.dx * xScale;
+      _viewMinY += panDelta.dy * yScale;
+      _viewMaxY += panDelta.dy * yScale;
+
+      if (canScale && (incrementalScale - 1).abs() >= 0.0001) {
+        final factor = 1 / incrementalScale.clamp(0.2, 5.0);
+        final cx = _pxToDataX(event.localPosition.dx);
+        final cy = _pxToDataY(event.localPosition.dy);
+        _viewMinX = cx - (cx - _viewMinX) * factor;
+        _viewMaxX = cx + (_viewMaxX - cx) * factor;
+        _viewMinY = cy - (cy - _viewMinY) * factor;
+        _viewMaxY = cy + (_viewMaxY - cy) * factor;
+      }
+      _storeView(plot);
+    });
+  }
+
+  void _handleTrackpadGestureEnd(PointerPanZoomEndEvent event) {
+    _trackpadGestureActive = false;
+    _lastTrackpadScale = 1;
   }
 
   void _handlePointerDown(PointerDownEvent event) {

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -1002,6 +1003,68 @@ void main() {
 
     final centerAfterPan = (chart().data.minX + chart().data.maxX) / 2;
     expect(centerAfterPan, lessThan(centerBeforePan));
+  });
+
+  testWidgets('Trackpad pan/zoom events pan and zoom a plot together',
+      (tester) async {
+    final app = AppState();
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 0],
+          [5, 5],
+          [10, 10]
+        ],
+        null);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 500,
+              height: 400,
+              child: PlotPanel(plotIdx: 0),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    LineChart chart() => tester.widget<LineChart>(find.byType(LineChart));
+    final initialWidth = chart().data.maxX - chart().data.minX;
+    final initialCenter = (chart().data.minX + chart().data.maxX) / 2;
+    final trackpadListener = find.byWidgetPredicate(
+      (widget) => widget is Listener && widget.onPointerPanZoomUpdate != null,
+    );
+    final position = tester.getCenter(trackpadListener);
+
+    await tester.sendEventToBinding(
+      PointerPanZoomStartEvent(pointer: 41, position: position),
+    );
+    await tester.sendEventToBinding(
+      PointerPanZoomUpdateEvent(
+        pointer: 41,
+        position: position,
+        pan: const Offset(55, -20),
+        panDelta: const Offset(55, -20),
+        scale: 1.5,
+      ),
+    );
+    await tester.pump();
+    await tester.sendEventToBinding(
+      PointerPanZoomEndEvent(pointer: 41, position: position),
+    );
+    await tester.pump();
+
+    final transformedWidth = chart().data.maxX - chart().data.minX;
+    final transformedCenter = (chart().data.minX + chart().data.maxX) / 2;
+    expect(transformedWidth, lessThan(initialWidth));
+    expect((transformedCenter - initialCenter).abs(), greaterThan(0.01));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('One-finger touch drag pans a plot in Zoom/Move mode',
