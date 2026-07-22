@@ -33,9 +33,17 @@ if (Get-Command rustup -ErrorAction SilentlyContinue) {
   if ($LASTEXITCODE -ne 0) {
     throw "Could not install Rust target $rustTarget"
   }
+  $cargoExecutable = (& rustup which cargo).Trim()
+  $env:RUSTC = (& rustup which rustc).Trim()
+} else {
+  $cargoExecutable = (Get-Command cargo -ErrorAction SilentlyContinue).Source
+  $rustcCommand = Get-Command rustc -ErrorAction SilentlyContinue
+  if ($rustcCommand) {
+    $env:RUSTC = $rustcCommand.Source
+  }
 }
 
-if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
+if (-not $cargoExecutable -or -not $env:RUSTC) {
   throw "Cargo is required to build the Windows native library."
 }
 
@@ -47,7 +55,7 @@ $cargoArgs = @(
   "--target", $rustTarget
 ) + $profileArgs
 
-& cargo @cargoArgs
+& $cargoExecutable @cargoArgs
 if ($LASTEXITCODE -ne 0) {
   throw "Rust build failed for $rustTarget"
 }

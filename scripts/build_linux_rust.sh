@@ -25,7 +25,14 @@ case "$CONFIGURATION" in
     ;;
 esac
 
-if ! command -v cargo >/dev/null 2>&1; then
+if command -v rustup >/dev/null 2>&1; then
+  CARGO_BIN=$(rustup which cargo)
+  RUSTC_BIN=$(rustup which rustc)
+else
+  CARGO_BIN=$(command -v cargo || true)
+  RUSTC_BIN=$(command -v rustc || true)
+fi
+if [ -z "$CARGO_BIN" ] || [ -z "$RUSTC_BIN" ]; then
   echo "Cargo is required to build the Linux native library." >&2
   exit 1
 fi
@@ -36,7 +43,7 @@ fi
 # shellcheck disable=SC2086
 env -u CPATH -u CFLAGS -u CXXFLAGS -u CPPFLAGS -u LDFLAGS \
   -u LIBRARY_PATH -u LD_LIBRARY_PATH -u PKG_CONFIG_PATH \
-  LIBZ_SYS_STATIC=1 cargo build \
+  LIBZ_SYS_STATIC=1 RUSTC="$RUSTC_BIN" "$CARGO_BIN" build \
     --manifest-path "$ROOT_DIR/rust/Cargo.toml" \
     -p mds-bridge $CARGO_PROFILE_FLAG
 
