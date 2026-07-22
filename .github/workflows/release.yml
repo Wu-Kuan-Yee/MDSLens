@@ -17,10 +17,11 @@ jobs:
           channel: stable
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Build Flutter Windows
+      - name: Build Flutter Windows & Bundle Rust
         run: |
           cargo build --release --manifest-path rust/mds-bridge/Cargo.toml
           flutter build windows --release
+          copy rust\target\release\mds_bridge.dll build\windows\x64\runner\Release\
 
       - name: Create Windows Packages (.zip, .exe)
         shell: powershell
@@ -49,10 +50,14 @@ jobs:
           channel: stable
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Build Flutter macOS
+      - name: Build Flutter macOS & Bundle Rust
         run: |
           cargo build --release --manifest-path rust/mds-bridge/Cargo.toml
           flutter build macos --release
+          APP_PATH="build/macos/Build/Products/Release/mdsscope.app"
+          mkdir -p "$APP_PATH/Contents/Frameworks" "$APP_PATH/Contents/MacOS"
+          cp rust/target/release/libmds_bridge.dylib "$APP_PATH/Contents/Frameworks/"
+          cp rust/target/release/libmds_bridge.dylib "$APP_PATH/Contents/MacOS/"
 
       - name: Create macOS Packages (.dmg, .pkg, .zip, .tar.gz, .app)
         run: |
@@ -91,10 +96,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libsecret-1-dev zstd dpkg-dev
 
-      - name: Build Flutter Linux
+      - name: Build Flutter Linux & Bundle Rust
         run: |
           cargo build --release --manifest-path rust/mds-bridge/Cargo.toml
           flutter build linux --release
+          BUNDLE="build/linux/x64/release/bundle"
+          mkdir -p "$BUNDLE/lib"
+          cp rust/target/release/libmds_bridge.so "$BUNDLE/lib/"
+          cp rust/target/release/libmds_bridge.so "$BUNDLE/"
 
       - name: Create Linux Packages (.tar.gz, .tar.xz, .zip, .pkg.tar.zst, .deb)
         run: |

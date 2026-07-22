@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# MdsScope Multi-Platform Automated Package Builder
-# Naming Convention: mdsscope-<platform>-<arch>.<extension>
-
 set -e
 
 VERSION="7.0.0"
+APP_NAME="mdsscope"
 DIST_DIR="build/dist"
 mkdir -p "$DIST_DIR"
 
-detect_os() {
+log() { echo -e "\031[32m[BUILD]\031[0m $1"; }
+
+detect_platform() {
   case "$(uname -s)" in
-    Darwin*)  echo "macos" ;;
-    Linux*)   echo "linux" ;;
-    MINGW*|MSYS*|CYGWIN*) echo "windows" ;;
-    *)        echo "unknown" ;;
+    Darwin*) echo "macos" ;;
+    Linux*) echo "linux" ;;
+    CYGWIN*|MINGW*|MSYS*) echo "windows" ;;
+    *) echo "unknown" ;;
   esac
 }
 
@@ -21,77 +21,67 @@ detect_arch() {
   case "$(uname -m)" in
     x86_64|amd64) echo "x64" ;;
     arm64|aarch64) echo "arm64" ;;
-    armv7l|armv7) echo "armv7" ;;
-    i386|i686)    echo "x86" ;;
-    *)            echo "x64" ;;
+    *) echo "$(uname -m)" ;;
   esac
 }
 
-PLATFORM="$(detect_os)"
-ARCH="$(detect_arch)"
+PLATFORM=$(detect_platform)
+ARCH=$(detect_arch)
+base_name="${APP_NAME}-${PLATFORM}-${ARCH}"
 
-echo "=== Building MdsScope Packages for $PLATFORM ($ARCH) ==="
+log "Building Rust engine static/cdylib..."
+cargo build --release --manifest-path rust/mds-bridge/Cargo.toml
 
-if [ "$PLATFORM" = "macos" ]; then
-  echo "--> Building macOS Release Bundle..."
-  cargo build --release --manifest-path rust/mds-bridge/Cargo.toml
-  flutter build macos --release
+log "Building Flutter application for ${PLATFORM} (${ARCH})..."
+flutter build ${PLATFORM} --release
 
-  APP_PATH="build/macos/Build/Products/Release/mdsscope.app"
+case "$PLATFORM" in
+  macos)
+    APP_PATH="build/macos/Build/Products/Release/mdsscope.app"
+    mkdir -p "$APP_PATH/Contents/Frameworks" "$APP_PATH/Contents/MacOS"
+    cp rust/target/release/libmds_bridge.dylib "$APP_PATH/Contents/Frameworks/" 2>/dev/null || true
+    cp rust/target/release/libmds_bridge.dylib "$APP_PATH/Contents/MacOS/" 2>/dev/null || true
+    
+    cp -R "$APP_PATH" "$DIST_DIR/${base_name}.app"
+    (cd build/macos/Build/Products/Release && zip -rq "../../../dist/${base_name}.zip" mdsscope.app)
+    (cd build/macos/Build/Products/Release && tar -czf "../../../dist/${base_name}.tar.gz" mdsscope.app)
+    (cd build/macos/Build/Products/Release && tar -cJf "../../../dist/${base_name}.tar.xz" mdsscope.app)
+    (cd build/macos/Build/Products/Release && tar -cjf "../../../dist/${base_name}.tar.bz2" mdsscope.app)
+    hdiutil create -volname "MdsScope" -srcfolder "$APP_PATH" -ov -format UDZO "$DIST_DIR/${base_name}.dmg"
+    pkgbuild --component "$APP_PATH" --install-location /Applications "$DIST_DIR/${base_name}.pkg"
+    ;;
+  linux)
+    BUNDLE="build/linux/x64/release/bundle"
+    mkdir -p "$BUNDLE/lib"
+    cp rust/target/release/libmds_bridge.so "$BUNDLE/lib/" 2>/dev/null || true
+    cp rust/target/release/libmds_bridge.so "$BUNDLE/" 2>/dev/null || true
 
-  echo "--> Generating macOS Formats..."
-  # 1. Portable .app
-  cp -R "$APP_PATH" "$DIST_DIR/mdsscope-macos-$ARCH.app"
-  
-  # 2. Archives (.zip, .tar.gz, .tar.xz, .tar.bz2)
-  (cd build/macos/Build/Products/Release && zip -r "../../../dist/mdsscope-macos-$ARCH.zip" mdsscope.app)
-  (cd build/macos/Build/Products/Release && tar -czf "../../../dist/mdsscope-macos-$ARCH.tar.gz" mdsscope.app)
-  (cd build/macos/Build/Products/Release && tar -cJf "../../../dist/mdsscope-macos-$ARCH.tar.xz" mdsscope.app)
-  (cd build/macos/Build/Products/Release && tar -cjf "../../../dist/mdsscope-macos-$ARCH.tar.bz2" mdsscope.app)
+    (cd "$BUNDLE" && tar -czf "../../../../$DIST_DIR/${base_name}.tar.gz" *)
+    (cd "$BUNDLE" && tar -cJf "../../../../$DIST_DIR/${base_name}.tar.xz" *)
+    (cd "$BUNDLE" && tar -cjf "../../../../$DIST_DIR/${base_name}.tar.bz2" *)
+    (cd "$BUNDLE" && zip -rq "../../../../$DIST_DIR/${base_name}.zip" *)
+    (cd "$BUNDLE" && tar -c --zstd -f "../../../../$DIST_DIR/${base_name}.pkg.tar.zst" *)
 
-  # 3. .dmg Image
-  hdiutil create -volname "MdsScope" -srcfolder "$APP_PATH" -ov -format UDZO "$DIST_DIR/mdsscope-macos-$ARCH.dmg"
-
-  # 4. .pkg Installer
-  pkgbuild --component "$APP_PATH" --install-location /Applications "$DIST_DIR/mdsscope-macos-$ARCH.pkg"
-
-elif [ "$PLATFORM" = "linux" ]; then
-  echo "--> Building Linux Release Bundle..."
-  cargo build --release --manifest-path rust/mds-bridge/Cargo.toml
-  flutter build linux --release
-
-  BUNDLE="build/linux/$ARCH/release/bundle"
-
-  echo "--> Generating Linux Formats..."
-  # Archives
-  (cd "$BUNDLE" && tar -czf "../../../../$DIST_DIR/mdsscope-linux-$ARCH.tar.gz" *)
-  (cd "$BUNDLE" && tar -cJf "../../../../$DIST_DIR/mdsscope-linux-$ARCH.tar.xz" *)
-  (cd "$BUNDLE" && tar -cjf "../../../../$DIST_DIR/mdsscope-linux-$ARCH.tar.bz2" *)
-  (cd "$BUNDLE" && zip -r "../../../../$DIST_DIR/mdsscope-linux-$ARCH.zip" *)
-
-  # Arch Linux .pkg.tar.zst & .pkg.tar.xz
-  (cd "$BUNDLE" && tar -c --zstd -f "../../../../$DIST_DIR/mdsscope-linux-$ARCH.pkg.tar.zst" *)
-  (cd "$BUNDLE" && tar -c --xz -f "../../../../$DIST_DIR/mdsscope-linux-$ARCH.pkg.tar.xz" *)
-
-  # .deb Package
-  DEB_DIR="build/deb/mdsscope-linux-$ARCH"
-  mkdir -p "$DEB_DIR/usr/bin" "$DEB_DIR/usr/lib/mdsscope" "$DEB_DIR/DEBIAN"
-  cp -R "$BUNDLE/"* "$DEB_DIR/usr/lib/mdsscope/"
-  ln -sf /usr/lib/mdsscope/mdsscope "$DEB_DIR/usr/bin/mdsscope"
-  cat <<EOF > "$DEB_DIR/DEBIAN/control"
+    DEB_DIR="build/deb/${base_name}"
+    mkdir -p "$DEB_DIR/usr/bin" "$DEB_DIR/usr/lib/mdsscope" "$DEB_DIR/DEBIAN"
+    cp -R "$BUNDLE/"* "$DEB_DIR/usr/lib/mdsscope/"
+    ln -sf /usr/lib/mdsscope/mdsscope "$DEB_DIR/usr/bin/mdsscope"
+    cat <<EOF > "$DEB_DIR/DEBIAN/control"
 Package: mdsscope
-Version: $VERSION
+Version: ${VERSION}
 Architecture: amd64
 Maintainer: MdsScope Contributors
 Description: Signal data plotting for MDSplus experiments
 EOF
-  dpkg-deb --build "$DEB_DIR" "$DIST_DIR/mdsscope-linux-$ARCH.deb"
+    chmod 755 "$DEB_DIR/DEBIAN" "$DEB_DIR/DEBIAN/control"
+    dpkg-deb --build "$DEB_DIR" "$DIST_DIR/${base_name}.deb"
+    ;;
+  windows)
+    BUNDLE="build/windows/x64/runner/Release"
+    cp rust/target/release/mds_bridge.dll "$BUNDLE/" 2>/dev/null || true
+    cp "$BUNDLE/mdsscope.exe" "$DIST_DIR/${base_name}-portable.exe"
+    (cd "$BUNDLE" && zip -rq "../../../../../$DIST_DIR/${base_name}.zip" *)
+    ;;
+esac
 
-  # .rpm Package
-  if command -v fpm >/dev/null 2>&1; then
-    fpm -s dir -t rpm -n mdsscope -v "$VERSION" -C "$BUNDLE" -p "$DIST_DIR/mdsscope-linux-$ARCH.rpm" .
-  fi
-fi
-
-echo "=== All Packages Generated Successfully in $DIST_DIR ==="
-ls -lh "$DIST_DIR"
+log "Build complete! Packages saved in $DIST_DIR"
