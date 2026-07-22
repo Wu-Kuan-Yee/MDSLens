@@ -1169,19 +1169,24 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('toolbar-rate-dropdown')));
     await tester.pumpAndSettle();
-    final firstRateOption = tester.widget<Container>(
-      find.byKey(const ValueKey('rate-option-0')),
+    expect(
+      find.byKey(const ValueKey('toolbar-rate-divider-1')),
+      findsOneWidget,
     );
-    final decoration = firstRateOption.decoration as BoxDecoration;
-    expect(decoration.border?.bottom.width, greaterThan(0));
-    final rateDropdown = tester.widget<DropdownButton<int>>(
-      find.byKey(const ValueKey('toolbar-rate-dropdown')),
+    expect(
+      find.byKey(const ValueKey('toolbar-rate-divider-2')),
+      findsOneWidget,
     );
-    expect(rateDropdown.itemHeight, 48);
-    expect(rateDropdown.menuMaxHeight, 320);
-    expect(rateDropdown.borderRadius, BorderRadius.circular(12));
-    await tester.tap(find.byKey(const ValueKey('rate-option-0')));
+    final anchor = tester.widget<AnimatedContainer>(
+      find.byKey(const ValueKey('toolbar-rate-anchor')),
+    );
+    final decoration = anchor.decoration as BoxDecoration;
+    expect(decoration.borderRadius, BorderRadius.circular(12));
+    expect(decoration.boxShadow, isNotEmpty);
+    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('toolbar-rate-option-1')));
     await tester.pumpAndSettle();
+    expect(app.dataMode, 1);
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
@@ -1461,6 +1466,17 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('layout-data-source-setup-1')));
     await tester.pumpAndSettle();
     expect(find.text('Data Source Setup'), findsOneWidget);
+    expect(find.byKey(const ValueKey('data-mode-dropdown-0')), findsOneWidget);
+    await tester
+        .ensureVisible(find.byKey(const ValueKey('data-mode-dropdown-0')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('data-mode-dropdown-0')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('data-mode-0-option-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('data-mode-0-divider-1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('data-mode-0-divider-2')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('data-mode-0-option-2')));
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(TextButton, 'Cancel').last);
     await tester.pumpAndSettle();
 

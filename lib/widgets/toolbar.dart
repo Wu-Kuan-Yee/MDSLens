@@ -9,6 +9,7 @@ import 'dialogs/ssh.dart';
 import 'dialogs/about.dart';
 import 'dropdown_items.dart';
 import 'plot_panel.dart';
+import 'polished_dropdown.dart';
 import 'responsive_plot_layout.dart';
 
 List<(String, String)> _shotMetadata(AppState app) {
@@ -207,65 +208,34 @@ class ToolbarWidget extends StatelessWidget {
               TextStyle(fontSize: uiSize, color: theme.colorScheme.onSurface)),
       const SizedBox(width: 6),
       Expanded(
-        child: Container(
-          height: 44,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerLow,
-            border: Border.all(color: theme.colorScheme.outlineVariant),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<int>(
-              key: const ValueKey('toolbar-rate-dropdown'),
-              value: app.dataMode,
-              isExpanded: true,
-              isDense: true,
-              itemHeight: 48,
-              menuMaxHeight: 320,
-              elevation: 12,
-              borderRadius: BorderRadius.circular(12),
-              iconSize: 18,
-              style: TextStyle(
-                  fontSize: uiSize, color: theme.colorScheme.onSurface),
-              dropdownColor: theme.colorScheme.surfaceContainerHigh,
-              selectedItemBuilder: (_) => ['Thin', 'Medium', 'Full']
-                  .map((label) => Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(label,
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
-                      ))
-                  .toList(),
-              items: [
-                for (var index = 0;
-                    index < const ['Thin', 'Medium', 'Full'].length;
-                    index++)
-                  DropdownMenuItem(
-                    value: index,
-                    child: separatedDropdownItem(
-                      context,
-                      key: ValueKey('rate-option-$index'),
-                      isLast: index == 2,
-                      child: Text(
-                        const ['Thin', 'Medium', 'Full'][index],
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: uiSize,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-              onChanged: (v) {
-                if (v != null) {
-                  app.dataMode = v;
-                  app.startRefresh();
-                }
-              },
+        child: PolishedDropdown<int>(
+          key: const ValueKey('toolbar-rate-dropdown'),
+          id: 'toolbar-rate',
+          value: app.dataMode,
+          leadingIcon: Icons.speed_rounded,
+          fontSize: uiSize,
+          minimumMenuWidth: 190,
+          options: const [
+            PolishedDropdownOption(
+              value: 0,
+              label: 'Thin',
+              icon: Icons.compress_rounded,
             ),
-          ),
+            PolishedDropdownOption(
+              value: 1,
+              label: 'Medium',
+              icon: Icons.format_line_spacing_rounded,
+            ),
+            PolishedDropdownOption(
+              value: 2,
+              label: 'Full',
+              icon: Icons.stacked_line_chart_rounded,
+            ),
+          ],
+          onChanged: (value) {
+            app.dataMode = value;
+            app.startRefresh();
+          },
         ),
       ),
     ]);
@@ -403,7 +373,7 @@ class ToolbarWidget extends StatelessWidget {
         final compact = width < 560;
         final wide = width >= 940;
         final rateSelectorWidth =
-            (140 + (uiSize - 12).clamp(0, 16) * 2).clamp(140, 172).toDouble();
+            (190 + (uiSize - 12).clamp(0, 16) * 2).clamp(190, 222).toDouble();
         final shotInfo = _shotInfoPanel(
           context,
           compact: compact,

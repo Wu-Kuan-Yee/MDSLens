@@ -7,6 +7,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dropdown_items.dart';
+import 'polished_dropdown.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/app_state.dart';
 import '../services/platform_file_dialog.dart';
@@ -1493,7 +1494,6 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
   List<String> _treeNames = [];
   final Map<String, List<String>> _signalCache = {};
 
-  static const _modes = ['Thin', 'Medium', 'Full'];
   static const _presetColors = [
     0xFF2364aa,
     0xFFc44e52,
@@ -1620,8 +1620,6 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
 
   @override
   Widget build(BuildContext ctx) {
-    final ddStyle =
-        TextStyle(fontSize: 11, color: Theme.of(ctx).colorScheme.onSurface);
     return AlertDialog(
       title: Row(children: [
         const Expanded(
@@ -1673,7 +1671,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                   3: FixedColumnWidth(144),
                   4: FixedColumnWidth(34),
                   5: FixedColumnWidth(46),
-                  6: FixedColumnWidth(114),
+                  6: FixedColumnWidth(136),
                   7: FixedColumnWidth(26),
                 },
                 defaultVerticalAlignment: TableCellVerticalAlignment.middle,
@@ -1736,45 +1734,34 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                                       () => _rows[i].hidden = v ?? false)))),
                       Padding(
                           padding: const EdgeInsets.only(right: 4),
-                          child: DropdownButtonFormField<int>(
-                              initialValue: _rows[i].readMode,
-                              isExpanded: true,
-                              itemHeight: 48,
-                              menuMaxHeight: 240,
-                              elevation: 12,
-                              borderRadius: BorderRadius.circular(12),
-                              decoration: _dsDeco(),
-                              style: ddStyle,
-                              dropdownColor: Theme.of(ctx)
-                                  .colorScheme
-                                  .surfaceContainerHigh,
-                              selectedItemBuilder: (_) => _modes
-                                  .map((mode) => Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: Text(
-                                          mode,
-                                          style: ddStyle,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ))
-                                  .toList(),
-                              items: List.generate(
-                                  3,
-                                  (j) => DropdownMenuItem(
-                                      value: j,
-                                      child: separatedDropdownItem(
-                                        ctx,
-                                        isLast: j == 2,
-                                        child: Text(
-                                          _modes[j],
-                                          style: ddStyle,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ))),
-                              onChanged: (v) {
-                                if (v != null)
-                                  setState(() => _rows[i].readMode = v);
-                              })),
+                          child: PolishedDropdown<int>(
+                            key: ValueKey('data-mode-dropdown-$i'),
+                            id: 'data-mode-$i',
+                            value: _rows[i].readMode,
+                            height: 42,
+                            fontSize: 11,
+                            leadingIcon: Icons.data_usage_rounded,
+                            minimumMenuWidth: 190,
+                            options: const [
+                              PolishedDropdownOption(
+                                value: 0,
+                                label: 'Thin',
+                                icon: Icons.compress_rounded,
+                              ),
+                              PolishedDropdownOption(
+                                value: 1,
+                                label: 'Medium',
+                                icon: Icons.format_line_spacing_rounded,
+                              ),
+                              PolishedDropdownOption(
+                                value: 2,
+                                label: 'Full',
+                                icon: Icons.stacked_line_chart_rounded,
+                              ),
+                            ],
+                            onChanged: (value) =>
+                                setState(() => _rows[i].readMode = value),
+                          )),
                       _rows.length > 1
                           ? GestureDetector(
                               onTap: () => setState(() {
