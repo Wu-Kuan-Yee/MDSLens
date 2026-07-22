@@ -44,6 +44,7 @@ class MdsScopeTheme {
           fontSize: size.clamp(6, 48),
         );
     final source = base.textTheme;
+    final colors = base.colorScheme;
     final textTheme = source.copyWith(
       displayLarge: style(source.displayLarge, uiFontSize + 32),
       displayMedium: style(source.displayMedium, uiFontSize + 24),
@@ -64,6 +65,45 @@ class MdsScopeTheme {
     return base.copyWith(
       textTheme: textTheme,
       primaryTextTheme: textTheme,
+      inputDecorationTheme: InputDecorationThemeData(
+        filled: true,
+        fillColor: colors.surfaceContainerLow,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: colors.outlineVariant),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: colors.outlineVariant),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: colors.primary, width: 1.5),
+        ),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: colors.surfaceContainerHigh,
+        surfaceTintColor: Colors.transparent,
+        elevation: 12,
+        menuPadding: const EdgeInsets.symmetric(vertical: 6),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        textStyle: textTheme.bodyMedium,
+      ),
+      menuTheme: MenuThemeData(
+        style: MenuStyle(
+          backgroundColor: WidgetStatePropertyAll(colors.surfaceContainerHigh),
+          surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+          elevation: const WidgetStatePropertyAll(12),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(vertical: 6),
+          ),
+        ),
+      ),
     );
   }
 }

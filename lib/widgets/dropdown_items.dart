@@ -10,12 +10,13 @@ Widget separatedDropdownItem(
     key: key,
     width: double.infinity,
     alignment: Alignment.centerLeft,
+    padding: const EdgeInsets.symmetric(horizontal: 8),
     decoration: isLast
         ? null
         : BoxDecoration(
             border: Border(
               bottom: BorderSide(
-                color: Theme.of(context).dividerColor.withValues(alpha: 0.8),
+                color: Theme.of(context).dividerColor.withValues(alpha: 0.55),
               ),
             ),
           ),

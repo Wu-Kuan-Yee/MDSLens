@@ -34,6 +34,9 @@ void main() {
     expect(theme.textTheme.bodyMedium?.fontFamily, 'Courier New');
     expect(theme.textTheme.bodyMedium?.fontSize, 18);
     expect(theme.textTheme.labelLarge?.fontSize, 18);
+    expect(theme.inputDecorationTheme.filled, isTrue);
+    final popupShape = theme.popupMenuTheme.shape as RoundedRectangleBorder;
+    expect(popupShape.borderRadius, BorderRadius.circular(12));
   });
 
   testWidgets('Auto theme follows live platform brightness changes',
@@ -957,6 +960,12 @@ void main() {
     );
     final decoration = firstRateOption.decoration as BoxDecoration;
     expect(decoration.border?.bottom.width, greaterThan(0));
+    final rateDropdown = tester.widget<DropdownButton<int>>(
+      find.byKey(const ValueKey('toolbar-rate-dropdown')),
+    );
+    expect(rateDropdown.itemHeight, 48);
+    expect(rateDropdown.menuMaxHeight, 320);
+    expect(rateDropdown.borderRadius, BorderRadius.circular(12));
     await tester.tap(find.byKey(const ValueKey('rate-option-0')));
     await tester.pumpAndSettle();
 

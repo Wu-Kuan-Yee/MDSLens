@@ -1555,10 +1555,14 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
     }
   }
 
-  static InputDecoration _dsDeco() => const InputDecoration(
-      isDense: true,
-      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      border: OutlineInputBorder());
+  static InputDecoration _dsDeco() => InputDecoration(
+        isDense: true,
+        filled: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      );
 
   static Widget _hdrCell(String text, double rightPad) {
     return Padding(
@@ -1733,9 +1737,15 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                           child: DropdownButtonFormField<int>(
                               initialValue: _rows[i].readMode,
                               isExpanded: true,
+                              itemHeight: 48,
+                              menuMaxHeight: 240,
+                              elevation: 12,
+                              borderRadius: BorderRadius.circular(12),
                               decoration: _dsDeco(),
                               style: ddStyle,
-                              dropdownColor: Theme.of(ctx).colorScheme.surface,
+                              dropdownColor: Theme.of(ctx)
+                                  .colorScheme
+                                  .surfaceContainerHigh,
                               selectedItemBuilder: (_) => _modes
                                   .map((mode) => Align(
                                         alignment: Alignment.centerLeft,
@@ -1867,34 +1877,71 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
       // Don't show if there's exactly one hint that matches the current text exactly
       if (hints.length == 1 && hints[0].toLowerCase() == v) return;
       _overlay = OverlayEntry(
-          builder: (_) => Positioned(
-              width: 220,
-              child: CompositedTransformFollower(
-                  link: _layerLink,
-                  showWhenUnlinked: false,
-                  offset: const Offset(0, 40),
-                  child: Material(
-                      elevation: 8,
-                      child: Container(
-                          constraints: const BoxConstraints(maxHeight: 200),
-                          decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey.shade300)),
-                          child: ListView.builder(
-                              padding: EdgeInsets.zero,
-                              shrinkWrap: true,
-                              itemCount: hints.length,
-                              itemBuilder: (_, i) => ListTile(
-                                  dense: true,
-                                  title: Text(hints[i],
-                                      style: const TextStyle(fontSize: 12)),
-                                  onTap: () {
-                                    widget.controller.text = hints[i];
-                                    widget.controller.selection =
-                                        TextSelection.collapsed(
-                                            offset: hints[i].length);
-                                    _removeOverlay();
-                                    widget.onChanged?.call();
-                                  })))))));
+        builder: (overlayContext) {
+          final theme = Theme.of(overlayContext);
+          return Positioned(
+            width: 220,
+            child: CompositedTransformFollower(
+              link: _layerLink,
+              showWhenUnlinked: false,
+              offset: const Offset(0, 42),
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  constraints: const BoxConstraints(maxHeight: 240),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHigh,
+                    border: Border.all(
+                      color: theme.colorScheme.outlineVariant,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: theme.colorScheme.shadow.withValues(alpha: 0.22),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: ListView.separated(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      shrinkWrap: true,
+                      itemCount: hints.length,
+                      separatorBuilder: (_, __) => Divider(
+                        height: 1,
+                        color: theme.dividerColor.withValues(alpha: 0.55),
+                      ),
+                      itemBuilder: (_, i) => ListTile(
+                        dense: true,
+                        minTileHeight: 42,
+                        leading: Icon(
+                          Icons.search_rounded,
+                          size: 18,
+                          color: theme.colorScheme.primary,
+                        ),
+                        title: Text(
+                          hints[i],
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        onTap: () {
+                          widget.controller.text = hints[i];
+                          widget.controller.selection = TextSelection.collapsed(
+                            offset: hints[i].length,
+                          );
+                          _removeOverlay();
+                          widget.onChanged?.call();
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
       Overlay.of(context).insert(_overlay!);
     }
   }

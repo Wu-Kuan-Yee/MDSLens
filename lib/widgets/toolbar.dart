@@ -74,21 +74,27 @@ class ToolbarWidget extends StatelessWidget {
       const SizedBox(width: 6),
       Expanded(
         child: Container(
-          height: 40,
-          padding: const EdgeInsets.symmetric(horizontal: 6),
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(
-              border: Border.all(color: theme.dividerColor),
-              borderRadius: BorderRadius.circular(6)),
+            color: theme.colorScheme.surfaceContainerLow,
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(10),
+          ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<int>(
               key: const ValueKey('toolbar-rate-dropdown'),
               value: app.dataMode,
               isExpanded: true,
               isDense: true,
+              itemHeight: 48,
+              menuMaxHeight: 320,
+              elevation: 12,
+              borderRadius: BorderRadius.circular(12),
               iconSize: 18,
               style: TextStyle(
                   fontSize: uiSize, color: theme.colorScheme.onSurface),
-              dropdownColor: theme.colorScheme.surface,
+              dropdownColor: theme.colorScheme.surfaceContainerHigh,
               selectedItemBuilder: (_) => ['Thin', 'Medium', 'Full']
                   .map((label) => Align(
                         alignment: Alignment.centerLeft,
@@ -156,6 +162,7 @@ class ToolbarWidget extends StatelessWidget {
           icon: Icon(Icons.arrow_drop_down,
               size: 16, color: theme.colorScheme.onSurface),
           tooltip: 'Shot history',
+          position: PopupMenuPosition.under,
           onSelected: (v) {
             app.shotText = v;
             app.startRefresh();
@@ -470,6 +477,7 @@ class ToolbarWidget extends StatelessWidget {
   Widget _settingsMenu(BuildContext ctx, AppState app) {
     return PopupMenuButton<String>(
       tooltip: 'Settings',
+      position: PopupMenuPosition.under,
       child: Container(
         height: 44,
         alignment: Alignment.center,
@@ -1121,6 +1129,10 @@ class ToolbarWidget extends StatelessWidget {
                             ? fontFamily
                             : 'System',
                         isDense: true,
+                        itemHeight: 48,
+                        menuMaxHeight: 360,
+                        elevation: 12,
+                        borderRadius: BorderRadius.circular(12),
                         selectedItemBuilder: (_) => families
                             .map((family) => Align(
                                   alignment: Alignment.centerLeft,
@@ -1134,10 +1146,13 @@ class ToolbarWidget extends StatelessWidget {
                                   ),
                                 ))
                             .toList(),
-                        decoration: const InputDecoration(
-                            contentPadding: EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            border: OutlineInputBorder()),
+                        decoration: InputDecoration(
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 8),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
                         items: [
                           for (var index = 0; index < families.length; index++)
                             DropdownMenuItem(

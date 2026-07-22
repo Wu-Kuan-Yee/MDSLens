@@ -72,9 +72,14 @@ class SshDialog extends StatelessWidget {
                       DropdownButtonFormField<int>(
                         initialValue: mode,
                         decoration: const InputDecoration(labelText: 'Mode'),
+                        itemHeight: 48,
+                        menuMaxHeight: 240,
+                        elevation: 12,
+                        borderRadius: BorderRadius.circular(12),
                         style: TextStyle(
                             color: Theme.of(context).colorScheme.onSurface),
-                        dropdownColor: Theme.of(context).colorScheme.surface,
+                        dropdownColor:
+                            Theme.of(context).colorScheme.surfaceContainerHigh,
                         selectedItemBuilder: (_) => const [
                           'Disabled',
                           'Auto (direct first)',
