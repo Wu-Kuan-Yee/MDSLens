@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/app_state.dart';
+import '../services/external_url_launcher.dart';
 import '../services/rust_bridge.dart';
 import 'dialogs/login.dart';
 import 'dialogs/ssh.dart';
@@ -360,7 +360,7 @@ class ToolbarWidget extends StatelessWidget {
     );
   }
 
-  void _openUrl(String url, AppState app) {
+  Future<void> _openUrl(String url, AppState app) async {
     var finalUrl = url;
     // Route through SSH tunnel if connected (matching C++ behaviour)
     if (app.sshConnected && app.sshHost.isNotEmpty) {
@@ -379,13 +379,10 @@ class ToolbarWidget extends StatelessWidget {
         }
       } catch (_) {}
     }
-    if (Platform.isMacOS) {
-      Process.run('open', [finalUrl]);
-    } else if (Platform.isWindows) {
-      Process.run('start', [finalUrl], runInShell: true);
-    } else {
-      Process.run('xdg-open', [finalUrl]);
-    }
+    final opened = await openExternalWebUrl(finalUrl);
+    app.setStatus(opened
+        ? 'Opened internal web page'
+        : 'Could not open the default browser');
   }
 
   void _showLayoutSetup(BuildContext ctx, AppState app) {

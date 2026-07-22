@@ -2,12 +2,29 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:mdsscope/models/app_state.dart';
+import 'package:mdsscope/services/external_url_launcher.dart';
 import 'package:mdsscope/widgets/plot_panel.dart';
 import 'package:mdsscope/widgets/plot_grid.dart';
 import 'package:mdsscope/widgets/toolbar.dart';
 import 'package:provider/provider.dart';
 
 void main() {
+  test('External web URLs are normalized before cross-platform launch',
+      () async {
+    Uri? launchedUri;
+    final opened = await openExternalWebUrl(
+      '10.0.0.8/internal/status',
+      opener: (uri) async {
+        launchedUri = uri;
+        return true;
+      },
+    );
+
+    expect(opened, isTrue);
+    expect(launchedUri, Uri.parse('http://10.0.0.8/internal/status'));
+    expect(normalizeExternalWebUrl('ftp://10.0.0.8/file'), isNull);
+  });
+
   testWidgets(
       'Point mode draws a synchronized horizontal crosshair in every plot',
       (tester) async {
