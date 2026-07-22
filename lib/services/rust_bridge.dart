@@ -32,7 +32,11 @@ class RustBridge {
   static DynamicLibrary _openLib() {
     final exeDir = File(Platform.resolvedExecutable).parent.path;
     final errors = <String>[];
-    final names = Platform.isMacOS ? [
+    final names = Platform.isIOS ? [
+      '$exeDir/Frameworks/libmds_bridge.dylib',
+      '$exeDir/libmds_bridge.dylib',
+      'libmds_bridge.dylib',
+    ] : Platform.isMacOS ? [
       '$exeDir/../Frameworks/libmds_bridge.dylib',
       '$exeDir/libmds_bridge.dylib',
       'libmds_bridge.dylib',
