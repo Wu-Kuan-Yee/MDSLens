@@ -166,6 +166,50 @@ void main() {
     expect(app.status, contains('163702'));
   });
 
+  testWidgets('Waveform panels show Loading while keeping existing curves',
+      (tester) async {
+    final pending = Completer<String>();
+    final app = AppState(
+      signalFetchWorker: (configJson, dataMode, sshSettings) => pending.future,
+    );
+    await app.preferencesReady;
+    app.setLoggedIn(true, 'test-token');
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 10],
+          [1, 11],
+        ],
+        null);
+    app.shotText = '163701';
+    app.startRefresh();
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(
+          home: Scaffold(
+              body: SizedBox(
+                  width: 320, height: 240, child: PlotPanel(plotIdx: 0))),
+        ),
+      ),
+    );
+
+    expect(find.byType(LineChart), findsOneWidget);
+    expect(find.byKey(const ValueKey('plot-loading-0')), findsOneWidget);
+    expect(find.text('Loading...'), findsOneWidget);
+
+    pending.complete(
+      '[{"column":0,"row":0,"signal":0,'
+      '"series":{"points":[[0,20],[1,21]],"error":""}}]',
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('plot-loading-0')), findsNothing);
+    expect(find.byType(LineChart), findsOneWidget);
+  });
+
   test('Logout preserves loaded data and blocks authenticated operations',
       () async {
     var signalRequests = 0;

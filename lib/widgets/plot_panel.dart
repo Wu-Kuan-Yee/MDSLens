@@ -203,14 +203,16 @@ class _PlotPanelState extends State<PlotPanel> {
                 child: Column(children: [
                   Expanded(
                     child: bars.isEmpty
-                        ? Center(
-                            child: Text(_getPlaceholderText(app, plot),
-                                style: TextStyle(
-                                  color: Colors.grey,
-                                  fontFamily: app.effectiveFontFamily,
-                                  fontSize: app.fontUiSize.toDouble(),
-                                ),
-                                textAlign: TextAlign.center))
+                        ? app.fetching
+                            ? _buildLoadingIndicator(app, theme)
+                            : Center(
+                                child: Text(_getPlaceholderText(plot),
+                                    style: TextStyle(
+                                      color: Colors.grey,
+                                      fontFamily: app.effectiveFontFamily,
+                                      fontSize: app.fontUiSize.toDouble(),
+                                    ),
+                                    textAlign: TextAlign.center))
                         : Stack(key: _chartAreaKey, children: [
                             _buildChart(bars, plot, panel, theme, viewMinX,
                                 viewMaxX, viewMinY, viewMaxY),
@@ -222,6 +224,12 @@ class _PlotPanelState extends State<PlotPanel> {
           ),
         ),
       ),
+      if (app.fetching && bars.isNotEmpty)
+        Positioned.fill(
+          child: IgnorePointer(
+            child: _buildLoadingIndicator(app, theme),
+          ),
+        ),
       if (_inRubberBand && _rubberBandRect != null)
         Positioned(
           left: _rubberBandRect!.left,
@@ -505,8 +513,51 @@ class _PlotPanelState extends State<PlotPanel> {
         : s;
   }
 
-  String _getPlaceholderText(AppState app, PlotData plot) {
-    if (app.fetching) return 'Loading...';
+  Widget _buildLoadingIndicator(AppState app, ThemeData theme) {
+    return Center(
+      child: Container(
+        key: ValueKey('plot-loading-${widget.plotIdx}'),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color:
+              theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.92),
+          border: Border.all(color: theme.colorScheme.primary),
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: theme.colorScheme.shadow.withValues(alpha: 0.18),
+              blurRadius: 8,
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Loading...',
+              style: TextStyle(
+                color: theme.colorScheme.onSurface,
+                fontFamily: app.effectiveFontFamily,
+                fontSize: app.fontUiSize.toDouble(),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getPlaceholderText(PlotData plot) {
     for (final s in plot.series) {
       if (s?.error != null && s!.error!.isNotEmpty) {
         return s.error!;
