@@ -7,6 +7,7 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    _ = mds_free_string
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 

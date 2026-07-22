@@ -1,2 +1,3 @@
 #include "Generated.xcconfig"
-OTHER_LDFLAGS = $(inherited) -Wl,-force_load,$(SRCROOT)/../rust/target/aarch64-apple-ios/release/libmds_bridge.a
+OTHER_LDFLAGS = $(inherited) -Wl,-export_dynamic -Wl,-force_load,$(SRCROOT)/../rust/target/aarch64-apple-ios/release/libmds_bridge.a
+

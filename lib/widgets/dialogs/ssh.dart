@@ -27,41 +27,46 @@ class SshDialog extends StatelessWidget {
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setState) => AlertDialog(
         title: const Text('SSH Tunnel'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          if (testing) const Row(children: [SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)), SizedBox(width: 8), Text('Testing...')]),
-          if (!testing && result == 'ok') const Text('Connection OK', style: TextStyle(color: Colors.green)),
-          if (!testing && result.isNotEmpty && result != 'ok') SelectableText('Error: $result', style: const TextStyle(fontSize: 13, color: Colors.red)),
-          const SizedBox(height: 8),
-          DropdownButtonFormField<int>(
-            initialValue: mode,
-            decoration: const InputDecoration(labelText: 'Mode'),
-            style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-            dropdownColor: Theme.of(context).colorScheme.surface,
-            items: [
-              DropdownMenuItem(value: 0, child: Text('Disabled', style: TextStyle(color: Theme.of(context).colorScheme.onSurface))),
-              DropdownMenuItem(value: 1, child: Text('Auto (direct first)', style: TextStyle(color: Theme.of(context).colorScheme.onSurface))),
-              DropdownMenuItem(value: 2, child: Text('Always SSH', style: TextStyle(color: Theme.of(context).colorScheme.onSurface))),
-            ],
-            onChanged: (v) { if (v != null) setState(() => mode = v); },
+        content: SizedBox(
+          width: 320,
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              if (testing) const Row(children: [SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)), SizedBox(width: 8), Text('Testing...')]),
+              if (!testing && result == 'ok') const Text('Connection OK', style: TextStyle(color: Colors.green)),
+              if (!testing && result.isNotEmpty && result != 'ok') SelectableText('Error: $result', style: const TextStyle(fontSize: 13, color: Colors.red)),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<int>(
+                initialValue: mode,
+                decoration: const InputDecoration(labelText: 'Mode'),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+                dropdownColor: Theme.of(context).colorScheme.surface,
+                items: [
+                  DropdownMenuItem(value: 0, child: Text('Disabled', style: TextStyle(color: Theme.of(context).colorScheme.onSurface))),
+                  DropdownMenuItem(value: 1, child: Text('Auto (direct first)', style: TextStyle(color: Theme.of(context).colorScheme.onSurface))),
+                  DropdownMenuItem(value: 2, child: Text('Always SSH', style: TextStyle(color: Theme.of(context).colorScheme.onSurface))),
+                ],
+                onChanged: (v) { if (v != null) setState(() => mode = v); },
+              ),
+              TextField(controller: hostCtrl, decoration: const InputDecoration(labelText: 'Host', hintText: 'ssh.example.com')),
+              Row(children: [
+                Expanded(flex: 3, child: TextField(controller: userCtrl, decoration: const InputDecoration(labelText: 'User'))),
+                const SizedBox(width: 8),
+                Expanded(flex: 1, child: TextField(controller: portCtrl, decoration: const InputDecoration(labelText: 'Port'), keyboardType: TextInputType.number)),
+              ]),
+              TextField(controller: passCtrl, decoration: const InputDecoration(labelText: 'Password'), obscureText: true),
+              Row(children: [
+                Expanded(child: TextField(controller: keyCtrl, decoration: const InputDecoration(labelText: 'Identity File', hintText: '~/.ssh/id_ed25519'))),
+                const SizedBox(width: 4),
+                OutlinedButton(onPressed: () async {
+                  final r = await FilePicker.platform.pickFiles();
+                  if (r != null && r.files.single.path != null) {
+                    keyCtrl.text = r.files.single.path!;
+                  }
+                }, child: const Text('Browse')),
+              ]),
+            ]),
           ),
-          TextField(controller: hostCtrl, decoration: const InputDecoration(labelText: 'Host', hintText: 'ssh.example.com')),
-          Row(children: [
-            Expanded(flex: 3, child: TextField(controller: userCtrl, decoration: const InputDecoration(labelText: 'User'))),
-            const SizedBox(width: 8),
-            Expanded(flex: 1, child: TextField(controller: portCtrl, decoration: const InputDecoration(labelText: 'Port'), keyboardType: TextInputType.number)),
-          ]),
-          TextField(controller: passCtrl, decoration: const InputDecoration(labelText: 'Password'), obscureText: true),
-          Row(children: [
-            Expanded(child: TextField(controller: keyCtrl, decoration: const InputDecoration(labelText: 'Identity File', hintText: '~/.ssh/id_ed25519'))),
-            const SizedBox(width: 4),
-            OutlinedButton(onPressed: () async {
-              final r = await FilePicker.platform.pickFiles();
-              if (r != null && r.files.single.path != null) {
-                keyCtrl.text = r.files.single.path!;
-              }
-            }, child: const Text('Browse')),
-          ]),
-        ]),
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           OutlinedButton(onPressed: testing ? null : () async {
