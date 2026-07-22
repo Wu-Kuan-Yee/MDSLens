@@ -928,9 +928,9 @@ void main() {
     final orderedGroups = [
       themes,
       fileActions,
-      find.byKey(const ValueKey('toolbar-shot-info')),
       find.byKey(const ValueKey('toolbar-shot-entry')),
       navigation,
+      find.byKey(const ValueKey('toolbar-shot-info')),
     ];
     final tops = orderedGroups.map(tester.getTopLeft).map((p) => p.dy).toList();
     for (var i = 1; i < tops.length; i++) {

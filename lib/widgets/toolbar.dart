@@ -365,10 +365,10 @@ class ToolbarWidget extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             topActions,
-            const SizedBox(height: 8),
-            shotInfo,
             Divider(height: 17, color: theme.dividerColor),
             shotControls,
+            const SizedBox(height: 8),
+            shotInfo,
           ],
         );
       }),
