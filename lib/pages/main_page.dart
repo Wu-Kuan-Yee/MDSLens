@@ -49,7 +49,7 @@ class MainPage extends StatelessWidget {
                 },
                 child: Column(
                   children: [
-                    const ToolbarWidget(),
+                    const ResponsiveToolbar(),
                     if (app.columns.isEmpty)
                       const Expanded(
                           child: Center(

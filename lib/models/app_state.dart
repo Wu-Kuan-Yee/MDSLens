@@ -287,6 +287,15 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool _toolbarCollapsed = false;
+  bool get toolbarCollapsed => _toolbarCollapsed;
+  set toolbarCollapsed(bool value) {
+    if (value == _toolbarCollapsed) return;
+    _toolbarCollapsed = value;
+    savePreferences();
+    notifyListeners();
+  }
+
   // Font settings (Customize Fonts dialog)
   String _fontFamily = 'System';
   int _fontLegendSize = 11,
@@ -720,6 +729,8 @@ class AppState extends ChangeNotifier {
       _interactionMode =
           (prefs.getInt('interactionMode') ?? _interactionMode).clamp(0, 1);
       _themeMode = (prefs.getInt('themeMode') ?? _themeMode).clamp(0, 2);
+      _toolbarCollapsed =
+          prefs.getBool('toolbarCollapsed') ?? _toolbarCollapsed;
       _fontFamily = prefs.getString('fontFamily') ?? _fontFamily;
       _fontLegendSize = prefs.getInt('fontLegendSize') ?? _fontLegendSize;
       _fontAxisSize = prefs.getInt('fontAxisSize') ?? _fontAxisSize;
@@ -785,6 +796,7 @@ class AppState extends ChangeNotifier {
       await prefs.setInt('dataMode', _dataMode);
       await prefs.setInt('interactionMode', _interactionMode);
       await prefs.setInt('themeMode', _themeMode);
+      await prefs.setBool('toolbarCollapsed', _toolbarCollapsed);
       await prefs.setString('fontFamily', _fontFamily);
       await prefs.setInt('fontLegendSize', _fontLegendSize);
       await prefs.setInt('fontAxisSize', _fontAxisSize);

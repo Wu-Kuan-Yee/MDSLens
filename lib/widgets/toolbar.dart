@@ -11,6 +11,93 @@ import 'dropdown_items.dart';
 import 'plot_panel.dart';
 import 'responsive_plot_layout.dart';
 
+class ResponsiveToolbar extends StatelessWidget {
+  const ResponsiveToolbar({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final app = context.watch<AppState>();
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final offersCollapse = constraints.maxWidth < 600 || screenHeight < 720;
+        if (!offersCollapse) return const ToolbarWidget();
+
+        final theme = Theme.of(context);
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedSize(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: app.toolbarCollapsed
+                  ? const SizedBox(width: double.infinity)
+                  : const ToolbarWidget(),
+            ),
+            Material(
+              color: theme.colorScheme.surfaceContainerHigh,
+              child: InkWell(
+                key: const ValueKey('toolbar-collapse-control'),
+                onTap: () => app.toolbarCollapsed = !app.toolbarCollapsed,
+                child: SizedBox(
+                  height: 40,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Row(
+                      children: [
+                        Icon(
+                          app.toolbarCollapsed
+                              ? Icons.keyboard_arrow_down_rounded
+                              : Icons.keyboard_arrow_up_rounded,
+                          size: 22,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          app.toolbarCollapsed
+                              ? 'Expand controls'
+                              : 'Collapse controls',
+                          style: TextStyle(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        if (app.toolbarCollapsed) ...[
+                          const SizedBox(width: 12),
+                          Container(
+                            width: 1,
+                            height: 20,
+                            color: theme.dividerColor,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Shot ${app.shotText.isEmpty ? "--" : app.shotText} · ${app.status}',
+                              key: const ValueKey('toolbar-collapsed-summary'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.right,
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ] else
+                          const Spacer(),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 class ToolbarWidget extends StatelessWidget {
   const ToolbarWidget({super.key});
 

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:mdsscope/app.dart';
+import 'package:mdsscope/pages/main_page.dart';
 import 'package:mdsscope/models/app_state.dart';
 import 'package:mdsscope/services/external_url_launcher.dart';
 import 'package:mdsscope/services/update_service.dart';
@@ -81,6 +82,7 @@ void main() {
     first.dataMode = 2;
     first.interactionMode = 1;
     first.themeMode = 0;
+    first.toolbarCollapsed = true;
     first.shotText = '163701';
     first.applyFontSettings('Courier New', 17, 14, 13, 16);
     first.addWebBookmark('Status', 'http://10.0.0.8/status');
@@ -97,6 +99,7 @@ void main() {
     expect(second.dataMode, 2);
     expect(second.interactionMode, 1);
     expect(second.themeMode, 0);
+    expect(second.toolbarCollapsed, isTrue);
     expect(second.shotText, '163701');
     expect(second.fontFamily, 'Courier New');
     expect(second.fontLegendSize, 17);
@@ -1015,6 +1018,65 @@ void main() {
           width);
       expect(tester.takeException(), isNull);
     }
+  });
+
+  testWidgets('Small screens can collapse controls without covering plots',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: MainPage()),
+      ),
+    );
+
+    final collapse = find.byKey(const ValueKey('toolbar-collapse-control'));
+    expect(collapse, findsOneWidget);
+    expect(find.byKey(const ValueKey('toolbar-root')), findsOneWidget);
+    final expandedPlotTop = tester.getTopLeft(find.byType(PlotGrid)).dy;
+    expect(tester.getRect(collapse).bottom,
+        lessThanOrEqualTo(expandedPlotTop + 0.01));
+
+    await tester.tap(collapse);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('toolbar-root')), findsNothing);
+    expect(find.byKey(const ValueKey('toolbar-collapsed-summary')),
+        findsOneWidget);
+    final collapsedPlotTop = tester.getTopLeft(find.byType(PlotGrid)).dy;
+    expect(collapsedPlotTop, lessThan(expandedPlotTop));
+    expect(tester.getRect(collapse).bottom,
+        lessThanOrEqualTo(collapsedPlotTop + 0.01));
+
+    await tester.tap(collapse);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('toolbar-root')), findsOneWidget);
+  });
+
+  testWidgets('Comfortable screens do not show the collapse control',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1024, 900);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: MainPage()),
+      ),
+    );
+
+    expect(
+        find.byKey(const ValueKey('toolbar-collapse-control')), findsNothing);
+    expect(find.byKey(const ValueKey('toolbar-root')), findsOneWidget);
   });
 
   testWidgets('Layout Setup preview matches phone and tablet plot columns',
