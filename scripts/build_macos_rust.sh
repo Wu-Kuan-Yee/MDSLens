@@ -32,7 +32,8 @@ fi
 MANIFEST="$ROOT_DIR/rust/Cargo.toml"
 ARM_TARGET=aarch64-apple-darwin
 INTEL_TARGET=x86_64-apple-darwin
-RUSTC_BIN=$(rustup which --toolchain stable rustc)
+RUSTC_BIN=$(rustup which rustc)
+CARGO_BIN=$(rustup which cargo)
 
 for target in "$ARM_TARGET" "$INTEL_TARGET"; do
   if ! rustup target list --installed | grep -qx "$target"; then
@@ -47,7 +48,7 @@ for target in "$ARM_TARGET" "$INTEL_TARGET"; do
   env -u CPATH -u CFLAGS -u CXXFLAGS -u CPPFLAGS -u LDFLAGS \
     -u LIBRARY_PATH -u LD_LIBRARY_PATH -u DYLD_LIBRARY_PATH \
     -u PKG_CONFIG_PATH LIBZ_SYS_STATIC=1 RUSTC="$RUSTC_BIN" \
-    rustup run stable cargo build \
+    "$CARGO_BIN" build \
     --manifest-path "$MANIFEST" -p mds-bridge \
     --target "$target" $CARGO_PROFILE_FLAG
 done

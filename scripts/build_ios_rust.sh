@@ -41,7 +41,8 @@ case "$SDK_NAME" in
   *) echo "Unsupported Apple SDK: $SDK_NAME" >&2; exit 1 ;;
 esac
 
-RUSTC_BIN=$(rustup which --toolchain stable rustc)
+RUSTC_BIN=$(rustup which rustc)
+CARGO_BIN=$(rustup which cargo)
 LIBRARIES=
 for arch in $ARCHS; do
   if [ "$PLATFORM" = device ]; then
@@ -70,7 +71,7 @@ for arch in $ARCHS; do
     CARGO_TARGET_DIR="$IOS_TARGET_DIR" \
     IPHONEOS_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" \
     IPHONESIMULATOR_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" \
-    rustup run stable cargo rustc \
+    "$CARGO_BIN" rustc \
       --manifest-path "$MANIFEST" -p mds-bridge \
       --target "$RUST_TARGET" $CARGO_PROFILE_FLAG --lib -- \
       --crate-type=staticlib
