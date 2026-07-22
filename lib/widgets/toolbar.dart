@@ -355,6 +355,8 @@ class ToolbarWidget extends StatelessWidget {
         final width = constraints.maxWidth;
         final compact = width < 560;
         final wide = width >= 940;
+        final rateSelectorWidth =
+            (140 + (uiSize - 12).clamp(0, 16) * 2).clamp(140, 172).toDouble();
         final shotInfo = _shotInfoPanel(
           context,
           compact: compact,
@@ -371,24 +373,36 @@ class ToolbarWidget extends StatelessWidget {
 
         Widget topActions;
         if (compact) {
-          topActions = Column(children: [
-            Row(children: [
-              SizedBox(width: 108, child: themeActions),
-              const SizedBox(width: 8),
-              Expanded(child: appActions),
-            ]),
-            const SizedBox(height: 8),
-            Row(children: [
-              Expanded(child: fileActions),
-              const SizedBox(width: 8),
-              SizedBox(width: 140, child: rateSelector),
-            ]),
-          ]);
+          if (width < rateSelectorWidth + 152) {
+            topActions = Column(children: [
+              Align(alignment: Alignment.centerLeft, child: themeActions),
+              const SizedBox(height: 8),
+              SizedBox(width: double.infinity, child: appActions),
+              const SizedBox(height: 8),
+              SizedBox(width: double.infinity, child: fileActions),
+              const SizedBox(height: 8),
+              SizedBox(width: double.infinity, child: rateSelector),
+            ]);
+          } else {
+            topActions = Column(children: [
+              Row(children: [
+                SizedBox(width: 108, child: themeActions),
+                const SizedBox(width: 8),
+                Expanded(child: appActions),
+              ]),
+              const SizedBox(height: 8),
+              Row(children: [
+                Expanded(child: fileActions),
+                const SizedBox(width: 8),
+                SizedBox(width: rateSelectorWidth, child: rateSelector),
+              ]),
+            ]);
+          }
         } else if (wide) {
           topActions = Row(children: [
             SizedBox(width: 280, child: fileActions),
             const SizedBox(width: 8),
-            SizedBox(width: 150, child: rateSelector),
+            SizedBox(width: rateSelectorWidth, child: rateSelector),
             const Spacer(),
             SizedBox(width: 108, child: themeActions),
             const SizedBox(width: 8),
@@ -407,7 +421,7 @@ class ToolbarWidget extends StatelessWidget {
             Row(children: [
               SizedBox(width: fileWidth, child: fileActions),
               const Spacer(),
-              SizedBox(width: 160, child: rateSelector),
+              SizedBox(width: rateSelectorWidth, child: rateSelector),
             ]),
           ]);
         }
