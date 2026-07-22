@@ -7,6 +7,7 @@ import 'models/app_state.dart';
 import 'services/theme_channel.dart';
 import 'theme/mdsscope_theme.dart';
 import 'pages/main_page.dart';
+import 'widgets/network_permission_gate.dart';
 
 class MdsScopeApp extends StatefulWidget {
   const MdsScopeApp({super.key});
@@ -85,7 +86,10 @@ class _MdsScopeAppState extends State<MdsScopeApp> with WidgetsBindingObserver {
         uiFontSize: app.fontUiSize.toDouble(),
       ),
       themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
-      home: const MainPage(),
+      home: NetworkPermissionGate(
+        app: app,
+        child: const MainPage(),
+      ),
     );
   }
 }

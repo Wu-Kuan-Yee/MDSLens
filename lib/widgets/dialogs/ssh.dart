@@ -24,6 +24,62 @@ class SshDialog extends StatelessWidget {
     var testing = false;
     var result = ''; // 'ok' or error message
 
+    Future<void> testConnection(
+      void Function(void Function()) setState,
+      BuildContext ctx,
+    ) async {
+      setState(() {
+        testing = true;
+        result = '';
+      });
+      try {
+        if (hostCtrl.text.isEmpty) {
+          setState(() {
+            testing = false;
+            result = 'Host is required';
+          });
+          return;
+        }
+        final settingsJson = jsonEncode({
+          'host': hostCtrl.text,
+          'port': int.tryParse(portCtrl.text) ?? 22,
+          'user': userCtrl.text,
+          'password': passCtrl.text,
+          'identity_file': keyCtrl.text,
+          'mode': mode
+        });
+        final resp = RustBridge.instance.sshT(settingsJson);
+        final json = _tryJson(resp);
+        if (!ctx.mounted) return;
+        if (json is Map && json['ok'] == true) {
+          setState(() {
+            testing = false;
+            result = 'ok';
+          });
+        } else {
+          final error = json is Map ? json['error']?.toString() ?? resp : resp;
+          setState(() {
+            testing = false;
+            result = error;
+          });
+          app.reportNetworkPermissionFailure(
+            error,
+            retry: () => testConnection(setState, ctx),
+          );
+        }
+      } catch (e) {
+        if (!ctx.mounted) return;
+        setState(() {
+          testing = false;
+          result = '$e';
+        });
+        app.reportNetworkPermissionFailure(
+          e,
+          retry: () => testConnection(setState, ctx),
+        );
+      }
+    }
+
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -134,51 +190,7 @@ class SshDialog extends StatelessWidget {
                 onPressed: () => Navigator.pop(ctx),
                 child: const Text('Cancel')),
             OutlinedButton(
-                onPressed: testing
-                    ? null
-                    : () async {
-                        setState(() {
-                          testing = true;
-                          result = '';
-                        });
-                        try {
-                          if (hostCtrl.text.isEmpty) {
-                            setState(() {
-                              testing = false;
-                              result = 'Host is required';
-                            });
-                            return;
-                          }
-                          final settingsJson = jsonEncode({
-                            'host': hostCtrl.text,
-                            'port': int.tryParse(portCtrl.text) ?? 22,
-                            'user': userCtrl.text,
-                            'password': passCtrl.text,
-                            'identity_file': keyCtrl.text,
-                            'mode': mode
-                          });
-                          final resp = RustBridge.instance.sshT(settingsJson);
-                          final json = _tryJson(resp);
-                          if (json is Map && json['ok'] == true) {
-                            setState(() {
-                              testing = false;
-                              result = 'ok';
-                            });
-                          } else {
-                            setState(() {
-                              testing = false;
-                              result = json is Map
-                                  ? json['error']?.toString() ?? resp
-                                  : resp;
-                            });
-                          }
-                        } catch (e) {
-                          setState(() {
-                            testing = false;
-                            result = '$e';
-                          });
-                        }
-                      },
+                onPressed: testing ? null : () => testConnection(setState, ctx),
                 child: const Text('Test')),
             FilledButton(
                 onPressed: () {

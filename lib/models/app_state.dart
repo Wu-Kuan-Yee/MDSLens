@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/platform_file_dialog.dart';
+import '../services/network_permission_service.dart';
 import '../services/rust_bridge.dart';
 
 class ConfigOpenSelection {
@@ -578,6 +579,30 @@ class AppState extends ChangeNotifier {
   String _status = 'Ready';
   String get status => _status;
   int _fetchGeneration = 0;
+  int _networkPermissionFailureRevision = 0;
+  int get networkPermissionFailureRevision => _networkPermissionFailureRevision;
+  String _networkPermissionFailureDetails = '';
+  String get networkPermissionFailureDetails =>
+      _networkPermissionFailureDetails;
+  Future<void> Function()? _lastNetworkRetry;
+  bool get canRetryNetworkOperation => _lastNetworkRetry != null;
+
+  void reportNetworkPermissionFailure(
+    Object error, {
+    Future<void> Function()? retry,
+  }) {
+    if (_disposed) return;
+    if (!NetworkPermissionService.isLikelyPermissionFailure(error)) return;
+    _networkPermissionFailureDetails = error.toString();
+    _lastNetworkRetry = retry;
+    _networkPermissionFailureRevision++;
+    notifyListeners();
+  }
+
+  Future<void> retryLastNetworkOperation() async {
+    final retry = _lastNetworkRetry;
+    if (retry != null) await retry();
+  }
 
   bool _isCurrentFetch(int generation) {
     return !_disposed && generation == _fetchGeneration;
@@ -808,6 +833,15 @@ class AppState extends ChangeNotifier {
           automatic ? 'Automatic login failed: $error' : 'Login failed: $error';
       await savePreferences();
       if (!_disposed) notifyListeners();
+      reportNetworkPermissionFailure(
+        error,
+        retry: () => loginAndLoadLatest(
+          apiUrl: apiUrl,
+          user: user,
+          password: password,
+          automatic: automatic,
+        ),
+      );
       rethrow;
     }
   }
@@ -1317,11 +1351,21 @@ class AppState extends ChangeNotifier {
               p.series.any((s) => s?.points != null && s!.points!.isNotEmpty))
           .length;
       _status = 'Shot $requestShot: ${firstErr ?? "$loaded panels with data"}';
+      if (firstErr != null) {
+        reportNetworkPermissionFailure(
+          firstErr,
+          retry: () => _doFetch(shot: requestShot),
+        );
+      }
       unawaited(_fetchTopInfo(requestShot, generation));
     } catch (e) {
       if (!_isCurrentFetch(generation)) return;
       _fetching = false;
       _status = 'Error: $e';
+      reportNetworkPermissionFailure(
+        e,
+        retry: () => _doFetch(shot: requestShot),
+      );
     }
     if (_isCurrentFetch(generation)) notifyListeners();
   }
@@ -1395,6 +1439,10 @@ class AppState extends ChangeNotifier {
       if (!_isCurrentFetch(generation)) return;
       _fetching = false;
       _status = 'Error: $e';
+      reportNetworkPermissionFailure(
+        e,
+        retry: () => fetchSinglePanel(plotIdx),
+      );
     }
     if (_isCurrentFetch(generation)) notifyListeners();
   }
@@ -1457,6 +1505,7 @@ class AppState extends ChangeNotifier {
       _fetching = false;
       _status = 'Shot fetch: $e';
       notifyListeners();
+      reportNetworkPermissionFailure(e, retry: fetchLatestShot);
     }
   }
 
