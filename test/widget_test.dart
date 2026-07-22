@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:mdsscope/models/app_state.dart';
 import 'package:mdsscope/widgets/plot_panel.dart';
 import 'package:mdsscope/widgets/plot_grid.dart';
+import 'package:mdsscope/widgets/toolbar.dart';
 import 'package:provider/provider.dart';
 
 void main() {
@@ -111,5 +112,32 @@ void main() {
 
     final centerAfterPan = (chart().data.minX + chart().data.maxX) / 2;
     expect(centerAfterPan, lessThan(centerBeforePan));
+  });
+
+  testWidgets('Toolbar fills and reflows at phone, tablet, and desktop widths',
+      (tester) async {
+    final app = AppState();
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+
+    for (final width in [320.0, 768.0, 1440.0]) {
+      tester.view.physicalSize = Size(width, 900);
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: app,
+          child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+        ),
+      );
+
+      final toolbar = find.byKey(const ValueKey('toolbar-root'));
+      expect(tester.getSize(toolbar).width, width);
+      expect(
+        find.descendant(
+            of: toolbar, matching: find.byType(SingleChildScrollView)),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    }
   });
 }

@@ -17,119 +17,224 @@ class ToolbarWidget extends StatelessWidget {
     final theme = Theme.of(context);
     final infoStyle = TextStyle(fontSize: 11, color: theme.colorScheme.primary);
     final shot = app.shotText.isNotEmpty ? app.shotText : '--';
-    final ip = app.shotInfoIp.isNotEmpty ? '${app.shotInfoIp} kA' : (app.fetching ? '...' : '--');
-    final pulse = app.shotInfoPulse.isNotEmpty ? '${app.shotInfoPulse} s' : (app.fetching ? '...' : '--');
-    final it = app.shotInfoIt.isNotEmpty ? '${app.shotInfoIt} A' : (app.fetching ? '...' : '--');
-    final time = app.shotInfoTime.isNotEmpty ? app.shotInfoTime : (app.fetching ? '...' : '--');
+    final ip = app.shotInfoIp.isNotEmpty
+        ? '${app.shotInfoIp} kA'
+        : (app.fetching ? '...' : '--');
+    final pulse = app.shotInfoPulse.isNotEmpty
+        ? '${app.shotInfoPulse} s'
+        : (app.fetching ? '...' : '--');
+    final it = app.shotInfoIt.isNotEmpty
+        ? '${app.shotInfoIt} A'
+        : (app.fetching ? '...' : '--');
+    final time = app.shotInfoTime.isNotEmpty
+        ? app.shotInfoTime
+        : (app.fetching ? '...' : '--');
+
+    final fileActions = Row(mainAxisSize: MainAxisSize.min, children: [
+      _btn(context, 'Open', () => app.openFile()),
+      _btn(context, 'Save', () => app.saveFile()),
+      _btn(context, app.fetching ? 'Stop' : 'Refresh',
+          () => app.fetching ? app.stopFetch() : app.startRefresh()),
+    ]);
+    final rateSelector = Row(mainAxisSize: MainAxisSize.min, children: [
+      Text('Rate:',
+          style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface)),
+      const SizedBox(width: 4),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+            border: Border.all(color: theme.dividerColor),
+            borderRadius: BorderRadius.circular(4)),
+        child: DropdownButton<int>(
+          value: app.dataMode,
+          underline: const SizedBox(),
+          isDense: true,
+          style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface),
+          dropdownColor: theme.colorScheme.surface,
+          items: [
+            DropdownMenuItem(
+                value: 0,
+                child: Text('Thin',
+                    style: TextStyle(
+                        fontSize: 12, color: theme.colorScheme.onSurface))),
+            DropdownMenuItem(
+                value: 1,
+                child: Text('Medium',
+                    style: TextStyle(
+                        fontSize: 12, color: theme.colorScheme.onSurface))),
+            DropdownMenuItem(
+                value: 2,
+                child: Text('Full',
+                    style: TextStyle(
+                        fontSize: 12, color: theme.colorScheme.onSurface))),
+          ],
+          onChanged: (v) {
+            if (v != null) {
+              app.dataMode = v;
+              app.startRefresh();
+            }
+          },
+        ),
+      ),
+    ]);
+    final shotInfo = Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        alignment: WrapAlignment.center,
+        children: [
+          Text('Shot: $shot', style: infoStyle),
+          Text('Ip: $ip', style: infoStyle),
+          Text('Pulse: $pulse', style: infoStyle),
+          Text('It: $it', style: infoStyle),
+          Text('Time: $time', style: infoStyle),
+        ]);
+    final appActions = Row(mainAxisSize: MainAxisSize.min, children: [
+      _settingsMenu(context, app),
+      IconButton(
+        icon: Icon(Icons.info_outline,
+            size: 18, color: theme.colorScheme.onSurface),
+        tooltip: 'About MdsScope',
+        onPressed: () => AboutDialogWidget.show(context),
+      ),
+      _btn(context, app.loggedIn ? 'Logout' : 'Login',
+          () => app.loggedIn ? app.logout() : LoginDialog.show(context)),
+      _sshBtn(context, app),
+    ]);
+    final shotEntry = Row(mainAxisSize: MainAxisSize.min, children: [
+      Text('Shot:',
+          style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurface)),
+      if (app.shotHistory.isNotEmpty)
+        PopupMenuButton<String>(
+          padding: EdgeInsets.zero,
+          iconSize: 16,
+          icon: Icon(Icons.arrow_drop_down,
+              size: 16, color: theme.colorScheme.onSurface),
+          tooltip: 'Shot history',
+          onSelected: (v) {
+            app.shotText = v;
+            app.startRefresh();
+          },
+          itemBuilder: (_) => app.shotHistory
+              .map((s) => PopupMenuItem(
+                  value: s,
+                  child: Text(s, style: const TextStyle(fontSize: 13))))
+              .toList(),
+        ),
+      const SizedBox(width: 4),
+      SizedBox(
+        width: 95,
+        child: TextField(
+          controller: app.shotCtrl,
+          style: const TextStyle(fontSize: 13),
+          decoration: const InputDecoration(
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              border: OutlineInputBorder()),
+          onSubmitted: (_) => app.startRefresh(),
+        ),
+      ),
+      _btn(context, 'Apply', () => app.startRefresh()),
+    ]);
+    final shotNavigation = Row(mainAxisSize: MainAxisSize.min, children: [
+      _btn(context, 'Prev', () {
+        final cur = app.shotCtrl.text.trim().isNotEmpty
+            ? app.shotCtrl.text.trim()
+            : app.shotText;
+        final s = int.tryParse(cur);
+        if (s != null) {
+          app.shotText = (s - 1).toString();
+          app.startRefresh();
+        }
+      }),
+      _btn(context, 'Next', () {
+        final cur = app.shotCtrl.text.trim().isNotEmpty
+            ? app.shotCtrl.text.trim()
+            : app.shotText;
+        final s = int.tryParse(cur);
+        if (s != null) {
+          app.shotText = (s + 1).toString();
+          app.startRefresh();
+        }
+      }),
+      _btn(context, 'Latest', () async => app.fetchLatestShot()),
+    ]);
+    final modeActions = Row(mainAxisSize: MainAxisSize.min, children: [
+      _modeBtn(context, 'Zoom/Move', app.interactionMode == 0,
+          () => app.interactionMode = 0),
+      _modeBtn(context, 'Point', app.interactionMode == 1,
+          () => app.interactionMode = 1),
+    ]);
 
     return Container(
+      key: const ValueKey('toolbar-root'),
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       color: theme.colorScheme.surfaceContainerHighest,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(children: [
-              _btn(context, 'Open', () => app.openFile()),
-              const SizedBox(width: 4),
-              _btn(context, 'Save', () => app.saveFile()),
-              const SizedBox(width: 8),
-              _btn(context, app.fetching ? 'Stop' : 'Refresh', () => app.fetching ? app.stopFetch() : app.startRefresh()),
-              const SizedBox(width: 8),
-              Text('Rate:', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface)),
-              const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(border: Border.all(color: theme.dividerColor), borderRadius: BorderRadius.circular(4)),
-                child: DropdownButton<int>(
-                  value: app.dataMode, underline: const SizedBox(), isDense: true,
-                  style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface),
-                  dropdownColor: theme.colorScheme.surface,
-                  items: [
-                    DropdownMenuItem(value: 0, child: Text('Thin', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface))),
-                    DropdownMenuItem(value: 1, child: Text('Medium', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface))),
-                    DropdownMenuItem(value: 2, child: Text('Full', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface))),
+      child: LayoutBuilder(builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 1180;
+        final wrapAlignment = constraints.maxWidth < 600
+            ? WrapAlignment.center
+            : WrapAlignment.spaceBetween;
+        return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (isWide)
+                Row(children: [
+                  fileActions,
+                  const SizedBox(width: 8),
+                  rateSelector,
+                  const SizedBox(width: 12),
+                  Expanded(child: shotInfo),
+                  const SizedBox(width: 12),
+                  _themeBtns(context, app),
+                  appActions,
+                ])
+              else
+                Wrap(
+                  alignment: wrapAlignment,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    fileActions,
+                    rateSelector,
+                    shotInfo,
+                    _themeBtns(context, app),
+                    appActions
                   ],
-                  onChanged: (v) { if (v != null) { app.dataMode = v; app.startRefresh(); } },
                 ),
+              const SizedBox(height: 6),
+              Wrap(
+                alignment: isWide ? WrapAlignment.start : wrapAlignment,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 10,
+                runSpacing: 6,
+                children: [shotEntry, shotNavigation, modeActions],
               ),
-              const SizedBox(width: 8),
-              Text('Shot: $shot', style: infoStyle),
-              const SizedBox(width: 6),
-              Text('Ip: $ip', style: infoStyle),
-              const SizedBox(width: 6),
-              Text('Pulse: $pulse', style: infoStyle),
-              const SizedBox(width: 6),
-              Text('It: $it', style: infoStyle),
-              const SizedBox(width: 6),
-              Text('Time: $time', style: infoStyle),
-              const SizedBox(width: 12),
-              _themeBtns(context, app),
-              const SizedBox(width: 4),
-              _settingsMenu(context, app),
-              const SizedBox(width: 4),
-              IconButton(
-                icon: Icon(Icons.info_outline, size: 18, color: Theme.of(context).colorScheme.onSurface),
-                tooltip: 'About MdsScope',
-                onPressed: () => AboutDialogWidget.show(context),
-              ),
-              const SizedBox(width: 4),
-              _btn(context, app.loggedIn ? 'Logout' : 'Login', () => app.loggedIn ? app.logout() : LoginDialog.show(context)),
-              const SizedBox(width: 4),
-              _sshBtn(context, app),
-            ]),
-          ),
-          const SizedBox(height: 6),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(children: [
-              Text('Shot:', style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurface)),
-              const SizedBox(width: 4),
-              if (app.shotHistory.isNotEmpty)
-                PopupMenuButton<String>(
-                  padding: EdgeInsets.zero,
-                  iconSize: 16,
-                  icon: Icon(Icons.arrow_drop_down, size: 16, color: theme.colorScheme.onSurface),
-                  tooltip: 'Shot history',
-                  onSelected: (v) { app.shotText = v; app.startRefresh(); },
-                  itemBuilder: (_) => app.shotHistory.map((s) => PopupMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 13)))).toList(),
-                ),
-              const SizedBox(width: 4),
-              SizedBox(
-                width: 95,
-                child: TextField(
-                  controller: app.shotCtrl,
-                  style: const TextStyle(fontSize: 13),
-                  decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8), border: OutlineInputBorder()),
-                  onSubmitted: (_) => app.startRefresh(),
-                ),
-              ),
-              const SizedBox(width: 6),
-              _btn(context, 'Apply', () => app.startRefresh()),
-              _btn(context, 'Prev', () { final cur = app.shotCtrl.text.trim().isNotEmpty ? app.shotCtrl.text.trim() : app.shotText; final s = int.tryParse(cur); if (s != null) { app.shotText = (s - 1).toString(); app.startRefresh(); } }),
-              _btn(context, 'Next', () { final cur = app.shotCtrl.text.trim().isNotEmpty ? app.shotCtrl.text.trim() : app.shotText; final s = int.tryParse(cur); if (s != null) { app.shotText = (s + 1).toString(); app.startRefresh(); } }),
-              _btn(context, 'Latest', () async => app.fetchLatestShot()),
-              const SizedBox(width: 10),
-              _modeBtn(context, 'Zoom/Move', app.interactionMode == 0, () => app.interactionMode = 0),
-              _modeBtn(context, 'Point', app.interactionMode == 1, () => app.interactionMode = 1),
-            ]),
-          ),
-        ],
-      ),
+            ]);
+      }),
     );
   }
 
   Widget _settingsMenu(BuildContext ctx, AppState app) {
     return PopupMenuButton<String>(
       tooltip: 'Settings',
-      icon: Icon(Icons.settings, size: 18, color: Theme.of(ctx).colorScheme.onSurface),
+      icon: Icon(Icons.settings,
+          size: 18, color: Theme.of(ctx).colorScheme.onSurface),
       onSelected: (v) {
         switch (v) {
-          case 'web': _showWebBookmarks(ctx, app); break;
-          case 'layout': _showLayoutSetup(ctx, app); break;
-          case 'fonts': _showFontDialog(ctx, app); break;
-          case 'about': AboutDialogWidget.show(ctx); break;
+          case 'web':
+            _showWebBookmarks(ctx, app);
+            break;
+          case 'layout':
+            _showLayoutSetup(ctx, app);
+            break;
+          case 'fonts':
+            _showFontDialog(ctx, app);
+            break;
+          case 'about':
+            AboutDialogWidget.show(ctx);
+            break;
         }
       },
       itemBuilder: (_) => [
@@ -146,31 +251,51 @@ class ToolbarWidget extends StatelessWidget {
     final bookmarks = app.webBookmarks;
     showDialog(
       context: ctx,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setState) => AlertDialog(
-        title: const Text('Internal Web Pages'),
-        content: SizedBox(width: 400, height: 300,
-          child: bookmarks.isEmpty
-              ? const Center(child: Text('No Saved Web Addresses', style: TextStyle(color: Colors.grey)))
-              : ListView.builder(
-                  itemCount: bookmarks.length,
-                  itemBuilder: (_, i) => ListTile(
-                    title: Text(bookmarks[i].keys.first),
-                    subtitle: Text(bookmarks[i].values.first, style: const TextStyle(fontSize: 11)),
-                    onTap: () { Navigator.pop(ctx); _openUrl(bookmarks[i].values.first, app); },
-                  ),
+      builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setState) => AlertDialog(
+                title: const Text('Internal Web Pages'),
+                content: SizedBox(
+                  width: 400,
+                  height: 300,
+                  child: bookmarks.isEmpty
+                      ? const Center(
+                          child: Text('No Saved Web Addresses',
+                              style: TextStyle(color: Colors.grey)))
+                      : ListView.builder(
+                          itemCount: bookmarks.length,
+                          itemBuilder: (_, i) => ListTile(
+                            title: Text(bookmarks[i].keys.first),
+                            subtitle: Text(bookmarks[i].values.first,
+                                style: const TextStyle(fontSize: 11)),
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              _openUrl(bookmarks[i].values.first, app);
+                            },
+                          ),
+                        ),
                 ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
-          TextButton(onPressed: () { _addBookmark(ctx, app, setState); }, child: const Text('Add...')),
-          if (bookmarks.isNotEmpty)
-            TextButton(onPressed: () { _removeBookmark(ctx, app, setState); }, child: const Text('Remove...')),
-        ],
-      )),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Close')),
+                  TextButton(
+                      onPressed: () {
+                        _addBookmark(ctx, app, setState);
+                      },
+                      child: const Text('Add...')),
+                  if (bookmarks.isNotEmpty)
+                    TextButton(
+                        onPressed: () {
+                          _removeBookmark(ctx, app, setState);
+                        },
+                        child: const Text('Remove...')),
+                ],
+              )),
     );
   }
 
-  void _addBookmark(BuildContext ctx, AppState app, void Function(VoidCallback) setState) {
+  void _addBookmark(
+      BuildContext ctx, AppState app, void Function(VoidCallback) setState) {
     final aliasCtrl = TextEditingController();
     final urlCtrl = TextEditingController();
     showDialog(
@@ -178,42 +303,59 @@ class ToolbarWidget extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         title: const Text('Add Web Bookmark'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: aliasCtrl, decoration: const InputDecoration(labelText: 'Alias')),
+          TextField(
+              controller: aliasCtrl,
+              decoration: const InputDecoration(labelText: 'Alias')),
           const SizedBox(height: 8),
-          TextField(controller: urlCtrl, decoration: const InputDecoration(labelText: 'URL')),
+          TextField(
+              controller: urlCtrl,
+              decoration: const InputDecoration(labelText: 'URL')),
         ]),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          TextButton(onPressed: () {
-            final alias = aliasCtrl.text.trim();
-            final url = urlCtrl.text.trim();
-            if (alias.isNotEmpty && url.isNotEmpty) {
-              app.addWebBookmark(alias, url);
-              Navigator.pop(ctx);
-              setState(() {});
-            }
-          }, child: const Text('Add')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () {
+                final alias = aliasCtrl.text.trim();
+                final url = urlCtrl.text.trim();
+                if (alias.isNotEmpty && url.isNotEmpty) {
+                  app.addWebBookmark(alias, url);
+                  Navigator.pop(ctx);
+                  setState(() {});
+                }
+              },
+              child: const Text('Add')),
         ],
       ),
     );
   }
 
-  void _removeBookmark(BuildContext ctx, AppState app, void Function(VoidCallback) setState) {
+  void _removeBookmark(
+      BuildContext ctx, AppState app, void Function(VoidCallback) setState) {
     final bookmarks = app.webBookmarks;
     showDialog(
       context: ctx,
       builder: (ctx) => AlertDialog(
         title: const Text('Remove Bookmark'),
-        content: SizedBox(width: 300, height: 200,
+        content: SizedBox(
+          width: 300,
+          height: 200,
           child: ListView.builder(
             itemCount: bookmarks.length,
             itemBuilder: (_, i) => ListTile(
               title: Text(bookmarks[i].keys.first),
-              onTap: () { app.removeWebBookmark(i); Navigator.pop(ctx); setState(() {}); },
+              onTap: () {
+                app.removeWebBookmark(i);
+                Navigator.pop(ctx);
+                setState(() {});
+              },
             ),
           ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel'))],
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel'))
+        ],
       ),
     );
   }
@@ -224,9 +366,12 @@ class ToolbarWidget extends StatelessWidget {
     if (app.sshConnected && app.sshHost.isNotEmpty) {
       try {
         final settings = jsonEncode({
-          'host': app.sshHost, 'port': app.sshPort,
-          'user': app.sshUser, 'password': app.sshPass,
-          'identity_file': app.sshIdentity, 'mode': 2,
+          'host': app.sshHost,
+          'port': app.sshPort,
+          'user': app.sshUser,
+          'password': app.sshPass,
+          'identity_file': app.sshIdentity,
+          'mode': 2,
         });
         final prepared = RustBridge.instance.prepareUrl(url, settings);
         if (prepared.startsWith('http') && !prepared.contains('"error"')) {
@@ -250,78 +395,149 @@ class ToolbarWidget extends StatelessWidget {
 
     showDialog(
       context: ctx,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setState) => AlertDialog(
-        title: Row(children: [
-          const Text('Layout Setup'),
-          const Spacer(),
-          IconButton(icon: const Icon(Icons.add, size: 18), tooltip: 'Add Panel After Selected', onPressed: () {
-            if (selectedCol >= 0 && selectedCol < layout.length && selectedRow >= 0 && selectedRow < layout[selectedCol]) {
-              layout[selectedCol] = layout[selectedCol] + 1;
-              setState(() {});
-            }
-          }),
-        ]),
-        content: SizedBox(
-          width: (layout.length * 120.0 + 16).clamp(200.0, 700.0),
-          height: (layout.reduce((a, b) => a > b ? a : b) * 90.0 + 16).clamp(100.0, 500.0),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SingleChildScrollView(
-              child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                for (var c = 0; c < layout.length; c++) ...[
-                  if (c > 0) const VerticalDivider(width: 1),
-                  Column(mainAxisSize: MainAxisSize.min, children: [
-                    // Column header with delete button
-                    SizedBox(height: 28, child: Center(child: Text('Col ${c + 1}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)))),
-                    for (var r = 0; r < layout[c]; r++)
-                      GestureDetector(
-                        onTap: () => setState(() { selectedCol = c; selectedRow = r; }),
-                        child: Container(
-                          width: 110, height: 80, margin: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: selectedCol == c && selectedRow == r ? Theme.of(ctx).colorScheme.primary : Colors.grey.shade400, width: selectedCol == c && selectedRow == r ? 2 : 1),
-                            borderRadius: BorderRadius.circular(4),
-                            color: Theme.of(ctx).colorScheme.primaryContainer.withValues(alpha: 0.3),
-                          ),
-                          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                            Text('Panel ${_panelIndex(app, c, r) + 1}', style: TextStyle(fontSize: 10, color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.7))),
-                            if (selectedCol == c && selectedRow == r)
-                              TextButton(onPressed: () {
-                                if (layout.length == 1 && layout[0] == 1) return; // keep at least 1
-                                layout[c] = layout[c] - 1;
-                                if (layout[c] <= 0) layout.removeAt(c);
-                                selectedCol = -1; selectedRow = -1;
-                                setState(() {});
-                              }, child: const Text('Delete', style: TextStyle(fontSize: 9))),
-                          ]),
-                        ),
-                      ),
-                    // Add panel button at bottom of column
-                    TextButton(onPressed: () {
-                      layout[c] = layout[c] + 1;
-                      setState(() {});
-                    }, child: const Text('+ Add', style: TextStyle(fontSize: 10))),
-                  ]),
-                ],
-                const SizedBox(width: 8),
-                // Add column button
-                Column(children: [
-                  const SizedBox(height: 28),
-                  TextButton(onPressed: () { layout.add(1); setState(() {}); }, child: const Text('+ Col', style: TextStyle(fontSize: 10))),
+      builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setState) => AlertDialog(
+                title: Row(children: [
+                  const Text('Layout Setup'),
+                  const Spacer(),
+                  IconButton(
+                      icon: const Icon(Icons.add, size: 18),
+                      tooltip: 'Add Panel After Selected',
+                      onPressed: () {
+                        if (selectedCol >= 0 &&
+                            selectedCol < layout.length &&
+                            selectedRow >= 0 &&
+                            selectedRow < layout[selectedCol]) {
+                          layout[selectedCol] = layout[selectedCol] + 1;
+                          setState(() {});
+                        }
+                      }),
                 ]),
-              ]),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          TextButton(onPressed: () {
-            final cols = layout.where((n) => n > 0).toList();
-            if (cols.isNotEmpty) { app.applyLayoutList(cols); app.startRefresh(); }
-            Navigator.pop(ctx);
-          }, child: const Text('Apply')),
-        ],
-      )),
+                content: SizedBox(
+                  width: (layout.length * 120.0 + 16).clamp(200.0, 700.0),
+                  height: (layout.reduce((a, b) => a > b ? a : b) * 90.0 + 16)
+                      .clamp(100.0, 500.0),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SingleChildScrollView(
+                      child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            for (var c = 0; c < layout.length; c++) ...[
+                              if (c > 0) const VerticalDivider(width: 1),
+                              Column(mainAxisSize: MainAxisSize.min, children: [
+                                // Column header with delete button
+                                SizedBox(
+                                    height: 28,
+                                    child: Center(
+                                        child: Text('Col ${c + 1}',
+                                            style: const TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold)))),
+                                for (var r = 0; r < layout[c]; r++)
+                                  GestureDetector(
+                                    onTap: () => setState(() {
+                                      selectedCol = c;
+                                      selectedRow = r;
+                                    }),
+                                    child: Container(
+                                      width: 110,
+                                      height: 80,
+                                      margin: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                            color: selectedCol == c &&
+                                                    selectedRow == r
+                                                ? Theme.of(ctx)
+                                                    .colorScheme
+                                                    .primary
+                                                : Colors.grey.shade400,
+                                            width: selectedCol == c &&
+                                                    selectedRow == r
+                                                ? 2
+                                                : 1),
+                                        borderRadius: BorderRadius.circular(4),
+                                        color: Theme.of(ctx)
+                                            .colorScheme
+                                            .primaryContainer
+                                            .withValues(alpha: 0.3),
+                                      ),
+                                      child: Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Text(
+                                                'Panel ${_panelIndex(app, c, r) + 1}',
+                                                style: TextStyle(
+                                                    fontSize: 10,
+                                                    color: Theme.of(ctx)
+                                                        .colorScheme
+                                                        .onSurface
+                                                        .withValues(
+                                                            alpha: 0.7))),
+                                            if (selectedCol == c &&
+                                                selectedRow == r)
+                                              TextButton(
+                                                  onPressed: () {
+                                                    if (layout.length == 1 &&
+                                                        layout[0] == 1)
+                                                      return; // keep at least 1
+                                                    layout[c] = layout[c] - 1;
+                                                    if (layout[c] <= 0)
+                                                      layout.removeAt(c);
+                                                    selectedCol = -1;
+                                                    selectedRow = -1;
+                                                    setState(() {});
+                                                  },
+                                                  child: const Text('Delete',
+                                                      style: TextStyle(
+                                                          fontSize: 9))),
+                                          ]),
+                                    ),
+                                  ),
+                                // Add panel button at bottom of column
+                                TextButton(
+                                    onPressed: () {
+                                      layout[c] = layout[c] + 1;
+                                      setState(() {});
+                                    },
+                                    child: const Text('+ Add',
+                                        style: TextStyle(fontSize: 10))),
+                              ]),
+                            ],
+                            const SizedBox(width: 8),
+                            // Add column button
+                            Column(children: [
+                              const SizedBox(height: 28),
+                              TextButton(
+                                  onPressed: () {
+                                    layout.add(1);
+                                    setState(() {});
+                                  },
+                                  child: const Text('+ Col',
+                                      style: TextStyle(fontSize: 10))),
+                            ]),
+                          ]),
+                    ),
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Cancel')),
+                  TextButton(
+                      onPressed: () {
+                        final cols = layout.where((n) => n > 0).toList();
+                        if (cols.isNotEmpty) {
+                          app.applyLayoutList(cols);
+                          app.startRefresh();
+                        }
+                        Navigator.pop(ctx);
+                      },
+                      child: const Text('Apply')),
+                ],
+              )),
     );
   }
 
@@ -339,66 +555,141 @@ class ToolbarWidget extends StatelessWidget {
     var axisSize = app.fontAxisSize;
     var unitSize = app.fontUnitSize;
     var uiSize = app.fontUiSize;
-    const families = ['System', 'Arial', 'Helvetica', 'Times New Roman', 'Courier New', 'Georgia', 'Verdana', 'Monaco'];
+    const families = [
+      'System',
+      'Arial',
+      'Helvetica',
+      'Times New Roman',
+      'Courier New',
+      'Georgia',
+      'Verdana',
+      'Monaco'
+    ];
     showDialog(
       context: ctx,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setState) => AlertDialog(
-        title: const Text('Customize Fonts'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Row(children: [
-            const SizedBox(width: 100, child: Text('Font')),
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                initialValue: families.contains(fontFamily) ? fontFamily : 'System',
-                isDense: true,
-                decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4), border: OutlineInputBorder()),
-                items: families.map((f) => DropdownMenuItem(value: f, child: Text(f, style: TextStyle(fontSize: 12, fontFamily: f == 'System' ? null : f)))).toList(),
-                onChanged: (v) { if (v != null) setState(() => fontFamily = v); },
-              ),
-            ),
-          ]),
-          const SizedBox(height: 8),
-          _fontRow('Legend size', legendSize, (v) => setState(() => legendSize = v)),
-          _fontRow('Axis size', axisSize, (v) => setState(() => axisSize = v)),
-          _fontRow('Unit size', unitSize, (v) => setState(() => unitSize = v)),
-          _fontRow('UI size', uiSize, (v) => setState(() => uiSize = v)),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          TextButton(onPressed: () { app.applyFontSettings(fontFamily, legendSize, axisSize, unitSize, uiSize); Navigator.pop(ctx); }, child: const Text('OK')),
-        ],
-      )),
+      builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setState) => AlertDialog(
+                title: const Text('Customize Fonts'),
+                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Row(children: [
+                    const SizedBox(width: 100, child: Text('Font')),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: families.contains(fontFamily)
+                            ? fontFamily
+                            : 'System',
+                        isDense: true,
+                        decoration: const InputDecoration(
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            border: OutlineInputBorder()),
+                        items: families
+                            .map((f) => DropdownMenuItem(
+                                value: f,
+                                child: Text(f,
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontFamily: f == 'System' ? null : f))))
+                            .toList(),
+                        onChanged: (v) {
+                          if (v != null) setState(() => fontFamily = v);
+                        },
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 8),
+                  _fontRow('Legend size', legendSize,
+                      (v) => setState(() => legendSize = v)),
+                  _fontRow('Axis size', axisSize,
+                      (v) => setState(() => axisSize = v)),
+                  _fontRow('Unit size', unitSize,
+                      (v) => setState(() => unitSize = v)),
+                  _fontRow(
+                      'UI size', uiSize, (v) => setState(() => uiSize = v)),
+                ]),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Cancel')),
+                  TextButton(
+                      onPressed: () {
+                        app.applyFontSettings(
+                            fontFamily, legendSize, axisSize, unitSize, uiSize);
+                        Navigator.pop(ctx);
+                      },
+                      child: const Text('OK')),
+                ],
+              )),
     );
   }
 
   Widget _fontRow(String label, int value, void Function(int) onChanged) {
     return Row(children: [
       SizedBox(width: 100, child: Text(label)),
-      IconButton(icon: const Icon(Icons.remove, size: 16), onPressed: value > 6 ? () => onChanged(value - 1) : null),
+      IconButton(
+          icon: const Icon(Icons.remove, size: 16),
+          onPressed: value > 6 ? () => onChanged(value - 1) : null),
       SizedBox(width: 30, child: Text('$value', textAlign: TextAlign.center)),
-      IconButton(icon: const Icon(Icons.add, size: 16), onPressed: value < 28 ? () => onChanged(value + 1) : null),
+      IconButton(
+          icon: const Icon(Icons.add, size: 16),
+          onPressed: value < 28 ? () => onChanged(value + 1) : null),
     ]);
   }
 
   Widget _btn(BuildContext ctx, String label, VoidCallback onTap) {
-    return Padding(padding: const EdgeInsets.symmetric(horizontal: 3),
-      child: ElevatedButton(onPressed: onTap,
-        style: ElevatedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)), padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-        child: Text(label)));
+    return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: ElevatedButton(
+            onPressed: onTap,
+            style: ElevatedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle:
+                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+            child: Text(label)));
   }
 
-  Widget _modeBtn(BuildContext ctx, String label, bool active, VoidCallback onTap) {
-    return Padding(padding: const EdgeInsets.symmetric(horizontal: 3),
-      child: OutlinedButton(onPressed: onTap,
-        style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)), padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 13, fontWeight: active ? FontWeight.bold : FontWeight.w500), backgroundColor: active ? Theme.of(ctx).colorScheme.primaryContainer : null),
-        child: Text(label)));
+  Widget _modeBtn(
+      BuildContext ctx, String label, bool active, VoidCallback onTap) {
+    return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: OutlinedButton(
+            onPressed: onTap,
+            style: OutlinedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: TextStyle(
+                    fontSize: 13,
+                    fontWeight: active ? FontWeight.bold : FontWeight.w500),
+                backgroundColor:
+                    active ? Theme.of(ctx).colorScheme.primaryContainer : null),
+            child: Text(label)));
   }
 
   Widget _sshBtn(BuildContext ctx, AppState app) {
-    return Padding(padding: const EdgeInsets.symmetric(horizontal: 3),
-      child: ElevatedButton(onPressed: () => SshDialog.show(ctx),
-        style: ElevatedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)), padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 13, color: app.sshConnected ? Colors.green : null)),
-        child: const Text('SSH')));
+    return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: ElevatedButton(
+            onPressed: () => SshDialog.show(ctx),
+            style: ElevatedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: TextStyle(
+                    fontSize: 13,
+                    color: app.sshConnected ? Colors.green : null)),
+            child: const Text('SSH')));
   }
 
   Widget _themeBtns(BuildContext ctx, AppState app) {
@@ -409,11 +700,27 @@ class ToolbarWidget extends StatelessWidget {
     ]);
   }
 
-  Widget _themeBtn(BuildContext ctx, String label, bool active, VoidCallback onTap) {
+  Widget _themeBtn(
+      BuildContext ctx, String label, bool active, VoidCallback onTap) {
     final theme = Theme.of(ctx);
-    return Padding(padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: OutlinedButton(onPressed: onTap,
-        style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)), padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: TextStyle(fontSize: 12, fontWeight: active ? FontWeight.bold : FontWeight.normal, color: active ? theme.colorScheme.onPrimaryContainer : theme.colorScheme.onSurface), backgroundColor: active ? theme.colorScheme.primaryContainer : null),
-        child: Text(label)));
+    return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: OutlinedButton(
+            onPressed: onTap,
+            style: OutlinedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4)),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: TextStyle(
+                    fontSize: 12,
+                    fontWeight: active ? FontWeight.bold : FontWeight.normal,
+                    color: active
+                        ? theme.colorScheme.onPrimaryContainer
+                        : theme.colorScheme.onSurface),
+                backgroundColor:
+                    active ? theme.colorScheme.primaryContainer : null),
+            child: Text(label)));
   }
 }
