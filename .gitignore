@@ -7,4 +7,5 @@ build/
 *.swp
 .DS_Store
 rust/target/
+android/.gradle/
 pubspec.lock
