@@ -78,6 +78,10 @@ tasks.register('buildRustAndroid', Exec) {
     outputs.dir(rustJniOutput)
 
     doFirst {
+        // The requested Flutter ABI set can change between builds. Remove the
+        // previous staging tree so a single-ABI APK cannot retain stale Rust
+        // libraries from an earlier universal build.
+        delete(rustJniOutput.get().asFile)
         def sdkDir = localProperties.getProperty('sdk.dir')
         if (sdkDir == null || sdkDir.trim().isEmpty()) {
             throw new GradleException('Android SDK path is missing from local.properties')
