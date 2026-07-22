@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -39,6 +40,8 @@ class _PlotPanelState extends State<PlotPanel> {
   Offset? _rubberBandStart;
   Rect? _rubberBandRect;
   double _lastScale = 1.0;
+  Timer? _longPressTimer;
+  Offset? _longPressStartPos;
 
   @override
   Widget build(BuildContext context) {
@@ -138,13 +141,14 @@ class _PlotPanelState extends State<PlotPanel> {
         });
       },
       onSecondaryTapUp: (details) => _showContextMenu(context, details.globalPosition),
-      onLongPressStart: (details) => _showContextMenu(context, details.globalPosition),
+      // Long press handled manually via _longPressTimer in onPointerDown/Up for mobile compatibility
       child: Listener(
         key: _listenerKey,
         onPointerSignal: _handleScrollWheel,
-        onPointerDown: _handlePointerDown,
-        onPointerMove: _handlePointerMove,
-        onPointerUp: _handlePointerUp,
+        onPointerDown: (e) { _handlePointerDown(e); _startLongPressTimer(e); },
+        onPointerMove: (e) { _handlePointerMove(e); _cancelLongPressIfMoved(e); },
+        onPointerUp: (e) { _handlePointerUp(e); _cancelLongPressTimer(); },
+        onPointerCancel: (_) { _cancelLongPressTimer(); },
         child: Padding(
             padding: const EdgeInsets.all(2),
             child: ClipRRect(
@@ -523,6 +527,28 @@ class _PlotPanelState extends State<PlotPanel> {
     _inRubberBand = false;
     _rubberBandStart = null;
     _rubberBandRect = null;
+  }
+  void _startLongPressTimer(PointerDownEvent e) {
+    _cancelLongPressTimer();
+    _longPressStartPos = e.position;
+    _longPressTimer = Timer(const Duration(milliseconds: 500), () {
+      if (mounted && _longPressStartPos != null) {
+        _showContextMenu(context, _longPressStartPos!);
+      }
+      _longPressStartPos = null;
+    });
+  }
+
+  void _cancelLongPressTimer() {
+    _longPressTimer?.cancel();
+    _longPressTimer = null;
+    _longPressStartPos = null;
+  }
+
+  void _cancelLongPressIfMoved(PointerMoveEvent e) {
+    if (_longPressStartPos != null && (e.position - _longPressStartPos!).distance > 10) {
+      _cancelLongPressTimer();
+    }
   }
 
   void _showContextMenu(BuildContext ctx, Offset globalPosition) {
