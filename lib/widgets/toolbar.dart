@@ -7,6 +7,7 @@ import '../services/rust_bridge.dart';
 import 'dialogs/login.dart';
 import 'dialogs/ssh.dart';
 import 'dialogs/about.dart';
+import 'plot_panel.dart';
 import 'responsive_plot_layout.dart';
 
 class ToolbarWidget extends StatelessWidget {
@@ -621,8 +622,8 @@ class ToolbarWidget extends StatelessWidget {
   }
 
   void _showLayoutSetup(BuildContext ctx, AppState app) {
-    var layout = app.columns.map((col) => col.length).toList();
-    if (layout.isEmpty) layout = [1];
+    final draftColumns = _cloneLayoutColumns(app.columns);
+    if (draftColumns.isEmpty) draftColumns.add([_emptyPanelConfig()]);
     var selectedCol = -1, selectedRow = -1;
 
     showDialog(
@@ -630,7 +631,7 @@ class ToolbarWidget extends StatelessWidget {
       builder: (ctx) => StatefulBuilder(builder: (ctx, setState) {
         final screenSize = MediaQuery.sizeOf(ctx);
         final displayColumns = buildResponsivePlotColumns(
-          layout,
+          draftColumns.map((column) => column.length).toList(),
           screenSize.width,
         );
         final contentWidth = (screenSize.width - 64).clamp(240.0, 700.0);
@@ -646,9 +647,20 @@ class ToolbarWidget extends StatelessWidget {
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    'Overview · ${displayColumns.length} columns · all panels visible',
-                    style: Theme.of(ctx).textTheme.bodySmall,
+                  GestureDetector(
+                    key: const ValueKey('layout-setup-blank-area'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => setState(() {
+                      selectedCol = -1;
+                      selectedRow = -1;
+                    }),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(
+                        'Overview · ${displayColumns.length} columns · all panels visible',
+                        style: Theme.of(ctx).textTheme.bodySmall,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Expanded(
@@ -669,16 +681,23 @@ class ToolbarWidget extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Column(children: [
-                                SizedBox(
-                                  height: 28,
-                                  child: Center(
-                                    child: FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Text(
-                                        'Column ${displayColumn + 1}',
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
+                                GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => setState(() {
+                                    selectedCol = -1;
+                                    selectedRow = -1;
+                                  }),
+                                  child: SizedBox(
+                                    height: 28,
+                                    child: Center(
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Text(
+                                          'Column ${displayColumn + 1}',
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -691,6 +710,9 @@ class ToolbarWidget extends StatelessWidget {
                                       final selected =
                                           selectedCol == cell.sourceColumn &&
                                               selectedRow == cell.sourceRow;
+                                      final panel =
+                                          draftColumns[cell.sourceColumn]
+                                              [cell.sourceRow];
                                       return Expanded(
                                         child: GestureDetector(
                                           onTap: () => setState(() {
@@ -718,45 +740,44 @@ class ToolbarWidget extends StatelessWidget {
                                                   .primaryContainer
                                                   .withValues(alpha: 0.3),
                                             ),
-                                            child: Column(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                Text(
-                                                  'Panel ${cell.plotIndex + 1}',
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    color: Theme.of(ctx)
-                                                        .colorScheme
-                                                        .onSurfaceVariant,
-                                                  ),
-                                                ),
-                                                if (selected)
-                                                  TextButton(
-                                                    onPressed: () {
-                                                      if (layout.length == 1 &&
-                                                          layout[0] == 1) {
-                                                        return;
-                                                      }
-                                                      layout[
-                                                          cell.sourceColumn]--;
-                                                      if (layout[cell
-                                                              .sourceColumn] <=
-                                                          0) {
-                                                        layout.removeAt(
-                                                            cell.sourceColumn);
-                                                      }
-                                                      selectedCol = -1;
-                                                      selectedRow = -1;
-                                                      setState(() {});
-                                                    },
-                                                    child: const Text(
-                                                      'Delete',
-                                                      style: TextStyle(
-                                                          fontSize: 9),
-                                                    ),
-                                                  ),
-                                              ],
+                                            child: _buildLayoutPanelPreview(
+                                              ctx,
+                                              panel: panel,
+                                              panelNumber: cell.plotIndex + 1,
+                                              selected: selected,
+                                              onEdit: () async {
+                                                final changed =
+                                                    await _editLayoutPanel(
+                                                  ctx,
+                                                  app,
+                                                  panel,
+                                                  cell.plotIndex + 1,
+                                                );
+                                                if (changed && ctx.mounted) {
+                                                  setState(() {});
+                                                }
+                                              },
+                                              onDelete: () {
+                                                final panelCount =
+                                                    draftColumns.fold(
+                                                  0,
+                                                  (count, column) =>
+                                                      count + column.length,
+                                                );
+                                                if (panelCount <= 1) return;
+                                                draftColumns[cell.sourceColumn]
+                                                    .removeAt(cell.sourceRow);
+                                                if (draftColumns[
+                                                        cell.sourceColumn]
+                                                    .isEmpty) {
+                                                  draftColumns.removeAt(
+                                                    cell.sourceColumn,
+                                                  );
+                                                }
+                                                selectedCol = -1;
+                                                selectedRow = -1;
+                                                setState(() {});
+                                              },
                                             ),
                                           ),
                                         ),
@@ -775,11 +796,11 @@ class ToolbarWidget extends StatelessWidget {
                   Wrap(spacing: 8, runSpacing: 4, children: [
                     TextButton.icon(
                       onPressed: () {
-                        final targetColumn =
-                            selectedCol >= 0 && selectedCol < layout.length
-                                ? selectedCol
-                                : layout.length - 1;
-                        layout[targetColumn]++;
+                        final targetColumn = selectedCol >= 0 &&
+                                selectedCol < draftColumns.length
+                            ? selectedCol
+                            : draftColumns.length - 1;
+                        draftColumns[targetColumn].add(_emptyPanelConfig());
                         setState(() {});
                       },
                       icon: const Icon(Icons.add, size: 16),
@@ -787,7 +808,7 @@ class ToolbarWidget extends StatelessWidget {
                     ),
                     TextButton.icon(
                       onPressed: () {
-                        layout.add(1);
+                        draftColumns.add([_emptyPanelConfig()]);
                         setState(() {});
                       },
                       icon: const Icon(Icons.view_column_outlined, size: 16),
@@ -802,9 +823,8 @@ class ToolbarWidget extends StatelessWidget {
                 child: const Text('Cancel')),
             TextButton(
               onPressed: () {
-                final columns = layout.where((count) => count > 0).toList();
-                if (columns.isNotEmpty) {
-                  app.applyLayoutList(columns);
+                if (draftColumns.isNotEmpty) {
+                  app.applyLayoutColumns(draftColumns);
                   app.startRefresh();
                 }
                 Navigator.pop(ctx);
@@ -815,6 +835,194 @@ class ToolbarWidget extends StatelessWidget {
         );
       }),
     );
+  }
+
+  List<List<Map<String, dynamic>>> _cloneLayoutColumns(
+    List<List<Map<String, dynamic>>> columns,
+  ) {
+    return columns
+        .map(
+          (column) => column
+              .map(
+                (panel) => Map<String, dynamic>.from(
+                  _cloneLayoutValue(panel) as Map,
+                ),
+              )
+              .toList(),
+        )
+        .toList();
+  }
+
+  dynamic _cloneLayoutValue(dynamic value) {
+    if (value is List) return value.map(_cloneLayoutValue).toList();
+    if (value is Map) {
+      return value.map(
+        (key, item) => MapEntry(key.toString(), _cloneLayoutValue(item)),
+      );
+    }
+    return value;
+  }
+
+  Map<String, dynamic> _emptyPanelConfig() => {
+        'title': '',
+        'x_label': 's',
+        'y_label': 'a.u.',
+        'grid': true,
+        'signal_specs': <Map<String, dynamic>>[],
+      };
+
+  Widget _buildLayoutPanelPreview(
+    BuildContext context, {
+    required Map<String, dynamic> panel,
+    required int panelNumber,
+    required bool selected,
+    required VoidCallback onEdit,
+    required VoidCallback onDelete,
+  }) {
+    final textColor = Theme.of(context).colorScheme.onSurfaceVariant;
+    final details = <Widget>[
+      Text(
+        'Panel $panelNumber',
+        key: ValueKey('layout-panel-number-$panelNumber'),
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: textColor,
+        ),
+      ),
+    ];
+    final title = panel['title']?.toString().trim() ?? '';
+    if (title.isNotEmpty) {
+      details.add(Text(
+        'Title: $title',
+        key: ValueKey('layout-panel-title-$panelNumber'),
+        style: TextStyle(fontSize: 9, color: textColor),
+      ));
+    }
+    final signals = panel['signal_specs'] as List? ?? const [];
+    for (var signalIndex = 0; signalIndex < signals.length; signalIndex++) {
+      final rawSignal = signals[signalIndex];
+      if (rawSignal is! Map) continue;
+      final tree = rawSignal['experiment']?.toString().trim() ?? '';
+      final signal = rawSignal['y_expr']?.toString().trim() ?? '';
+      if (tree.isNotEmpty) {
+        details.add(Text(
+          'Curve ${signalIndex + 1} Tree: $tree',
+          key: ValueKey(
+              'layout-panel-$panelNumber-curve-${signalIndex + 1}-tree'),
+          style: TextStyle(fontSize: 8, color: textColor),
+        ));
+      }
+      if (signal.isNotEmpty) {
+        details.add(Text(
+          'Curve ${signalIndex + 1} Signal: $signal',
+          key: ValueKey(
+              'layout-panel-$panelNumber-curve-${signalIndex + 1}-signal'),
+          style: TextStyle(fontSize: 8, color: textColor),
+        ));
+      }
+    }
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(4, 4, 4, selected ? 32 : 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: details,
+            ),
+          ),
+        ),
+        if (selected)
+          Positioned(
+            left: 2,
+            right: 2,
+            bottom: 2,
+            height: 28,
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    key: ValueKey('layout-edit-panel-$panelNumber'),
+                    onPressed: onEdit,
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    child: const Text('Edit', style: TextStyle(fontSize: 8)),
+                  ),
+                ),
+                Expanded(
+                  child: TextButton(
+                    key: ValueKey('layout-delete-panel-$panelNumber'),
+                    onPressed: onDelete,
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    child: const Text('Delete', style: TextStyle(fontSize: 8)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<bool> _editLayoutPanel(
+    BuildContext context,
+    AppState app,
+    Map<String, dynamic> panel,
+    int panelNumber,
+  ) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              key: ValueKey('layout-panel-setup-$panelNumber'),
+              leading: const Icon(Icons.tune),
+              title: const Text('Panel Setup'),
+              onTap: () => Navigator.pop(context, 'panel'),
+            ),
+            ListTile(
+              key: ValueKey('layout-data-source-setup-$panelNumber'),
+              leading: const Icon(Icons.show_chart),
+              title: const Text('Data Source Setup'),
+              onTap: () => Navigator.pop(context, 'dataSource'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (action == null || !context.mounted) return false;
+    if (action == 'panel') {
+      return showPanelSetupEditor(context, panel);
+    }
+
+    final signals = List<Map<String, dynamic>>.from(
+      (panel['signal_specs'] as List?)
+              ?.whereType<Map>()
+              .map((signal) => Map<String, dynamic>.from(signal)) ??
+          const [],
+    );
+    if (signals.isEmpty) {
+      signals.add({
+        'experiment': 'pcs_east',
+        'server_ip': '202.127.204.12',
+      });
+    }
+    final saved = await showDataSourceSetupEditor(
+      context,
+      signals: signals,
+      defaultShot: (panel['shot']?.toString() ?? app.shotText).trim(),
+    );
+    if (saved) panel['signal_specs'] = signals;
+    return saved;
   }
 
   void _showFontDialog(BuildContext ctx, AppState app) {

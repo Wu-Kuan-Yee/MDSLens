@@ -246,7 +246,6 @@ class AppState extends ChangeNotifier {
   }
 
   void applyLayoutList(List<int> colSizes) {
-    _invalidateFetchForSettingsChange();
     final newCols = <List<Map<String, dynamic>>>[];
     for (var c = 0; c < colSizes.length; c++) {
       final col = <Map<String, dynamic>>[];
@@ -265,7 +264,19 @@ class AppState extends ChangeNotifier {
       }
       newCols.add(col);
     }
-    _columns = newCols;
+    applyLayoutColumns(newCols);
+  }
+
+  void applyLayoutColumns(List<List<Map<String, dynamic>>> columns) {
+    if (columns.isEmpty || columns.every((column) => column.isEmpty)) return;
+    _invalidateFetchForSettingsChange();
+    _columns = columns
+        .where((column) => column.isNotEmpty)
+        .map(
+          (column) =>
+              column.map((panel) => Map<String, dynamic>.from(panel)).toList(),
+        )
+        .toList();
     _rebuildPlotsFromColumns();
     savePreferences();
     notifyListeners();

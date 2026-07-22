@@ -24,6 +24,37 @@ const _colors = [
   Color(0xFF0891b2),
 ];
 
+Future<bool> showPanelSetupEditor(
+  BuildContext context,
+  Map<String, dynamic> panel,
+) async {
+  var saved = false;
+  await showDialog<void>(
+    context: context,
+    builder: (context) => _PanelSetupDialog(
+      panel: panel,
+      onSave: () => saved = true,
+    ),
+  );
+  return saved;
+}
+
+Future<bool> showDataSourceSetupEditor(
+  BuildContext context, {
+  required List<Map<String, dynamic>> signals,
+  required String defaultShot,
+}) async {
+  return await showDialog<bool>(
+        context: context,
+        builder: (context) => _DataSourceDialog(
+          signals: signals,
+          defaultShot: defaultShot,
+          onSave: () {},
+        ),
+      ) ??
+      false;
+}
+
 class PlotPanel extends StatefulWidget {
   final int plotIdx;
   final bool selected;
@@ -1033,7 +1064,7 @@ class _PlotPanelState extends State<PlotPanel> {
     return <String, dynamic>{};
   }
 
-  void _showDataSourceSetup(BuildContext ctx, AppState app) {
+  Future<void> _showDataSourceSetup(BuildContext ctx, AppState app) async {
     final panel = _findPanel(app);
     final sigs = List<Map<String, dynamic>>.from(
         (panel['signal_specs'] as List?)
@@ -1042,18 +1073,15 @@ class _PlotPanelState extends State<PlotPanel> {
     final defaultShot = (panel['shot']?.toString() ?? app.shotText).trim();
     if (sigs.isEmpty)
       sigs.add({'experiment': 'pcs_east', 'server_ip': '202.127.204.12'});
-    showDialog(
-      context: ctx,
-      builder: (ctx) => _DataSourceDialog(
-          signals: sigs,
-          defaultShot: defaultShot,
-          onSave: () {
-            panel['signal_specs'] = sigs;
-            _rebuildPlots(app);
-          }),
-    ).then((confirmed) {
-      if (confirmed == true) app.fetchSinglePanel(widget.plotIdx);
-    });
+    final confirmed = await showDataSourceSetupEditor(
+      ctx,
+      signals: sigs,
+      defaultShot: defaultShot,
+    );
+    if (!confirmed || !mounted) return;
+    panel['signal_specs'] = sigs;
+    _rebuildPlots(app);
+    app.fetchSinglePanel(widget.plotIdx);
   }
 
   void _rebuildPlots(AppState app) {
@@ -1093,16 +1121,10 @@ class _PlotPanelState extends State<PlotPanel> {
     return [...old, ...List.filled(newCount - old.length, null)];
   }
 
-  void _showPanelSetup(BuildContext ctx, AppState app) {
+  Future<void> _showPanelSetup(BuildContext ctx, AppState app) async {
     final panel = _findPanel(app);
-    showDialog(
-      context: ctx,
-      builder: (ctx) => _PanelSetupDialog(
-          panel: panel,
-          onSave: () {
-            _rebuildPlots(app);
-          }),
-    );
+    final confirmed = await showPanelSetupEditor(ctx, panel);
+    if (confirmed && mounted) _rebuildPlots(app);
   }
 
   Future<void> _exportCsv(AppState app) async {
@@ -1539,8 +1561,13 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
         TextStyle(fontSize: 11, color: Theme.of(ctx).colorScheme.onSurface);
     return AlertDialog(
       title: Row(children: [
-        const Text('Data Source Setup'),
-        const Spacer(),
+        const Expanded(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text('Data Source Setup'),
+          ),
+        ),
         IconButton(
             icon: const Icon(Icons.add, size: 18),
             tooltip: 'Add Curve',
@@ -1648,6 +1675,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                           padding: const EdgeInsets.only(right: 4),
                           child: DropdownButtonFormField<int>(
                               initialValue: _rows[i].readMode,
+                              isExpanded: true,
                               decoration: _dsDeco(),
                               style: ddStyle,
                               dropdownColor: Theme.of(ctx).colorScheme.surface,
@@ -1655,7 +1683,11 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                                   3,
                                   (j) => DropdownMenuItem(
                                       value: j,
-                                      child: Text(_modes[j], style: ddStyle))),
+                                      child: Text(
+                                        _modes[j],
+                                        style: ddStyle,
+                                        overflow: TextOverflow.ellipsis,
+                                      ))),
                               onChanged: (v) {
                                 if (v != null)
                                   setState(() => _rows[i].readMode = v);

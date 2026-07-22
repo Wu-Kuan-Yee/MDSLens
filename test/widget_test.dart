@@ -697,6 +697,100 @@ void main() {
     }
   });
 
+  testWidgets('Layout Setup shows metadata and supports draft panel actions',
+      (tester) async {
+    final app = AppState(
+      signalFetchWorker: (_, __, ___) async => '[]',
+    );
+    await app.preferencesReady;
+    app.applyLayoutList([2]);
+    app.columns[0][0]
+      ..['title'] = 'Magnetic overview'
+      ..['signal_specs'] = [
+        {'experiment': 'tree_a', 'y_expr': r'\signal_a'},
+        {'experiment': 'tree_b'},
+        {'y_expr': r'\signal_c'},
+        <String, dynamic>{},
+      ];
+    app.columns[0][1]
+      ..['title'] = ''
+      ..['signal_specs'] = <Map<String, dynamic>>[];
+    app.rebuild();
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 900);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Layout setup'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Panel 1'), findsOneWidget);
+    expect(find.text('Title: Magnetic overview'), findsOneWidget);
+    expect(find.text('Curve 1 Tree: tree_a'), findsOneWidget);
+    expect(find.text(r'Curve 1 Signal: \signal_a'), findsOneWidget);
+    expect(find.text('Curve 2 Tree: tree_b'), findsOneWidget);
+    expect(find.text(r'Curve 3 Signal: \signal_c'), findsOneWidget);
+    expect(find.textContaining('Curve 4'), findsNothing);
+    expect(find.text('Title: '), findsNothing);
+    expect(find.byKey(const ValueKey('layout-edit-panel-1')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('layout-preview-panel-0')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('layout-edit-panel-1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('layout-delete-panel-1')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('layout-setup-blank-area')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('layout-edit-panel-1')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('layout-preview-panel-0')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('layout-edit-panel-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('Panel Setup'), findsOneWidget);
+    expect(find.text('Data Source Setup'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('layout-panel-setup-1')));
+    await tester.pumpAndSettle();
+    final titleField = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField && widget.decoration?.labelText == 'Title',
+    );
+    await tester.enterText(titleField, 'Edited title');
+    await tester.tap(find.widgetWithText(TextButton, 'Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Title: Edited title'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('layout-edit-panel-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('layout-data-source-setup-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('Data Source Setup'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('layout-preview-panel-1')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('layout-delete-panel-2')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('layout-preview-panel-1')), findsNothing);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Apply'));
+    await tester.pumpAndSettle();
+    expect(app.columns, hasLength(1));
+    expect(app.columns.single, hasLength(1));
+    expect(app.columns.single.single['title'], 'Edited title');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('About dialog reflows and opens links on a phone',
       (tester) async {
     addTearDown(tester.view.resetPhysicalSize);
