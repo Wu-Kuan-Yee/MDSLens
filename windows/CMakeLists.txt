@@ -52,6 +52,37 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 
+# Build and stage the Rust FFI bridge automatically for both supported Windows
+# architectures. A Flutter Windows executable is not standalone, so the DLL is
+# intentionally placed beside the executable in the relocatable app bundle.
+if(NOT DEFINED FLUTTER_TARGET_PLATFORM)
+  set(FLUTTER_TARGET_PLATFORM "windows-x64")
+endif()
+find_program(POWERSHELL_EXECUTABLE NAMES pwsh powershell powershell.exe)
+if(NOT POWERSHELL_EXECUTABLE)
+  message(FATAL_ERROR "PowerShell is required to build the Rust bridge")
+endif()
+set(MDS_BRIDGE_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/build_windows_rust.ps1")
+set(MDS_BRIDGE_OUTPUT_DIR "${CMAKE_BINARY_DIR}/rust/$<CONFIG>")
+set(MDS_BRIDGE_LIBRARY "${MDS_BRIDGE_OUTPUT_DIR}/mds_bridge.dll")
+add_custom_target(mds_bridge_native ALL
+  COMMAND "${POWERSHELL_EXECUTABLE}" -NoProfile -ExecutionPolicy Bypass
+    -File "${MDS_BRIDGE_SCRIPT}"
+    -Configuration "$<CONFIG>"
+    -TargetPlatform "${FLUTTER_TARGET_PLATFORM}"
+    -OutputDirectory "${MDS_BRIDGE_OUTPUT_DIR}"
+  BYPRODUCTS "${MDS_BRIDGE_LIBRARY}"
+  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+  COMMENT "Building the MdsScope Rust bridge"
+  VERBATIM
+)
+add_dependencies(${BINARY_NAME} mds_bridge_native)
+add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${MDS_BRIDGE_LIBRARY}" "$<TARGET_FILE_DIR:${BINARY_NAME}>/mds_bridge.dll"
+  VERBATIM
+)
+
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.

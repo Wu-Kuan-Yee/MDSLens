@@ -57,6 +57,20 @@ pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 
+# Build the Rust FFI bridge as part of every native Flutter build. Keeping the
+# output under the CMake tree gives the install step one stable source path and
+# makes a clean clone build without a manual cargo/copy step.
+set(MDS_BRIDGE_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/build_linux_rust.sh")
+set(MDS_BRIDGE_LIBRARY "${CMAKE_BINARY_DIR}/rust/libmds_bridge.so")
+add_custom_target(mds_bridge_native ALL
+  COMMAND "${MDS_BRIDGE_SCRIPT}" "${CMAKE_BUILD_TYPE}" "${MDS_BRIDGE_LIBRARY}"
+  BYPRODUCTS "${MDS_BRIDGE_LIBRARY}"
+  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+  COMMENT "Building the MdsScope Rust bridge"
+  VERBATIM
+)
+add_dependencies(${BINARY_NAME} mds_bridge_native)
+
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
 
@@ -101,6 +115,9 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/runner/app_icon.png"
   DESTINATION "${INSTALL_BUNDLE_DATA_DIR}" COMPONENT Runtime)
 
 install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+  COMPONENT Runtime)
+
+install(FILES "${MDS_BRIDGE_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
 
 foreach(bundled_library ${PLUGIN_BUNDLED_LIBRARIES})
