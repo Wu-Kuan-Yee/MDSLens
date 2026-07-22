@@ -39,7 +39,16 @@ def run(*command: str, cwd: Path = ROOT, check: bool = True) -> subprocess.Compl
 
 
 def tool(name: str) -> str | None:
-    return shutil.which(name)
+    found = shutil.which(name)
+    if found is not None or host_platform() != "windows":
+        return found
+    candidates = {
+        "ISCC": [Path(os.environ.get("ProgramFiles(x86)", "C:/Program Files (x86)")) / "Inno Setup 6/ISCC.exe"],
+        "heat": [Path(os.environ.get("WIX", "C:/Program Files (x86)/WiX Toolset v3.14")) / "bin/heat.exe"],
+        "candle": [Path(os.environ.get("WIX", "C:/Program Files (x86)/WiX Toolset v3.14")) / "bin/candle.exe"],
+        "light": [Path(os.environ.get("WIX", "C:/Program Files (x86)/WiX Toolset v3.14")) / "bin/light.exe"],
+    }
+    return next((str(path) for path in candidates.get(name, []) if path.is_file()), None)
 
 
 def format_tool(name: str, formats: set[str], package_format: str) -> str | None:
@@ -184,8 +193,32 @@ def package_windows(formats: set[str], no_build: bool, arch: str) -> None:
                 f"/DAppVersion={project_version()}",
                 str(ROOT / "packaging/windows/mdsscope.iss"),
             )
-    if "msi" in formats:
-        fail("MSI generation needs a separately maintained WiX installer definition; use the signed EXE installer")
+    if selected(formats, "msi"):
+        heat = format_tool("heat", formats, "msi")
+        candle = format_tool("candle", formats, "msi")
+        light = format_tool("light", formats, "msi")
+        if heat is not None and candle is not None and light is not None:
+            with tempfile.TemporaryDirectory(prefix="mdsscope-wix-") as temporary:
+                wix = Path(temporary)
+                harvested = wix / "bundle.wxs"
+                run(
+                    heat, "dir", str(bundle), "-nologo", "-cg", "AppFiles", "-dr", "INSTALLFOLDER",
+                    "-gg", "-scom", "-sreg", "-sfrag", "-srd", "-var", "var.BundleDir",
+                    "-out", str(harvested),
+                )
+                wix_arch = {"x64": "x64", "arm64": "arm64"}[arch]
+                run(
+                    candle, "-nologo", "-arch", wix_arch,
+                    f"-dBundleDir={bundle}", f"-dAppVersion={project_version()}",
+                    f"-dIconPath={ROOT / 'windows/runner/resources/app_icon.ico'}",
+                    "-out", str(wix) + os.sep,
+                    str(ROOT / "packaging/windows/mdsscope.wxs"), str(harvested),
+                )
+                run(
+                    light, "-nologo", "-ext", "WixUIExtension",
+                    "-out", str(DIST / f"{base}.msi"),
+                    str(wix / "mdsscope.wixobj"), str(wix / "bundle.wixobj"),
+                )
 
 
 def linux_bundle(arch: str) -> Path:
