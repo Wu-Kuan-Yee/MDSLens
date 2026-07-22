@@ -1,6 +1,7 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -8,7 +9,7 @@ import 'package:provider/provider.dart';
 import 'dropdown_items.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/app_state.dart';
-import 'package:file_picker/file_picker.dart';
+import '../services/platform_file_dialog.dart';
 
 const _colors = [
   Color(0xFF2364aa),
@@ -1201,14 +1202,15 @@ class _PlotPanelState extends State<PlotPanel> {
     }
     if (buf.length == 0) return;
     try {
-      final path = await FilePicker.platform.saveFile(
-        fileName:
-            '${plot.title.isNotEmpty ? plot.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_') : "export"}.csv',
-        type: FileType.custom,
-        allowedExtensions: ['csv'],
+      final fileName =
+          '${plot.title.isNotEmpty ? plot.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_') : "export"}.csv';
+      final path = await saveBytesWithFilePicker(
+        dialogTitle: 'Export waveform data',
+        fileName: fileName,
+        allowedExtensions: const ['csv'],
+        bytes: Uint8List.fromList(utf8.encode(buf.toString())),
       );
       if (path != null) {
-        await File(path).writeAsString(buf.toString());
         app.setStatus('Exported to ${path.split('/').last}');
       }
     } catch (e) {

@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +10,7 @@ import 'package:mdsscope/app.dart';
 import 'package:mdsscope/pages/main_page.dart';
 import 'package:mdsscope/models/app_state.dart';
 import 'package:mdsscope/services/external_url_launcher.dart';
+import 'package:mdsscope/services/platform_file_dialog.dart';
 import 'package:mdsscope/services/update_service.dart';
 import 'package:mdsscope/theme/mdsscope_theme.dart';
 import 'package:mdsscope/widgets/dialogs/about.dart';
@@ -110,6 +114,148 @@ void main() {
     expect(second.columns.map((column) => column.length), [1, 2]);
     expect(second.columns[0][0]['title'], 'Saved panel');
     expect(second.columns[0][0]['xmin'], isNull);
+  });
+
+  test('Configuration open accepts desktop paths and mobile file bytes',
+      () async {
+    const parsedConfig = '{"columns":[[{"title":"Opened panel","x_label":"s",'
+        '"y_label":"A","signal_specs":[{"y_expr":"\\\\ip"}]}]]}';
+    String? desktopParsedPath;
+    final desktop = AppState(
+      configOpenPicker: () async => const ConfigOpenSelection(
+        name: 'desktop.toml',
+        path: '/chosen/desktop.toml',
+      ),
+      configParser: (path) {
+        desktopParsedPath = path;
+        return parsedConfig;
+      },
+    );
+    await desktop.preferencesReady;
+    await desktop.openFile();
+    expect(desktopParsedPath, '/chosen/desktop.toml');
+    expect(desktop.columns[0][0]['title'], 'Opened panel');
+    expect(desktop.status, contains('Loaded: desktop.toml'));
+
+    final originalBytes = Uint8List.fromList(utf8.encode('mobile config'));
+    String? temporaryPath;
+    final mobile = AppState(
+      configOpenPicker: () async => ConfigOpenSelection(
+        name: 'mobile.toml',
+        bytes: originalBytes,
+      ),
+      configParser: (path) {
+        temporaryPath = path;
+        expect(File(path).readAsBytesSync(), originalBytes);
+        return parsedConfig;
+      },
+    );
+    await mobile.preferencesReady;
+    await mobile.openFile();
+    expect(mobile.columns[0][0]['title'], 'Opened panel');
+    expect(temporaryPath, isNotNull);
+    expect(File(temporaryPath!).existsSync(), isFalse);
+  });
+
+  test('Configuration save hands complete TOML bytes to the file dialog',
+      () async {
+    String? encodedJson;
+    String? suggestedName;
+    Uint8List? savedBytes;
+    final expectedBytes = Uint8List.fromList(utf8.encode('title = "Saved"'));
+    final app = AppState(
+      configEncoder: (configJson) async {
+        encodedJson = configJson;
+        return expectedBytes;
+      },
+      configSavePicker: (name, bytes) async {
+        suggestedName = name;
+        savedBytes = bytes;
+        return 'content://documents/config.toml';
+      },
+    );
+    await app.preferencesReady;
+
+    await app.saveFile();
+
+    expect(suggestedName, 'config.toml');
+    expect(savedBytes, expectedBytes);
+    expect(jsonDecode(encodedJson!)['columns'], isNotEmpty);
+    expect(app.status, 'Saved to config.toml');
+  });
+
+  test('Cross-platform saver writes desktop paths and supplies mobile bytes',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('mdsscope-test-');
+    addTearDown(() => directory.delete(recursive: true));
+    final bytes = Uint8List.fromList([1, 2, 3, 4]);
+    Uint8List? desktopDialogBytes;
+    final desktopPath = await saveBytesWithFilePicker(
+      dialogTitle: 'Save',
+      fileName: 'config.toml',
+      allowedExtensions: const ['toml'],
+      bytes: bytes,
+      mobileOverride: false,
+      saveDialog: (payload) async {
+        desktopDialogBytes = payload;
+        return '${directory.path}/desktop-config';
+      },
+    );
+    expect(desktopDialogBytes, isNull);
+    expect(desktopPath, endsWith('.toml'));
+    expect(await File(desktopPath!).readAsBytes(), bytes);
+
+    Uint8List? mobileDialogBytes;
+    final mobilePath = await saveBytesWithFilePicker(
+      dialogTitle: 'Save',
+      fileName: 'config.toml',
+      allowedExtensions: const ['toml'],
+      bytes: bytes,
+      mobileOverride: true,
+      saveDialog: (payload) async {
+        mobileDialogBytes = payload;
+        return 'content://documents/mobile-config.toml';
+      },
+    );
+    expect(mobileDialogBytes, bytes);
+    expect(mobilePath, 'content://documents/mobile-config.toml');
+  });
+
+  testWidgets('Open and Save toolbar buttons invoke working file flows',
+      (tester) async {
+    var openCalls = 0;
+    var saveCalls = 0;
+    final app = AppState(
+      configOpenPicker: () async {
+        openCalls++;
+        return const ConfigOpenSelection(name: 'toolbar.toml', path: '/x');
+      },
+      configParser: (_) =>
+          '{"columns":[[{"title":"Toolbar open","signal_specs":[]}]]}',
+      configEncoder: (_) async => Uint8List.fromList([10, 20]),
+      configSavePicker: (_, bytes) async {
+        saveCalls++;
+        expect(bytes, [10, 20]);
+        return '/saved/config.toml';
+      },
+    );
+    await app.preferencesReady;
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Open configuration'));
+    await tester.pumpAndSettle();
+    expect(openCalls, 1);
+    expect(app.columns[0][0]['title'], 'Toolbar open');
+
+    await tester.tap(find.byTooltip('Save configuration'));
+    await tester.pumpAndSettle();
+    expect(saveCalls, 1);
+    expect(app.status, 'Saved to config.toml');
   });
 
   test('Waveform loading stays interactive and discards stale results',

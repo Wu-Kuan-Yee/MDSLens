@@ -2,10 +2,32 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/platform_file_dialog.dart';
 import '../services/rust_bridge.dart';
+
+class ConfigOpenSelection {
+  const ConfigOpenSelection({
+    required this.name,
+    this.path,
+    this.bytes,
+  });
+
+  final String name;
+  final String? path;
+  final Uint8List? bytes;
+}
+
+typedef ConfigOpenPicker = Future<ConfigOpenSelection?> Function();
+typedef ConfigSavePicker = Future<String?> Function(
+  String suggestedName,
+  Uint8List bytes,
+);
+typedef ConfigParser = String Function(String path);
+typedef ConfigEncoder = Future<Uint8List> Function(String configJson);
 
 typedef SignalFetchWorker = Future<String> Function(
   String configJson,
@@ -31,6 +53,55 @@ typedef LatestShotWorker = Future<dynamic> Function(
   String token,
   String sshSettingsJson,
 );
+
+Future<ConfigOpenSelection?> _pickConfigurationFile() async {
+  final mobile = Platform.isAndroid || Platform.isIOS;
+  final result = await FilePicker.platform.pickFiles(
+    dialogTitle: 'Open MdsScope configuration',
+    type: FileType.custom,
+    allowedExtensions: const ['toml', 'webscp'],
+    withData: mobile,
+    lockParentWindow: !mobile,
+  );
+  if (result == null || result.files.isEmpty) return null;
+  final file = result.files.single;
+  return ConfigOpenSelection(
+    name: file.name,
+    path: file.path,
+    bytes: file.bytes,
+  );
+}
+
+Future<String?> _saveConfigurationFile(
+  String suggestedName,
+  Uint8List bytes,
+) {
+  return saveBytesWithFilePicker(
+    dialogTitle: 'Save MdsScope configuration',
+    fileName: suggestedName,
+    allowedExtensions: const ['toml'],
+    bytes: bytes,
+  );
+}
+
+String _parseConfiguration(String path) => RustBridge.instance.parseEnv(path);
+
+Future<Uint8List> _encodeConfiguration(String configJson) async {
+  final directory = await Directory.systemTemp.createTemp('mdsscope-save-');
+  final path = '${directory.path}${Platform.pathSeparator}config.toml';
+  try {
+    final result = RustBridge.instance.writeEnv(configJson, path);
+    final decoded = jsonDecode(result);
+    if (decoded is! Map || decoded['ok'] != true) {
+      throw decoded is Map ? decoded['error'] ?? result : result;
+    }
+    return File(path).readAsBytes();
+  } finally {
+    try {
+      await directory.delete(recursive: true);
+    } catch (_) {}
+  }
+}
 
 Future<String> _fetchSignalsInBackground(
   String configJson,
@@ -130,6 +201,10 @@ class AppState extends ChangeNotifier {
   final ShotInfoFetchWorker _shotInfoFetchWorker;
   final LoginWorker _loginWorker;
   final LatestShotWorker _latestShotWorker;
+  final ConfigOpenPicker _configOpenPicker;
+  final ConfigSavePicker _configSavePicker;
+  final ConfigParser _configParser;
+  final ConfigEncoder _configEncoder;
   bool _disposed = false;
 
   // Config
@@ -208,11 +283,19 @@ class AppState extends ChangeNotifier {
     ShotInfoFetchWorker? shotInfoFetchWorker,
     LoginWorker? loginWorker,
     LatestShotWorker? latestShotWorker,
+    ConfigOpenPicker? configOpenPicker,
+    ConfigSavePicker? configSavePicker,
+    ConfigParser? configParser,
+    ConfigEncoder? configEncoder,
   })  : _signalFetchWorker = signalFetchWorker ?? _fetchSignalsInBackground,
         _shotInfoFetchWorker =
             shotInfoFetchWorker ?? _fetchShotInfoInBackground,
         _loginWorker = loginWorker ?? _loginToApi,
-        _latestShotWorker = latestShotWorker ?? _fetchLatestShotFromApi {
+        _latestShotWorker = latestShotWorker ?? _fetchLatestShotFromApi,
+        _configOpenPicker = configOpenPicker ?? _pickConfigurationFile,
+        _configSavePicker = configSavePicker ?? _saveConfigurationFile,
+        _configParser = configParser ?? _parseConfiguration,
+        _configEncoder = configEncoder ?? _encodeConfiguration {
     _shotCtrl.addListener(() {
       if (_shotCtrl.text != _shotText) {
         _invalidateFetchForSettingsChange();
@@ -895,15 +978,37 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void openFile() async {
+  Future<void> openFile() async {
+    Directory? temporaryDirectory;
     try {
-      final r = await FilePicker.platform.pickFiles(
-          type: FileType.custom, allowedExtensions: ['toml', 'webscp']);
-      if (r == null || r.files.isEmpty || r.files.single.path == null) return;
-      final path = r.files.single.path!;
-      _status = 'Loading $path...';
+      _status = 'Choose a .toml or .webscp configuration file...';
       notifyListeners();
-      final raw = RustBridge.instance.parseEnv(path);
+      final selection = await _configOpenPicker();
+      if (selection == null) {
+        _status = 'Open cancelled';
+        notifyListeners();
+        return;
+      }
+
+      var path = selection.path;
+      if ((path == null || path.isEmpty) && selection.bytes != null) {
+        temporaryDirectory =
+            await Directory.systemTemp.createTemp('mdsscope-open-');
+        final safeName = selection.name.replaceAll(
+          RegExp(r'[^A-Za-z0-9._-]'),
+          '_',
+        );
+        path = '${temporaryDirectory.path}${Platform.pathSeparator}'
+            '${safeName.isEmpty ? "config.toml" : safeName}';
+        await File(path).writeAsBytes(selection.bytes!, flush: true);
+      }
+      if (path == null || path.isEmpty) {
+        throw 'The selected file did not provide a readable path or bytes.';
+      }
+
+      _status = 'Opening ${selection.name}...';
+      notifyListeners();
+      final raw = _configParser(path);
       if (raw.isEmpty) {
         _status = 'Empty result from parser';
         notifyListeners();
@@ -949,26 +1054,26 @@ class AppState extends ChangeNotifier {
         }
       }
       _status =
-          'Loaded: ${path.split('/').last} (${_columns.length} cols, ${_plots.length} panels)';
+          'Loaded: ${selection.name} (${_columns.length} cols, ${_plots.length} panels)';
       savePreferences();
       notifyListeners();
       if (_shotText.isNotEmpty) startRefresh();
     } catch (e) {
       _status = 'Open error: $e';
       notifyListeners();
+    } finally {
+      if (temporaryDirectory != null) {
+        try {
+          await temporaryDirectory.delete(recursive: true);
+        } catch (_) {}
+      }
     }
   }
 
-  void saveFile() async {
+  Future<void> saveFile() async {
     try {
-      var r = await FilePicker.platform.saveFile(
-          fileName: 'config.toml',
-          type: FileType.custom,
-          allowedExtensions: ['toml']);
-      if (r == null || r.trim().isEmpty) return;
-      if (!r.endsWith('.toml') && !r.endsWith('.webscp')) {
-        r = '$r.toml';
-      }
+      _status = 'Preparing configuration...';
+      notifyListeners();
       final cols = _columns
           .map((col) => col.map((panel) {
                 final m = Map<String, dynamic>.from(panel);
@@ -976,21 +1081,31 @@ class AppState extends ChangeNotifier {
                 return m;
               }).toList())
           .toList();
-      final configJson = jsonEncode({'columns': cols});
-      final result = RustBridge.instance.writeEnv(configJson, r);
-      final resMap = jsonDecode(result);
-      if (resMap is Map && resMap['ok'] == true) {
-        _status = 'Saved to ${r.split('/').last}';
+      final configJson = jsonEncode(_jsonSafeValue({'columns': cols}));
+      final bytes = await _configEncoder(configJson);
+      _status = 'Choose where to save the configuration...';
+      notifyListeners();
+      final destination = await _configSavePicker('config.toml', bytes);
+      if (destination == null || destination.trim().isEmpty) {
+        _status = 'Save cancelled';
         notifyListeners();
-      } else {
-        _status =
-            'Save error: ${resMap is Map ? resMap['error'] ?? result : result}';
-        notifyListeners();
+        return;
       }
+      _status = 'Saved to ${_displayFileName(destination)}';
+      notifyListeners();
     } catch (e) {
       _status = 'Save error: $e';
       notifyListeners();
     }
+  }
+
+  String _displayFileName(String value) {
+    final decoded = Uri.decodeComponent(value);
+    final parts = decoded.split(RegExp(r'[/\\]'));
+    for (var index = parts.length - 1; index >= 0; index--) {
+      if (parts[index].isNotEmpty) return parts[index];
+    }
+    return value;
   }
 
   void _clearCustomReadModes() {
