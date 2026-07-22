@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/rust_bridge.dart';
 
 class AppState extends ChangeNotifier {
@@ -55,9 +56,10 @@ class AppState extends ChangeNotifier {
 
   AppState() {
     _shotCtrl.addListener(() {
-      if (_shotCtrl.text != _shotText) { _shotText = _shotCtrl.text; notifyListeners(); }
+      if (_shotCtrl.text != _shotText) { _shotText = _shotCtrl.text; savePreferences(); notifyListeners(); }
     });
     loadDefaultConfig();
+    initPreferences();
   }
 
   void setShotFromApi(String v) {
@@ -143,6 +145,8 @@ class AppState extends ChangeNotifier {
   }
 
   // Auth
+  bool _rememberLogin = true; bool get rememberLogin => _rememberLogin;
+  set rememberLogin(bool v) { _rememberLogin = v; savePreferences(); notifyListeners(); }
   bool _loggedIn = false; bool get loggedIn => _loggedIn;
   String _authToken = ''; String get authToken => _authToken;
   String _loginApiUrl = 'http://202.127.204.26:80/api'; String get loginApiUrl => _loginApiUrl;
@@ -151,7 +155,7 @@ class AppState extends ChangeNotifier {
 
   // SSH
   String _sshHost = ''; String get sshHost => _sshHost;
-  int _sshMode = 1; int get sshMode => _sshMode; set sshMode(int v) { _sshMode = v; notifyListeners(); }
+  int _sshMode = 1; int get sshMode => _sshMode; set sshMode(int v) { _sshMode = v; savePreferences(); notifyListeners(); }
   int _sshPort = 22; int get sshPort => _sshPort;
   String _sshUser = ''; String get sshUser => _sshUser;
   String _sshPass = ''; String get sshPass => _sshPass;
@@ -189,22 +193,133 @@ class AppState extends ChangeNotifier {
   bool _showLogin = false; bool get showLogin => _showLogin;
   bool _showSsh = false; bool get showSsh => _showSsh;
 
-  // AppState() constructor is above with _shotCtrl initialization
-
-  void setLoginApiUrl(String v) { _loginApiUrl = v; }
-  void setLoginUser(String v) { _loginUser = v; }
-  void setLoginPass(String v) { _loginPass = v; }
-  void setSshHost(String v) { _sshHost = v; notifyListeners(); }
-  void setSshPort(int v) { _sshPort = v; notifyListeners(); }
-  void setSshUser(String v) { _sshUser = v; notifyListeners(); }
-  void setSshPass(String v) { _sshPass = v; notifyListeners(); }
-  void setSshIdentity(String v) { _sshIdentity = v; notifyListeners(); }
+  void setLoginApiUrl(String v) { _loginApiUrl = v; savePreferences(); }
+  void setLoginUser(String v) { _loginUser = v; savePreferences(); }
+  void setLoginPass(String v) { _loginPass = v; savePreferences(); }
+  void setSshHost(String v) { _sshHost = v; savePreferences(); notifyListeners(); }
+  void setSshPort(int v) { _sshPort = v; savePreferences(); }
+  void setSshUser(String v) { _sshUser = v; savePreferences(); }
+  void setSshPass(String v) { _sshPass = v; savePreferences(); }
+  void setSshIdentity(String v) { _sshIdentity = v; savePreferences(); }
   void openLogin() { _showLogin = true; notifyListeners(); }
   void openSsh() { _showSsh = true; notifyListeners(); }
-  void setLoggedIn(bool v, String token) { _loggedIn = v; _authToken = token; notifyListeners(); }
-  void logout() { _loggedIn = false; _authToken = ''; setStatus('Logged out'); }
+  void setLoggedIn(bool v, String token) { _loggedIn = v; _authToken = token; savePreferences(); notifyListeners(); }
+  void logout() { _loggedIn = false; _authToken = ''; savePreferences(); setStatus('Logged out'); }
   void setStatus(String s) { _status = s; notifyListeners(); }
   void setSshConnected(bool v) { _sshConnected = v; notifyListeners(); }
+
+  Future<void> initPreferences() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _rememberLogin = prefs.getBool('rememberLogin') ?? true;
+      _loginApiUrl = prefs.getString('loginApiUrl') ?? _loginApiUrl;
+      _loginUser = prefs.getString('loginUser') ?? _loginUser;
+      if (_rememberLogin) {
+        _loginPass = prefs.getString('loginPass') ?? _loginPass;
+        _authToken = prefs.getString('authToken') ?? _authToken;
+        _loggedIn = prefs.getBool('loggedIn') ?? _loggedIn;
+      }
+      _sshHost = prefs.getString('sshHost') ?? _sshHost;
+      _sshPort = prefs.getInt('sshPort') ?? _sshPort;
+      _sshUser = prefs.getString('sshUser') ?? _sshUser;
+      _sshPass = prefs.getString('sshPass') ?? _sshPass;
+      _sshIdentity = prefs.getString('sshIdentity') ?? _sshIdentity;
+      _sshMode = prefs.getInt('sshMode') ?? _sshMode;
+      _themeMode = prefs.getInt('themeMode') ?? _themeMode;
+      _fontFamily = prefs.getString('fontFamily') ?? _fontFamily;
+      _fontLegendSize = prefs.getInt('fontLegendSize') ?? _fontLegendSize;
+      _fontAxisSize = prefs.getInt('fontAxisSize') ?? _fontAxisSize;
+      _fontUnitSize = prefs.getInt('fontUnitSize') ?? _fontUnitSize;
+      _fontUiSize = prefs.getInt('fontUiSize') ?? _fontUiSize;
+
+      final bookmarksJson = prefs.getString('webBookmarks');
+      if (bookmarksJson != null) {
+        final list = jsonDecode(bookmarksJson);
+        if (list is List) {
+          _webBookmarks.clear();
+          for (final item in list) {
+            if (item is Map) _webBookmarks.add(Map<String, String>.from(item));
+          }
+        }
+      }
+
+      final lastConfig = prefs.getString('lastConfigJson');
+      if (lastConfig != null && lastConfig.isNotEmpty) {
+        _applyConfigJsonString(lastConfig);
+      }
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> savePreferences() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('rememberLogin', _rememberLogin);
+      await prefs.setString('loginApiUrl', _loginApiUrl);
+      await prefs.setString('loginUser', _loginUser);
+      if (_rememberLogin) {
+        await prefs.setString('loginPass', _loginPass);
+        await prefs.setString('authToken', _authToken);
+        await prefs.setBool('loggedIn', _loggedIn);
+      } else {
+        await prefs.remove('loginPass');
+        await prefs.remove('authToken');
+        await prefs.setBool('loggedIn', false);
+      }
+      await prefs.setString('sshHost', _sshHost);
+      await prefs.setInt('sshPort', _sshPort);
+      await prefs.setString('sshUser', _sshUser);
+      await prefs.setString('sshPass', _sshPass);
+      await prefs.setString('sshIdentity', _sshIdentity);
+      await prefs.setInt('sshMode', _sshMode);
+      await prefs.setInt('themeMode', _themeMode);
+      await prefs.setString('fontFamily', _fontFamily);
+      await prefs.setInt('fontLegendSize', _fontLegendSize);
+      await prefs.setInt('fontAxisSize', _fontAxisSize);
+      await prefs.setInt('fontUnitSize', _fontUnitSize);
+      await prefs.setInt('fontUiSize', _fontUiSize);
+      await prefs.setString('webBookmarks', jsonEncode(_webBookmarks));
+
+      final configJson = jsonEncode({'columns': _columns, 'shot': _shotText});
+      await prefs.setString('lastConfigJson', configJson);
+    } catch (_) {}
+  }
+
+  void _applyConfigJsonString(String raw) {
+    try {
+      final json = jsonDecode(raw);
+      if (json is! Map || json['columns'] is! List) return;
+      final cols = (json['columns'] as List).map((col) {
+        return (col as List).map((panel) {
+          final m = Map<String, dynamic>.from(panel as Map);
+          m['extraction_points'] ??= 2000;
+          m['grid'] ??= true;
+          return m;
+        }).toList();
+      }).toList();
+      if (cols.isEmpty || cols.every((c) => c.isEmpty)) return;
+      _columns = cols;
+      _plots.clear();
+      for (final col in _columns) {
+        for (final panel in col) {
+          final sigCount = (panel['signal_specs'] as List?)?.length ?? 1;
+          _plots.add(PlotData(
+            title: panel['title']?.toString() ?? '',
+            xLabel: panel['x_label']?.toString() ?? 's',
+            yLabel: panel['y_label']?.toString() ?? 'a.u.',
+            series: List.filled(sigCount > 0 ? sigCount : 1, null),
+          ));
+        }
+      }
+      if (json['shot'] != null) {
+        final s = json['shot'].toString().trim();
+        if (s.isNotEmpty) {
+          _shotText = s;
+          _shotCtrl.text = s;
+        }
+      }
+    } catch (_) {}
+  }
 
   void loadDefaultConfig() {
     // Match the original MdsScope init.toml — 2 columns × 3 rows
@@ -272,7 +387,9 @@ class AppState extends ChangeNotifier {
           ));
         }
       }
-      _status = 'Loaded: ${path.split('/').last} (${_columns.length} cols, ${_plots.length} panels)'; notifyListeners();
+      _status = 'Loaded: ${path.split('/').last} (${_columns.length} cols, ${_plots.length} panels)';
+      savePreferences();
+      notifyListeners();
       if (_shotText.isNotEmpty) startRefresh();
     } catch (e) { _status = 'Open error: $e'; notifyListeners(); }
   }

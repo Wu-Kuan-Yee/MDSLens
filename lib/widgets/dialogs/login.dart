@@ -57,6 +57,14 @@ class LoginDialog extends StatelessWidget {
             TextField(controller: apiCtrl, decoration: const InputDecoration(labelText: 'API URL'), onSubmitted: (_) => doLogin(setState, ctx)),
             TextField(controller: userCtrl, decoration: const InputDecoration(labelText: 'Username'), onSubmitted: (_) => doLogin(setState, ctx)),
             TextField(controller: passCtrl, decoration: const InputDecoration(labelText: 'Password'), obscureText: true, onSubmitted: (_) => doLogin(setState, ctx)),
+            const SizedBox(height: 6),
+            Row(children: [
+              Checkbox(
+                value: app.rememberLogin,
+                onChanged: (v) { if (v != null) setState(() => app.rememberLogin = v); },
+              ),
+              const Text('Remember Credentials', style: TextStyle(fontSize: 13)),
+            ]),
           ],
         ]),
         actions: loading ? [
