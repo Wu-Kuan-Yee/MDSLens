@@ -67,7 +67,7 @@ Future<ConfigOpenSelection?> _pickConfigurationFile() async {
   final file = result.files.single;
   return ConfigOpenSelection(
     name: file.name,
-    path: file.path,
+    path: mobile ? null : file.path,
     bytes: file.bytes,
   );
 }
