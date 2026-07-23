@@ -44,22 +44,27 @@ jobs:
         include:
           - os: ubuntu-24.04
             target: linux
+            channel: stable
             artifact: linux-x64
             bundle: build/linux/x64/release/bundle
           - os: ubuntu-24.04-arm
             target: linux
+            channel: main
             artifact: linux-arm64
             bundle: build/linux/arm64/release/bundle
           - os: macos-15
             target: macos
+            channel: stable
             artifact: macos-universal
             bundle: build/macos/Build/Products/Release/MdsScope.app
           - os: windows-2025
             target: windows
+            channel: stable
             artifact: windows-x64
             bundle: build/windows/x64/runner/Release
           - os: windows-11-arm
             target: windows
+            channel: main
             artifact: windows-arm64
             bundle: build/windows/arm64/runner/Release
     steps:
@@ -67,7 +72,10 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
+          # Flutter does not publish every stable SDK archive for ARM64 hosts.
+          # The action's main-channel mode clones upstream and checks out this
+          # exact version tag, which is Flutter's documented ARM64 fallback.
+          channel: ${{ matrix.channel }}
           cache: true
       - uses: dtolnay/rust-toolchain@1.92.0
       - name: Install Linux build dependencies
@@ -98,7 +106,7 @@ jobs:
           channel: stable
           cache: true
       - uses: dtolnay/rust-toolchain@1.92.0
-      - run: sdkmanager "ndk;27.0.12077973"
+      - run: "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.0.12077973"
       - run: >-
           flutter build apk --release --split-per-abi
           --target-platform android-arm,android-arm64,android-x64

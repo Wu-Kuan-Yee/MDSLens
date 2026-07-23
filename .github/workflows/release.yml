@@ -22,14 +22,16 @@ jobs:
         include:
           - arch: x64
             runner: windows-2025
+            channel: stable
           - arch: arm64
             runner: windows-11-arm
+            channel: main
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
+          channel: ${{ matrix.channel }}
           cache: true
       - uses: dtolnay/rust-toolchain@1.92.0
       - name: Install Windows packagers
@@ -77,14 +79,16 @@ jobs:
         include:
           - arch: x64
             runner: ubuntu-24.04
+            channel: stable
           - arch: arm64
             runner: ubuntu-24.04-arm
+            channel: main
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
+          channel: ${{ matrix.channel }}
           cache: true
       - uses: dtolnay/rust-toolchain@1.92.0
       - name: Install Linux build and packaging tools
@@ -122,7 +126,7 @@ jobs:
           cache: true
       - uses: dtolnay/rust-toolchain@1.92.0
       - name: Install the pinned Android NDK
-        run: sdkmanager "ndk;27.0.12077973"
+        run: "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.0.12077973"
       - name: Install Android release key when configured
         shell: bash
         run: |
