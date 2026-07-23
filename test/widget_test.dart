@@ -1135,7 +1135,61 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Stylus tip draws a rubber-band zoom in Zoom/Move mode',
+  testWidgets('Stylus write tip pans in Zoom/Move mode', (tester) async {
+    final app = AppState();
+    addTearDown(app.dispose);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 0],
+          [5, 5],
+          [10, 10]
+        ],
+        null);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 500,
+              height: 400,
+              child: PlotPanel(plotIdx: 0),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    LineChart chart() => tester.widget<LineChart>(find.byType(LineChart));
+    final centerBefore = (chart().data.minX + chart().data.maxX) / 2;
+    final widthBefore = chart().data.maxX - chart().data.minX;
+    final stylus = await tester.startGesture(
+      const Offset(150, 100),
+      kind: PointerDeviceKind.stylus,
+    );
+    await stylus.moveTo(const Offset(390, 300));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('plot-rubber-band-0')), findsNothing);
+    expect(find.byType(PopupMenuItem<String>), findsNothing);
+
+    await stylus.up();
+    await tester.pumpAndSettle();
+    final widthAfter = chart().data.maxX - chart().data.minX;
+    final centerAfter = (chart().data.minX + chart().data.maxX) / 2;
+    expect(centerAfter, lessThan(centerBefore));
+    expect(widthAfter, closeTo(widthBefore, 0.0001));
+    expect(
+      find.byKey(const ValueKey('plot-rubber-band-0')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Stylus erase mode draws rubber-band and inverted tip points',
       (tester) async {
     final app = AppState();
     addTearDown(app.dispose);
@@ -1167,72 +1221,18 @@ void main() {
 
     LineChart chart() => tester.widget<LineChart>(find.byType(LineChart));
     final widthBefore = chart().data.maxX - chart().data.minX;
-    final stylus = await tester.startGesture(
+    app.setStylusEraserMode(true);
+    final eraser = await tester.startGesture(
       const Offset(150, 100),
       kind: PointerDeviceKind.stylus,
     );
-    await stylus.moveTo(const Offset(390, 300));
+    await eraser.moveTo(const Offset(390, 300));
     await tester.pump();
-    expect(
-      find.byKey(const ValueKey('plot-rubber-band-0')),
-      findsOneWidget,
-    );
-    expect(find.byType(PopupMenuItem<String>), findsNothing);
-
-    await stylus.up();
+    expect(find.byKey(const ValueKey('plot-rubber-band-0')), findsOneWidget);
+    await eraser.up();
     await tester.pumpAndSettle();
     final widthAfter = chart().data.maxX - chart().data.minX;
     expect(widthAfter, lessThan(widthBefore));
-    expect(
-      find.byKey(const ValueKey('plot-rubber-band-0')),
-      findsNothing,
-    );
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('Stylus barrel pans and inverted stylus drives Point mode',
-      (tester) async {
-    final app = AppState();
-    addTearDown(app.dispose);
-    app.updatePlotSeriesByColRow(
-        0,
-        0,
-        0,
-        [
-          [0, 0],
-          [5, 5],
-          [10, 10]
-        ],
-        null);
-
-    await tester.pumpWidget(
-      ChangeNotifierProvider.value(
-        value: app,
-        child: const MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 500,
-              height: 400,
-              child: PlotPanel(plotIdx: 0),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    LineChart chart() => tester.widget<LineChart>(find.byType(LineChart));
-    final centerBefore = (chart().data.minX + chart().data.maxX) / 2;
-    final barrel = await tester.startGesture(
-      const Offset(240, 200),
-      kind: PointerDeviceKind.stylus,
-      buttons: kPrimaryStylusButton,
-    );
-    await barrel.moveBy(const Offset(70, -25));
-    await tester.pump();
-    await barrel.up();
-    await tester.pump();
-    final centerAfter = (chart().data.minX + chart().data.maxX) / 2;
-    expect(centerAfter, lessThan(centerBefore));
     expect(find.byType(PopupMenuItem<String>), findsNothing);
 
     app.interactionMode = 1;

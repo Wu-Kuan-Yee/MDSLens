@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'models/app_state.dart';
+import 'services/stylus_mode_channel.dart';
 import 'services/theme_channel.dart';
 import 'theme/mdsscope_theme.dart';
 import 'pages/main_page.dart';
@@ -26,6 +27,9 @@ class _MdsScopeAppState extends State<MdsScopeApp> with WidgetsBindingObserver {
     _sysDark = WidgetsBinding.instance.platformDispatcher.platformBrightness ==
         Brightness.dark;
     ThemeChannel.init();
+    StylusModeChannel.init(
+      (eraser) => context.read<AppState>().setStylusEraserMode(eraser),
+    );
     ThemeChannel.isDark().then((d) {
       if (mounted && d != null) setState(() => _sysDark = d);
     });
@@ -63,6 +67,7 @@ class _MdsScopeAppState extends State<MdsScopeApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     HardwareKeyboard.instance.removeHandler(_onAppKey);
     _themeSubscription?.cancel();
+    StylusModeChannel.dispose();
     super.dispose();
   }
 

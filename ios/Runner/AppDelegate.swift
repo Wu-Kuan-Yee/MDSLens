@@ -3,8 +3,13 @@ import UIKit
 import Darwin
 
 @main
-@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate,
+  UIPencilInteractionDelegate
+{
   private var permissionsChannel: FlutterMethodChannel?
+  private var stylusChannel: FlutterMethodChannel?
+  private var pencilInteraction: UIPencilInteraction?
+  private var pencilUsesEraser = false
 
   override func application(
     _ application: UIApplication,
@@ -39,6 +44,39 @@ import Darwin
         result(opened)
       }
     }
+
+    stylusChannel = FlutterMethodChannel(
+      name: "mdsscope/stylus",
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
+    )
+    DispatchQueue.main.async { [weak self] in
+      self?.installPencilInteraction()
+    }
+  }
+
+  private func installPencilInteraction() {
+    guard pencilInteraction == nil,
+      let rootView = window?.rootViewController?.view
+    else {
+      return
+    }
+    let interaction = UIPencilInteraction()
+    interaction.delegate = self
+    rootView.addInteraction(interaction)
+    pencilInteraction = interaction
+  }
+
+  func pencilInteractionDidTap(_ interaction: UIPencilInteraction) {
+    let preferredAction = UIPencilInteraction.preferredTapAction
+    guard preferredAction == .switchEraser || preferredAction == .switchPrevious
+    else {
+      return
+    }
+    pencilUsesEraser.toggle()
+    stylusChannel?.invokeMethod(
+      "stylusModeChanged",
+      arguments: pencilUsesEraser
+    )
   }
 
   // Apple TN3179 recommends connecting UDP sockets to selected link-local

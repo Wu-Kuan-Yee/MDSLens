@@ -359,6 +359,22 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // A normal stylus starts in write mode (pan). Platforms that expose a
+  // write/erase toggle, such as Apple Pencil double-tap, update this transient
+  // session state. An inverted stylus is still treated as an eraser directly
+  // from its PointerDeviceKind.
+  bool _stylusEraserMode = false;
+  bool get stylusEraserMode => _stylusEraserMode;
+  void setStylusEraserMode(bool enabled) {
+    if (_stylusEraserMode == enabled) return;
+    _stylusEraserMode = enabled;
+    setStatus(
+      enabled
+          ? 'Stylus erase mode: drag a rubber-band to zoom.'
+          : 'Stylus write mode: drag to pan.',
+    );
+  }
+
   // Theme
   int _themeMode = 2;
   int get themeMode => _themeMode;

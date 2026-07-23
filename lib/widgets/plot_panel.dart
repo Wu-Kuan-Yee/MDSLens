@@ -784,10 +784,12 @@ class _PlotPanelState extends State<PlotPanel> {
         return;
       }
       if (app.interactionMode != 0) return;
+      final eraser = event.kind == PointerDeviceKind.invertedStylus ||
+          app.stylusEraserMode;
       final barrelButton =
           (event.buttons & (kPrimaryStylusButton | kSecondaryStylusButton)) !=
               0;
-      if (barrelButton) {
+      if (!eraser || barrelButton) {
         _midPanning = true;
         _lastMidPanPos = event.localPosition;
       } else if ((event.buttons & kPrimaryButton) != 0) {
