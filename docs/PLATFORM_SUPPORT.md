@@ -6,7 +6,7 @@ With Flutter 3.44 as the baseline, the upstream Flutter deployment targets used 
 
 | Platform | Architecture | Project Formats | Build Host |
 |---|---|---|---|
-| Windows | x64, arm64 | Installer EXE, MSI, ZIP, tar.gz/xz/bz2 | Windows |
+| Windows | x64, arm64 | Installer EXE, MSI, ZIP, tar.gz/xz/bz2 | Same-arch Windows |
 | macOS | x64 + arm64 Universal | APP, DMG, PKG, ZIP, tar.gz/xz/bz2 | macOS |
 | Linux | x64, arm64 | DEB, RPM, pkg.tar.zst/xz, AppImage, ZIP, tar.gz/xz/bz2 | Same-arch Linux |
 | Android | armv7, arm64, x64 | APK, AAB | Windows/macOS/Linux |
@@ -15,6 +15,10 @@ With Flutter 3.44 as the baseline, the upstream Flutter deployment targets used 
 Sources: [Flutter supported platforms](https://docs.flutter.dev/reference/supported-platforms) and [multi-platform build host restrictions](https://docs.flutter.dev/platform-integration).
 
 Upstream Flutter does not currently support Windows x86, Linux 32-bit, or iOS 32-bit deployment. The 32-bit Android target is armv7; the current official table no longer lists Android x86 32-bit. An architecture being producible by the Rust compiler does not imply the Flutter UI also supports that architecture.
+
+Flutter 3.44 no longer exposes a Windows `--target-platform` build option.
+Windows x64 and ARM64 packages are therefore built on native x64 and ARM64
+hosts respectively. CI uses the matching GitHub-hosted runner for each one.
 
 ## Icon Coverage
 

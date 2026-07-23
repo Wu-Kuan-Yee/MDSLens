@@ -4,10 +4,10 @@
 //! Integration tests using real EAST configuration files.
 
 use mds_core::env_io::{parse_environment, parse_toml_environment, parse_webscp_environment, write_environment_toml};
-use std::path::Path;
+use std::path::PathBuf;
 
-fn resource_dir() -> &'static str {
-    "../../../MdsScope/resources/environment"
+fn resource_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
 }
 
 fn assert_init_config_valid(config: &mds_core::types::LayoutConfig, source: &str) {
@@ -73,7 +73,7 @@ fn assert_init_config_valid(config: &mds_core::types::LayoutConfig, source: &str
 
 #[test]
 fn test_parse_init_toml() {
-    let path = Path::new(resource_dir()).join("init.toml");
+    let path = resource_dir().join("init.toml");
     assert!(path.exists(), "init.toml not found at {:?}", path);
 
     let config = parse_toml_environment(path.to_str().unwrap());
@@ -82,7 +82,7 @@ fn test_parse_init_toml() {
 
 #[test]
 fn test_parse_init_webscp() {
-    let path = Path::new(resource_dir()).join("init.webscp");
+    let path = resource_dir().join("init.webscp");
     assert!(path.exists(), "init.webscp not found at {:?}", path);
 
     let config = parse_webscp_environment(path.to_str().unwrap());
@@ -92,8 +92,8 @@ fn test_parse_init_webscp() {
 #[test]
 fn test_auto_detect_format() {
     // parse_environment should auto-detect TOML vs webscp by extension
-    let toml_path = Path::new(resource_dir()).join("init.toml");
-    let webscp_path = Path::new(resource_dir()).join("init.webscp");
+    let toml_path = resource_dir().join("init.toml");
+    let webscp_path = resource_dir().join("init.webscp");
 
     let config_toml = parse_environment(toml_path.to_str().unwrap());
     let config_webscp = parse_environment(webscp_path.to_str().unwrap());
@@ -117,7 +117,7 @@ fn test_auto_detect_format() {
 
 #[test]
 fn test_toml_roundtrip_real() {
-    let path = Path::new(resource_dir()).join("init.toml");
+    let path = resource_dir().join("init.toml");
     let config = parse_toml_environment(path.to_str().unwrap());
 
     // Write to temp file
@@ -158,7 +158,7 @@ fn test_toml_roundtrip_real() {
 #[test]
 fn test_webscp_specific_fields() {
     // Verify that webscp format preserves specific field mappings
-    let path = Path::new(resource_dir()).join("init.webscp");
+    let path = resource_dir().join("init.webscp");
     let config = parse_webscp_environment(path.to_str().unwrap());
 
     // All panels should have grid=true and extraction_points=2000 from webscp

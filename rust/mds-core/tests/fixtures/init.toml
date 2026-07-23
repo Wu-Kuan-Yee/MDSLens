@@ -1,0 +1,86 @@
+version = 1
+shot = "143850"
+
+[[panels]]
+column = 1
+row = 1
+title = "Ip"
+x_label = "s"
+y_label = "a.u."
+extraction_points = 2000
+grid = true
+
+[[panels.signals]]
+tree = "pcs_east"
+server = "202.127.204.12"
+y = "\\pcrl01"
+
+[[panels]]
+column = 1
+row = 2
+title = "R"
+x_label = "s"
+y_label = "a.u."
+extraction_points = 2000
+grid = true
+
+[[panels.signals]]
+tree = "pcs_east"
+server = "202.127.204.12"
+y = "\\lmsr"
+
+[[panels]]
+column = 1
+row = 3
+title = "Z"
+x_label = "s"
+y_label = "a.u."
+extraction_points = 2000
+grid = true
+
+[[panels.signals]]
+tree = "pcs_east"
+server = "202.127.204.12"
+y = "\\lmsz"
+
+[[panels]]
+column = 2
+row = 1
+title = "Vloop"
+x_label = "s"
+y_label = "a.u."
+extraction_points = 2000
+grid = true
+
+[[panels.signals]]
+tree = "pcs_east"
+server = "202.127.204.12"
+y = "\\pcvloop"
+
+[[panels]]
+column = 2
+row = 2
+title = "Ne"
+x_label = "s"
+y_label = "a.u."
+extraction_points = 2000
+grid = true
+
+[[panels.signals]]
+tree = "pcs_east"
+server = "202.127.204.12"
+y = "\\dfsdev"
+
+[[panels]]
+column = 2
+row = 3
+title = "Pf1 current"
+x_label = "s"
+y_label = "a.u."
+extraction_points = 2000
+grid = true
+
+[[panels.signals]]
+tree = "pcs_east"
+server = "202.127.204.12"
+y = "\\pcpf1"

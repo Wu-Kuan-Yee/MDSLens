@@ -172,11 +172,13 @@ def package_windows(formats: set[str], no_build: bool, arch: str) -> None:
         fail("Windows packages can only be built on Windows")
     if arch not in {"x64", "arm64"}:
         fail("Flutter supports Windows x64 and arm64, not " + arch)
+    if arch != host_arch():
+        fail(
+            "Flutter 3.44 builds Windows for the native host architecture; "
+            f"requested {arch} on a {host_arch()} host"
+        )
     if not no_build:
-        if arch == host_arch():
-            flutter_build("windows")
-        else:
-            flutter_build("windows", "--target-platform", f"windows-{arch}")
+        flutter_build("windows")
 
     bundle = windows_bundle(arch)
     if not (bundle / "mdsscope.exe").is_file():

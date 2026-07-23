@@ -7,11 +7,50 @@ param(
   [string]$TargetPlatform,
 
   [Parameter(Mandatory = $true)]
-  [string]$OutputDirectory
+  [string]$OutputDirectory,
+
+  [Parameter(Mandatory = $true)]
+  [string]$CargoTargetDirectory
 )
 
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
+
+function Add-ToolDirectory {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$CommandName,
+
+    [Parameter(Mandatory = $true)]
+    [string[]]$Candidates,
+
+    [Parameter(Mandatory = $true)]
+    [string]$InstallHint
+  )
+
+  if (Get-Command $CommandName -ErrorAction SilentlyContinue) {
+    return
+  }
+  foreach ($candidate in $Candidates) {
+    if ($candidate -and (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+      $env:Path = "$(Split-Path -Parent $candidate);$env:Path"
+      return
+    }
+  }
+  throw "$CommandName is required to compile vendored OpenSSL. $InstallHint"
+}
+
+# openssl-src invokes these tools directly. Virtual-environment activation can
+# replace PATH entries, so also discover their conventional Windows locations.
+Add-ToolDirectory "perl.exe" @(
+  "C:\Strawberry\perl\bin\perl.exe",
+  "${env:ProgramFiles}\Git\usr\bin\perl.exe"
+) "Install Strawberry Perl or Git for Windows with Perl."
+Add-ToolDirectory "nasm.exe" @(
+  "C:\Strawberry\c\bin\nasm.exe",
+  "${env:ProgramFiles}\NASM\nasm.exe",
+  "${env:ProgramFiles(x86)}\NASM\nasm.exe"
+) "Install NASM or Strawberry Perl."
 
 if ($Configuration -in @("Release", "Profile")) {
   $cargoProfile = "release"
@@ -48,6 +87,7 @@ if (-not $cargoExecutable -or -not $env:RUSTC) {
 }
 
 $env:LIBZ_SYS_STATIC = "1"
+$env:CARGO_TARGET_DIR = [IO.Path]::GetFullPath($CargoTargetDirectory)
 $cargoArgs = @(
   "build",
   "--manifest-path", (Join-Path $projectRoot "rust\Cargo.toml"),
@@ -60,7 +100,7 @@ if ($LASTEXITCODE -ne 0) {
   throw "Rust build failed for $rustTarget"
 }
 
-$library = Join-Path $projectRoot "rust\target\$rustTarget\$cargoProfile\mds_bridge.dll"
+$library = Join-Path $env:CARGO_TARGET_DIR "$rustTarget\$cargoProfile\mds_bridge.dll"
 if (-not (Test-Path $library -PathType Leaf)) {
   throw "Rust build did not produce $library"
 }

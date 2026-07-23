@@ -64,6 +64,7 @@ if(NOT POWERSHELL_EXECUTABLE)
 endif()
 set(MDS_BRIDGE_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/build_windows_rust.ps1")
 set(MDS_BRIDGE_OUTPUT_DIR "${CMAKE_BINARY_DIR}/rust/$<CONFIG>")
+set(MDS_BRIDGE_CARGO_TARGET_DIR "${CMAKE_BINARY_DIR}/rust-cargo")
 set(MDS_BRIDGE_LIBRARY "${MDS_BRIDGE_OUTPUT_DIR}/mds_bridge.dll")
 add_custom_target(mds_bridge_native ALL
   COMMAND "${POWERSHELL_EXECUTABLE}" -NoProfile -ExecutionPolicy Bypass
@@ -71,6 +72,7 @@ add_custom_target(mds_bridge_native ALL
     -Configuration "$<CONFIG>"
     -TargetPlatform "${FLUTTER_TARGET_PLATFORM}"
     -OutputDirectory "${MDS_BRIDGE_OUTPUT_DIR}"
+    -CargoTargetDirectory "${MDS_BRIDGE_CARGO_TARGET_DIR}"
   BYPRODUCTS "${MDS_BRIDGE_LIBRARY}"
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
   COMMENT "Building the MdsScope Rust bridge"

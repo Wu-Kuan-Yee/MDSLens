@@ -7,7 +7,7 @@ on:
     branches: [master, main, flutter-rewrite]
 
 env:
-  FLUTTER_VERSION: 3.44.3
+  FLUTTER_VERSION: 3.44.7
 
 jobs:
   flutter:
@@ -44,13 +44,24 @@ jobs:
         include:
           - os: ubuntu-24.04
             target: linux
+            artifact: linux-x64
             bundle: build/linux/x64/release/bundle
+          - os: ubuntu-24.04-arm
+            target: linux
+            artifact: linux-arm64
+            bundle: build/linux/arm64/release/bundle
           - os: macos-15
             target: macos
+            artifact: macos-universal
             bundle: build/macos/Build/Products/Release/MdsScope.app
           - os: windows-2025
             target: windows
+            artifact: windows-x64
             bundle: build/windows/x64/runner/Release
+          - os: windows-11-arm
+            target: windows
+            artifact: windows-arm64
+            bundle: build/windows/arm64/runner/Release
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -68,6 +79,49 @@ jobs:
       - run: flutter build ${{ matrix.target }} --release
       - uses: actions/upload-artifact@v4
         with:
-          name: ci-${{ matrix.target }}
+          name: ci-${{ matrix.artifact }}
           path: ${{ matrix.bundle }}
+          if-no-files-found: error
+
+  android-build:
+    needs: [flutter, rust]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - uses: dtolnay/rust-toolchain@1.92.0
+      - run: sdkmanager "ndk;27.0.12077973"
+      - run: >-
+          flutter build apk --release --split-per-abi
+          --target-platform android-arm,android-arm64,android-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ci-android
+          path: build/app/outputs/flutter-apk/*-release.apk
+          if-no-files-found: error
+
+  apple-mobile-build:
+    needs: [flutter, rust]
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - uses: dtolnay/rust-toolchain@1.92.0
+      - run: flutter build ios --release --no-codesign
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ci-apple-mobile
+          path: build/ios/iphoneos/Runner.app
           if-no-files-found: error
