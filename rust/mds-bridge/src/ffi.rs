@@ -41,6 +41,12 @@ pub extern "C" fn mds_write_environment(config_json: *const c_char, path: *const
     }
 }
 
+#[no_mangle]
+pub extern "C" fn mds_encode_environment(config_json: *const c_char) -> *mut c_char {
+    let config: a::FrbLayoutConfig = serde_json::from_str(&to_rust(config_json)).unwrap_or_default();
+    ffi_string!(a::encode_environment(config))
+}
+
 // ── Auth ─────────────────────────────────────────────────────────────
 
 #[no_mangle]

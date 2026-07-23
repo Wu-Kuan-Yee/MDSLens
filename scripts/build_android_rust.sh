@@ -83,6 +83,7 @@ build_target() {
   for symbol in \
     mds_parse_environment \
     mds_write_environment \
+    mds_encode_environment \
     mds_request_login \
     mds_fetch_shot \
     mds_fetch_shot_info \

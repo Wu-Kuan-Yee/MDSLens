@@ -5,6 +5,7 @@ extern "C" {
 #endif
 
 char* mds_parse_environment(const char* path);
+char* mds_encode_environment(const char* config_json);
 char* mds_write_environment(const char* config_json, const char* path);
 char* mds_request_login(const char* api_url, const char* user, const char* pass);
 char* mds_fetch_shot(const char* api_url, const char* token);

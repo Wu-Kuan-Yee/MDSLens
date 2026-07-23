@@ -242,8 +242,8 @@ pub fn parse_webscp_environment(path: &str) -> LayoutConfig {
     config
 }
 
-/// Write a LayoutConfig as TOML.
-pub fn write_environment_toml(config: &LayoutConfig, path: &str) -> Result<(), String> {
+/// Encode a LayoutConfig as TOML without touching the filesystem.
+pub fn encode_environment_toml(config: &LayoutConfig) -> String {
     use std::fmt::Write;
 
     let mut out = String::new();
@@ -332,6 +332,12 @@ pub fn write_environment_toml(config: &LayoutConfig, path: &str) -> Result<(), S
         }
     }
 
+    out
+}
+
+/// Write a LayoutConfig as TOML.
+pub fn write_environment_toml(config: &LayoutConfig, path: &str) -> Result<(), String> {
+    let out = encode_environment_toml(config);
     std::fs::write(path, &out).map_err(|e| format!("Cannot write {}: {}", path, e))
 }
 
@@ -496,7 +502,11 @@ y = "\\pcrl01"
         std::fs::write(&tmp, toml_content).unwrap();
 
         let config = parse_toml_environment(tmp.to_str().unwrap());
+        let encoded = encode_environment_toml(&config);
+        assert!(encoded.contains("title = \"Plasma Current\""));
+        assert!(encoded.contains("y = \"\\\\pcrl01\""));
         write_environment_toml(&config, tmp2.to_str().unwrap()).unwrap();
+        assert_eq!(std::fs::read_to_string(&tmp2).unwrap(), encoded);
 
         let config2 = parse_toml_environment(tmp2.to_str().unwrap());
         assert_eq!(config2.columns.len(), 1);

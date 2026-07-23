@@ -172,6 +172,11 @@ pub fn write_environment(config: FrbLayoutConfig, path: String) -> Result<(), St
     mds_core::env_io::write_environment_toml(&rust, &path)
 }
 
+pub fn encode_environment(config: FrbLayoutConfig) -> String {
+    let rust = config.into_rust();
+    mds_core::env_io::encode_environment_toml(&rust)
+}
+
 // ── API Auth ───────────────────────────────────────────────────────────
 
 
@@ -343,6 +348,27 @@ mod tests {
         assert_eq!(config2.columns[0][0].title, "Plasma");
         std::fs::remove_file(&tmp1).ok();
         std::fs::remove_file(&tmp2).ok();
+    }
+
+    #[test]
+    fn test_encode_environment_without_file_io() {
+        let config = FrbLayoutConfig {
+            columns: vec![vec![FrbPlotSpec {
+                title: "In-memory export".into(),
+                signal_specs: vec![FrbSignalSpec {
+                    experiment: "pcs_east".into(),
+                    y_expr: "\\pcrl01".into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }]],
+        };
+
+        let encoded = encode_environment(config);
+        assert!(encoded.starts_with("version = 1"));
+        assert!(encoded.contains("title = \"In-memory export\""));
+        assert!(encoded.contains("tree = \"pcs_east\""));
+        assert!(encoded.contains("y = \"\\\\pcrl01\""));
     }
 
     #[test]

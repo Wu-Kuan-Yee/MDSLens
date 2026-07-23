@@ -95,20 +95,8 @@ Future<String?> _saveConfigurationFile(
 String _parseConfiguration(String path) => RustBridge.instance.parseEnv(path);
 
 Future<Uint8List> _encodeConfiguration(String configJson) async {
-  final directory = await Directory.systemTemp.createTemp('mdsscope-save-');
-  final path = '${directory.path}${Platform.pathSeparator}config.toml';
-  try {
-    final result = RustBridge.instance.writeEnv(configJson, path);
-    final decoded = jsonDecode(result);
-    if (decoded is! Map || decoded['ok'] != true) {
-      throw decoded is Map ? decoded['error'] ?? result : result;
-    }
-    return File(path).readAsBytes();
-  } finally {
-    try {
-      await directory.delete(recursive: true);
-    } catch (_) {}
-  }
+  final toml = RustBridge.instance.encodeEnv(configJson);
+  return Uint8List.fromList(utf8.encode(toml));
 }
 
 Future<String> _fetchSignalsInBackground(
