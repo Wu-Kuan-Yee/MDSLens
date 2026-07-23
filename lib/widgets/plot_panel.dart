@@ -6,9 +6,9 @@ import 'dart:typed_data';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'dropdown_items.dart';
 import 'plot_render_cache.dart';
 import 'polished_dropdown.dart';
+import 'polished_popup_menu.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/app_state.dart';
 import '../services/platform_file_dialog.dart';
@@ -1126,28 +1126,87 @@ class _PlotPanelState extends State<PlotPanel> {
   void _showContextMenu(BuildContext ctx, Offset globalPosition) {
     final app = ctx.read<AppState>();
     final isMaxed = app.maximizedPlot != null;
-    showMenu<String>(
+    showPolishedPopupMenu<String>(
       context: ctx,
-      position: RelativeRect.fromLTRB(globalPosition.dx, globalPosition.dy,
-          globalPosition.dx, globalPosition.dy),
-      items: [
-        ...separatedPopupMenuItems([
-          if (isMaxed)
-            const PopupMenuItem(
-                value: 'showAll', child: Text('Show All Panels'))
-          else
-            const PopupMenuItem(value: 'max', child: Text('Max')),
-          const PopupMenuItem(
-              value: 'reset', child: Text('Reset Current Scale')),
-          const PopupMenuItem(
-              value: 'resetAll', child: Text('Reset All Panels')),
-          const PopupMenuItem(value: 'sameX', child: Text('All Same X Scale')),
-          const PopupMenuItem(value: 'sameY', child: Text('All Same Y Scale')),
-          const PopupMenuItem(value: 'export', child: Text('Export Data')),
-          const PopupMenuItem(
-              value: 'dataSource', child: Text('Data Source Setup')),
-          const PopupMenuItem(value: 'setup', child: Text('Panel Setup')),
-        ]),
+      globalPosition: globalPosition,
+      id: 'plot-context-menu',
+      groups: [
+        PolishedPopupMenuGroup(
+          label: 'View',
+          options: [
+            if (isMaxed)
+              const PolishedPopupMenuOption(
+                id: 'show-all',
+                value: 'showAll',
+                label: 'Show All Panels',
+                icon: Icons.grid_view_rounded,
+              )
+            else
+              const PolishedPopupMenuOption(
+                id: 'maximize',
+                value: 'max',
+                label: 'Maximize Panel',
+                icon: Icons.fullscreen_rounded,
+              ),
+            const PolishedPopupMenuOption(
+              id: 'reset-current',
+              value: 'reset',
+              label: 'Reset Current Scale',
+              icon: Icons.center_focus_strong_rounded,
+            ),
+            const PolishedPopupMenuOption(
+              id: 'reset-all',
+              value: 'resetAll',
+              label: 'Reset All Panels',
+              icon: Icons.restart_alt_rounded,
+            ),
+          ],
+        ),
+        const PolishedPopupMenuGroup(
+          label: 'Scale',
+          options: [
+            PolishedPopupMenuOption(
+              id: 'same-x',
+              value: 'sameX',
+              label: 'All Same X Scale',
+              icon: Icons.swap_horiz_rounded,
+            ),
+            PolishedPopupMenuOption(
+              id: 'same-y',
+              value: 'sameY',
+              label: 'All Same Y Scale',
+              icon: Icons.swap_vert_rounded,
+            ),
+          ],
+        ),
+        const PolishedPopupMenuGroup(
+          label: 'Data',
+          options: [
+            PolishedPopupMenuOption(
+              id: 'export',
+              value: 'export',
+              label: 'Export Data',
+              icon: Icons.file_download_outlined,
+            ),
+          ],
+        ),
+        const PolishedPopupMenuGroup(
+          label: 'Configure',
+          options: [
+            PolishedPopupMenuOption(
+              id: 'data-source',
+              value: 'dataSource',
+              label: 'Data Source Setup',
+              icon: Icons.storage_rounded,
+            ),
+            PolishedPopupMenuOption(
+              id: 'panel-setup',
+              value: 'setup',
+              label: 'Panel Setup',
+              icon: Icons.tune_rounded,
+            ),
+          ],
+        ),
       ],
     ).then((value) {
       if (value == null || !mounted) return;

@@ -1464,6 +1464,70 @@ void main() {
     expect(find.byType(PopupMenuDivider), findsNWidgets(3));
   });
 
+  testWidgets('Waveform context menu is polished, grouped, and actionable',
+      (tester) async {
+    final app = AppState();
+    addTearDown(app.dispose);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 1],
+          [1, 2],
+        ],
+        null);
+    addTearDown(tester.view.reset);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(900, 700);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MaterialApp(
+          theme: MdsScopeTheme.light(),
+          home: const Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 600,
+                height: 420,
+                child: PlotPanel(plotIdx: 0),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tapAt(
+      tester.getCenter(find.byType(PlotPanel)),
+      buttons: kSecondaryMouseButton,
+    );
+    await tester.pumpAndSettle();
+
+    for (final section in const ['VIEW', 'SCALE', 'DATA', 'CONFIGURE']) {
+      expect(find.text(section), findsOneWidget);
+    }
+    expect(
+      find.byKey(const ValueKey('plot-context-menu-maximize')),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.fullscreen_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.restart_alt_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.storage_rounded), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('plot-context-menu-group-divider-1')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('plot-context-menu-maximize')),
+    );
+    await tester.pumpAndSettle();
+    expect(app.maximizedPlot, 0);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('SSH mode and font family use polished dropdown menus',
       (tester) async {
     final app = AppState();
