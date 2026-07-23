@@ -46,11 +46,13 @@ Add-ToolDirectory "perl.exe" @(
   "C:\Strawberry\perl\bin\perl.exe",
   "${env:ProgramFiles}\Git\usr\bin\perl.exe"
 ) "Install Strawberry Perl or Git for Windows with Perl."
-Add-ToolDirectory "nasm.exe" @(
-  "C:\Strawberry\c\bin\nasm.exe",
-  "${env:ProgramFiles}\NASM\nasm.exe",
-  "${env:ProgramFiles(x86)}\NASM\nasm.exe"
-) "Install NASM or Strawberry Perl."
+if ($TargetPlatform -eq "windows-x64") {
+  Add-ToolDirectory "nasm.exe" @(
+    "C:\Strawberry\c\bin\nasm.exe",
+    "${env:ProgramFiles}\NASM\nasm.exe",
+    "${env:ProgramFiles(x86)}\NASM\nasm.exe"
+  ) "Install NASM or Strawberry Perl."
+}
 
 if ($Configuration -in @("Release", "Profile")) {
   $cargoProfile = "release"
