@@ -126,7 +126,7 @@ jobs:
           cache: true
       - uses: dtolnay/rust-toolchain@1.92.0
       - name: Install the pinned Android NDK
-        run: "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.0.12077973"
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.0.12077973"'
       - name: Install Android release key when configured
         shell: bash
         run: |

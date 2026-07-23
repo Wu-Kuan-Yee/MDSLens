@@ -106,7 +106,7 @@ jobs:
           channel: stable
           cache: true
       - uses: dtolnay/rust-toolchain@1.92.0
-      - run: "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.0.12077973"
+      - run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.0.12077973"'
       - run: >-
           flutter build apk --release --split-per-abi
           --target-platform android-arm,android-arm64,android-x64
