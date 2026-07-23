@@ -244,13 +244,45 @@ void main() {
       },
     );
     await app.preferencesReady;
+    app.shotText = '143850';
 
     await app.saveFile();
 
     expect(suggestedName, 'config.toml');
     expect(savedBytes, expectedBytes);
     expect(jsonDecode(encodedJson!)['columns'], isNotEmpty);
+    expect(jsonDecode(encodedJson!)['shot'], '143850');
     expect(app.status, 'Saved to config.toml');
+  });
+
+  test('Opening a portable configuration restores its shot and fetches data',
+      () async {
+    String? requestedConfig;
+    final app = AppState(
+      configOpenPicker: () async => ConfigOpenSelection(
+        name: 'portable.toml',
+        bytes: Uint8List(0),
+      ),
+      configParser: (_) => '{"shot":"143850","columns":[[{"title":"Ip",'
+          '"signal_specs":[{"y_expr":"\\\\pcrl01","experiment":"pcs_east",'
+          '"server_ip":"202.127.204.12"}]}]]}',
+      signalFetchWorker: (configJson, _, __) async {
+        requestedConfig = configJson;
+        return '[{"column":0,"row":0,"signal":0,"shot":"143850",'
+            '"series":{"error":"","points":[[0.0,1.0]]}}]';
+      },
+    );
+    await app.preferencesReady;
+    app.setLoggedIn(true, 'test-token');
+
+    await app.openFile();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(app.shotText, '143850');
+    expect(jsonDecode(requestedConfig!)['columns'][0][0]['shot'], '143850');
+    expect(app.plots.single.series.single?.points, [
+      [0.0, 1.0]
+    ]);
   });
 
   test('Cross-platform saver writes desktop paths and supplies mobile bytes',

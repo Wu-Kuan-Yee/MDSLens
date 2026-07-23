@@ -10,3 +10,10 @@ rust/target/
 android/.gradle/
 android/local.properties
 
+# Flutter regenerates these files with host-specific paths, SDK metadata, and
+# line endings during `flutter pub get` and every platform build.
+.flutter-plugins-dependencies
+**/GeneratedPluginRegistrant.*
+**/generated_plugin_registrant.*
+**/generated_plugins.cmake
+

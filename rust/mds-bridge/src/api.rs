@@ -32,7 +32,9 @@ pub struct FrbPlotSpec {
 
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct FrbLayoutConfig {
+    pub shot: String,
     pub columns: Vec<Vec<FrbPlotSpec>>,
 }
 
@@ -97,7 +99,10 @@ impl From<mds_core::types::PlotSpec> for FrbPlotSpec {
 
 impl From<mds_core::types::LayoutConfig> for FrbLayoutConfig {
     fn from(c: mds_core::types::LayoutConfig) -> Self {
-        Self { columns: c.columns.into_iter().map(|col| col.into_iter().map(Into::into).collect()).collect() }
+        Self {
+            shot: c.shot,
+            columns: c.columns.into_iter().map(|col| col.into_iter().map(Into::into).collect()).collect(),
+        }
     }
 }
 
@@ -129,6 +134,7 @@ impl FrbLayoutConfig {
     pub fn into_rust(self) -> mds_core::types::LayoutConfig {
         mds_core::types::LayoutConfig {
             file_path: String::new(),
+            shot: self.shot,
             columns: self.columns.into_iter().map(|col| {
                 col.into_iter().map(|p| mds_core::types::PlotSpec {
                     shot: p.shot, title: p.title, x_label: p.x_label, y_label: p.y_label,
@@ -353,6 +359,7 @@ mod tests {
     #[test]
     fn test_encode_environment_without_file_io() {
         let config = FrbLayoutConfig {
+            shot: "143850".into(),
             columns: vec![vec![FrbPlotSpec {
                 title: "In-memory export".into(),
                 signal_specs: vec![FrbSignalSpec {
@@ -366,6 +373,7 @@ mod tests {
 
         let encoded = encode_environment(config);
         assert!(encoded.starts_with("version = 1"));
+        assert!(encoded.contains("shot = \"143850\""));
         assert!(encoded.contains("title = \"In-memory export\""));
         assert!(encoded.contains("tree = \"pcs_east\""));
         assert!(encoded.contains("y = \"\\\\pcrl01\""));
@@ -374,6 +382,7 @@ mod tests {
     #[test]
     fn test_into_rust_config() {
         let frb = FrbLayoutConfig {
+            shot: "143850".into(),
             columns: vec![vec![FrbPlotSpec {
                 shot: "143850".into(), title: "Ip".into(),
                 x_label: "s".into(), y_label: "kA".into(),
@@ -386,6 +395,7 @@ mod tests {
             }]],
         };
         let rust = frb.into_rust();
+        assert_eq!(rust.shot, "143850");
         assert_eq!(rust.columns.len(), 1);
         assert_eq!(rust.columns[0][0].signal_specs[0].y_expr, "\\pcrl01");
     }
@@ -403,7 +413,10 @@ mod tests {
 
     #[test]
     fn test_serialize_config() {
-        let frb = FrbLayoutConfig { columns: vec![] };
+        let frb = FrbLayoutConfig {
+            columns: vec![],
+            ..Default::default()
+        };
         let json = serde_json::to_string(&frb).unwrap();
         let back: FrbLayoutConfig = serde_json::from_str(&json).unwrap();
         assert!(back.columns.is_empty());

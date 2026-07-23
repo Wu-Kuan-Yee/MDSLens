@@ -77,11 +77,6 @@ add_custom_target(mds_bridge_native ALL
   VERBATIM
 )
 add_dependencies(${BINARY_NAME} mds_bridge_native)
-add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${MDS_BRIDGE_LIBRARY}" "$<TARGET_FILE_DIR:${BINARY_NAME}>/mds_bridge.dll"
-  VERBATIM
-)
 
 
 # Generated plugin build rules, which manage building the plugins and adding
@@ -110,6 +105,8 @@ install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}
   COMPONENT Runtime)
 
 install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+  COMPONENT Runtime)
+install(FILES "${MDS_BRIDGE_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
 
 if(PLUGIN_BUNDLED_LIBRARIES)

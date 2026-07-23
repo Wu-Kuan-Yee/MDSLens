@@ -57,11 +57,13 @@ typedef LatestShotWorker = Future<dynamic> Function(
 
 Future<ConfigOpenSelection?> _pickConfigurationFile() async {
   final mobile = Platform.isAndroid || Platform.isIOS;
-  final android = Platform.isAndroid;
   final result = await FilePicker.platform.pickFiles(
     dialogTitle: 'Open MdsScope configuration',
-    type: android ? FileType.any : FileType.custom,
-    allowedExtensions: android ? null : const ['toml', 'webscp'],
+    // iOS/iPadOS document providers do not consistently map the non-standard
+    // TOML extension to a UTI, which makes valid files appear disabled.
+    // Validate the selected filename ourselves on mobile instead.
+    type: mobile ? FileType.any : FileType.custom,
+    allowedExtensions: mobile ? null : const ['toml', 'webscp'],
     withData: mobile,
     lockParentWindow: !mobile,
   );
@@ -75,7 +77,9 @@ Future<ConfigOpenSelection?> _pickConfigurationFile() async {
   }
   return ConfigOpenSelection(
     name: file.name,
-    path: mobile ? null : file.path,
+    // file_picker commonly provides a readable cached path on mobile. Keep it
+    // and use the in-memory bytes only as a fallback.
+    path: file.path,
     bytes: file.bytes,
   );
 }
@@ -1117,8 +1121,22 @@ class AppState extends ChangeNotifier {
         return;
       }
       _invalidateFetchForSettingsChange();
-      final fileShot =
+      dynamic fileShot =
           json['shot'] ?? json['default_shot'] ?? json['global_shot'];
+      if (fileShot == null || fileShot.toString().trim().isEmpty) {
+        for (final column in cols) {
+          for (final panel in column) {
+            final panelShot = panel['shot'];
+            if (panelShot != null && panelShot.toString().trim().isNotEmpty) {
+              fileShot = panelShot;
+              break;
+            }
+          }
+          if (fileShot != null && fileShot.toString().trim().isNotEmpty) {
+            break;
+          }
+        }
+      }
       if (fileShot != null && fileShot.toString().trim().isNotEmpty) {
         _shotText = fileShot.toString().trim();
         _shotCtrl.text = _shotText;
@@ -1164,7 +1182,10 @@ class AppState extends ChangeNotifier {
                 return m;
               }).toList())
           .toList();
-      final configJson = jsonEncode(_jsonSafeValue({'columns': cols}));
+      final configJson = jsonEncode(_jsonSafeValue({
+        'shot': _shotText.trim(),
+        'columns': cols,
+      }));
       final bytes = await _configEncoder(configJson);
       _status = 'Choose where to save the configuration...';
       notifyListeners();

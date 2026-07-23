@@ -118,6 +118,8 @@ impl PlotSpec {
 pub struct LayoutConfig {
     /// Path to the environment file this was loaded from.
     pub file_path: String,
+    /// Default shot used by all panels without an explicit override.
+    pub shot: String,
     /// Columns of plot panels. Each column is a vector of panels (rows).
     pub columns: Vec<Vec<PlotSpec>>,
 }

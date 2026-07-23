@@ -35,6 +35,12 @@ def fail(message: str) -> "NoReturn":
 
 def run(*command: str, cwd: Path = ROOT, check: bool = True) -> subprocess.CompletedProcess[str]:
     log("Running: " + " ".join(command))
+    executable = shutil.which(command[0])
+    if host_platform() == "windows" and executable is not None:
+        if Path(executable).suffix.lower() in {".bat", ".cmd"}:
+            command = (os.environ.get("COMSPEC", "cmd.exe"), "/d", "/c", executable, *command[1:])
+        else:
+            command = (executable, *command[1:])
     return subprocess.run(command, cwd=cwd, check=check, text=True)
 
 
@@ -167,7 +173,10 @@ def package_windows(formats: set[str], no_build: bool, arch: str) -> None:
     if arch not in {"x64", "arm64"}:
         fail("Flutter supports Windows x64 and arm64, not " + arch)
     if not no_build:
-        flutter_build("windows", "--target-platform", f"windows-{arch}")
+        if arch == host_arch():
+            flutter_build("windows")
+        else:
+            flutter_build("windows", "--target-platform", f"windows-{arch}")
 
     bundle = windows_bundle(arch)
     if not (bundle / "mdsscope.exe").is_file():

@@ -54,6 +54,12 @@ pub fn parse_toml_environment(path: &str) -> LayoutConfig {
         }
     };
 
+    config.shot = ["shot", "default_shot", "global_shot"]
+        .iter()
+        .find_map(|key| toml_value.get(*key).and_then(|value| value.as_str()))
+        .unwrap_or_default()
+        .to_string();
+
     let panels = toml_value.get("panels").and_then(|v| v.as_array());
     let Some(panels) = panels else {
         return config;
@@ -183,6 +189,13 @@ pub fn parse_webscp_environment(path: &str) -> LayoutConfig {
     let cols = parse_usize(&map, "cols", 1).max(1);
     let mut config = LayoutConfig {
         file_path: path.to_string(),
+        shot: trim_quotes(
+            map.get("shot")
+                .or_else(|| map.get("shot_txt"))
+                .or_else(|| map.get("global_shot"))
+                .map(|value| value.as_str())
+                .unwrap_or(""),
+        ),
         columns: vec![Vec::new(); cols],
     };
 
@@ -259,10 +272,17 @@ pub fn encode_environment_toml(config: &LayoutConfig) -> String {
             }
         }
     }
-    let default_shot = shot_counts.into_iter()
+    let default_shot = if config.shot.trim().is_empty() {
+        shot_counts.into_iter()
         .max_by_key(|(_, count)| *count)
         .map(|(shot, _)| shot.to_string())
-        .unwrap_or_default();
+        .unwrap_or_default()
+    } else {
+        config.shot.trim().to_string()
+    };
+    if !default_shot.is_empty() {
+        writeln!(out, "shot = {:?}\n", default_shot).unwrap();
+    }
 
     for (c, column) in config.columns.iter().enumerate() {
         for (r, plot) in column.iter().enumerate() {
@@ -516,5 +536,29 @@ y = "\\pcrl01"
 
         std::fs::remove_file(&tmp).ok();
         std::fs::remove_file(&tmp2).ok();
+    }
+
+    #[test]
+    fn test_toml_roundtrip_preserves_default_shot() {
+        let toml_content = r#"
+version = 1
+shot = "143850"
+
+[[panels]]
+column = 1
+row = 1
+
+[[panels.signals]]
+tree = "pcs_east"
+server = "202.127.204.12"
+y = "\\pcrl01"
+"#;
+        let tmp = std::env::temp_dir().join("test_default_shot.toml");
+        std::fs::write(&tmp, toml_content).unwrap();
+        let config = parse_toml_environment(tmp.to_str().unwrap());
+        assert_eq!(config.shot, "143850");
+        let encoded = encode_environment_toml(&config);
+        assert!(encoded.contains("shot = \"143850\""));
+        std::fs::remove_file(&tmp).ok();
     }
 }
