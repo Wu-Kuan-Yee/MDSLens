@@ -100,4 +100,40 @@ void main() {
 
     expect(await NetworkPermissionService.openAppSettings(), isTrue);
   });
+
+  testWidgets('Startup requests the native system permission without a panel',
+      (tester) async {
+    const channel = MethodChannel('mdsscope/permissions');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    var requestCount = 0;
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(channel, null),
+    );
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'requestLocalNetworkAccess') requestCount++;
+      return true;
+    });
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NetworkPermissionGate(
+          app: app,
+          enabled: true,
+          requestOnStartup: true,
+          child: const Scaffold(body: Text('MdsScope')),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(requestCount, 1);
+    expect(
+      find.byKey(const ValueKey('network-permission-dialog')),
+      findsNothing,
+    );
+  });
 }

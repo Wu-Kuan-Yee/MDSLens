@@ -10,6 +10,20 @@ class NetworkPermissionService {
       defaultTargetPlatform == TargetPlatform.iOS ||
       defaultTargetPlatform == TargetPlatform.macOS;
 
+  static bool get requestsLocalNetworkOnStartup =>
+      defaultTargetPlatform == TargetPlatform.iOS;
+
+  static Future<bool> requestInitialLocalNetworkAccess() async {
+    try {
+      return await _channel.invokeMethod<bool>('requestLocalNetworkAccess') ??
+          false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
   static bool isLikelyPermissionFailure(Object error) {
     final message = error.toString().toLowerCase();
     return const [

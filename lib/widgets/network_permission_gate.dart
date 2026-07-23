@@ -12,12 +12,14 @@ class NetworkPermissionGate extends StatefulWidget {
     required this.app,
     required this.child,
     this.enabled,
+    this.requestOnStartup,
     super.key,
   });
 
   final AppState app;
   final Widget child;
   final bool? enabled;
+  final bool? requestOnStartup;
 
   @override
   State<NetworkPermissionGate> createState() => _NetworkPermissionGateState();
@@ -27,6 +29,7 @@ class _NetworkPermissionGateState extends State<NetworkPermissionGate> {
   int _presentedRevision = 0;
   bool _dialogOpen = false;
   bool _promptScheduled = false;
+  bool _startupRequestScheduled = false;
 
   bool get _enabled =>
       widget.enabled ??
@@ -37,6 +40,7 @@ class _NetworkPermissionGateState extends State<NetworkPermissionGate> {
     super.initState();
     widget.app.addListener(_onAppChanged);
     _onAppChanged();
+    _scheduleStartupRequest();
   }
 
   @override
@@ -65,6 +69,19 @@ class _NetworkPermissionGateState extends State<NetworkPermissionGate> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _promptScheduled = false;
       if (mounted) unawaited(_showPermissionPrompt());
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  void _scheduleStartupRequest() {
+    final shouldRequest = widget.requestOnStartup ??
+        NetworkPermissionService.requestsLocalNetworkOnStartup;
+    if (!shouldRequest || _startupRequestScheduled) return;
+    _startupRequestScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        unawaited(NetworkPermissionService.requestInitialLocalNetworkAccess());
+      }
     });
     WidgetsBinding.instance.ensureVisualUpdate();
   }
