@@ -5,10 +5,18 @@ build/
 .idea/
 .vscode/
 *.swp
+*.swo
+*.bak
+*.orig
+*.rej
+*.log
+*~
 .DS_Store
 rust/target/
 android/.gradle/
 android/local.properties
+macos/Frameworks/
+*.stride_backup
 
 # Flutter regenerates these files with host-specific paths, SDK metadata, and
 # line endings during `flutter pub get` and every platform build.

@@ -1,0 +1,7 @@
+# Store all text as LF so Unix scripts and cross-platform toolchains behave
+# identically regardless of each contributor's core.autocrlf setting.
+* text=auto eol=lf
+
+# Windows command scripts are the sole CRLF exception.
+*.bat text eol=crlf
+*.cmd text eol=crlf
