@@ -96,6 +96,7 @@ class _PlotPanelState extends State<PlotPanel> {
   double? _lastMultiTouchSpan;
   bool _trackpadGestureActive = false;
   double _lastTrackpadScale = 1;
+  int? _activeStylusPointer;
   Timer? _longPressTimer;
   Offset? _longPressStartPos;
 
@@ -169,8 +170,10 @@ class _PlotPanelState extends State<PlotPanel> {
             );
           }
         },
-        onSecondaryTapUp: (details) =>
-            _showContextMenu(context, details.globalPosition),
+        onSecondaryTapUp: (details) {
+          if (_isStylusKind(details.kind)) return;
+          _showContextMenu(context, details.globalPosition);
+        },
         // Long press handled manually via _longPressTimer in onPointerDown/Up for mobile compatibility
         child: Listener(
           key: _listenerKey,
@@ -180,7 +183,11 @@ class _PlotPanelState extends State<PlotPanel> {
           onPointerPanZoomEnd: _handleTrackpadGestureEnd,
           onPointerDown: (e) {
             _handlePointerDown(e);
-            if (!_multiTouchActive) _startLongPressTimer(e);
+            if (e.kind == PointerDeviceKind.touch &&
+                _activeStylusPointer == null &&
+                !_multiTouchActive) {
+              _startLongPressTimer(e);
+            }
           },
           onPointerMove: (e) {
             _handlePointerMove(e);
@@ -242,6 +249,7 @@ class _PlotPanelState extends State<PlotPanel> {
         ),
       if (_inRubberBand && _rubberBandRect != null)
         Positioned(
+          key: ValueKey('plot-rubber-band-${widget.plotIdx}'),
           left: _rubberBandRect!.left,
           top: _rubberBandRect!.top,
           width: _rubberBandRect!.width,
@@ -767,7 +775,29 @@ class _PlotPanelState extends State<PlotPanel> {
   }
 
   void _handlePointerDown(PointerDownEvent event) {
+    if (_isStylusKind(event.kind)) {
+      _activeStylusPointer = event.pointer;
+      _cancelLongPressTimer();
+      final app = context.read<AppState>();
+      if (app.interactionMode == 1) {
+        _updateTouchCrosshair(event.localPosition, unlock: true);
+        return;
+      }
+      if (app.interactionMode != 0) return;
+      final barrelButton =
+          (event.buttons & (kPrimaryStylusButton | kSecondaryStylusButton)) !=
+              0;
+      if (barrelButton) {
+        _midPanning = true;
+        _lastMidPanPos = event.localPosition;
+      } else if ((event.buttons & kPrimaryButton) != 0) {
+        _beginRubberBand(event.localPosition);
+      }
+      return;
+    }
+
     if (event.kind == PointerDeviceKind.touch) {
+      if (_activeStylusPointer != null) return;
       _touchPositions[event.pointer] = event.localPosition;
       if (_touchPositions.length >= 2) {
         _beginMultiTouch();
@@ -787,10 +817,7 @@ class _PlotPanelState extends State<PlotPanel> {
         (event.buttons & kPrimaryMouseButton) != 0 &&
         !app.shiftHeld;
     if (isMouseLeft) {
-      _inRubberBand = true;
-      _rubberBandStart = event.localPosition;
-      _rubberBandRect =
-          Rect.fromPoints(event.localPosition, event.localPosition);
+      _beginRubberBand(event.localPosition);
     } else if (isMid || isShiftLeft) {
       _midPanning = true;
       _lastMidPanPos = event.localPosition;
@@ -798,6 +825,9 @@ class _PlotPanelState extends State<PlotPanel> {
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
+    if (_isStylusKind(event.kind) && event.pointer != _activeStylusPointer) {
+      return;
+    }
     if (event.kind == PointerDeviceKind.touch &&
         _touchPositions.containsKey(event.pointer)) {
       final previousPosition = _touchPositions[event.pointer]!;
@@ -814,12 +844,12 @@ class _PlotPanelState extends State<PlotPanel> {
       }
       return;
     }
+    if (event.kind == PointerDeviceKind.touch) return;
 
     final app = context.read<AppState>();
     if (app.interactionMode == 1 &&
         !app.pointLocked &&
-        (event.kind == PointerDeviceKind.mouse ||
-            event.kind == PointerDeviceKind.stylus) &&
+        (event.kind == PointerDeviceKind.mouse || _isStylusKind(event.kind)) &&
         _ensureViewInitialized(app)) {
       app.setCrosshair(
         _pxToDataX(event.localPosition.dx),
@@ -866,6 +896,9 @@ class _PlotPanelState extends State<PlotPanel> {
       return;
     }
 
+    final wasActiveStylus = event.pointer == _activeStylusPointer;
+    if (wasActiveStylus) _activeStylusPointer = null;
+
     if (_inRubberBand &&
         _rubberBandRect != null &&
         ((event.buttons & kPrimaryMouseButton) == 0)) {
@@ -900,6 +933,9 @@ class _PlotPanelState extends State<PlotPanel> {
       _removeTouchPointer(event.pointer);
       return;
     }
+    if (event.pointer == _activeStylusPointer) {
+      _activeStylusPointer = null;
+    }
     _midPanning = false;
     _lastMidPanPos = null;
     if (_inRubberBand && mounted) {
@@ -933,6 +969,16 @@ class _PlotPanelState extends State<PlotPanel> {
       _pxToDataX(localPosition.dx),
       sourcePlot: widget.plotIdx,
     );
+  }
+
+  bool _isStylusKind(PointerDeviceKind kind) =>
+      kind == PointerDeviceKind.stylus ||
+      kind == PointerDeviceKind.invertedStylus;
+
+  void _beginRubberBand(Offset localPosition) {
+    _inRubberBand = true;
+    _rubberBandStart = localPosition;
+    _rubberBandRect = Rect.fromPoints(localPosition, localPosition);
   }
 
   void _beginMultiTouch() {

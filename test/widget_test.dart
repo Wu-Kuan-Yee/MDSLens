@@ -1135,6 +1135,122 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Stylus tip draws a rubber-band zoom in Zoom/Move mode',
+      (tester) async {
+    final app = AppState();
+    addTearDown(app.dispose);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 0],
+          [5, 5],
+          [10, 10]
+        ],
+        null);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 500,
+              height: 400,
+              child: PlotPanel(plotIdx: 0),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    LineChart chart() => tester.widget<LineChart>(find.byType(LineChart));
+    final widthBefore = chart().data.maxX - chart().data.minX;
+    final stylus = await tester.startGesture(
+      const Offset(150, 100),
+      kind: PointerDeviceKind.stylus,
+    );
+    await stylus.moveTo(const Offset(390, 300));
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('plot-rubber-band-0')),
+      findsOneWidget,
+    );
+    expect(find.byType(PopupMenuItem<String>), findsNothing);
+
+    await stylus.up();
+    await tester.pumpAndSettle();
+    final widthAfter = chart().data.maxX - chart().data.minX;
+    expect(widthAfter, lessThan(widthBefore));
+    expect(
+      find.byKey(const ValueKey('plot-rubber-band-0')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Stylus barrel pans and inverted stylus drives Point mode',
+      (tester) async {
+    final app = AppState();
+    addTearDown(app.dispose);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 0],
+          [5, 5],
+          [10, 10]
+        ],
+        null);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 500,
+              height: 400,
+              child: PlotPanel(plotIdx: 0),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    LineChart chart() => tester.widget<LineChart>(find.byType(LineChart));
+    final centerBefore = (chart().data.minX + chart().data.maxX) / 2;
+    final barrel = await tester.startGesture(
+      const Offset(240, 200),
+      kind: PointerDeviceKind.stylus,
+      buttons: kPrimaryStylusButton,
+    );
+    await barrel.moveBy(const Offset(70, -25));
+    await tester.pump();
+    await barrel.up();
+    await tester.pump();
+    final centerAfter = (chart().data.minX + chart().data.maxX) / 2;
+    expect(centerAfter, lessThan(centerBefore));
+    expect(find.byType(PopupMenuItem<String>), findsNothing);
+
+    app.interactionMode = 1;
+    final pointPen = await tester.startGesture(
+      const Offset(180, 180),
+      kind: PointerDeviceKind.invertedStylus,
+    );
+    await tester.pump();
+    final firstX = app.crosshairX;
+    expect(firstX, isNotNull);
+    await pointPen.moveTo(const Offset(360, 180));
+    await tester.pump();
+    expect(app.crosshairX, greaterThan(firstX!));
+    await pointPen.up();
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Plot view survives panel disposal and reconstruction',
       (tester) async {
     final app = AppState();
