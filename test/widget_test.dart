@@ -1251,6 +1251,54 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Stylus long press tolerates jitter and opens context menu',
+      (tester) async {
+    final app = AppState();
+    addTearDown(app.dispose);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 0],
+          [5, 5],
+          [10, 10]
+        ],
+        null);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 500,
+              height: 400,
+              child: PlotPanel(plotIdx: 0),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final stylus = await tester.startGesture(
+      const Offset(240, 200),
+      kind: PointerDeviceKind.stylus,
+    );
+    await stylus.moveBy(const Offset(4, 3));
+    await tester.pump(const Duration(milliseconds: 550));
+
+    expect(
+      find.byKey(const ValueKey('plot-context-menu-maximize')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('plot-rubber-band-0')), findsNothing);
+
+    await stylus.up();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Plot view survives panel disposal and reconstruction',
       (tester) async {
     final app = AppState();

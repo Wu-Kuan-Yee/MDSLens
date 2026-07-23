@@ -97,8 +97,19 @@ class _PlotPanelState extends State<PlotPanel> {
   bool _trackpadGestureActive = false;
   double _lastTrackpadScale = 1;
   int? _activeStylusPointer;
+  Offset? _stylusDownLocal;
+  bool _stylusDragStarted = false;
+  bool _stylusLongPressTriggered = false;
+  bool _stylusShouldErase = false;
   Timer? _longPressTimer;
   Offset? _longPressStartPos;
+  static const double _stylusLongPressSlop = 12;
+
+  @override
+  void dispose() {
+    _longPressTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -777,24 +788,18 @@ class _PlotPanelState extends State<PlotPanel> {
   void _handlePointerDown(PointerDownEvent event) {
     if (_isStylusKind(event.kind)) {
       _activeStylusPointer = event.pointer;
-      _cancelLongPressTimer();
+      _stylusDownLocal = event.localPosition;
+      _stylusDragStarted = false;
+      _stylusLongPressTriggered = false;
       final app = context.read<AppState>();
+      _stylusShouldErase = event.kind == PointerDeviceKind.invertedStylus ||
+          app.stylusEraserMode;
+      _startLongPressTimer(event, stylus: true);
       if (app.interactionMode == 1) {
         _updateTouchCrosshair(event.localPosition, unlock: true);
         return;
       }
       if (app.interactionMode != 0) return;
-      final eraser = event.kind == PointerDeviceKind.invertedStylus ||
-          app.stylusEraserMode;
-      final barrelButton =
-          (event.buttons & (kPrimaryStylusButton | kSecondaryStylusButton)) !=
-              0;
-      if (!eraser || barrelButton) {
-        _midPanning = true;
-        _lastMidPanPos = event.localPosition;
-      } else if ((event.buttons & kPrimaryButton) != 0) {
-        _beginRubberBand(event.localPosition);
-      }
       return;
     }
 
@@ -849,9 +854,42 @@ class _PlotPanelState extends State<PlotPanel> {
     if (event.kind == PointerDeviceKind.touch) return;
 
     final app = context.read<AppState>();
+    if (_isStylusKind(event.kind)) {
+      if (_stylusLongPressTriggered) return;
+      final moved = _longPressStartPos == null
+          ? double.infinity
+          : (event.position - _longPressStartPos!).distance;
+      if (app.interactionMode == 1) {
+        if (moved > _stylusLongPressSlop) _cancelLongPressTimer();
+        if (!app.pointLocked && _ensureViewInitialized(app)) {
+          app.setCrosshair(
+            _pxToDataX(event.localPosition.dx),
+            sourcePlot: widget.plotIdx,
+          );
+        }
+        return;
+      }
+      if (app.interactionMode != 0) return;
+      if (!_stylusDragStarted) {
+        if (moved <= _stylusLongPressSlop) return;
+        final dragStart = _stylusDownLocal ?? event.localPosition;
+        final barrelButton =
+            (event.buttons & (kPrimaryStylusButton | kSecondaryStylusButton)) !=
+                0;
+        _stylusDragStarted = true;
+        _cancelLongPressTimer();
+        if (_stylusShouldErase && !barrelButton) {
+          _beginRubberBand(dragStart);
+        } else {
+          _midPanning = true;
+          _lastMidPanPos = dragStart;
+        }
+      }
+    }
+
     if (app.interactionMode == 1 &&
         !app.pointLocked &&
-        (event.kind == PointerDeviceKind.mouse || _isStylusKind(event.kind)) &&
+        event.kind == PointerDeviceKind.mouse &&
         _ensureViewInitialized(app)) {
       app.setCrosshair(
         _pxToDataX(event.localPosition.dx),
@@ -899,7 +937,12 @@ class _PlotPanelState extends State<PlotPanel> {
     }
 
     final wasActiveStylus = event.pointer == _activeStylusPointer;
-    if (wasActiveStylus) _activeStylusPointer = null;
+    if (wasActiveStylus) {
+      _activeStylusPointer = null;
+      final completedDrag = _stylusDragStarted;
+      _clearStylusGesture();
+      if (!completedDrag) return;
+    }
 
     if (_inRubberBand &&
         _rubberBandRect != null &&
@@ -937,6 +980,7 @@ class _PlotPanelState extends State<PlotPanel> {
     }
     if (event.pointer == _activeStylusPointer) {
       _activeStylusPointer = null;
+      _clearStylusGesture();
     }
     _midPanning = false;
     _lastMidPanPos = null;
@@ -1147,13 +1191,28 @@ class _PlotPanelState extends State<PlotPanel> {
     _rubberBandRect = null;
   }
 
-  void _startLongPressTimer(PointerDownEvent e) {
+  void _startLongPressTimer(PointerDownEvent e, {bool stylus = false}) {
     _cancelLongPressTimer();
     _longPressStartPos = e.position;
+    final pointer = e.pointer;
     _longPressTimer = Timer(const Duration(milliseconds: 500), () {
       if (mounted && _longPressStartPos != null) {
+        if (stylus && pointer == _activeStylusPointer) {
+          _stylusLongPressTriggered = true;
+          _stylusDragStarted = false;
+          _midPanning = false;
+          _lastMidPanPos = null;
+          if (_inRubberBand) {
+            setState(() {
+              _inRubberBand = false;
+              _rubberBandStart = null;
+              _rubberBandRect = null;
+            });
+          }
+        }
         _showContextMenu(context, _longPressStartPos!);
       }
+      _longPressTimer = null;
       _longPressStartPos = null;
     });
   }
@@ -1165,10 +1224,18 @@ class _PlotPanelState extends State<PlotPanel> {
   }
 
   void _cancelLongPressIfMoved(PointerMoveEvent e) {
+    if (_isStylusKind(e.kind)) return;
     if (_longPressStartPos != null &&
         (e.position - _longPressStartPos!).distance > 10) {
       _cancelLongPressTimer();
     }
+  }
+
+  void _clearStylusGesture() {
+    _stylusDownLocal = null;
+    _stylusDragStarted = false;
+    _stylusLongPressTriggered = false;
+    _stylusShouldErase = false;
   }
 
   void _showContextMenu(BuildContext ctx, Offset globalPosition) {
