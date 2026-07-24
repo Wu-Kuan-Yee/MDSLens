@@ -9,6 +9,7 @@ use crate::settings::SshSettings;
 use mds_core::types::{LayoutConfig, SshMode};
 use std::collections::HashMap;
 use std::net::{TcpListener, TcpStream};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -212,12 +213,27 @@ impl Drop for SshTunnelManager {
 
 #[cfg(feature = "libssh2")]
 fn authenticate(session: &ssh2::Session, settings: &SshSettings) -> Result<AuthMethod, String> {
-    if !settings.identity_file.is_empty() {
-        if session.userauth_pubkey_file(&settings.user, None, std::path::Path::new(&settings.identity_file), None).is_ok() {
-            return Ok(AuthMethod::PublicKey);
+    let identity_supplied = !settings.identity_file.trim().is_empty();
+    let mut identity_error = None;
+    if identity_supplied {
+        match resolve_identity_file(&settings.identity_file) {
+            Ok(Some(identity_file)) => {
+                match session.userauth_pubkey_file(&settings.user, None, &identity_file, None) {
+                    Ok(()) => return Ok(AuthMethod::PublicKey),
+                    Err(e) => {
+                        identity_error = Some(format!(
+                            "public-key authentication failed using '{}': {}",
+                            identity_file.display(),
+                            e
+                        ));
+                    }
+                }
+            }
+            Ok(None) => {}
+            Err(e) => identity_error = Some(e),
         }
     }
-    if settings.password.is_empty() && settings.identity_file.is_empty() {
+    if settings.password.is_empty() && !identity_supplied {
         if let Ok(mut agent) = session.agent() {
             if agent.connect().is_ok() && agent.list_identities().is_ok() {
                 if let Ok(ids) = agent.identities() {
@@ -237,11 +253,14 @@ fn authenticate(session: &ssh2::Session, settings: &SshSettings) -> Result<AuthM
                 if try_keyboard_interactive(session, &settings.user, &settings.password) {
                     return Ok(AuthMethod::KeyboardInteractive);
                 }
-                return Err(format!("auth failed: {}", e));
+                return Err(match identity_error {
+                    Some(key_error) => format!("{}; password authentication failed: {}", key_error, e),
+                    None => format!("password authentication failed: {}", e),
+                });
             }
         }
     }
-    Err("no valid authentication method found".into())
+    Err(identity_error.unwrap_or_else(|| "no valid authentication method found".into()))
 }
 
 #[cfg(feature = "libssh2")]
@@ -256,6 +275,143 @@ fn try_keyboard_interactive(session: &ssh2::Session, user: &str, password: &str)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────
+
+fn resolve_identity_file(input: &str) -> Result<Option<PathBuf>, String> {
+    if input.trim().is_empty() {
+        return Ok(None);
+    }
+    let home = home_directory();
+    let expanded = expand_identity_path_with(input, home.as_deref(), &|name| {
+        std::env::var(name).ok()
+    });
+    let absolute = if expanded.is_absolute() {
+        expanded
+    } else {
+        std::env::current_dir()
+            .map_err(|e| format!("cannot resolve relative identity file '{}': {}", input.trim(), e))?
+            .join(expanded)
+    };
+    let metadata = std::fs::metadata(&absolute).map_err(|e| {
+        format!(
+            "identity file '{}' was not found or is inaccessible (resolved to '{}'): {}",
+            input.trim(),
+            absolute.display(),
+            e
+        )
+    })?;
+    if !metadata.is_file() {
+        return Err(format!(
+            "identity file '{}' resolves to a directory, not a file: '{}'",
+            input.trim(),
+            absolute.display()
+        ));
+    }
+    Ok(Some(absolute.canonicalize().unwrap_or(absolute)))
+}
+
+fn home_directory() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("USERPROFILE")
+                .filter(|value| !value.is_empty())
+                .map(PathBuf::from)
+        })
+        .or_else(|| {
+            let drive = std::env::var_os("HOMEDRIVE")?;
+            let path = std::env::var_os("HOMEPATH")?;
+            if drive.is_empty() || path.is_empty() {
+                return None;
+            }
+            let mut value = drive;
+            value.push(path);
+            Some(PathBuf::from(value))
+        })
+}
+
+fn expand_identity_path_with<F>(input: &str, home: Option<&Path>, lookup: &F) -> PathBuf
+where
+    F: Fn(&str) -> Option<String>,
+{
+    let trimmed = input.trim();
+    let unquoted = if trimmed.len() >= 2
+        && ((trimmed.starts_with('"') && trimmed.ends_with('"'))
+            || (trimmed.starts_with('\'') && trimmed.ends_with('\'')))
+    {
+        &trimmed[1..trimmed.len() - 1]
+    } else {
+        trimmed
+    };
+    let expanded = expand_environment_variables_with(unquoted, lookup);
+    if let Some(home) = home {
+        if expanded == "~" {
+            return home.to_path_buf();
+        }
+        if let Some(rest) = expanded
+            .strip_prefix("~/")
+            .or_else(|| expanded.strip_prefix("~\\"))
+        {
+            return home.join(rest);
+        }
+    }
+    PathBuf::from(expanded)
+}
+
+fn expand_environment_variables_with<F>(input: &str, lookup: &F) -> String
+where
+    F: Fn(&str) -> Option<String>,
+{
+    let chars: Vec<char> = input.chars().collect();
+    let mut output = String::with_capacity(input.len());
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '$' {
+            if i + 1 < chars.len() && chars[i + 1] == '{' {
+                if let Some(end) = (i + 2..chars.len()).find(|&j| chars[j] == '}') {
+                    let name: String = chars[i + 2..end].iter().collect();
+                    if let Some(value) = lookup(&name) {
+                        output.push_str(&value);
+                    } else {
+                        output.extend(chars[i..=end].iter());
+                    }
+                    i = end + 1;
+                    continue;
+                }
+            } else {
+                let end = (i + 1..chars.len())
+                    .find(|&j| !(chars[j].is_ascii_alphanumeric() || chars[j] == '_'))
+                    .unwrap_or(chars.len());
+                if end > i + 1 {
+                    let name: String = chars[i + 1..end].iter().collect();
+                    if let Some(value) = lookup(&name) {
+                        output.push_str(&value);
+                    } else {
+                        output.extend(chars[i..end].iter());
+                    }
+                    i = end;
+                    continue;
+                }
+            }
+        } else if chars[i] == '%' {
+            if let Some(end) = (i + 1..chars.len()).find(|&j| chars[j] == '%') {
+                let name: String = chars[i + 1..end].iter().collect();
+                if !name.is_empty() {
+                    if let Some(value) = lookup(&name) {
+                        output.push_str(&value);
+                    } else {
+                        output.extend(chars[i..=end].iter());
+                    }
+                    i = end + 1;
+                    continue;
+                }
+            }
+        }
+        output.push(chars[i]);
+        i += 1;
+    }
+    output
+}
 
 fn reserve_local_port() -> Result<u16, String> {
     let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| format!("bind: {}", e))?;
@@ -401,5 +557,38 @@ mod tests {
         });
         assert_eq!(mgr.state(), TunnelState::Ready);
         assert_eq!(mgr.settings().host, "second");
+    }
+
+    #[test]
+    fn identity_path_expands_tilde_quotes_and_environment_variables() {
+        let home = Path::new("/home/test user");
+        let path = expand_identity_path_with(
+            r#""~/.ssh/id ed25519""#,
+            Some(home),
+            &|_| None,
+        );
+        assert_eq!(path, home.join(".ssh/id ed25519"));
+
+        let path = expand_identity_path_with(
+            "${KEY_ROOT}/id_rsa",
+            None,
+            &|name| (name == "KEY_ROOT").then(|| "/keys".to_string()),
+        );
+        assert_eq!(path, PathBuf::from("/keys/id_rsa"));
+
+        let path = expand_identity_path_with(
+            "%KEY_ROOT%/id_rsa",
+            None,
+            &|name| (name == "KEY_ROOT").then(|| "/portable-keys".to_string()),
+        );
+        assert_eq!(path, PathBuf::from("/portable-keys/id_rsa"));
+    }
+
+    #[test]
+    fn invalid_identity_path_returns_the_resolved_path() {
+        let error = resolve_identity_file("./definitely-missing-mdsscope-key")
+            .expect_err("missing identity file must be rejected");
+        assert!(error.contains("not found or is inaccessible"));
+        assert!(error.contains("definitely-missing-mdsscope-key"));
     }
 }

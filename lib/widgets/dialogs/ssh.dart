@@ -33,6 +33,7 @@ class SshDialog extends StatelessWidget {
       void Function(void Function()) setState,
       BuildContext ctx,
     ) async {
+      final identityFile = keyCtrl.text.trim();
       setState(() {
         testing = true;
         result = '';
@@ -50,7 +51,7 @@ class SshDialog extends StatelessWidget {
           'port': int.tryParse(portCtrl.text) ?? 22,
           'user': userCtrl.text,
           'password': passCtrl.text,
-          'identity_file': keyCtrl.text,
+          'identity_file': identityFile,
           'mode': mode
         });
         final resp = RustBridge.instance.sshT(settingsJson);
@@ -238,7 +239,7 @@ class SshDialog extends StatelessWidget {
                     app.setSshPort(int.tryParse(portCtrl.text) ?? 22);
                     app.setSshUser(userCtrl.text);
                     app.setSshPass(passCtrl.text);
-                  app.setSshIdentity(keyCtrl.text);
+                  app.setSshIdentity(keyCtrl.text.trim());
                     app.sshMode = mode;
                     app.setSshTestResult(result == 'ok' && mode > 0);
                     app.setStatus(result == 'ok'

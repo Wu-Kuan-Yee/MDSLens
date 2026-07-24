@@ -945,6 +945,29 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('SSH dialog preserves a manually entered identity file path',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('SSH tunnel'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('ssh-identity')),
+      '  ~/.ssh/id_ed25519  ',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(app.sshIdentity, '~/.ssh/id_ed25519');
+  });
+
   testWidgets('SSH button lights only while a reachable tunnel is in use',
       (tester) async {
     final app = AppState();
