@@ -1754,6 +1754,9 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
     } catch (_) {
       _treeNames = ['pcs_east'];
     }
+    _signalCache.remove('__all__');
+    await _signalsForTree('');
+    if (!mounted) return;
     // Load initial signal options for each row
     for (final r in _rows) {
       _updateSignalOptions(r);
@@ -1764,6 +1767,20 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
   Future<List<String>> _signalsForTree(String tree) async {
     final key =
         tree.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]+'), '_');
+    if (key.isEmpty) {
+      const allKey = '__all__';
+      if (_signalCache.containsKey(allKey)) return _signalCache[allKey]!;
+      final signalLists = await Future.wait(
+        _treeNames.map(_signalsForTree),
+      );
+      final allSignals = signalLists
+          .expand((signals) => signals)
+          .toSet()
+          .toList()
+        ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      _signalCache[allKey] = allSignals;
+      return allSignals;
+    }
     if (_signalCache.containsKey(key)) return _signalCache[key]!;
     try {
       final text = await _loadAsset('assets/source_index/signals/$key.txt');
@@ -1920,6 +1937,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                       Padding(
                           padding: const EdgeInsets.only(right: 4),
                           child: _AutocompleteField(
+                              key: ValueKey('data-tree-$i'),
                               controller: _rows[i].tree,
                               options: _treeNames,
                               label: 'Tree',
@@ -1930,12 +1948,10 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                       Padding(
                           padding: const EdgeInsets.only(right: 4),
                           child: _AutocompleteField(
+                              key: ValueKey('data-signal-$i'),
                               controller: _rows[i].y,
                               options: _rows[i]._signalOptions,
-                              label: 'Signal',
-                              onChanged: () {
-                                _updateSignalOptions(_rows[i]);
-                              })),
+                              label: 'Signal')),
                       Padding(
                           padding: const EdgeInsets.only(right: 4),
                           child: TextField(
@@ -2011,7 +2027,9 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
   }
 
   void _updateSignalOptions(_DSRow row) async {
-    final sigs = await _signalsForTree(row.tree.text);
+    final requestedTree = row.tree.text.trim().toLowerCase();
+    final sigs = await _signalsForTree(requestedTree);
+    if (!mounted || requestedTree != row.tree.text.trim().toLowerCase()) return;
     setState(() => row._signalOptions = sigs);
   }
 
@@ -2044,7 +2062,8 @@ class _AutocompleteField extends StatefulWidget {
   final String label;
   final VoidCallback? onChanged;
   const _AutocompleteField(
-      {required this.controller,
+      {super.key,
+      required this.controller,
       required this.options,
       required this.label,
       this.onChanged});
@@ -2061,12 +2080,24 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
   void initState() {
     super.initState();
     widget.controller.addListener(_update);
+    _node.addListener(_handleFocusChange);
+  }
+
+  @override
+  void didUpdateWidget(covariant _AutocompleteField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.options, widget.options) && _node.hasFocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _update();
+      });
+    }
   }
 
   @override
   void dispose() {
     _removeOverlay();
     widget.controller.removeListener(_update);
+    _node.removeListener(_handleFocusChange);
     _node.dispose();
     super.dispose();
   }
@@ -2076,14 +2107,19 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
     _overlay = null;
   }
 
+  void _handleFocusChange() {
+    if (_node.hasFocus) {
+      _update();
+    } else {
+      _removeOverlay();
+    }
+  }
+
   void _update() {
     final v = widget.controller.text.toLowerCase();
     final hints = v.isEmpty
-        ? <String>[]
-        : widget.options
-            .where((o) => o.toLowerCase().contains(v))
-            .take(20)
-            .toList();
+        ? widget.options
+        : widget.options.where((o) => o.toLowerCase().contains(v)).toList();
     _removeOverlay();
     if (hints.isNotEmpty && _node.hasFocus) {
       // Don't show if there's exactly one hint that matches the current text exactly
@@ -2098,54 +2134,48 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
               showWhenUnlinked: false,
               offset: const Offset(0, 42),
               child: Material(
-                color: Colors.transparent,
-                child: Container(
-                  constraints: const BoxConstraints(maxHeight: 240),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHigh,
-                    border: Border.all(
-                      color: theme.colorScheme.outlineVariant,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: theme.colorScheme.shadow.withValues(alpha: 0.22),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
+                color: theme.colorScheme.surfaceContainerHigh,
+                elevation: 8,
+                shadowColor: theme.colorScheme.shadow.withValues(alpha: 0.22),
+                shape: RoundedRectangleBorder(
+                  side: BorderSide(
+                    color: theme.colorScheme.outlineVariant,
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: ListView.separated(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      shrinkWrap: true,
-                      itemCount: hints.length,
-                      separatorBuilder: (_, __) => Divider(
-                        height: 1,
-                        color: theme.dividerColor.withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: ConstrainedBox(
+                  key: ValueKey(
+                      'autocomplete-${widget.label.toLowerCase()}-menu'),
+                  constraints: const BoxConstraints(maxHeight: 240),
+                  child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    shrinkWrap: true,
+                    itemCount: hints.length,
+                    separatorBuilder: (_, __) => Divider(
+                      height: 1,
+                      color: theme.dividerColor.withValues(alpha: 0.55),
+                    ),
+                    itemBuilder: (_, i) => ListTile(
+                      dense: true,
+                      minTileHeight: 42,
+                      leading: Icon(
+                        Icons.search_rounded,
+                        size: 18,
+                        color: theme.colorScheme.primary,
                       ),
-                      itemBuilder: (_, i) => ListTile(
-                        dense: true,
-                        minTileHeight: 42,
-                        leading: Icon(
-                          Icons.search_rounded,
-                          size: 18,
-                          color: theme.colorScheme.primary,
-                        ),
-                        title: Text(
-                          hints[i],
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        onTap: () {
-                          widget.controller.text = hints[i];
-                          widget.controller.selection = TextSelection.collapsed(
-                            offset: hints[i].length,
-                          );
-                          _removeOverlay();
-                          widget.onChanged?.call();
-                        },
+                      title: Text(
+                        hints[i],
+                        style: const TextStyle(fontSize: 12),
                       ),
+                      onTap: () {
+                        widget.controller.text = hints[i];
+                        widget.controller.selection = TextSelection.collapsed(
+                          offset: hints[i].length,
+                        );
+                        _removeOverlay();
+                        widget.onChanged?.call();
+                      },
                     ),
                   ),
                 ),
@@ -2166,7 +2196,8 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
           focusNode: _node,
           decoration: _DataSourceDialogState._dsDeco(),
           style: const TextStyle(fontSize: 12),
-          onChanged: (_) => _update()));
+          onTap: _update,
+          onChanged: (_) => widget.onChanged?.call()));
 }
 
 class _ColorPicker extends StatelessWidget {

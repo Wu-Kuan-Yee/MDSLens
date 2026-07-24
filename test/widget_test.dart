@@ -2017,6 +2017,77 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Empty data source fields expose every available suggestion',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(900, 700);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MaterialApp(
+          theme: MdsScopeTheme.light(),
+          home: const Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 600,
+                height: 420,
+                child: PlotPanel(plotIdx: 0),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tapAt(
+      tester.getCenter(find.byType(PlotPanel)),
+      buttons: kSecondaryMouseButton,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('plot-context-menu-data-source')),
+    );
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 300)),
+    );
+    await tester.pumpAndSettle();
+
+    final signalField = find.byKey(const ValueKey('data-signal-0'));
+    await tester.ensureVisible(signalField);
+    final signalTextField =
+        find.descendant(of: signalField, matching: find.byType(TextField));
+    await tester.tap(signalTextField);
+    await tester.enterText(signalTextField, '');
+    final signalMenu = find.byKey(const ValueKey('autocomplete-signal-menu'));
+    await tester.pumpAndSettle();
+    expect(signalMenu, findsOneWidget);
+    final signalList = tester.widget<ListView>(
+      find.descendant(of: signalMenu, matching: find.byType(ListView)),
+    );
+    expect(signalList.semanticChildCount, 3967);
+
+    final treeField = find.byKey(const ValueKey('data-tree-0'));
+    await tester.ensureVisible(treeField);
+    final treeTextField =
+        find.descendant(of: treeField, matching: find.byType(TextField));
+    await tester.tap(treeTextField);
+    await tester.enterText(treeTextField, '');
+    await tester.pumpAndSettle();
+    final treeMenu = find.byKey(const ValueKey('autocomplete-tree-menu'));
+    expect(treeMenu, findsOneWidget);
+    final treeList = tester.widget<ListView>(
+      find.descendant(of: treeMenu, matching: find.byType(ListView)),
+    );
+    expect(treeList.semanticChildCount, 18);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('SSH mode and font family use polished dropdown menus',
       (tester) async {
     final app = AppState();
