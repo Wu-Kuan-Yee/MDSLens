@@ -838,6 +838,49 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Credential fields keep the secure keyboard focus transition',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Login'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('login-username')));
+    await tester.pump();
+    await tester.testTextInput.receiveAction(TextInputAction.next);
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final loginPassword = tester.widget<TextField>(
+      find.byKey(const ValueKey('login-password')),
+    );
+    expect(loginPassword.focusNode?.hasFocus, isTrue);
+    expect(loginPassword.keyboardType, TextInputType.visiblePassword);
+    expect(loginPassword.enableSuggestions, isFalse);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('SSH tunnel'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('ssh-user')));
+    await tester.pump();
+    await tester.testTextInput.receiveAction(TextInputAction.next);
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final sshPassword = tester.widget<TextField>(
+      find.byKey(const ValueKey('ssh-password')),
+    );
+    expect(sshPassword.focusNode?.hasFocus, isTrue);
+    expect(sshPassword.keyboardType, TextInputType.visiblePassword);
+    expect(sshPassword.enableSuggestions, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('SSH button lights only while a reachable tunnel is in use',
       (tester) async {
     final app = AppState();

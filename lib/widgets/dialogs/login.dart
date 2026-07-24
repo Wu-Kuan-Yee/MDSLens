@@ -14,6 +14,9 @@ class LoginDialog extends StatelessWidget {
     final apiCtrl = TextEditingController(text: app.loginApiUrl);
     final userCtrl = TextEditingController(text: app.loginUser);
     final passCtrl = TextEditingController(text: app.loginPass);
+    final apiFocus = FocusNode(debugLabel: 'login-api-url');
+    final userFocus = FocusNode(debugLabel: 'login-username');
+    final passFocus = FocusNode(debugLabel: 'login-password');
     var loading = false;
     var error = '';
     var notice = app.hasActiveSession ? 'Signed in' : 'Not signed in';
@@ -93,25 +96,37 @@ class LoginDialog extends StatelessWidget {
                   TextField(
                     key: const ValueKey('login-api-url'),
                     controller: apiCtrl,
+                    focusNode: apiFocus,
                     enabled: !loading,
                     decoration: const InputDecoration(labelText: 'API URL'),
                     keyboardType: TextInputType.url,
-                    onSubmitted: (_) => doLogin(setState, ctx),
+                    textInputAction: TextInputAction.next,
+                    autofillHints: const [AutofillHints.url],
+                    onSubmitted: (_) => focusAndShowKeyboard(ctx, userFocus),
                   ),
                   TextField(
                     key: const ValueKey('login-username'),
                     controller: userCtrl,
+                    focusNode: userFocus,
                     enabled: !loading,
                     decoration: const InputDecoration(labelText: 'Username'),
                     textInputAction: TextInputAction.next,
-                    onSubmitted: (_) => doLogin(setState, ctx),
+                    autofillHints: const [AutofillHints.username],
+                    onSubmitted: (_) => focusAndShowKeyboard(ctx, passFocus),
                   ),
                   TextField(
                     key: const ValueKey('login-password'),
                     controller: passCtrl,
+                    focusNode: passFocus,
                     enabled: !loading,
                     decoration: const InputDecoration(labelText: 'Password'),
                     obscureText: true,
+                    enableSuggestions: false,
+                    autocorrect: false,
+                    keyboardType: TextInputType.visiblePassword,
+                    textInputAction: TextInputAction.done,
+                    autofillHints: const [AutofillHints.password],
+                    onTap: () => focusAndShowKeyboard(ctx, passFocus),
                     onSubmitted: (_) => doLogin(setState, ctx),
                   ),
                   const SizedBox(height: 6),
@@ -155,6 +170,9 @@ class LoginDialog extends StatelessWidget {
       apiCtrl.dispose();
       userCtrl.dispose();
       passCtrl.dispose();
+      apiFocus.dispose();
+      userFocus.dispose();
+      passFocus.dispose();
     });
   }
 }

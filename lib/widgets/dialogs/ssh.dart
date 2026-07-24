@@ -20,6 +20,11 @@ class SshDialog extends StatelessWidget {
     final userCtrl = TextEditingController(text: app.sshUser);
     final passCtrl = TextEditingController(text: app.sshPass);
     final keyCtrl = TextEditingController(text: app.sshIdentity);
+    final hostFocus = FocusNode(debugLabel: 'ssh-host');
+    final userFocus = FocusNode(debugLabel: 'ssh-user');
+    final portFocus = FocusNode(debugLabel: 'ssh-port');
+    final passFocus = FocusNode(debugLabel: 'ssh-password');
+    final keyFocus = FocusNode(debugLabel: 'ssh-identity');
     var mode = app.sshMode;
     var testing = false;
     var result = ''; // 'ok' or error message
@@ -143,34 +148,55 @@ class SshDialog extends StatelessWidget {
             TextField(
                 key: const ValueKey('ssh-host'),
                 controller: hostCtrl,
+                focusNode: hostFocus,
                 decoration: const InputDecoration(
-                    labelText: 'Host', hintText: 'ssh.example.com')),
+                    labelText: 'Host', hintText: 'ssh.example.com'),
+                textInputAction: TextInputAction.next,
+                onSubmitted: (_) => focusAndShowKeyboard(ctx, userFocus)),
             Row(children: [
               Expanded(
                   flex: 3,
                   child: TextField(
                       key: const ValueKey('ssh-user'),
                       controller: userCtrl,
-                      decoration: const InputDecoration(labelText: 'User'))),
+                      focusNode: userFocus,
+                      decoration: const InputDecoration(labelText: 'User'),
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.username],
+                      onSubmitted: (_) =>
+                          focusAndShowKeyboard(ctx, passFocus))),
               const SizedBox(width: 8),
               Expanded(
                   flex: 1,
                   child: TextField(
                       key: const ValueKey('ssh-port'),
                       controller: portCtrl,
+                      focusNode: portFocus,
                       decoration: const InputDecoration(labelText: 'Port'),
-                      keyboardType: TextInputType.number)),
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.next,
+                      onSubmitted: (_) =>
+                          focusAndShowKeyboard(ctx, passFocus))),
             ]),
             TextField(
                 key: const ValueKey('ssh-password'),
                 controller: passCtrl,
+                focusNode: passFocus,
                 decoration: const InputDecoration(labelText: 'Password'),
-                obscureText: true),
+                obscureText: true,
+                enableSuggestions: false,
+                autocorrect: false,
+                keyboardType: TextInputType.visiblePassword,
+                textInputAction: TextInputAction.done,
+                autofillHints: const [AutofillHints.password],
+                onTap: () => focusAndShowKeyboard(ctx, passFocus),
+                onSubmitted: (_) => testConnection(setState, ctx)),
             Row(children: [
               Expanded(
                   child: TextField(
                       key: const ValueKey('ssh-identity'),
                       controller: keyCtrl,
+                      focusNode: keyFocus,
                       decoration: const InputDecoration(
                           labelText: 'Identity File',
                           hintText: '~/.ssh/id_ed25519'))),
@@ -216,6 +242,11 @@ class SshDialog extends StatelessWidget {
       userCtrl.dispose();
       passCtrl.dispose();
       keyCtrl.dispose();
+      hostFocus.dispose();
+      userFocus.dispose();
+      portFocus.dispose();
+      passFocus.dispose();
+      keyFocus.dispose();
     });
   }
 

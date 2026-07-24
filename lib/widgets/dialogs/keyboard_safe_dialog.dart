@@ -1,4 +1,37 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+void focusAndShowKeyboard(BuildContext context, FocusNode focusNode) {
+  void ensureInputConnection() {
+    if (!context.mounted || !focusNode.canRequestFocus) return;
+    if (!focusNode.hasFocus) focusNode.requestFocus();
+    unawaited(_showTextInputIfFocused(context, focusNode));
+  }
+
+  ensureInputConnection();
+  WidgetsBinding.instance.addPostFrameCallback((_) => ensureInputConnection());
+  unawaited(
+    Future<void>.delayed(
+      const Duration(milliseconds: 80),
+      ensureInputConnection,
+    ),
+  );
+}
+
+Future<void> _showTextInputIfFocused(
+  BuildContext context,
+  FocusNode focusNode,
+) async {
+  if (!context.mounted || !focusNode.hasFocus) return;
+  try {
+    await SystemChannels.textInput.invokeMethod<void>('TextInput.show');
+  } catch (_) {
+    // Some desktop embedders do not expose an on-screen keyboard. The focus
+    // transfer is still valid there, so a missing platform handler is harmless.
+  }
+}
 
 class KeyboardSafeDialog extends StatelessWidget {
   const KeyboardSafeDialog({
