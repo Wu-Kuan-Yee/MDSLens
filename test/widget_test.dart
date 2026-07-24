@@ -444,6 +444,83 @@ void main() {
     ]);
   });
 
+  test('A user-selected shot overrides an imported configuration default',
+      () async {
+    final requestedConfigs = <Map<String, dynamic>>[];
+    final app = AppState(
+      configOpenPicker: () async => ConfigOpenSelection(
+        name: 'switchable.toml',
+        bytes: Uint8List(0),
+      ),
+      configParser: (_) =>
+          '{"shot":"143850","columns":[[{"title":"Signals","shot":"143850",'
+          '"signal_specs":['
+          '{"shot":"143850","y_expr":"\\\\inherit","experiment":"pcs_east",'
+          '"server_ip":"202.127.204.12"},'
+          '{"shot":"143849","y_expr":"\\\\fixed","experiment":"pcs_east",'
+          '"server_ip":"202.127.204.12"}]}]]}',
+      signalFetchWorker: (configJson, _, __) async {
+        final config = Map<String, dynamic>.from(jsonDecode(configJson) as Map);
+        requestedConfigs.add(config);
+        final panel = (config['columns'] as List).first.first as Map;
+        final panelShot = panel['shot'].toString();
+        final signals = panel['signal_specs'] as List;
+        final fixedShot = (signals[1] as Map)['shot']?.toString() ?? panelShot;
+        return jsonEncode([
+          {
+            'column': 0,
+            'row': 0,
+            'signal': 0,
+            'shot': panelShot,
+            'series': {
+              'error': '',
+              'points': [
+                [0.0, 1.0]
+              ]
+            }
+          },
+          {
+            'column': 0,
+            'row': 0,
+            'signal': 1,
+            'shot': fixedShot,
+            'series': {
+              'error': '',
+              'points': [
+                [0.0, 2.0]
+              ]
+            }
+          }
+        ]);
+      },
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setLoggedIn(true, 'test-token');
+
+    await app.openFile();
+    expect(app.displayedShot, '143850');
+    var requestedPanel =
+        (requestedConfigs.single['columns'] as List).first.first as Map;
+    expect(requestedPanel['shot'], '143850');
+    var requestedSignals = requestedPanel['signal_specs'] as List;
+    expect((requestedSignals[0] as Map)['shot'] ?? '', isEmpty);
+    expect((requestedSignals[1] as Map)['shot'], '143849');
+
+    app.shotText = '163999';
+    app.startRefresh();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(app.displayedShot, '163999');
+    expect(requestedConfigs, hasLength(2));
+    requestedPanel =
+        (requestedConfigs.last['columns'] as List).first.first as Map;
+    expect(requestedPanel['shot'], '163999');
+    requestedSignals = requestedPanel['signal_specs'] as List;
+    expect((requestedSignals[0] as Map)['shot'] ?? '', isEmpty);
+    expect((requestedSignals[1] as Map)['shot'], '143849');
+  });
+
   test(
       'A configuration imported before login keeps its shot and loads after login',
       () async {

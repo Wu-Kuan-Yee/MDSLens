@@ -284,6 +284,7 @@ class AppState extends ChangeNotifier {
   TextEditingController get shotCtrl => _shotCtrl;
   set shotText(String v) {
     _invalidateFetchForSettingsChange();
+    _pendingImportedShot = null;
     _shotText = v;
     _shotCtrl.text = v;
     savePreferences();
@@ -342,6 +343,7 @@ class AppState extends ChangeNotifier {
     _shotCtrl.addListener(() {
       if (_shotCtrl.text != _shotText) {
         _invalidateFetchForSettingsChange();
+        _pendingImportedShot = null;
         _shotText = _shotCtrl.text;
         savePreferences();
         notifyListeners();
@@ -353,6 +355,7 @@ class AppState extends ChangeNotifier {
 
   void setShotFromApi(String v) {
     _invalidateFetchForSettingsChange();
+    _pendingImportedShot = null;
     _shotText = v;
     _shotCtrl.text = v;
     // Move cursor to end
@@ -1092,6 +1095,52 @@ class AppState extends ChangeNotifier {
     panel['grid'] ??= true;
   }
 
+  String _configurationInitialShot(
+    Map<dynamic, dynamic> json,
+    List<List<Map<String, dynamic>>> columns,
+  ) {
+    for (final key in const ['shot', 'default_shot', 'global_shot']) {
+      final value = json[key]?.toString().trim() ?? '';
+      if (value.isNotEmpty) return value;
+    }
+    for (final column in columns) {
+      for (final panel in column) {
+        final panelShot = panel['shot']?.toString().trim() ?? '';
+        if (panelShot.isNotEmpty) return panelShot;
+        final signals = panel['signal_specs'];
+        if (signals is! List) continue;
+        for (final rawSignal in signals) {
+          if (rawSignal is! Map) continue;
+          final signalShot = rawSignal['shot']?.toString().trim() ?? '';
+          if (signalShot.isNotEmpty) return signalShot;
+        }
+      }
+    }
+    return '';
+  }
+
+  void _makeConfigurationShotInheritable(
+    List<List<Map<String, dynamic>>> columns,
+    String initialShot,
+  ) {
+    if (initialShot.isEmpty) return;
+    for (final column in columns) {
+      for (final panel in column) {
+        if (panel['shot']?.toString().trim() == initialShot) {
+          panel.remove('shot');
+        }
+        final signals = panel['signal_specs'];
+        if (signals is! List) continue;
+        for (final rawSignal in signals) {
+          if (rawSignal is Map &&
+              rawSignal['shot']?.toString().trim() == initialShot) {
+            rawSignal.remove('shot');
+          }
+        }
+      }
+    }
+  }
+
   List<Map<String, dynamic>> _configurationSignalsFor(
     Map<String, dynamic> panel,
   ) {
@@ -1148,6 +1197,8 @@ class AppState extends ChangeNotifier {
         }).toList();
       }).toList();
       if (cols.isEmpty || cols.every((c) => c.isEmpty)) return;
+      final initialShot = _configurationInitialShot(json, cols);
+      _makeConfigurationShotInheritable(cols, initialShot);
       _columns = cols;
       _plots.clear();
       for (final col in _columns) {
@@ -1162,12 +1213,9 @@ class AppState extends ChangeNotifier {
           ));
         }
       }
-      if (json['shot'] != null) {
-        final s = json['shot'].toString().trim();
-        if (s.isNotEmpty) {
-          _shotText = s;
-          _shotCtrl.text = s;
-        }
+      if (initialShot.isNotEmpty) {
+        _shotText = initialShot;
+        _shotCtrl.text = initialShot;
       }
     } catch (_) {}
   }
@@ -1287,24 +1335,10 @@ class AppState extends ChangeNotifier {
         return;
       }
       _invalidateFetchForSettingsChange();
-      dynamic fileShot =
-          json['shot'] ?? json['default_shot'] ?? json['global_shot'];
-      if (fileShot == null || fileShot.toString().trim().isEmpty) {
-        for (final column in cols) {
-          for (final panel in column) {
-            final panelShot = panel['shot'];
-            if (panelShot != null && panelShot.toString().trim().isNotEmpty) {
-              fileShot = panelShot;
-              break;
-            }
-          }
-          if (fileShot != null && fileShot.toString().trim().isNotEmpty) {
-            break;
-          }
-        }
-      }
-      if (fileShot != null && fileShot.toString().trim().isNotEmpty) {
-        _shotText = fileShot.toString().trim();
+      final fileShot = _configurationInitialShot(json, cols);
+      _makeConfigurationShotInheritable(cols, fileShot);
+      if (fileShot.isNotEmpty) {
+        _shotText = fileShot;
         _shotCtrl.text = _shotText;
       }
       _columns = cols;
@@ -1428,6 +1462,7 @@ class AppState extends ChangeNotifier {
   }
 
   void startRefresh() {
+    _pendingImportedShot = null;
     if (!_requireActiveSession('load a shot')) return;
     if (_columns.isEmpty) return;
     _clearCustomReadModes();
@@ -1475,6 +1510,7 @@ class AppState extends ChangeNotifier {
   }
 
   void startRefreshPreserveView() {
+    _pendingImportedShot = null;
     if (!_requireActiveSession('load a shot')) return;
     if (_columns.isEmpty) return;
     _clearCustomReadModes();
