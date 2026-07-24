@@ -1013,6 +1013,15 @@ class AppState extends ChangeNotifier {
     return value;
   }
 
+  void _normalizePanelDefaults(Map<String, dynamic> panel) {
+    final rawPoints = panel['extraction_points'];
+    final points = rawPoints is num
+        ? rawPoints.toInt()
+        : int.tryParse(rawPoints?.toString() ?? '');
+    panel['extraction_points'] = points != null && points >= 2 ? points : 2000;
+    panel['grid'] ??= true;
+  }
+
   void _applyConfigJsonString(String raw) {
     try {
       final json = jsonDecode(raw);
@@ -1020,8 +1029,7 @@ class AppState extends ChangeNotifier {
       final cols = (json['columns'] as List).map((col) {
         return (col as List).map((panel) {
           final m = Map<String, dynamic>.from(panel as Map);
-          m['extraction_points'] ??= 2000;
-          m['grid'] ??= true;
+          _normalizePanelDefaults(m);
           return m;
         }).toList();
       }).toList();
@@ -1066,6 +1074,8 @@ class AppState extends ChangeNotifier {
         'title': title,
         'x_label': 's',
         'y_label': 'a.u.',
+        'extraction_points': 2000,
+        'grid': true,
         'signal_specs': [
           {'y_expr': y, 'experiment': 'pcs_east', 'server_ip': '202.127.204.12'}
         ],
@@ -1129,8 +1139,7 @@ class AppState extends ChangeNotifier {
       final cols = (json['columns'] as List).map((col) {
         return (col as List).map((panel) {
           final m = Map<String, dynamic>.from(panel as Map);
-          m['extraction_points'] ??= 2000;
-          m['grid'] ??= true;
+          _normalizePanelDefaults(m);
           return m;
         }).toList();
       }).toList();
@@ -1209,6 +1218,17 @@ class AppState extends ChangeNotifier {
           .map((col) => col.map((panel) {
                 final m = Map<String, dynamic>.from(panel);
                 m.remove('shot');
+                _normalizePanelDefaults(m);
+                if (m['custom_x_range'] != true) {
+                  m
+                    ..remove('xmin')
+                    ..remove('xmax');
+                }
+                if (m['custom_y_range'] != true) {
+                  m
+                    ..remove('ymin')
+                    ..remove('ymax');
+                }
                 return m;
               }).toList())
           .toList();
@@ -1330,8 +1350,7 @@ class AppState extends ChangeNotifier {
         .map((col) => col.map((p) {
               final panel = Map<String, dynamic>.from(p);
               panel['shot'] = shot;
-              panel['extraction_points'] ??= 2000;
-              panel['grid'] ??= true;
+              _normalizePanelDefaults(panel);
               return panel;
             }).toList())
         .toList();

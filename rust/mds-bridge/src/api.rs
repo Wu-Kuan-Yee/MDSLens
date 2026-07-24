@@ -18,7 +18,7 @@ pub struct FrbSignalSpec {
 }
 
 
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct FrbPlotSpec {
     pub shot: String,
@@ -27,7 +27,33 @@ pub struct FrbPlotSpec {
     pub y_label: String,
     pub extraction_points: i32,
     pub grid: bool,
+    pub custom_x_range: bool,
+    pub custom_y_range: bool,
+    pub xmin: Option<f64>,
+    pub xmax: Option<f64>,
+    pub ymin: Option<f64>,
+    pub ymax: Option<f64>,
     pub signal_specs: Vec<FrbSignalSpec>,
+}
+
+impl Default for FrbPlotSpec {
+    fn default() -> Self {
+        Self {
+            shot: String::new(),
+            title: String::new(),
+            x_label: String::new(),
+            y_label: String::new(),
+            extraction_points: 2000,
+            grid: true,
+            custom_x_range: false,
+            custom_y_range: false,
+            xmin: None,
+            xmax: None,
+            ymin: None,
+            ymax: None,
+            signal_specs: Vec::new(),
+        }
+    }
 }
 
 
@@ -93,7 +119,21 @@ impl From<mds_core::types::SignalSpec> for FrbSignalSpec {
 
 impl From<mds_core::types::PlotSpec> for FrbPlotSpec {
     fn from(p: mds_core::types::PlotSpec) -> Self {
-        Self { shot: p.shot, title: p.title, x_label: p.x_label, y_label: p.y_label, extraction_points: p.extraction_points, grid: p.grid, signal_specs: p.signal_specs.into_iter().map(Into::into).collect() }
+        Self {
+            shot: p.shot,
+            title: p.title,
+            x_label: p.x_label,
+            y_label: p.y_label,
+            extraction_points: p.extraction_points,
+            grid: p.grid,
+            custom_x_range: p.custom_x_range,
+            custom_y_range: p.custom_y_range,
+            xmin: p.xmin.is_finite().then_some(p.xmin),
+            xmax: p.xmax.is_finite().then_some(p.xmax),
+            ymin: p.ymin.is_finite().then_some(p.ymin),
+            ymax: p.ymax.is_finite().then_some(p.ymax),
+            signal_specs: p.signal_specs.into_iter().map(Into::into).collect(),
+        }
     }
 }
 
@@ -138,7 +178,18 @@ impl FrbLayoutConfig {
             columns: self.columns.into_iter().map(|col| {
                 col.into_iter().map(|p| mds_core::types::PlotSpec {
                     shot: p.shot, title: p.title, x_label: p.x_label, y_label: p.y_label,
-                    extraction_points: p.extraction_points, grid: p.grid,
+                    extraction_points: if p.extraction_points >= 2 {
+                        p.extraction_points
+                    } else {
+                        2000
+                    },
+                    grid: p.grid,
+                    custom_x_range: p.custom_x_range,
+                    custom_y_range: p.custom_y_range,
+                    xmin: p.xmin.unwrap_or(f64::NAN),
+                    xmax: p.xmax.unwrap_or(f64::NAN),
+                    ymin: p.ymin.unwrap_or(f64::NAN),
+                    ymax: p.ymax.unwrap_or(f64::NAN),
                     signal_specs: p.signal_specs.into_iter().map(|s| mds_core::types::SignalSpec {
                         shot: s.shot, y_expr: s.y_expr, x_expr: s.x_expr,
                         experiment: s.experiment, server_ip: s.server_ip,
@@ -392,6 +443,7 @@ mod tests {
                     server_ip: "202.127.204.12".into(),
                     ..Default::default()
                 }],
+                ..Default::default()
             }]],
         };
         let rust = frb.into_rust();
@@ -420,5 +472,19 @@ mod tests {
         let json = serde_json::to_string(&frb).unwrap();
         let back: FrbLayoutConfig = serde_json::from_str(&json).unwrap();
         assert!(back.columns.is_empty());
+    }
+
+    #[test]
+    fn test_minimal_flutter_panel_uses_drawable_export_defaults() {
+        let config: FrbLayoutConfig = serde_json::from_str(
+            r#"{"shot":"163870","columns":[[{"title":"Ip","signal_specs":[{"y_expr":"\\pcrl01","experiment":"pcs_east","server_ip":"202.127.204.12"}]}]]}"#,
+        )
+        .unwrap();
+        let encoded = encode_environment(config);
+
+        assert!(!encoded.contains("extraction_points = 0"));
+        assert!(!encoded.contains("grid = false"));
+        assert!(!encoded.contains("xmin = 0"));
+        assert!(encoded.contains(r#"y = "\\pcrl01""#));
     }
 }

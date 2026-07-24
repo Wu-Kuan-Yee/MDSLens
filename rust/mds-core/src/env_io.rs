@@ -7,6 +7,12 @@
 
 use crate::types::LayoutConfig;
 
+fn toml_number_as_f64(value: &toml::Value) -> Option<f64> {
+    value
+        .as_float()
+        .or_else(|| value.as_integer().map(|number| number as f64))
+}
+
 /// Parse an environment file, auto-detecting TOML (.toml) or WebScope (.webscp) format.
 pub fn parse_environment(path: &str) -> LayoutConfig {
     if path.to_lowercase().ends_with(".toml") {
@@ -92,7 +98,9 @@ pub fn parse_toml_environment(path: &str) -> LayoutConfig {
             plot.y_label = v.to_string();
         }
         if let Some(v) = table.get("extraction_points").and_then(|v| v.as_integer()) {
-            plot.extraction_points = v as i32;
+            if v >= 2 {
+                plot.extraction_points = v as i32;
+            }
         }
         if let Some(v) = table.get("grid").and_then(|v| v.as_bool()) {
             plot.grid = v;
@@ -103,16 +111,16 @@ pub fn parse_toml_environment(path: &str) -> LayoutConfig {
         if let Some(v) = table.get("custom_y_range").and_then(|v| v.as_bool()) {
             plot.custom_y_range = v;
         }
-        if let Some(v) = table.get("xmin").and_then(|v| v.as_float()) {
+        if let Some(v) = table.get("xmin").and_then(toml_number_as_f64) {
             plot.xmin = v;
         }
-        if let Some(v) = table.get("xmax").and_then(|v| v.as_float()) {
+        if let Some(v) = table.get("xmax").and_then(toml_number_as_f64) {
             plot.xmax = v;
         }
-        if let Some(v) = table.get("ymin").and_then(|v| v.as_float()) {
+        if let Some(v) = table.get("ymin").and_then(toml_number_as_f64) {
             plot.ymin = v;
         }
-        if let Some(v) = table.get("ymax").and_then(|v| v.as_float()) {
+        if let Some(v) = table.get("ymax").and_then(toml_number_as_f64) {
             plot.ymax = v;
         }
 
@@ -311,10 +319,14 @@ pub fn encode_environment_toml(config: &LayoutConfig) -> String {
             if plot.custom_y_range {
                 writeln!(out, "custom_y_range = true").unwrap();
             }
-            if plot.xmin.is_finite() { writeln!(out, "xmin = {}", plot.xmin).unwrap(); }
-            if plot.xmax.is_finite() { writeln!(out, "xmax = {}", plot.xmax).unwrap(); }
-            if plot.ymin.is_finite() { writeln!(out, "ymin = {}", plot.ymin).unwrap(); }
-            if plot.ymax.is_finite() { writeln!(out, "ymax = {}", plot.ymax).unwrap(); }
+            if plot.custom_x_range {
+                if plot.xmin.is_finite() { writeln!(out, "xmin = {}", plot.xmin).unwrap(); }
+                if plot.xmax.is_finite() { writeln!(out, "xmax = {}", plot.xmax).unwrap(); }
+            }
+            if plot.custom_y_range {
+                if plot.ymin.is_finite() { writeln!(out, "ymin = {}", plot.ymin).unwrap(); }
+                if plot.ymax.is_finite() { writeln!(out, "ymax = {}", plot.ymax).unwrap(); }
+            }
             out.push('\n');
 
             for (_s, signal) in plot.signal_specs.iter().enumerate() {
@@ -585,5 +597,39 @@ y = "\\pcrl01"
         assert_eq!(config.columns.iter().map(Vec::len).sum::<usize>(), 9);
         assert_eq!(config.columns[2][2].title, "Panel 9");
         assert_eq!(config.columns[2][2].signal_specs[0].y_expr, "\\signal_8");
+    }
+
+    #[test]
+    fn test_parser_repairs_zero_point_configs_from_older_flutter_builds() {
+        let content = r#"
+version = 1
+shot = "163870"
+
+[[panels]]
+column = 1
+row = 1
+title = "Ip"
+extraction_points = 0
+grid = false
+xmin = 0
+xmax = 0
+ymin = 0
+ymax = 0
+
+[[panels.signals]]
+tree = "pcs_east"
+server = "202.127.204.12"
+y = "\\pcrl01"
+"#;
+        let tmp = std::env::temp_dir().join("mdsscope_zero_points.toml");
+        std::fs::write(&tmp, content).unwrap();
+        let config = parse_toml_environment(tmp.to_str().unwrap());
+        std::fs::remove_file(&tmp).ok();
+
+        let plot = &config.columns[0][0];
+        assert_eq!(plot.extraction_points, 2000);
+        assert!(!plot.grid);
+        assert_eq!(plot.xmin, 0.0);
+        assert_eq!(plot.xmax, 0.0);
     }
 }

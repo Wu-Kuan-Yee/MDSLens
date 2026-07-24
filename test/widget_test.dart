@@ -332,6 +332,37 @@ void main() {
     ]);
   });
 
+  test('Imported zero-point panels are repaired before waveform loading',
+      () async {
+    String? requestedConfig;
+    final app = AppState(
+      configOpenPicker: () async => ConfigOpenSelection(
+        name: 'iphone-config.toml',
+        bytes: Uint8List(0),
+      ),
+      configParser: (_) => '{"shot":"163870","columns":[[{"title":"Ip",'
+          '"extraction_points":0,"grid":false,'
+          '"signal_specs":[{"y_expr":"\\\\pcrl01","experiment":"pcs_east",'
+          '"server_ip":"202.127.204.12"}]}]]}',
+      signalFetchWorker: (configJson, _, __) async {
+        requestedConfig = configJson;
+        return '[{"column":0,"row":0,"signal":0,"shot":"163870",'
+            '"series":{"error":"","points":[[0.0,1.0],[1.0,2.0]]}}]';
+      },
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setLoggedIn(true, 'test-token');
+
+    await app.openFile();
+
+    final requestedPanel =
+        jsonDecode(requestedConfig!)['columns'][0][0] as Map<String, dynamic>;
+    expect(requestedPanel['extraction_points'], 2000);
+    expect(requestedPanel['grid'], isFalse);
+    expect(app.plots.single.series.single?.points, hasLength(2));
+  });
+
   test('Imported layouts load every panel beyond the built-in six', () async {
     final columns = List.generate(
       3,

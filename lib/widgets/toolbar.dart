@@ -1059,6 +1059,7 @@ class ToolbarWidget extends StatelessWidget {
         'title': '',
         'x_label': 's',
         'y_label': 'a.u.',
+        'extraction_points': 2000,
         'grid': true,
         'signal_specs': <Map<String, dynamic>>[],
       };

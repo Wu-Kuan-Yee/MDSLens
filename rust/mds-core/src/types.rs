@@ -74,7 +74,7 @@ pub struct SignalSpec {
 }
 
 /// Describes one plot panel (a single chart with axes).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct PlotSpec {
     /// Shot number for all signals in this panel (unless overridden per-signal).
     pub shot: String,
@@ -99,17 +99,29 @@ pub struct PlotSpec {
     pub signal_specs: Vec<SignalSpec>,
 }
 
-impl PlotSpec {
-    pub fn new() -> Self {
+impl Default for PlotSpec {
+    fn default() -> Self {
         Self {
+            shot: String::new(),
+            title: String::new(),
+            x_label: String::new(),
+            y_label: String::new(),
             extraction_points: 2000,
             grid: true,
+            custom_x_range: false,
+            custom_y_range: false,
             xmin: f64::NAN,
             xmax: f64::NAN,
             ymin: f64::NAN,
             ymax: f64::NAN,
-            ..Default::default()
+            signal_specs: Vec::new(),
         }
+    }
+}
+
+impl PlotSpec {
+    pub fn new() -> Self {
+        Self::default()
     }
 }
 

@@ -1658,7 +1658,11 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
     widget.panel['title'] = _titleCtrl.text;
     widget.panel['x_label'] = _xLabelCtrl.text;
     widget.panel['y_label'] = _yLabelCtrl.text;
-    widget.panel['extraction_points'] = int.tryParse(_pointsCtrl.text) ?? 2000;
+    final extractionPoints = int.tryParse(_pointsCtrl.text);
+    widget.panel['extraction_points'] =
+        extractionPoints != null && extractionPoints >= 2
+            ? extractionPoints
+            : 2000;
     widget.panel['grid'] = _grid;
     widget.panel['custom_x_range'] = _customX;
     widget.panel['custom_y_range'] = _customY;
