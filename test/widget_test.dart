@@ -363,6 +363,50 @@ void main() {
     expect(app.plots.single.series.single?.points, hasLength(2));
   });
 
+  test('Waveform decoding keeps finite samples and skips null coordinates',
+      () async {
+    final app = AppState(
+      signalFetchWorker: (_, __, ___) async =>
+          '[{"column":0,"row":0,"signal":0,"series":{"error":"","points":'
+          '[[null,1.0],[0.0,null],["bad",2.0],[1.0,3.0],[2.0,4.0]]}}]',
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setLoggedIn(true, 'test-token');
+    app.shotText = '163870';
+
+    app.startRefresh();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(app.plots.first.series.first?.points, [
+      [1.0, 3.0],
+      [2.0, 4.0],
+    ]);
+    expect(app.status, isNot(contains("type 'Null'")));
+  });
+
+  test('A signal with no finite samples reports a meaningful data error',
+      () async {
+    final app = AppState(
+      signalFetchWorker: (_, __, ___) async =>
+          '[{"column":0,"row":0,"signal":0,"series":{"error":"","points":'
+          '[[null,1.0],[0.0,null]]}}]',
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setLoggedIn(true, 'test-token');
+    app.shotText = '163870';
+
+    app.startRefresh();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(
+      app.plots.first.series.first?.error,
+      contains('no finite numeric samples'),
+    );
+    expect(app.status, contains('no finite numeric samples'));
+  });
+
   test('Imported layouts load every panel beyond the built-in six', () async {
     final columns = List.generate(
       3,

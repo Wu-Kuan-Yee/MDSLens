@@ -1389,6 +1389,59 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  ({
+    List<List<double>>? points,
+    String? error,
+  }) _decodeLoadedSeries(dynamic rawSeries) {
+    if (rawSeries is! Map) {
+      return (
+        points: null,
+        error: 'The server returned an invalid signal payload.',
+      );
+    }
+    final rawError = rawSeries['error']?.toString().trim() ?? '';
+    final rawPoints = rawSeries['points'];
+    if (rawPoints == null) {
+      return (
+        points: null,
+        error: rawError.isEmpty ? null : rawError,
+      );
+    }
+    if (rawPoints is! List) {
+      return (
+        points: null,
+        error: rawError.isEmpty
+            ? 'The server returned an invalid point list.'
+            : rawError,
+      );
+    }
+
+    final points = <List<double>>[];
+    for (final rawPoint in rawPoints) {
+      if (rawPoint is! List || rawPoint.length < 2) continue;
+      final rawX = rawPoint[0];
+      final rawY = rawPoint[1];
+      if (rawX is! num || rawY is! num) continue;
+      final x = rawX.toDouble();
+      final y = rawY.toDouble();
+      if (!x.isFinite || !y.isFinite) continue;
+      points.add([x, y]);
+    }
+
+    String? error = rawError.isEmpty ? null : rawError;
+    if (points.isEmpty && error == null) {
+      error = rawPoints.isEmpty
+          ? 'The signal returned no samples for this tree and shot.'
+          : 'The signal returned no finite numeric samples for this tree and shot.';
+    }
+    return (points: points, error: error);
+  }
+
+  int? _decodeSignalIndex(dynamic value) {
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '');
+  }
+
   void _clearPanelSeries(int plotIdx) {
     if (plotIdx < 0 || plotIdx >= _plots.length) return;
     for (final series in _plots[plotIdx].series) {
@@ -1458,14 +1511,23 @@ class AppState extends ChangeNotifier {
       String? firstErr;
       for (final sig in json) {
         if (sig is Map) {
-          final ser = sig['series'];
-          final err = ser?['error']?.toString();
+          final col = _decodeSignalIndex(sig['column']);
+          final row = _decodeSignalIndex(sig['row']);
+          final signal = _decodeSignalIndex(sig['signal']);
+          if (col == null || row == null || signal == null) {
+            firstErr ??= 'The server returned an invalid signal location.';
+            continue;
+          }
+          final decoded = _decodeLoadedSeries(sig['series']);
+          final err = decoded.error;
           if (err != null && err.isNotEmpty) firstErr ??= err;
-          final pts = (ser?['points'] as List?)
-              ?.map((p) => [(p[0] as num).toDouble(), (p[1] as num).toDouble()])
-              .toList();
-          updatePlotSeriesByColRow(sig['column'] as int, sig['row'] as int,
-              sig['signal'] as int, pts, err);
+          updatePlotSeriesByColRow(
+            col,
+            row,
+            signal,
+            decoded.points,
+            err,
+          );
         }
       }
       _markUnresolvedSeries(
@@ -1544,18 +1606,24 @@ class AppState extends ChangeNotifier {
           String? firstErr;
           for (final sig in json) {
             if (sig is Map) {
-              final c = sig['column'] as int?;
-              final r = sig['row'] as int?;
+              final c = _decodeSignalIndex(sig['column']);
+              final r = _decodeSignalIndex(sig['row']);
               if (c == targetCol && r == targetRow) {
-                final ser = sig['series'];
-                final err = ser?['error']?.toString();
+                final signal = _decodeSignalIndex(sig['signal']);
+                if (signal == null) {
+                  firstErr ??= 'The server returned an invalid signal index.';
+                  continue;
+                }
+                final decoded = _decodeLoadedSeries(sig['series']);
+                final err = decoded.error;
                 if (err != null && err.isNotEmpty) firstErr ??= err;
-                final pts = (ser?['points'] as List?)
-                    ?.map((p) =>
-                        [(p[0] as num).toDouble(), (p[1] as num).toDouble()])
-                    .toList();
                 updatePlotSeriesByColRow(
-                    targetCol, targetRow, sig['signal'] as int, pts, err);
+                  targetCol,
+                  targetRow,
+                  signal,
+                  decoded.points,
+                  err,
+                );
               }
             }
           }
