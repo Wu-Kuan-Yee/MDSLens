@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../models/app_state.dart';
 import '../../services/identity_file_access.dart';
-import '../../services/rust_bridge.dart';
 import '../polished_dropdown.dart';
 import 'keyboard_safe_dialog.dart';
 
@@ -61,7 +60,7 @@ class SshDialog extends StatelessWidget {
           'identity_file': identityFile,
           'mode': mode
         });
-        final resp = RustBridge.instance.sshT(settingsJson);
+        final resp = await app.testSshConnection(settingsJson);
         final json = _tryJson(resp);
         if (!ctx.mounted) return;
         if (json is Map && json['ok'] == true) {
@@ -115,14 +114,24 @@ class SshDialog extends StatelessWidget {
             title: const Text('SSH Tunnel'),
             content: Column(mainAxisSize: MainAxisSize.min, children: [
               if (testing)
-                const Row(children: [
-                  SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2)),
-                  SizedBox(width: 8),
-                  Text('Testing...')
-                ]),
+                Semantics(
+                  liveRegion: true,
+                  label: 'Connecting to SSH server',
+                  child: Row(children: [
+                    Icon(
+                      Icons.vpn_lock_rounded,
+                      size: 20,
+                      color: Theme.of(ctx).colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2)),
+                    const SizedBox(width: 8),
+                    const Text('Connecting...')
+                  ]),
+                ),
               if (!testing && result == 'ok')
                 const Text('Connection OK',
                     style: TextStyle(color: Colors.green)),
@@ -241,9 +250,10 @@ class SshDialog extends StatelessWidget {
                   onPressed: () => Navigator.pop(ctx),
                   child: const Text('Cancel')),
               OutlinedButton(
+                  key: const ValueKey('ssh-dialog-test'),
                   onPressed:
                       testing ? null : () => testConnection(setState, ctx),
-                  child: const Text('Test')),
+                  child: Text(testing ? 'Connecting...' : 'Test')),
               FilledButton(
                   onPressed: () {
                     app.setSshHost(hostCtrl.text);

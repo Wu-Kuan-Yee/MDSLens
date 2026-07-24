@@ -44,6 +44,7 @@ typedef ConfigSavePicker = Future<String?> Function(
 );
 typedef ConfigParser = String Function(String path);
 typedef ConfigEncoder = Future<Uint8List> Function(String configJson);
+typedef SshTestWorker = Future<String> Function(String settingsJson);
 
 typedef SignalFetchWorker = Future<String> Function(
   String configJson,
@@ -116,6 +117,10 @@ String _parseConfiguration(String path) => RustBridge.instance.parseEnv(path);
 Future<Uint8List> _encodeConfiguration(String configJson) async {
   final toml = RustBridge.instance.encodeEnv(configJson);
   return Uint8List.fromList(utf8.encode(toml));
+}
+
+Future<String> _testSshInBackground(String settingsJson) {
+  return Isolate.run(() => RustBridge.instance.sshT(settingsJson));
 }
 
 Future<String> _fetchSignalsInBackground(
@@ -220,6 +225,7 @@ class AppState extends ChangeNotifier {
   final ConfigSavePicker _configSavePicker;
   final ConfigParser _configParser;
   final ConfigEncoder _configEncoder;
+  final SshTestWorker _sshTestWorker;
   bool _disposed = false;
 
   // Config
@@ -305,6 +311,7 @@ class AppState extends ChangeNotifier {
     ConfigSavePicker? configSavePicker,
     ConfigParser? configParser,
     ConfigEncoder? configEncoder,
+    SshTestWorker? sshTestWorker,
   })  : _signalFetchWorker = signalFetchWorker ?? _fetchSignalsInBackground,
         _shotInfoFetchWorker =
             shotInfoFetchWorker ?? _fetchShotInfoInBackground,
@@ -313,7 +320,8 @@ class AppState extends ChangeNotifier {
         _configOpenPicker = configOpenPicker ?? _pickConfigurationFile,
         _configSavePicker = configSavePicker ?? _saveConfigurationFile,
         _configParser = configParser ?? _parseConfiguration,
-        _configEncoder = configEncoder ?? _encodeConfiguration {
+        _configEncoder = configEncoder ?? _encodeConfiguration,
+        _sshTestWorker = sshTestWorker ?? _testSshInBackground {
     _shotCtrl.addListener(() {
       if (_shotCtrl.text != _shotText) {
         _invalidateFetchForSettingsChange();
@@ -793,6 +801,10 @@ class AppState extends ChangeNotifier {
     _sshTunnelReachable = reachable;
     if (!reachable) _sshInUse = false;
     notifyListeners();
+  }
+
+  Future<String> testSshConnection(String settingsJson) {
+    return _sshTestWorker(settingsJson);
   }
 
   void recordSshUsage(bool used) {

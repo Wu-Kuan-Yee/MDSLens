@@ -1190,6 +1190,56 @@ void main() {
     expect(find.byTooltip('SSH tunnel'), findsOneWidget);
   });
 
+  testWidgets('SSH Test runs in the background and keeps the dialog responsive',
+      (tester) async {
+    final result = Completer<String>();
+    String? testedSettings;
+    final app = AppState(
+      sshTestWorker: (settingsJson) {
+        testedSettings = settingsJson;
+        return result.future;
+      },
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('SSH tunnel'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('ssh-host')),
+      'ssh.example.com',
+    );
+    await tester.tap(find.byKey(const ValueKey('ssh-dialog-test')));
+    await tester.pump();
+
+    expect(find.text('Connecting...'), findsNWidgets(2));
+    expect(find.byIcon(Icons.vpn_lock_rounded), findsWidgets);
+    expect(testedSettings, isNotNull);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('ssh-user')),
+      'still-responsive',
+    );
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const ValueKey('ssh-user')))
+          .controller
+          ?.text,
+      'still-responsive',
+    );
+
+    result.complete('{"ok":true}');
+    await tester.pumpAndSettle();
+    expect(find.text('Connection OK'), findsOneWidget);
+    expect(find.text('Connecting...'), findsNothing);
+  });
+
   test('Startup signs in, fetches the latest shot, and loads its waveforms',
       () async {
     SharedPreferences.setMockInitialValues({
