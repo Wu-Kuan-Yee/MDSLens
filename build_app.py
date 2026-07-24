@@ -9,52 +9,145 @@ GitHub release workflow runs this entry point on each required host.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
+import textwrap
 from pathlib import Path
+from typing import NoReturn
 
 
 ROOT = Path(__file__).resolve().parent
 DIST = ROOT / "build" / "dist"
 APP = "mdsscope"
+FLUTTER_BASELINE = "3.44.7"
+RUST_BASELINE = "1.92.0"
+ANDROID_API = "36"
+ANDROID_NDK = "27.0.12077973"
+
+PLATFORM_FORMATS = {
+    "windows": {"exe", "msi", "zip", "tar.gz", "tar.xz", "tar.bz2"},
+    "macos": {"app", "dmg", "pkg", "zip", "tar.gz", "tar.xz", "tar.bz2"},
+    "linux": {
+        "deb", "rpm", "pkg.tar.zst", "pkg.tar.xz", "AppImage",
+        "zip", "tar.gz", "tar.xz", "tar.bz2",
+    },
+    "android": {"apk", "aab"},
+    "ios": {"ipa", "unsigned-zip"},
+    "ipados": {"ipa", "unsigned-zip"},
+}
 
 
 def log(message: str) -> None:
     print(f"[MdsScope] {message}", flush=True)
 
 
-def fail(message: str) -> "NoReturn":
+def fail(message: str) -> NoReturn:
     raise SystemExit(f"[MdsScope] ERROR: {message}")
 
 
+def display_command(command: tuple[str, ...] | list[str]) -> str:
+    if host_platform() == "windows":
+        return subprocess.list2cmdline(command)
+    return shlex.join(command)
+
+
 def run(*command: str, cwd: Path = ROOT, check: bool = True) -> subprocess.CompletedProcess[str]:
-    log("Running: " + " ".join(command))
+    log("Running: " + display_command(command))
     executable = shutil.which(command[0])
+    if executable is None:
+        fail(
+            f"Required command '{command[0]}' was not found on PATH. "
+            "Run build_app.py --doctor for platform-specific installation guidance."
+        )
     if host_platform() == "windows" and executable is not None:
         if Path(executable).suffix.lower() in {".bat", ".cmd"}:
             command = (os.environ.get("COMSPEC", "cmd.exe"), "/d", "/c", executable, *command[1:])
         else:
             command = (executable, *command[1:])
-    return subprocess.run(command, cwd=cwd, check=check, text=True)
+    try:
+        return subprocess.run(command, cwd=cwd, check=check, text=True)
+    except OSError as error:
+        fail(f"Could not start '{command[0]}': {error}")
+
+
+def prepend_path(directory: Path) -> None:
+    resolved = str(directory.resolve())
+    entries = os.environ.get("PATH", "").split(os.pathsep)
+    if resolved.lower() not in {entry.lower() for entry in entries if entry}:
+        os.environ["PATH"] = resolved + os.pathsep + os.environ.get("PATH", "")
+
+
+def configure_sdk_paths(
+    flutter_sdk: Path | None,
+    cargo_home: Path | None,
+    android_sdk: Path | None,
+) -> None:
+    if flutter_sdk is not None:
+        sdk = flutter_sdk.expanduser().resolve()
+        flutter = sdk / "bin" / ("flutter.bat" if host_platform() == "windows" else "flutter")
+        if not flutter.is_file():
+            fail(f"--flutter-sdk does not contain bin/{flutter.name}: {sdk}")
+        os.environ["FLUTTER_ROOT"] = str(sdk)
+        prepend_path(sdk / "bin")
+
+    if cargo_home is not None:
+        home = cargo_home.expanduser().resolve()
+        cargo = home / "bin" / ("cargo.exe" if host_platform() == "windows" else "cargo")
+        if not cargo.is_file():
+            fail(f"--cargo-home does not contain bin/{cargo.name}: {home}")
+        os.environ["CARGO_HOME"] = str(home)
+        prepend_path(home / "bin")
+
+    if android_sdk is not None:
+        sdk = android_sdk.expanduser().resolve()
+        if not sdk.is_dir():
+            fail(f"--android-sdk is not a directory: {sdk}")
+        os.environ["ANDROID_HOME"] = str(sdk)
+        os.environ["ANDROID_SDK_ROOT"] = str(sdk)
+
+
+def windows_tool_candidates() -> dict[str, list[Path]]:
+    program_files = Path(os.environ.get("ProgramFiles", "C:/Program Files"))
+    program_files_x86 = Path(os.environ.get("ProgramFiles(x86)", "C:/Program Files (x86)"))
+    wix = Path(os.environ.get("WIX", str(program_files_x86 / "WiX Toolset v3.14")))
+    return {
+        "ISCC": [program_files_x86 / "Inno Setup 6/ISCC.exe"],
+        "heat": [wix / "bin/heat.exe"],
+        "candle": [wix / "bin/candle.exe"],
+        "light": [wix / "bin/light.exe"],
+        "perl": [
+            Path("C:/Strawberry/perl/bin/perl.exe"),
+            program_files / "Git/usr/bin/perl.exe",
+        ],
+        "nasm": [
+            Path("C:/Strawberry/c/bin/nasm.exe"),
+            program_files / "NASM/nasm.exe",
+            program_files_x86 / "NASM/nasm.exe",
+        ],
+        "bash": [
+            program_files / "Git/bin/bash.exe",
+            program_files / "Git/usr/bin/bash.exe",
+        ],
+        "vswhere": [program_files_x86 / "Microsoft Visual Studio/Installer/vswhere.exe"],
+    }
 
 
 def tool(name: str) -> str | None:
     found = shutil.which(name)
     if found is not None or host_platform() != "windows":
         return found
-    candidates = {
-        "ISCC": [Path(os.environ.get("ProgramFiles(x86)", "C:/Program Files (x86)")) / "Inno Setup 6/ISCC.exe"],
-        "heat": [Path(os.environ.get("WIX", "C:/Program Files (x86)/WiX Toolset v3.14")) / "bin/heat.exe"],
-        "candle": [Path(os.environ.get("WIX", "C:/Program Files (x86)/WiX Toolset v3.14")) / "bin/candle.exe"],
-        "light": [Path(os.environ.get("WIX", "C:/Program Files (x86)/WiX Toolset v3.14")) / "bin/light.exe"],
-    }
-    return next((str(path) for path in candidates.get(name, []) if path.is_file()), None)
+    return next(
+        (str(path) for path in windows_tool_candidates().get(name, []) if path.is_file()),
+        None,
+    )
 
 
 def format_tool(name: str, formats: set[str], package_format: str) -> str | None:
@@ -80,6 +173,288 @@ def host_arch() -> str:
     if machine in {"arm64", "aarch64"}:
         return "arm64"
     return machine
+
+
+def capture(*command: str) -> tuple[int, str]:
+    executable = shutil.which(command[0])
+    if executable is None:
+        return 127, ""
+    resolved: tuple[str, ...]
+    if host_platform() == "windows" and Path(executable).suffix.lower() in {".bat", ".cmd"}:
+        resolved = (os.environ.get("COMSPEC", "cmd.exe"), "/d", "/c", executable, *command[1:])
+    else:
+        resolved = (executable, *command[1:])
+    try:
+        result = subprocess.run(
+            resolved,
+            cwd=ROOT,
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        return result.returncode, result.stdout.strip()
+    except OSError:
+        return 126, ""
+
+
+def parse_local_properties() -> dict[str, str]:
+    properties: dict[str, str] = {}
+    path = ROOT / "android/local.properties"
+    if not path.is_file():
+        return properties
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        properties[key.strip()] = value.strip().replace("\\\\", "\\")
+    return properties
+
+
+def find_android_sdk() -> Path | None:
+    configured = (
+        os.environ.get("ANDROID_HOME")
+        or os.environ.get("ANDROID_SDK_ROOT")
+        or parse_local_properties().get("sdk.dir")
+    )
+    if configured:
+        path = Path(configured).expanduser()
+        if path.is_dir():
+            return path.resolve()
+    return None
+
+
+def find_sdkmanager(sdk: Path) -> Path | None:
+    names = ["sdkmanager.bat", "sdkmanager"] if host_platform() == "windows" else ["sdkmanager"]
+    for relative in (
+        "cmdline-tools/latest/bin",
+        "cmdline-tools/bin",
+        "tools/bin",
+    ):
+        for name in names:
+            candidate = sdk / relative / name
+            if candidate.is_file():
+                return candidate
+    return None
+
+
+def install_android_components(sdk: Path) -> None:
+    manager = find_sdkmanager(sdk)
+    if manager is None:
+        fail(
+            "Android SDK command-line tools are missing; could not find sdkmanager "
+            f"under {sdk / 'cmdline-tools'}."
+        )
+    log(f"Installing Android platform {ANDROID_API} and NDK {ANDROID_NDK}")
+    run(
+        str(manager),
+        f"platforms;android-{ANDROID_API}",
+        f"ndk;{ANDROID_NDK}",
+    )
+
+
+def configure_platform_paths(platforms: list[str]) -> None:
+    if host_platform() == "windows" and "android" in platforms and shutil.which("bash") is None:
+        bash = tool("bash")
+        if bash is not None:
+            prepend_path(Path(bash).parent)
+
+
+def validate_platforms(platforms: list[str], arch: str) -> None:
+    host = host_platform()
+    for target in platforms:
+        if target == "harmonyos":
+            fail(
+                "HarmonyOS NEXT is not an upstream Flutter target and this repository "
+                "does not contain an ArkUI/OpenHarmony project; no valid HAP can be built."
+            )
+        if target in {"windows", "macos", "linux"} and target != host:
+            fail(f"{target} desktop packages must be built on a {target} host, not {host}.")
+        if target in {"ios", "ipados"} and host != "macos":
+            fail("iOS/iPadOS packages require macOS, Xcode, and Apple signing tools.")
+        if target in {"windows", "linux"} and arch != host_arch():
+            fail(
+                f"{target} {arch} must be built on a native {arch} host; "
+                f"this host is {host_arch()}."
+            )
+
+
+def normalize_formats(platforms: list[str], requested: list[str]) -> set[str]:
+    formats = {"AppImage" if value.lower() == "appimage" else value for value in requested}
+    if "all" in formats and len(formats) != 1:
+        fail("'all' cannot be combined with individual package formats.")
+    if formats == {"all"}:
+        return formats
+    supported = set().union(*(PLATFORM_FORMATS.get(target, set()) for target in platforms))
+    unknown = sorted(formats - supported)
+    if unknown:
+        choices = ", ".join(sorted(supported))
+        fail(f"Unsupported format(s): {', '.join(unknown)}. Valid for this selection: {choices}")
+    missing_targets = [
+        target
+        for target in platforms
+        if not formats.intersection(PLATFORM_FORMATS.get(target, set()))
+    ]
+    if missing_targets:
+        fail(
+            "No requested format applies to: "
+            + ", ".join(missing_targets)
+            + ". Use 'all' or add a format for every selected platform."
+        )
+    return formats
+
+
+def preflight(
+    platforms: list[str],
+    formats: set[str],
+    arch: str,
+    *,
+    detailed: bool,
+    build_required: bool = True,
+) -> None:
+    checks: list[tuple[str, bool, str, bool]] = []
+
+    def add(name: str, path: str | None, hint: str, required: bool = True) -> None:
+        checks.append((name, path is not None, path or hint, required))
+
+    add(
+        "Python >= 3.10",
+        sys.executable if sys.version_info >= (3, 10) else None,
+        "Install Python 3.10 or newer.",
+    )
+    if build_required:
+        add("Flutter", shutil.which("flutter"), f"Install Flutter {FLUTTER_BASELINE} or pass --flutter-sdk.")
+        add("rustup", shutil.which("rustup"), "Install rustup from https://rustup.rs/.")
+        add("Cargo", shutil.which("cargo"), "Install Rust or pass --cargo-home.")
+        add("rustc", shutil.which("rustc"), "Install Rust or pass --cargo-home.")
+
+    host = host_platform()
+    if build_required and "windows" in platforms:
+        vswhere = tool("vswhere")
+        visual_studio = None
+        if vswhere is not None:
+            required_components = [
+                "Microsoft.VisualStudio.Component.VC.Tools.ARM64"
+                if arch == "arm64"
+                else "Microsoft.VisualStudio.Component.VC.Tools.x86.x64"
+            ]
+            code, output = capture(
+                vswhere,
+                "-latest",
+                "-products",
+                "*",
+                "-requires",
+                *required_components,
+                "-property",
+                "installationPath",
+            )
+            visual_studio = output.splitlines()[-1] if code == 0 and output else None
+        add(
+            "Visual Studio C++",
+            visual_studio,
+            "Install Visual Studio 2022+ with the 'Desktop development with C++' workload.",
+        )
+        add("PowerShell", shutil.which("pwsh") or shutil.which("powershell"), "Install Windows PowerShell.")
+        add("Perl", tool("perl"), "Install Strawberry Perl or Git for Windows with Perl.")
+        if arch == "x64":
+            add("NASM", tool("nasm"), "Install NASM or Strawberry Perl.")
+    if build_required and (
+        "macos" in platforms or "ios" in platforms or "ipados" in platforms
+    ):
+        add("Xcode", shutil.which("xcodebuild"), "Install Xcode and select it with xcode-select.")
+        add("Xcode tools", shutil.which("xcrun"), "Run xcode-select --install.")
+        add("lipo", shutil.which("lipo"), "Install Xcode command-line tools.")
+    if build_required and "linux" in platforms:
+        for name, hint in (
+            ("clang", "Install clang."),
+            ("cmake", "Install cmake."),
+            ("ninja", "Install ninja-build."),
+            ("pkg-config", "Install pkg-config."),
+            ("perl", "Install perl for vendored OpenSSL."),
+        ):
+            add(name, shutil.which(name), hint)
+        gtk_ok = capture("pkg-config", "--exists", "gtk+-3.0")[0] == 0
+        checks.append(("GTK 3 development files", gtk_ok, "Install libgtk-3-dev.", True))
+    if build_required and "android" in platforms:
+        java = shutil.which("java")
+        java_ok = False
+        if java is not None:
+            code, output = capture("java", "-version")
+            match = re.search(r'version "(?:1\.)?(\d+)', output)
+            java_ok = code == 0 and match is not None and int(match.group(1)) >= 17
+        add("Java 17+", java if java_ok else None, "Install a JDK 17 or newer.")
+        add("Bash", shutil.which("bash"), "Install Bash; on Windows install Git for Windows.")
+        add("Perl", tool("perl"), "Install Perl for vendored OpenSSL.")
+        sdk = find_android_sdk()
+        checks.append(("Android SDK", sdk is not None, str(sdk) if sdk else "Pass --android-sdk.", True))
+        if sdk is not None:
+            platform_dir = sdk / f"platforms/android-{ANDROID_API}"
+            ndk_dir = sdk / f"ndk/{ANDROID_NDK}"
+            checks.append((
+                f"Android platform {ANDROID_API}",
+                platform_dir.is_dir(),
+                str(platform_dir) if platform_dir.is_dir() else "Use --install-android-sdk-components.",
+                True,
+            ))
+            checks.append((
+                f"Android NDK {ANDROID_NDK}",
+                ndk_dir.is_dir(),
+                str(ndk_dir) if ndk_dir.is_dir() else "Use --install-android-sdk-components.",
+                True,
+            ))
+
+    explicitly_required = formats != {"all"}
+    if "windows" in platforms:
+        if selected(formats, "exe"):
+            add("Inno Setup 6", tool("ISCC"), "Install Inno Setup 6.", explicitly_required)
+        if selected(formats, "msi"):
+            for name in ("heat", "candle", "light"):
+                add(f"WiX {name}", tool(name), "Install WiX Toolset 3.14.", explicitly_required)
+    if "linux" in platforms:
+        optional_tools = {
+            "deb": "dpkg-deb",
+            "rpm": "rpmbuild",
+            "pkg.tar.zst": "zstd",
+            "pkg.tar.xz": "xz",
+            "AppImage": "appimagetool",
+        }
+        for package_format, name in optional_tools.items():
+            if selected(formats, package_format):
+                add(name, shutil.which(name), f"Install {name}.", explicitly_required)
+
+    failures = 0
+    log(f"Preflight for {', '.join(platforms)} on {host}/{host_arch()}")
+    for name, ok, detail, required in checks:
+        if ok:
+            if detailed:
+                print(f"  [OK]      {name}: {detail}")
+        elif required:
+            failures += 1
+            print(f"  [MISSING] {name}: {detail}")
+        elif detailed:
+            print(f"  [OPTIONAL] {name}: {detail}")
+
+    if detailed and shutil.which("flutter"):
+        code, output = capture("flutter", "--version", "--machine")
+        if code == 0:
+            try:
+                data = json.loads(output)
+                print(
+                    "  [INFO]    Flutter: "
+                    f"{data.get('frameworkVersion', 'unknown')} "
+                    f"({data.get('channel', 'unknown')})"
+                )
+            except json.JSONDecodeError:
+                print(f"  [INFO]    Flutter: {output.splitlines()[0] if output else 'unknown'}")
+        code, output = capture("rustc", "--version")
+        if code == 0:
+            print(f"  [INFO]    Rust: {output}")
+        print(f"  [INFO]    Expected baseline: Flutter {FLUTTER_BASELINE}, Rust {RUST_BASELINE}")
+
+    if failures:
+        fail(f"Preflight found {failures} missing required component(s).")
+    log("Preflight passed")
 
 
 def project_version() -> str:
@@ -126,7 +501,7 @@ def selected(formats: set[str], name: str) -> bool:
 
 def flutter_build(target: str, *arguments: str) -> None:
     run("flutter", "pub", "get")
-    run("flutter", "build", target, "--release", *arguments)
+    run("flutter", "build", target, "--release", "--no-pub", *arguments)
 
 
 def package_macos(formats: set[str], no_build: bool) -> None:
@@ -347,16 +722,16 @@ def package_android(formats: set[str], no_build: bool) -> None:
         run("flutter", "pub", "get")
         if selected(formats, "apk"):
             run(
-                "flutter", "build", "apk", "--release", "--split-per-abi",
+                "flutter", "build", "apk", "--release", "--no-pub", "--split-per-abi",
                 "--target-platform", "android-arm,android-arm64,android-x64",
             )
             run(
-                "flutter", "build", "apk", "--release",
+                "flutter", "build", "apk", "--release", "--no-pub",
                 "--target-platform", "android-arm,android-arm64,android-x64",
             )
         if selected(formats, "aab"):
             run(
-                "flutter", "build", "appbundle", "--release",
+                "flutter", "build", "appbundle", "--release", "--no-pub",
                 "--target-platform", "android-arm,android-arm64,android-x64",
             )
 
@@ -382,54 +757,184 @@ def package_android(formats: set[str], no_build: bool) -> None:
 def package_ios(formats: set[str], no_build: bool) -> None:
     if host_platform() != "macos":
         fail("iOS/iPadOS packages can only be built on macOS")
-    if not selected(formats, "ipa"):
-        return
-    if not no_build:
-        flutter_build("ipa")
-    ipas = sorted((ROOT / "build/ios/ipa").glob("*.ipa"))
-    if len(ipas) != 1:
-        fail("A signed IPA was not produced. Configure Apple signing in Xcode first.")
     # One universal Apple mobile binary supports both iPhone and iPad. Both
     # names are published as aliases so platform-filtered release clients find it.
-    shutil.copy2(ipas[0], DIST / "mdsscope-ios-arm64.ipa")
-    shutil.copy2(ipas[0], DIST / "mdsscope-ipados-arm64.ipa")
+    if selected(formats, "unsigned-zip"):
+        if not no_build:
+            flutter_build("ios", "--no-codesign")
+        app = ROOT / "build/ios/iphoneos/Runner.app"
+        if not app.is_dir():
+            fail(f"Unsigned iOS application bundle not found: {app}")
+        make_zip(app, DIST / "mdsscope-ios-arm64-unsigned.zip", app.name)
+        shutil.copy2(
+            DIST / "mdsscope-ios-arm64-unsigned.zip",
+            DIST / "mdsscope-ipados-arm64-unsigned.zip",
+        )
+    if selected(formats, "ipa"):
+        if not no_build:
+            flutter_build("ipa")
+        ipas = sorted((ROOT / "build/ios/ipa").glob("*.ipa"))
+        if len(ipas) != 1:
+            fail("A signed IPA was not produced. Configure Apple signing in Xcode first.")
+        shutil.copy2(ipas[0], DIST / "mdsscope-ios-arm64.ipa")
+        shutil.copy2(ipas[0], DIST / "mdsscope-ipados-arm64.ipa")
+
+
+class HelpFormatter(argparse.RawDescriptionHelpFormatter):
+    pass
+
+
+def create_parser() -> argparse.ArgumentParser:
+    formats = "\n".join(
+        f"  {platform_name:8} {', '.join(sorted(values))}"
+        for platform_name, values in PLATFORM_FORMATS.items()
+        if platform_name != "ipados"
+    )
+    epilog = "Package formats:\n" + formats + "\n\n" + textwrap.dedent(
+        f"""\
+        'all' builds the platform's default formats and every optional package
+        whose packaging tool is installed. Explicitly requested formats are
+        strict: a missing packaging tool is an error.
+
+        Examples:
+          python build_app.py --doctor -p windows
+          python build_app.py -p windows -a x64 -f zip
+          python build_app.py -p android -f apk aab --install-android-sdk-components
+          ./build_app.py -p macos -f app dmg zip
+          ./build_app.py -p ios -f unsigned-zip
+          ./build_app.py -p ios -p ipados -f ipa
+          ./build_app.py -p linux -a arm64 -f deb zip
+
+        SDK paths may be passed explicitly, so modifying the parent shell's
+        PATH is optional:
+          python build_app.py -p windows -f zip \\
+            --flutter-sdk C:\\SDKs\\flutter\\{FLUTTER_BASELINE} \\
+            --cargo-home C:\\Users\\me\\.cargo
+
+        A first native build compiles vendored OpenSSL and may take several
+        minutes. IPA output requires Xcode signing; unsigned-zip does not.
+        HarmonyOS NEXT is reported as unsupported because upstream Flutter
+        cannot produce a HAP and this repository has no ArkUI project.
+        See docs/BUILDING.md for complete host prerequisites and signing.
+        """
+    )
+    return argparse.ArgumentParser(
+        description=(
+            "Build and package MdsScope, including its native Rust bridge.\n"
+            "Desktop and Apple builds must run on a native host; Android builds "
+            "run on Windows, macOS, or Linux."
+        ),
+        epilog=epilog,
+        formatter_class=HelpFormatter,
+    )
 
 
 def main() -> None:
     global DIST
 
-    parser = argparse.ArgumentParser(description="Build real, installable MdsScope release packages")
+    parser = create_parser()
     parser.add_argument(
         "-p", "--platform", action="append",
         choices=["auto", "windows", "macos", "linux", "android", "ios", "ipados", "harmonyos"],
-        help="target platform; repeat to build several (default: native desktop)",
+        help="target platform; repeat for several targets (default: native desktop)",
     )
-    parser.add_argument("-a", "--arch", choices=["auto", "x64", "arm64"], default="auto")
+    parser.add_argument(
+        "-a", "--arch", choices=["auto", "x64", "arm64"], default="auto",
+        help="desktop output architecture; Windows/Linux require a matching native host (default: auto)",
+    )
     parser.add_argument(
         "-f", "--format", nargs="+", default=["all"],
-        help="package formats; 'all' builds every format whose tool is installed",
+        help="one or more formats from the table below (default: all)",
     )
-    parser.add_argument("--no-build", action="store_true", help="package existing release outputs")
-    parser.add_argument("--clean", action="store_true", help="run flutter clean first")
-    parser.add_argument("--dist", type=Path, default=DIST, help="artifact output directory")
+    parser.add_argument(
+        "--no-build", action="store_true",
+        help="only package existing release output; fail if it is absent",
+    )
+    parser.add_argument(
+        "--clean", action="store_true",
+        help="run 'flutter clean' before the build (cannot be combined with --no-build)",
+    )
+    parser.add_argument(
+        "--skip-preflight", action="store_true",
+        help="skip dependency checks (intended only for controlled CI environments)",
+    )
+    parser.add_argument(
+        "--doctor", action="store_true",
+        help="show detailed dependency diagnostics and exit without building",
+    )
+    parser.add_argument(
+        "--install-android-sdk-components", action="store_true",
+        help=f"install Android platform {ANDROID_API} and NDK {ANDROID_NDK} with sdkmanager",
+    )
+    parser.add_argument(
+        "--flutter-sdk", type=Path,
+        help=f"Flutter SDK root containing bin/flutter (tested baseline: {FLUTTER_BASELINE})",
+    )
+    parser.add_argument(
+        "--cargo-home", type=Path,
+        help="Cargo home containing bin/cargo (the repository pins Rust 1.92.0)",
+    )
+    parser.add_argument(
+        "--android-sdk", type=Path,
+        help="Android SDK root; overrides ANDROID_HOME/ANDROID_SDK_ROOT",
+    )
+    parser.add_argument(
+        "--dist", type=Path, default=DIST,
+        help="artifact output directory (default: build/dist)",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=(
+            f"MdsScope {project_version()} build script "
+            f"(Flutter {FLUTTER_BASELINE}, Rust {RUST_BASELINE})"
+        ),
+    )
     args = parser.parse_args()
+
+    configure_sdk_paths(args.flutter_sdk, args.cargo_home, args.android_sdk)
+
+    platforms = args.platform or ["auto"]
+    platforms = [host_platform() if target == "auto" else target for target in platforms]
+    arch = host_arch() if args.arch == "auto" else args.arch
+    if "ipados" in platforms and "ios" not in platforms:
+        platforms.append("ios")
+    platforms = list(dict.fromkeys(platforms))
+    configure_platform_paths(platforms)
+    validate_platforms(platforms, arch)
+    formats = normalize_formats(platforms, args.format)
+
+    if args.clean and args.no_build:
+        fail("--clean and --no-build cannot be combined.")
+    if args.install_android_sdk_components:
+        if "android" not in platforms:
+            fail("--install-android-sdk-components requires '-p android'.")
+        sdk = find_android_sdk()
+        if sdk is None:
+            fail("Android SDK was not found; pass --android-sdk.")
+        install_android_components(sdk)
+    if not args.skip_preflight:
+        preflight(
+            platforms,
+            formats,
+            arch,
+            detailed=args.doctor,
+            build_required=not args.no_build or args.doctor,
+        )
+    if args.doctor:
+        run("flutter", "doctor", "-v", check=False)
+        run("rustup", "show", check=False)
+        log("Doctor completed; no build was started.")
+        return
 
     DIST = args.dist.resolve()
     DIST.mkdir(parents=True, exist_ok=True)
     if args.clean:
         run("flutter", "clean")
 
-    platforms = args.platform or ["auto"]
-    platforms = [host_platform() if target == "auto" else target for target in platforms]
-    arch = host_arch() if args.arch == "auto" else args.arch
-    formats = set(args.format)
     version = project_version()
 
-    if "harmonyos" in platforms:
-        fail("HarmonyOS NEXT is not an upstream Flutter target; no valid HAP can be generated from this project")
-    if "ipados" in platforms and "ios" not in platforms:
-        platforms.append("ios")
-    for target in dict.fromkeys(platforms):
+    for target in platforms:
         log(f"Building {target} ({arch}), version {version}")
         if target == "macos":
             package_macos(formats, args.no_build)
@@ -447,4 +952,14 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except subprocess.CalledProcessError as error:
+        command = error.cmd if isinstance(error.cmd, (list, tuple)) else [str(error.cmd)]
+        fail(
+            f"Command failed with exit code {error.returncode}: {display_command(command)}\n"
+            "Run this script again with --doctor for dependency diagnostics. "
+            "Use --clean if the SDK/toolchain changed since the last build."
+        )
+    except KeyboardInterrupt:
+        fail("Interrupted by user.")

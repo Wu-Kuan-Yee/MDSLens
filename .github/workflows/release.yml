@@ -195,12 +195,7 @@ jobs:
         run: python3 build_app.py -p ios -p ipados -f ipa
       - name: Build unsigned verification bundle
         if: steps.signing.outputs.available != 'true'
-        shell: bash
-        run: |
-          flutter build ios --release --no-codesign
-          mkdir -p build/dist
-          ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app build/dist/mdsscope-ios-arm64-unsigned.zip
-          cp build/dist/mdsscope-ios-arm64-unsigned.zip build/dist/mdsscope-ipados-arm64-unsigned.zip
+        run: python3 build_app.py -p ios -p ipados -f unsigned-zip
       - uses: actions/upload-artifact@v4
         with:
           name: mdsscope-apple-mobile

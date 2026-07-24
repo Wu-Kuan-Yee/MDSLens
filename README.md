@@ -6,11 +6,13 @@ MdsScope is an MDSplus experimental signal waveform viewer, comparison, and conf
 
 Prerequisites:
 
-- Flutter 3.44.3;
+- Python 3.10 or newer (the build script uses only the standard library);
+- Flutter 3.44.7;
 - rustup (the repository auto-selects Rust 1.92.0);
 - Platform SDKs: Xcode, Android SDK/NDK, Visual Studio, or Linux GTK development packages.
 
 ```sh
+python3 build_app.py --doctor
 flutter pub get
 flutter run
 ```
@@ -24,6 +26,12 @@ One-command build entry point for the current system:
 ```sh
 ./build_app.py
 ```
+
+The script performs a platform-specific dependency preflight and accepts
+`--flutter-sdk`, `--cargo-home`, and `--android-sdk`, so SDK paths do not need
+to be configured globally. `python build_app.py --help` contains the complete
+format table and examples; [the build guide](docs/BUILDING.md) lists every host
+dependency, signing requirement, and troubleshooting step.
 
 Platform and format can be specified:
 
@@ -40,7 +48,10 @@ python build_app.py -p windows -a x64 -f exe msi zip
 # Linux (run on the matching architecture)
 ./build_app.py -p linux -a x64 -f deb rpm pkg.tar.zst zip
 
-# iOS/iPadOS with Xcode signing configured
+# iOS/iPadOS unsigned verification bundle
+./build_app.py -p ios -p ipados -f unsigned-zip
+
+# Signed IPA with Xcode signing configured
 ./build_app.py -p ios -p ipados -f ipa
 ```
 

@@ -20,6 +20,9 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - run: python3 -m py_compile build_app.py
+      - run: python3 build_app.py --help
+      - run: python3 -m unittest scripts/test_build_app.py
       - run: python3 scripts/verify_icons.py
       - run: flutter analyze
       - run: flutter test
@@ -44,29 +47,39 @@ jobs:
         include:
           - os: ubuntu-24.04
             target: linux
+            arch: x64
+            python: python3
             channel: stable
             artifact: linux-x64
-            bundle: build/linux/x64/release/bundle
+            bundle: build/dist/mdsscope-linux-x64.zip
           - os: ubuntu-24.04-arm
             target: linux
+            arch: arm64
+            python: python3
             channel: main
             artifact: linux-arm64
-            bundle: build/linux/arm64/release/bundle
+            bundle: build/dist/mdsscope-linux-arm64.zip
           - os: macos-15
             target: macos
+            arch: auto
+            python: python3
             channel: stable
             artifact: macos-universal
-            bundle: build/macos/Build/Products/Release/MdsScope.app
+            bundle: build/dist/mdsscope-macos-universal.zip
           - os: windows-2025
             target: windows
+            arch: x64
+            python: python
             channel: stable
             artifact: windows-x64
-            bundle: build/windows/x64/runner/Release
+            bundle: build/dist/mdsscope-windows-x64.zip
           - os: windows-11-arm
             target: windows
+            arch: arm64
+            python: python
             channel: main
             artifact: windows-arm64
-            bundle: build/windows/arm64/runner/Release
+            bundle: build/dist/mdsscope-windows-arm64.zip
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -83,8 +96,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev ninja-build pkg-config
-      - run: flutter pub get
-      - run: flutter build ${{ matrix.target }} --release
+      - run: >-
+          ${{ matrix.python }} build_app.py -p ${{ matrix.target }}
+          -a ${{ matrix.arch }} -f zip
       - uses: actions/upload-artifact@v4
         with:
           name: ci-${{ matrix.artifact }}
@@ -107,13 +121,11 @@ jobs:
           cache: true
       - uses: dtolnay/rust-toolchain@1.92.0
       - run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.0.12077973"'
-      - run: >-
-          flutter build apk --release --split-per-abi
-          --target-platform android-arm,android-arm64,android-x64
+      - run: python3 build_app.py -p android -f apk
       - uses: actions/upload-artifact@v4
         with:
           name: ci-android
-          path: build/app/outputs/flutter-apk/*-release.apk
+          path: build/dist/*.apk
           if-no-files-found: error
 
   apple-mobile-build:
@@ -127,9 +139,9 @@ jobs:
           channel: stable
           cache: true
       - uses: dtolnay/rust-toolchain@1.92.0
-      - run: flutter build ios --release --no-codesign
+      - run: python3 build_app.py -p ios -p ipados -f unsigned-zip
       - uses: actions/upload-artifact@v4
         with:
           name: ci-apple-mobile
-          path: build/ios/iphoneos/Runner.app
+          path: build/dist/*-unsigned.zip
           if-no-files-found: error
