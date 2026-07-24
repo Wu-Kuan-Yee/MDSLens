@@ -1220,7 +1220,11 @@ class ToolbarWidget extends StatelessWidget {
     final saved = await showDataSourceSetupEditor(
       context,
       signals: signals,
-      defaultShot: (panel['shot']?.toString() ?? app.shotText).trim(),
+      defaultShot: resolveDataSourceShot(
+        panelShot: panel['shot'],
+        displayedShot: app.displayedShot,
+        inputShot: app.shotText,
+      ),
     );
     if (saved) panel['signal_specs'] = signals;
     return saved;

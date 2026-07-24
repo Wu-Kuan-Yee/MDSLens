@@ -28,6 +28,24 @@ const _colors = [
   Color(0xFF0891b2),
 ];
 
+String resolveDataSourceShot({
+  Object? signalShot,
+  Object? panelShot,
+  String displayedShot = '',
+  String inputShot = '',
+}) {
+  for (final candidate in [
+    signalShot?.toString(),
+    panelShot?.toString(),
+    displayedShot,
+    inputShot,
+  ]) {
+    final shot = candidate?.trim() ?? '';
+    if (shot.isNotEmpty) return shot;
+  }
+  return '';
+}
+
 Future<bool> showPanelSetupEditor(
   BuildContext context,
   Map<String, dynamic> panel,
@@ -1380,7 +1398,11 @@ class _PlotPanelState extends State<PlotPanel> {
         (panel['signal_specs'] as List?)
                 ?.map((s) => Map<String, dynamic>.from(s as Map)) ??
             []);
-    final defaultShot = (panel['shot']?.toString() ?? app.shotText).trim();
+    final defaultShot = resolveDataSourceShot(
+      panelShot: panel['shot'],
+      displayedShot: app.displayedShot,
+      inputShot: app.shotText,
+    );
     if (sigs.isEmpty) {
       sigs.add({'experiment': 'pcs_east', 'server_ip': '202.127.204.12'});
     }
@@ -1824,7 +1846,11 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
     final defaultRate = context.read<AppState>().dataMode;
     _rows.add(_DSRow(
       shot: TextEditingController(
-          text: s?['shot']?.toString() ?? widget.defaultShot),
+        text: resolveDataSourceShot(
+          signalShot: s?['shot'],
+          inputShot: widget.defaultShot,
+        ),
+      ),
       y: TextEditingController(text: s?['y_expr']?.toString() ?? ''),
       tree: TextEditingController(
           text: s?['experiment']?.toString() ?? 'pcs_east'),
@@ -1931,6 +1957,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                       Padding(
                           padding: const EdgeInsets.only(right: 4),
                           child: TextField(
+                              key: ValueKey('data-shot-$i'),
                               controller: _rows[i].shot,
                               decoration: _dsDeco(),
                               style: const TextStyle(fontSize: 12))),

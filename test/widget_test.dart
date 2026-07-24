@@ -2247,6 +2247,54 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Data source Shot inherits the loaded shot when config is empty',
+      (tester) async {
+    expect(
+      resolveDataSourceShot(
+        signalShot: '',
+        panelShot: '  ',
+        displayedShot: '163888',
+        inputShot: '163999',
+      ),
+      '163888',
+    );
+
+    final signals = <Map<String, dynamic>>[
+      {
+        'shot': '',
+        'experiment': 'pcs_east',
+        'y_expr': r'\PCRL01',
+      },
+    ];
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showDataSourceSetupEditor(
+                context,
+                signals: signals,
+                defaultShot: '163888',
+              ),
+              child: const Text('Open data source'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open data source'));
+    await tester.pumpAndSettle();
+    final shotField = tester.widget<TextField>(
+      find.byKey(const ValueKey('data-shot-0')),
+    );
+    expect(shotField.controller?.text, '163888');
+  });
+
   testWidgets('SSH mode and font family use polished dropdown menus',
       (tester) async {
     final app = AppState();
