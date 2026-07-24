@@ -153,6 +153,7 @@ class _PlotPanelState extends State<PlotPanel> {
 
     final panel = _findPanel(app);
     final theme = Theme.of(context);
+    final isLoading = app.isPlotFetching(widget.plotIdx);
 
     // Build line bars with MinMax decimation
     final bars = <LineChartBarData>[];
@@ -249,7 +250,7 @@ class _PlotPanelState extends State<PlotPanel> {
                 child: Column(children: [
                   Expanded(
                     child: bars.isEmpty
-                        ? app.fetching
+                        ? isLoading
                             ? _buildLoadingIndicator(app, theme)
                             : Center(
                                 child: Text(_getPlaceholderText(plot),
@@ -270,7 +271,7 @@ class _PlotPanelState extends State<PlotPanel> {
           ),
         ),
       ),
-      if (app.fetching && bars.isNotEmpty)
+      if (isLoading && bars.isNotEmpty)
         Positioned.fill(
           child: IgnorePointer(
             child: _buildLoadingIndicator(app, theme),

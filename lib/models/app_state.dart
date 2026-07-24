@@ -585,6 +585,10 @@ class AppState extends ChangeNotifier {
   // Fetch
   bool _fetching = false;
   bool get fetching => _fetching;
+  int? _fetchingPlotIndex;
+  bool isPlotFetching(int plotIdx) =>
+      _fetching &&
+      (_fetchingPlotIndex == null || _fetchingPlotIndex == plotIdx);
   String _status = 'Ready';
   String get status => _status;
   int _fetchGeneration = 0;
@@ -619,6 +623,7 @@ class AppState extends ChangeNotifier {
 
   void _invalidateFetchForSettingsChange() {
     _fetchGeneration++;
+    _fetchingPlotIndex = null;
     if (_fetching) {
       _fetching = false;
       _status = 'Settings changed. Previous load discarded.';
@@ -1311,6 +1316,7 @@ class AppState extends ChangeNotifier {
     if (hasActiveSession) return true;
     _fetchGeneration++;
     _fetching = false;
+    _fetchingPlotIndex = null;
     _status = 'Login required to $action.';
     notifyListeners();
     return false;
@@ -1384,6 +1390,28 @@ class AppState extends ChangeNotifier {
               return panel;
             }).toList())
         .toList();
+    return jsonEncode({'columns': cols});
+  }
+
+  String _buildSinglePanelSignalConfigJson(
+    String shot,
+    int targetCol,
+    int targetRow,
+  ) {
+    final cols = <List<Map<String, dynamic>>>[];
+    for (var col = 0; col < _columns.length; col++) {
+      final panels = <Map<String, dynamic>>[];
+      for (var row = 0; row < _columns[col].length; row++) {
+        final panel = Map<String, dynamic>.from(_columns[col][row]);
+        panel['shot'] = shot;
+        _normalizePanelDefaults(panel);
+        if (col != targetCol || row != targetRow) {
+          panel['signal_specs'] = <Map<String, dynamic>>[];
+        }
+        panels.add(panel);
+      }
+      cols.add(panels);
+    }
     return jsonEncode({'columns': cols});
   }
 
@@ -1494,6 +1522,7 @@ class AppState extends ChangeNotifier {
     final configJson = _buildSignalConfigJson(requestShot);
     final dataMode = _dataMode.toString();
     final sshSettings = _buildSshSettingsJson();
+    _fetchingPlotIndex = null;
     _fetching = true;
     _status = 'Fetching...';
     notifyListeners();
@@ -1586,6 +1615,7 @@ class AppState extends ChangeNotifier {
   void stopFetch() {
     _fetchGeneration++;
     _fetching = false;
+    _fetchingPlotIndex = null;
     _status = 'Stopped';
     notifyListeners();
   }
@@ -1612,9 +1642,11 @@ class AppState extends ChangeNotifier {
     final shot = _displayedShot.trim().isNotEmpty
         ? _displayedShot.trim()
         : _shotText.trim();
-    final configJson = _buildSignalConfigJson(shot);
+    final configJson =
+        _buildSinglePanelSignalConfigJson(shot, targetCol, targetRow);
     final dataMode = _dataMode.toString();
     final sshSettings = _buildSshSettingsJson();
+    _fetchingPlotIndex = plotIdx;
     _fetching = true;
     _status = 'Fetching panel ($targetCol, $targetRow)...';
     notifyListeners();
@@ -1653,10 +1685,12 @@ class AppState extends ChangeNotifier {
         }
       }
       _fetching = false;
+      _fetchingPlotIndex = null;
       _status = 'Updated panel ($targetCol, $targetRow)';
     } catch (e) {
       if (!_isCurrentFetch(generation)) return;
       _fetching = false;
+      _fetchingPlotIndex = null;
       _status = 'Error: $e';
       reportNetworkPermissionFailure(
         e,
@@ -1692,6 +1726,7 @@ class AppState extends ChangeNotifier {
     final apiUrl = _loginApiUrl;
     final token = _authToken;
     final sshSettings = _buildSshSettingsJson();
+    _fetchingPlotIndex = null;
     _fetching = true;
     _status = 'Fetching latest shot...';
     notifyListeners();

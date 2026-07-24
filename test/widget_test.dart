@@ -774,6 +774,68 @@ void main() {
     expect(find.byType(LineChart), findsOneWidget);
   });
 
+  testWidgets('Single panel reload loads only its target panel',
+      (tester) async {
+    final pending = Completer<String>();
+    String? requestedConfig;
+    final app = AppState(
+      signalFetchWorker: (configJson, dataMode, sshSettings) {
+        requestedConfig = configJson;
+        return pending.future;
+      },
+    );
+    await app.preferencesReady;
+    app.setLoggedIn(true, 'test-token');
+    app.shotText = '163701';
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: Row(
+              children: [
+                Expanded(child: PlotPanel(plotIdx: 0)),
+                Expanded(child: PlotPanel(plotIdx: 1)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    unawaited(app.fetchSinglePanel(1));
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('plot-loading-0')), findsNothing);
+    expect(find.byKey(const ValueKey('plot-loading-1')), findsOneWidget);
+    final config = jsonDecode(requestedConfig!) as Map<String, dynamic>;
+    final columns = config['columns'] as List;
+    expect(
+      ((columns[0] as List)[0] as Map)['signal_specs'],
+      isEmpty,
+    );
+    expect(
+      ((columns[0] as List)[1] as Map)['signal_specs'],
+      isNotEmpty,
+    );
+    expect(
+      ((columns[1] as List)[0] as Map)['signal_specs'],
+      isEmpty,
+    );
+
+    pending.complete(
+      '[{"column":0,"row":1,"signal":0,'
+      '"series":{"points":[[0,20],[1,21]],"error":""}}]',
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('plot-loading-1')), findsNothing);
+    expect(app.plots[1].series[0]?.points, [
+      [0, 20],
+      [1, 21],
+    ]);
+  });
+
   test('Logout preserves loaded data and blocks authenticated operations',
       () async {
     var signalRequests = 0;
