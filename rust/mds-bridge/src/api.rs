@@ -16,6 +16,7 @@ pub struct FrbSignalSpec {
     pub color_name: String,
     pub manual_color: bool,
     pub hidden: bool,
+    pub hide_mode: i32, // 0=Visible, 1=Temporary, 2=Persistent
     pub read_mode: i32, // 0=Thin, 1=Medium, 2=Full (per-signal override)
 }
 
@@ -115,7 +116,13 @@ pub struct FrbShotInfo {
 
 impl From<mds_core::types::SignalSpec> for FrbSignalSpec {
     fn from(s: mds_core::types::SignalSpec) -> Self {
-        Self { shot: s.shot, y_expr: s.y_expr, x_expr: s.x_expr, legend: s.legend, experiment: s.experiment, server_ip: s.server_ip, color_name: s.color_name, manual_color: s.manual_color, hidden: s.hidden, read_mode: s.read_mode.map_or(0, |m| match m { mds_core::types::DataReadMode::Medium => 1, mds_core::types::DataReadMode::Full => 2, _ => 0 }) }
+        let hide_mode = match s.hide_mode {
+            mds_core::types::SignalHideMode::Temporary => 1,
+            mds_core::types::SignalHideMode::Persistent => 2,
+            mds_core::types::SignalHideMode::Visible if s.hidden => 2,
+            mds_core::types::SignalHideMode::Visible => 0,
+        };
+        Self { shot: s.shot, y_expr: s.y_expr, x_expr: s.x_expr, legend: s.legend, experiment: s.experiment, server_ip: s.server_ip, color_name: s.color_name, manual_color: s.manual_color, hidden: hide_mode != 0, hide_mode, read_mode: s.read_mode.map_or(0, |m| match m { mds_core::types::DataReadMode::Medium => 1, mds_core::types::DataReadMode::Full => 2, _ => 0 }) }
     }
 }
 
@@ -203,12 +210,22 @@ impl FrbLayoutConfig {
                     xmax: p.xmax.unwrap_or(f64::NAN),
                     ymin: p.ymin.unwrap_or(f64::NAN),
                     ymax: p.ymax.unwrap_or(f64::NAN),
-                    signal_specs: p.signal_specs.into_iter().map(|s| mds_core::types::SignalSpec {
-                        shot: s.shot, y_expr: s.y_expr, x_expr: s.x_expr, legend: s.legend,
-                        experiment: s.experiment, server_ip: s.server_ip,
-                        color_name: s.color_name, manual_color: s.manual_color, hidden: s.hidden,
-                        read_mode: match s.read_mode { 1 => Some(mds_core::types::DataReadMode::Medium), 2 => Some(mds_core::types::DataReadMode::Full), _ => None },
-                        ..Default::default()
+                    signal_specs: p.signal_specs.into_iter().map(|s| {
+                        let hide_mode = match s.hide_mode {
+                            1 => mds_core::types::SignalHideMode::Temporary,
+                            2 => mds_core::types::SignalHideMode::Persistent,
+                            _ if s.hidden => mds_core::types::SignalHideMode::Persistent,
+                            _ => mds_core::types::SignalHideMode::Visible,
+                        };
+                        mds_core::types::SignalSpec {
+                            shot: s.shot, y_expr: s.y_expr, x_expr: s.x_expr, legend: s.legend,
+                            experiment: s.experiment, server_ip: s.server_ip,
+                            color_name: s.color_name, manual_color: s.manual_color,
+                            hidden: hide_mode != mds_core::types::SignalHideMode::Visible,
+                            hide_mode,
+                            read_mode: match s.read_mode { 1 => Some(mds_core::types::DataReadMode::Medium), 2 => Some(mds_core::types::DataReadMode::Full), _ => Some(mds_core::types::DataReadMode::Thin) },
+                            ..Default::default()
+                        }
                     }).collect(),
                     ..Default::default()
                 }).collect()
@@ -312,7 +329,7 @@ fn fetch_signals_inner(config_json: String, mode: i32, ssh_settings: Option<FrbS
     // Verify config was parsed correctly
     let total_signals: usize = rust_config.columns.iter()
         .flat_map(|c| c.iter())
-        .map(|p| p.signal_specs.iter().filter(|s| !s.hidden).count())
+        .map(|p| p.signal_specs.iter().filter(|s| !s.is_hidden()).count())
         .sum();
     if total_signals == 0 {
         return vec![FrbLoadedSignal {
@@ -363,7 +380,8 @@ mod tests {
         let orig = mds_core::types::SignalSpec {
             y_expr: "\\pcrl01".into(), experiment: "pcs_east".into(),
             server_ip: "202.127.204.12".into(), color_name: "#123456".into(),
-            legend: "Plasma current".into(), manual_color: true, ..Default::default()
+            legend: "Plasma current".into(), manual_color: true, hidden: true,
+            hide_mode: mds_core::types::SignalHideMode::Temporary, ..Default::default()
         };
         let frb = FrbSignalSpec::from(orig.clone());
         assert_eq!(frb.y_expr, "\\pcrl01");
@@ -371,6 +389,8 @@ mod tests {
         assert_eq!(frb.color_name, "#123456");
         assert_eq!(frb.legend, "Plasma current");
         assert!(frb.manual_color);
+        assert!(frb.hidden);
+        assert_eq!(frb.hide_mode, 1);
     }
 
     #[test]
@@ -485,6 +505,7 @@ mod tests {
         assert_eq!(rust.shot, "143850");
         assert_eq!(rust.columns.len(), 1);
         assert_eq!(rust.columns[0][0].signal_specs[0].y_expr, "\\pcrl01");
+        assert_eq!(rust.columns[0][0].signal_specs[0].read_mode, Some(mds_core::types::DataReadMode::Thin));
     }
 
     #[test]

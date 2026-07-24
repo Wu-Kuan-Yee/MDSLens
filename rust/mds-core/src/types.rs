@@ -17,6 +17,18 @@ pub enum DataReadMode {
     Full,
 }
 
+/// Controls whether a signal is visible for the current and future shots.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SignalHideMode {
+    /// Draw the signal normally.
+    #[default]
+    Visible,
+    /// Hide only until the next full refresh or shot load.
+    Temporary,
+    /// Keep the signal hidden across refreshes and shot changes.
+    Persistent,
+}
+
 /// Interaction mode for plot mouse/touch behavior.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InteractionMode {
@@ -69,10 +81,18 @@ pub struct SignalSpec {
     pub color_name: String,
     /// True if the user explicitly chose the color.
     pub manual_color: bool,
-    /// Hide this signal from the plot (still fetched).
+    /// Effective hidden state retained for backward-compatible consumers.
     pub hidden: bool,
+    /// Whether hiding is temporary or persistent.
+    pub hide_mode: SignalHideMode,
     /// Per-signal data read mode override.
     pub read_mode: Option<DataReadMode>,
+}
+
+impl SignalSpec {
+    pub fn is_hidden(&self) -> bool {
+        self.hidden || self.hide_mode != SignalHideMode::Visible
+    }
 }
 
 /// Describes one plot panel (a single chart with axes).

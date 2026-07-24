@@ -25,6 +25,37 @@ const _configurationSignalColors = [
   '#0891b2',
 ];
 
+const signalHideModeVisible = 0;
+const signalHideModeTemporary = 1;
+const signalHideModePersistent = 2;
+
+int signalHideModeOf(Map<dynamic, dynamic> signal) {
+  final raw = signal['hide_mode'];
+  final parsed = raw is num
+      ? raw.toInt()
+      : switch (raw?.toString().trim().toLowerCase()) {
+          'temporary' || 'current_shot' || 'current-shot' => 1,
+          'persistent' || 'always' => 2,
+          'visible' || 'none' || 'not_hidden' || 'not-hidden' => 0,
+          final value => int.tryParse(value ?? ''),
+        };
+  if (parsed != null && parsed >= 0 && parsed <= 2) return parsed;
+  // Configurations produced before the three-state control used a single
+  // boolean. Preserve a previously hidden curve as persistently hidden.
+  return signal['hidden'] == true
+      ? signalHideModePersistent
+      : signalHideModeVisible;
+}
+
+bool signalIsHidden(Map<dynamic, dynamic> signal) =>
+    signalHideModeOf(signal) != signalHideModeVisible;
+
+void normalizeSignalHideSettings(Map<dynamic, dynamic> signal) {
+  final mode = signalHideModeOf(signal);
+  signal['hide_mode'] = mode;
+  signal['hidden'] = mode != signalHideModeVisible;
+}
+
 class ConfigOpenSelection {
   const ConfigOpenSelection({
     required this.name,
@@ -1133,6 +1164,18 @@ class AppState extends ChangeNotifier {
         : int.tryParse(rawPoints?.toString() ?? '');
     panel['extraction_points'] = points != null && points >= 2 ? points : 2000;
     panel['grid'] ??= true;
+    final signals = panel['signal_specs'];
+    if (signals is List) {
+      panel['signal_specs'] = <Map<String, dynamic>>[
+        for (final rawSignal in signals)
+          if (rawSignal is Map)
+            () {
+              final signal = Map<String, dynamic>.from(rawSignal);
+              normalizeSignalHideSettings(signal);
+              return signal;
+            }(),
+      ];
+    }
   }
 
   String _configurationInitialShot(
@@ -1219,6 +1262,7 @@ class AppState extends ChangeNotifier {
                 parsedMode != null && parsedMode >= 0 && parsedMode <= 2
                     ? parsedMode
                     : _dataMode;
+            final hideMode = signalHideModeOf(signal);
             return <String, dynamic>{
               ...signal,
               'shot': shot.isNotEmpty ? shot : inheritedShot,
@@ -1233,7 +1277,8 @@ class AppState extends ChangeNotifier {
                       index % _configurationSignalColors.length],
               'manual_color': signal['manual_color'] == true ||
                   (color.isNotEmpty && signal['manual_color'] != false),
-              'hidden': signal['hidden'] == true,
+              'hide_mode': hideMode,
+              'hidden': hideMode != signalHideModeVisible,
               'read_mode': mode,
             };
           }(),
@@ -1497,16 +1542,31 @@ class AppState extends ChangeNotifier {
     return value;
   }
 
-  void _clearCustomReadModes() {
+  void _synchronizeSignalRuntimeSettings(
+    String shot, {
+    bool resetTemporaryHides = true,
+  }) {
     for (final col in _columns) {
       for (final p in col) {
         final sigs = p['signal_specs'] as List?;
         if (sigs != null) {
-          for (final s in sigs) {
-            if (s is Map) {
-              s.remove('read_mode');
-            }
-          }
+          p['signal_specs'] = <Map<String, dynamic>>[
+            for (final rawSignal in sigs)
+              if (rawSignal is Map)
+                () {
+                  final signal = Map<String, dynamic>.from(rawSignal);
+                  var hideMode = signalHideModeOf(signal);
+                  if (resetTemporaryHides &&
+                      hideMode == signalHideModeTemporary) {
+                    hideMode = signalHideModeVisible;
+                  }
+                  signal['shot'] = shot;
+                  signal['read_mode'] = _dataMode;
+                  signal['hide_mode'] = hideMode;
+                  signal['hidden'] = hideMode != signalHideModeVisible;
+                  return signal;
+                }(),
+          ];
         }
       }
     }
@@ -1526,10 +1586,10 @@ class AppState extends ChangeNotifier {
     _pendingImportedShot = null;
     if (!_requireActiveSession('load a shot')) return;
     if (_columns.isEmpty) return;
-    _clearCustomReadModes();
     if (_shotCtrl.text.trim().isNotEmpty) {
       _shotText = _shotCtrl.text.trim();
     }
+    _synchronizeSignalRuntimeSettings(_shotText);
     _addToHistory(_shotText);
     savePreferences();
     _viewResetId++;
@@ -1541,9 +1601,9 @@ class AppState extends ChangeNotifier {
     if (shot == null || shot.isEmpty) return;
     if (!_requireActiveSession('load the imported configuration')) return;
     if (_columns.isEmpty) return;
-    _clearCustomReadModes();
     _shotText = shot;
     _shotCtrl.text = shot;
+    _synchronizeSignalRuntimeSettings(shot);
     _addToHistory(shot);
     await savePreferences();
     _viewResetId++;
@@ -1559,11 +1619,11 @@ class AppState extends ChangeNotifier {
   void refreshDisplayedShot() {
     if (!_requireActiveSession('refresh waveforms')) return;
     if (_columns.isEmpty) return;
-    _clearCustomReadModes();
     final shot = _displayedShot.trim().isNotEmpty
         ? _displayedShot.trim()
         : _shotText.trim();
     if (shot.isEmpty) return;
+    _synchronizeSignalRuntimeSettings(shot);
     _addToHistory(shot);
     savePreferences();
     _viewResetId++;
@@ -1574,10 +1634,10 @@ class AppState extends ChangeNotifier {
     _pendingImportedShot = null;
     if (!_requireActiveSession('load a shot')) return;
     if (_columns.isEmpty) return;
-    _clearCustomReadModes();
     if (_shotCtrl.text.trim().isNotEmpty) {
       _shotText = _shotCtrl.text.trim();
     }
+    _synchronizeSignalRuntimeSettings(_shotText);
     _addToHistory(_shotText);
     savePreferences();
     _doFetch(shot: _shotText);
@@ -1588,6 +1648,22 @@ class AppState extends ChangeNotifier {
         .map((col) => col.map((p) {
               final panel = Map<String, dynamic>.from(p);
               panel['shot'] = shot;
+              final signals = p['signal_specs'];
+              if (signals is List) {
+                panel['signal_specs'] = [
+                  for (final rawSignal in signals)
+                    if (rawSignal is Map)
+                      () {
+                        final signal = Map<String, dynamic>.from(rawSignal);
+                        final hideMode = signalHideModeOf(signal);
+                        signal['shot'] = shot;
+                        signal['read_mode'] = _dataMode;
+                        signal['hide_mode'] = hideMode;
+                        signal['hidden'] = hideMode != signalHideModeVisible;
+                        return signal;
+                      }(),
+                ];
+              }
               _normalizePanelDefaults(panel);
               return panel;
             }).toList())

@@ -410,6 +410,7 @@ void main() {
         'color_name': '#123456',
         'manual_color': true,
         'hidden': true,
+        'hide_mode': signalHideModePersistent,
         'read_mode': 2,
       },
       {
@@ -434,6 +435,7 @@ void main() {
       'color_name': '#123456',
       'manual_color': true,
       'hidden': true,
+      'hide_mode': signalHideModePersistent,
       'read_mode': 2,
     });
     expect(signals[1], {
@@ -446,6 +448,7 @@ void main() {
       'color_name': '#c44e52',
       'manual_color': false,
       'hidden': false,
+      'hide_mode': signalHideModeVisible,
       'read_mode': 1,
     });
   });
@@ -511,20 +514,21 @@ void main() {
     final storedSignals =
         app.columns.single.single['signal_specs'] as List<dynamic>;
     expect(
-        storedSignals.every((signal) => !(signal as Map).containsKey('shot')),
-        isTrue);
+      storedSignals.every((signal) => (signal as Map)['shot'] == '163999'),
+      isTrue,
+    );
 
     final requestedPanel =
         jsonDecode(requestedConfig!)['columns'][0][0] as Map<String, dynamic>;
     expect(requestedPanel['shot'], '163999');
     final requestedSignals = requestedPanel['signal_specs'] as List<dynamic>;
     expect(
-      requestedSignals.every((signal) => !(signal as Map).containsKey('shot')),
+      requestedSignals.every((signal) => (signal as Map)['shot'] == '163999'),
       isTrue,
     );
   });
 
-  test('A user-selected shot overrides an imported configuration default',
+  test('A newly loaded shot overrides every imported per-signal shot',
       () async {
     final requestedConfigs = <Map<String, dynamic>>[];
     final app = AppState(
@@ -584,8 +588,8 @@ void main() {
         (requestedConfigs.single['columns'] as List).first.first as Map;
     expect(requestedPanel['shot'], '143850');
     var requestedSignals = requestedPanel['signal_specs'] as List;
-    expect((requestedSignals[0] as Map)['shot'] ?? '', isEmpty);
-    expect((requestedSignals[1] as Map)['shot'], '143849');
+    expect((requestedSignals[0] as Map)['shot'], '143850');
+    expect((requestedSignals[1] as Map)['shot'], '143850');
 
     app.shotText = '163999';
     app.startRefresh();
@@ -597,8 +601,77 @@ void main() {
         (requestedConfigs.last['columns'] as List).first.first as Map;
     expect(requestedPanel['shot'], '163999');
     requestedSignals = requestedPanel['signal_specs'] as List;
-    expect((requestedSignals[0] as Map)['shot'] ?? '', isEmpty);
-    expect((requestedSignals[1] as Map)['shot'], '143849');
+    expect((requestedSignals[0] as Map)['shot'], '163999');
+    expect((requestedSignals[1] as Map)['shot'], '163999');
+  });
+
+  test(
+      'Full shot loads override signal Shot and Data and reset temporary hiding',
+      () async {
+    String? requestedConfig;
+    String? requestedDataMode;
+    final app = AppState(
+      signalFetchWorker: (configJson, dataMode, _) async {
+        requestedConfig = configJson;
+        requestedDataMode = dataMode;
+        return '[]';
+      },
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setLoggedIn(true, 'test-token');
+    app.columns[0][0]['signal_specs'] = [
+      {
+        'shot': '100001',
+        'read_mode': 2,
+        'hide_mode': signalHideModeTemporary,
+        'hidden': true,
+        'experiment': 'tree_a',
+        'y_expr': r'\FIRST',
+        'legend': 'First',
+        'server_ip': '10.0.0.1',
+        'color_name': '#123456',
+      },
+      {
+        'shot': '100002',
+        'read_mode': 0,
+        'hide_mode': signalHideModePersistent,
+        'hidden': true,
+        'experiment': 'tree_b',
+        'y_expr': r'\SECOND',
+        'legend': 'Second',
+        'server_ip': '10.0.0.2',
+        'color_name': '#654321',
+      },
+    ];
+    app.dataMode = 1;
+    app.shotText = '170001';
+
+    app.startRefresh();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(requestedDataMode, '1');
+    final signals =
+        jsonDecode(requestedConfig!)['columns'][0][0]['signal_specs'] as List;
+    expect(signals.map((signal) => (signal as Map)['shot']),
+        everyElement('170001'));
+    expect(
+        signals.map((signal) => (signal as Map)['read_mode']), everyElement(1));
+    expect((signals[0] as Map)['hide_mode'], signalHideModeVisible);
+    expect((signals[0] as Map)['hidden'], isFalse);
+    expect((signals[1] as Map)['hide_mode'], signalHideModePersistent);
+    expect((signals[1] as Map)['hidden'], isTrue);
+    expect((signals[0] as Map)['experiment'], 'tree_a');
+    expect((signals[0] as Map)['y_expr'], r'\FIRST');
+    expect((signals[0] as Map)['legend'], 'First');
+    expect((signals[0] as Map)['server_ip'], '10.0.0.1');
+    expect((signals[0] as Map)['color_name'], '#123456');
+
+    final stored = app.columns[0][0]['signal_specs'] as List;
+    expect((stored[0] as Map)['shot'], '170001');
+    expect((stored[0] as Map)['read_mode'], 1);
+    expect((stored[0] as Map)['hide_mode'], signalHideModeVisible);
+    expect((stored[1] as Map)['hide_mode'], signalHideModePersistent);
   });
 
   test(
@@ -3011,10 +3084,28 @@ void main() {
       find.byKey(const ValueKey('data-legend-0')),
       'Primary current',
     );
+    expect(
+      find.byKey(const ValueKey('data-hide-mode-dropdown-0')),
+      findsOneWidget,
+    );
+    expect(find.byType(Checkbox), findsNothing);
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('data-hide-mode-dropdown-0')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('data-hide-mode-dropdown-0')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('data-hide-mode-0-option-1')),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
     expect(signals.single['legend'], 'Primary current');
     expect(signals.single['shot'], '163888');
+    expect(signals.single['hide_mode'], signalHideModeTemporary);
+    expect(signals.single['hidden'], isTrue);
   });
 
   testWidgets('SSH mode and font family use polished dropdown menus',

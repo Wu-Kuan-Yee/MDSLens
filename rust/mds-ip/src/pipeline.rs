@@ -90,7 +90,7 @@ pub fn warm_connections(config: &LayoutConfig, cancel: &Arc<AtomicBool>) {
     let mut servers: Vec<&str> = config.columns.iter()
         .flat_map(|c| c.iter())
         .flat_map(|p| p.signal_specs.iter())
-        .filter(|s| !s.server_ip.is_empty() && !s.hidden)
+        .filter(|s| !s.server_ip.is_empty() && !s.is_hidden())
         .map(|s| s.server_ip.as_str())
         .collect();
     servers.sort();
@@ -193,7 +193,7 @@ fn build_requests(config: &LayoutConfig, read_mode: DataReadMode) -> Vec<FetchRe
     for (col, column) in config.columns.iter().enumerate() {
         for (row, plot) in column.iter().enumerate() {
             for (sig_idx, sig) in plot.signal_specs.iter().enumerate() {
-                if sig.hidden { continue; }
+                if sig.is_hidden() { continue; }
                 let mode = effective_read_mode(read_mode, sig.read_mode);
                 let max_pts = match mode {
                     DataReadMode::Thin => plot.extraction_points.max(1) as usize,

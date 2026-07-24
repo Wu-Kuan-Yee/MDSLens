@@ -171,7 +171,7 @@ class _PlotPanelState extends State<PlotPanel> {
     for (var i = 0; i < plot.series.length; i++) {
       final s = plot.series[i];
       if (s?.points == null || s!.points!.isEmpty) continue;
-      if (i < sigSpecs.length && sigSpecs[i]['hidden'] == true) continue;
+      if (i < sigSpecs.length && signalIsHidden(sigSpecs[i])) continue;
       activeSeries.add(s);
       final rendered = _renderCache.render(s);
       final spots = rendered.spots;
@@ -576,7 +576,7 @@ class _PlotPanelState extends State<PlotPanel> {
     final entries = <({int index, Map<dynamic, dynamic> signal})>[
       for (var index = 0; index < rawSignals.length; index++)
         if (rawSignals[index] is Map &&
-            (rawSignals[index] as Map)['hidden'] != true &&
+            !signalIsHidden(rawSignals[index] as Map) &&
             signalLegendLabel(rawSignals[index] as Map).isNotEmpty)
           (index: index, signal: rawSignals[index] as Map),
     ];
@@ -1968,7 +1968,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
           text: s?['server_ip']?.toString() ?? '202.127.204.12'),
       xExpr: s?['x_expr']?.toString() ?? '',
     )
-      ..hidden = s?['hidden'] == true
+      ..hideMode = s == null ? signalHideModeVisible : signalHideModeOf(s)
       ..colorIdx = i % _presetColors.length
       ..readMode = (s?['read_mode'] as int?) ?? defaultRate);
     if (s != null && s['color_name'] != null) {
@@ -2056,7 +2056,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                     3: FixedColumnWidth(130),
                     4: FixedColumnWidth(144),
                     5: FixedColumnWidth(34),
-                    6: FixedColumnWidth(46),
+                    6: FixedColumnWidth(150),
                     7: FixedColumnWidth(136),
                     8: FixedColumnWidth(26),
                   },
@@ -2069,7 +2069,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                       _hdrCell('Legend', 4),
                       _hdrCell('Server IP', 4),
                       _hdrCell('Color', 4),
-                      _hdrCell('Hide', 2),
+                      _hdrCell('Visibility', 4),
                       _hdrCell('Data', 4),
                       _hdrCell('Del', 0),
                     ]),
@@ -2125,12 +2125,36 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                                     row: _rows[i],
                                     onChanged: () => setState(() {})))),
                         Padding(
-                            padding: const EdgeInsets.only(right: 2),
-                            child: Center(
-                                child: Checkbox(
-                                    value: _rows[i].hidden,
-                                    onChanged: (v) => setState(
-                                        () => _rows[i].hidden = v ?? false)))),
+                          padding: const EdgeInsets.only(right: 4),
+                          child: PolishedDropdown<int>(
+                            key: ValueKey('data-hide-mode-dropdown-$i'),
+                            id: 'data-hide-mode-$i',
+                            value: _rows[i].hideMode,
+                            height: 42,
+                            fontSize: 11,
+                            leadingIcon: Icons.visibility_rounded,
+                            minimumMenuWidth: 220,
+                            options: const [
+                              PolishedDropdownOption(
+                                value: signalHideModeVisible,
+                                label: 'Not hidden',
+                                icon: Icons.visibility_rounded,
+                              ),
+                              PolishedDropdownOption(
+                                value: signalHideModeTemporary,
+                                label: 'Hide this shot',
+                                icon: Icons.visibility_off_outlined,
+                              ),
+                              PolishedDropdownOption(
+                                value: signalHideModePersistent,
+                                label: 'Always hide',
+                                icon: Icons.lock_outline_rounded,
+                              ),
+                            ],
+                            onChanged: (value) =>
+                                setState(() => _rows[i].hideMode = value),
+                          ),
+                        ),
                         Padding(
                             padding: const EdgeInsets.only(right: 4),
                             child: PolishedDropdown<int>(
@@ -2211,7 +2235,8 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
         'color_name':
             '#${colorValue.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}',
         'manual_color': true,
-        'hidden': r.hidden,
+        'hide_mode': r.hideMode,
+        'hidden': r.hideMode != signalHideModeVisible,
         'read_mode': r.readMode,
       });
     }
@@ -2544,7 +2569,7 @@ class _HsvPainter extends CustomPainter {
 class _DSRow {
   final TextEditingController shot, y, legend, tree, server;
   final String xExpr;
-  bool hidden = false;
+  int hideMode = signalHideModeVisible;
   int readMode = 0;
   int colorIdx = 0;
   Color? customColor;

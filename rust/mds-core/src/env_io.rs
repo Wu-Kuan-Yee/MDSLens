@@ -5,7 +5,7 @@
 //!
 //! Ported from `src/core/environment_io.cpp`.
 
-use crate::types::LayoutConfig;
+use crate::types::{LayoutConfig, SignalHideMode};
 
 fn toml_number_as_f64(value: &toml::Value) -> Option<f64> {
     value
@@ -158,9 +158,19 @@ pub fn parse_toml_environment(path: &str) -> LayoutConfig {
                 if !signal.manual_color {
                     signal.color_name = crate::colors::color_for_index(i);
                 }
-                if let Some(v) = sig.get("hidden").and_then(|v| v.as_bool()) {
-                    signal.hidden = v;
-                }
+                let legacy_hidden = sig.get("hidden").and_then(|v| v.as_bool()).unwrap_or(false);
+                signal.hide_mode = match sig.get("hide_mode")
+                    .and_then(|v| v.as_str())
+                    .map(|v| v.trim().to_ascii_lowercase())
+                    .as_deref()
+                {
+                    Some("temporary" | "current_shot" | "current-shot") => SignalHideMode::Temporary,
+                    Some("persistent" | "always") => SignalHideMode::Persistent,
+                    Some("visible" | "none" | "not_hidden" | "not-hidden") => SignalHideMode::Visible,
+                    _ if legacy_hidden => SignalHideMode::Persistent,
+                    _ => SignalHideMode::Visible,
+                };
+                signal.hidden = signal.hide_mode != SignalHideMode::Visible;
                 if let Some(v) = sig.get("read_mode").and_then(|v| v.as_str()) {
                     signal.read_mode = match v {
                         "full" => Some(crate::types::DataReadMode::Full),
@@ -355,7 +365,18 @@ pub fn encode_environment_toml(config: &LayoutConfig) -> String {
                 writeln!(out, "legend = {:?}", signal.legend).unwrap();
                 writeln!(out, "color = {:?}", resolved_color).unwrap();
                 writeln!(out, "manual_color = {}", signal.manual_color).unwrap();
-                writeln!(out, "hidden = {}", signal.hidden).unwrap();
+                let hide_mode = if signal.hide_mode == SignalHideMode::Visible && signal.hidden {
+                    // Old in-memory callers only had `hidden`; preserve their intent.
+                    SignalHideMode::Persistent
+                } else {
+                    signal.hide_mode
+                };
+                writeln!(out, "hidden = {}", hide_mode != SignalHideMode::Visible).unwrap();
+                writeln!(out, "hide_mode = {:?}", match hide_mode {
+                    SignalHideMode::Temporary => "temporary",
+                    SignalHideMode::Persistent => "persistent",
+                    SignalHideMode::Visible => "visible",
+                }).unwrap();
                 match signal.read_mode {
                     Some(crate::types::DataReadMode::Full) => writeln!(out, "read_mode = \"full\"").unwrap(),
                     Some(crate::types::DataReadMode::Medium) => writeln!(out, "read_mode = \"medium\"").unwrap(),
@@ -592,6 +613,7 @@ y = "\\pcrl01"
                         color_name: "#123456".into(),
                         manual_color: true,
                         hidden: true,
+                        hide_mode: crate::types::SignalHideMode::Temporary,
                         read_mode: Some(crate::types::DataReadMode::Full),
                     },
                     crate::types::SignalSpec {
@@ -617,10 +639,12 @@ y = "\\pcrl01"
         assert!(encoded.contains("color = \"#123456\""));
         assert!(encoded.contains("manual_color = true"));
         assert!(encoded.contains("hidden = true"));
+        assert!(encoded.contains("hide_mode = \"temporary\""));
         assert!(encoded.contains("read_mode = \"full\""));
         assert!(encoded.contains("shot = \"163900\""));
         assert!(encoded.contains("manual_color = false"));
         assert!(encoded.contains("hidden = false"));
+        assert!(encoded.contains("hide_mode = \"visible\""));
         assert!(encoded.contains("read_mode = \"medium\""));
 
         let tmp = std::env::temp_dir().join("test_complete_signal_settings.toml");
@@ -634,11 +658,13 @@ y = "\\pcrl01"
         assert_eq!(first.color_name, "#123456");
         assert!(first.manual_color);
         assert!(first.hidden);
+        assert_eq!(first.hide_mode, crate::types::SignalHideMode::Temporary);
         assert_eq!(first.read_mode, Some(crate::types::DataReadMode::Full));
         assert_eq!(second.shot, "163900");
         assert_eq!(second.color_name, crate::colors::color_for_index(1));
         assert!(!second.manual_color);
         assert!(!second.hidden);
+        assert_eq!(second.hide_mode, crate::types::SignalHideMode::Visible);
         assert_eq!(second.read_mode, Some(crate::types::DataReadMode::Medium));
         std::fs::remove_file(&tmp).ok();
     }
