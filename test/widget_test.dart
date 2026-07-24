@@ -2949,6 +2949,55 @@ void main() {
     expect(app.columns, hasLength(1));
   });
 
+  testWidgets('Layout Setup scrolls wide columns and tall panel lists',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.applyLayoutList([6, 1, 1, 1, 1]);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 800);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Layout setup'));
+    await tester.pumpAndSettle();
+
+    final horizontal = tester.widget<Scrollbar>(
+      find.byKey(const ValueKey('layout-horizontal-scrollbar')),
+    );
+    expect(horizontal.thumbVisibility, isTrue);
+    expect(horizontal.controller?.position.maxScrollExtent, greaterThan(0));
+
+    final tallColumn = tester.widget<Scrollbar>(
+      find.byKey(const ValueKey('layout-column-scrollbar-0')),
+    );
+    expect(tallColumn.thumbVisibility, isTrue);
+    expect(tallColumn.controller?.position.maxScrollExtent, greaterThan(0));
+
+    await tester.drag(
+      find.byKey(const ValueKey('layout-column-scroll-0')),
+      const Offset(0, -140),
+    );
+    await tester.pumpAndSettle();
+    expect(tallColumn.controller?.position.pixels, greaterThan(0));
+
+    await tester.drag(
+      find.byKey(const ValueKey('layout-horizontal-scroll')),
+      const Offset(-180, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(horizontal.controller?.position.pixels, greaterThan(0));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Layout Setup shows metadata and supports draft panel actions',
       (tester) async {
     final app = AppState(

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/app_state.dart';
@@ -878,9 +879,11 @@ class ToolbarWidget extends StatelessWidget {
   void _showLayoutSetup(BuildContext ctx, AppState app) {
     final draftColumns = _cloneLayoutColumns(app.columns);
     if (draftColumns.isEmpty) draftColumns.add([_emptyPanelConfig()]);
+    final horizontalController = ScrollController();
+    final verticalControllers = <int, ScrollController>{};
     var selectedCol = -1, selectedRow = -1;
 
-    showDialog(
+    final dialogFuture = showDialog<void>(
       context: ctx,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setState) {
         final screenSize = MediaQuery.sizeOf(ctx);
@@ -890,6 +893,11 @@ class ToolbarWidget extends StatelessWidget {
         );
         final contentWidth = (screenSize.width - 64).clamp(240.0, 700.0);
         final contentHeight = (screenSize.height * 0.58).clamp(260.0, 540.0);
+        final layoutWidth = math.max(
+          contentWidth,
+          displayColumns.length * 156.0 + (displayColumns.length + 1) * 8.0,
+        );
+        final needsHorizontalScroll = layoutWidth > contentWidth + 0.5;
 
         return GestureDetector(
           key: const ValueKey('layout-setup-surface'),
@@ -925,236 +933,348 @@ class ToolbarWidget extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Expanded(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          for (var displayColumn = 0;
-                              displayColumn < displayColumns.length;
-                              displayColumn++) ...[
-                            _layoutColumnDropTarget(
-                              context: ctx,
-                              columns: draftColumns,
-                              insertionIndex: displayColumn,
-                              setState: setState,
-                              clearSelection: () {
-                                selectedCol = -1;
-                                selectedRow = -1;
-                              },
-                            ),
-                            Expanded(
-                              child: LongPressDraggable<_LayoutDragData>(
-                                key: ValueKey(
-                                    'layout-column-drag-${displayColumn + 1}'),
-                                data: _LayoutDragData.column(displayColumn),
-                                delay: const Duration(milliseconds: 320),
-                                hapticFeedbackOnStart: true,
-                                feedback: _layoutDragFeedback(
-                                  ctx,
-                                  icon: Icons.view_column_rounded,
-                                  label: 'Column ${displayColumn + 1}',
-                                  subtitle:
-                                      '${draftColumns[displayColumn].length} panels',
-                                ),
-                                childWhenDragging: Opacity(
-                                  opacity: 0.22,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                        color: Theme.of(ctx).dividerColor,
-                                      ),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
+                      child: Scrollbar(
+                        key: const ValueKey('layout-horizontal-scrollbar'),
+                        controller: horizontalController,
+                        thumbVisibility: needsHorizontalScroll,
+                        interactive: true,
+                        child: SingleChildScrollView(
+                          key: const ValueKey('layout-horizontal-scroll'),
+                          controller: horizontalController,
+                          scrollDirection: Axis.horizontal,
+                          child: SizedBox(
+                            width: layoutWidth,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                for (var displayColumn = 0;
+                                    displayColumn < displayColumns.length;
+                                    displayColumn++) ...[
+                                  _layoutColumnDropTarget(
+                                    context: ctx,
+                                    columns: draftColumns,
+                                    insertionIndex: displayColumn,
+                                    setState: setState,
+                                    clearSelection: () {
+                                      selectedCol = -1;
+                                      selectedRow = -1;
+                                    },
                                   ),
-                                ),
-                                child: GestureDetector(
-                                  behavior: HitTestBehavior.translucent,
-                                  onTap: () => setState(() {
-                                    selectedCol = displayColumn;
-                                    selectedRow = -1;
-                                  }),
-                                  child: Container(
-                                    key: ValueKey(
-                                        'layout-preview-column-$displayColumn'),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                        color: selectedCol == displayColumn &&
-                                                selectedRow < 0
-                                            ? Theme.of(ctx).colorScheme.primary
-                                            : Theme.of(ctx).dividerColor,
-                                        width: selectedCol == displayColumn &&
-                                                selectedRow < 0
-                                            ? 2
-                                            : 1,
+                                  Expanded(
+                                    child: LongPressDraggable<_LayoutDragData>(
+                                      key: ValueKey(
+                                          'layout-column-drag-${displayColumn + 1}'),
+                                      data:
+                                          _LayoutDragData.column(displayColumn),
+                                      delay: const Duration(milliseconds: 320),
+                                      hapticFeedbackOnStart: true,
+                                      feedback: _layoutDragFeedback(
+                                        ctx,
+                                        icon: Icons.view_column_rounded,
+                                        label: 'Column ${displayColumn + 1}',
+                                        subtitle:
+                                            '${draftColumns[displayColumn].length} panels',
                                       ),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Column(children: [
-                                      GestureDetector(
-                                        key: ValueKey(
-                                            'layout-column-header-${displayColumn + 1}'),
-                                        behavior: HitTestBehavior.opaque,
+                                      childWhenDragging: Opacity(
+                                        opacity: 0.22,
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            border: Border.all(
+                                              color: Theme.of(ctx).dividerColor,
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                        ),
+                                      ),
+                                      child: GestureDetector(
+                                        behavior: HitTestBehavior.translucent,
                                         onTap: () => setState(() {
                                           selectedCol = displayColumn;
                                           selectedRow = -1;
                                         }),
-                                        child: SizedBox(
-                                          height: 32,
-                                          child: Row(
-                                            children: [
-                                              Expanded(
-                                                child: Center(
-                                                  child: FittedBox(
-                                                    fit: BoxFit.scaleDown,
-                                                    child: Text(
-                                                      'Column ${displayColumn + 1}',
-                                                      style: const TextStyle(
-                                                        fontSize: 10,
-                                                        fontWeight:
-                                                            FontWeight.bold,
+                                        child: Container(
+                                          key: ValueKey(
+                                              'layout-preview-column-$displayColumn'),
+                                          decoration: BoxDecoration(
+                                            border: Border.all(
+                                              color: selectedCol ==
+                                                          displayColumn &&
+                                                      selectedRow < 0
+                                                  ? Theme.of(ctx)
+                                                      .colorScheme
+                                                      .primary
+                                                  : Theme.of(ctx).dividerColor,
+                                              width: selectedCol ==
+                                                          displayColumn &&
+                                                      selectedRow < 0
+                                                  ? 2
+                                                  : 1,
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                          child: Column(children: [
+                                            GestureDetector(
+                                              key: ValueKey(
+                                                  'layout-column-header-${displayColumn + 1}'),
+                                              behavior: HitTestBehavior.opaque,
+                                              onTap: () => setState(() {
+                                                selectedCol = displayColumn;
+                                                selectedRow = -1;
+                                              }),
+                                              child: SizedBox(
+                                                height: 32,
+                                                child: Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Center(
+                                                        child: FittedBox(
+                                                          fit: BoxFit.scaleDown,
+                                                          child: Text(
+                                                            'Column ${displayColumn + 1}',
+                                                            style:
+                                                                const TextStyle(
+                                                              fontSize: 10,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold,
+                                                            ),
+                                                          ),
+                                                        ),
                                                       ),
                                                     ),
-                                                  ),
+                                                    if (selectedCol ==
+                                                            displayColumn &&
+                                                        selectedRow < 0)
+                                                      Padding(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .only(right: 3),
+                                                        child:
+                                                            _layoutIconButton(
+                                                          context: ctx,
+                                                          key: ValueKey(
+                                                              'layout-delete-column-${displayColumn + 1}'),
+                                                          icon: Icons
+                                                              .delete_outline_rounded,
+                                                          tooltip: draftColumns
+                                                                      .length >
+                                                                  1
+                                                              ? 'Delete column'
+                                                              : 'At least one column is required',
+                                                          destructive: true,
+                                                          onPressed: draftColumns
+                                                                      .length >
+                                                                  1
+                                                              ? () {
+                                                                  draftColumns
+                                                                      .removeAt(
+                                                                          displayColumn);
+                                                                  selectedCol =
+                                                                      -1;
+                                                                  selectedRow =
+                                                                      -1;
+                                                                  setState(
+                                                                      () {});
+                                                                }
+                                                              : null,
+                                                        ),
+                                                      ),
+                                                  ],
                                                 ),
                                               ),
-                                              if (selectedCol ==
-                                                      displayColumn &&
-                                                  selectedRow < 0)
-                                                Padding(
-                                                  padding:
-                                                      const EdgeInsets.only(
-                                                          right: 3),
-                                                  child: _layoutIconButton(
-                                                    context: ctx,
-                                                    key: ValueKey(
-                                                        'layout-delete-column-${displayColumn + 1}'),
-                                                    icon: Icons
-                                                        .delete_outline_rounded,
-                                                    tooltip: draftColumns
-                                                                .length >
-                                                            1
-                                                        ? 'Delete column'
-                                                        : 'At least one column is required',
-                                                    destructive: true,
-                                                    onPressed: draftColumns
-                                                                .length >
-                                                            1
-                                                        ? () {
-                                                            draftColumns.removeAt(
-                                                                displayColumn);
-                                                            selectedCol = -1;
-                                                            selectedRow = -1;
-                                                            setState(() {});
-                                                          }
-                                                        : null,
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                      Expanded(
-                                        child: Column(
-                                          children: [
-                                            _layoutPanelDropTarget(
-                                              context: ctx,
-                                              columns: draftColumns,
-                                              targetColumn: displayColumn,
-                                              insertionRow: 0,
-                                              setState: setState,
-                                              clearSelection: () {
-                                                selectedCol = -1;
-                                                selectedRow = -1;
-                                              },
                                             ),
-                                            for (final cell in displayColumns[
-                                                displayColumn]) ...[
-                                              _buildDraggableLayoutPanel(
-                                                ctx,
-                                                panel: draftColumns[
-                                                        cell.sourceColumn]
-                                                    [cell.sourceRow],
-                                                sourceColumn: cell.sourceColumn,
-                                                sourceRow: cell.sourceRow,
-                                                panelNumber: cell.plotIndex + 1,
-                                                selected: selectedCol ==
-                                                        cell.sourceColumn &&
-                                                    selectedRow ==
-                                                        cell.sourceRow,
-                                                onSelect: () => setState(() {
-                                                  selectedCol =
-                                                      cell.sourceColumn;
-                                                  selectedRow = cell.sourceRow;
-                                                }),
-                                                onEdit: () async {
-                                                  final panel = draftColumns[
-                                                          cell.sourceColumn]
-                                                      [cell.sourceRow];
-                                                  final changed =
-                                                      await _editLayoutPanel(
-                                                    ctx,
-                                                    app,
-                                                    panel,
-                                                    cell.plotIndex + 1,
-                                                  );
-                                                  if (changed && ctx.mounted) {
-                                                    setState(() {});
-                                                  }
-                                                },
-                                                onDelete: () {
+                                            Expanded(
+                                              child: LayoutBuilder(
+                                                builder:
+                                                    (context, constraints) {
                                                   final panelCount =
-                                                      draftColumns.fold(
-                                                    0,
-                                                    (count, column) =>
-                                                        count + column.length,
+                                                      displayColumns[
+                                                              displayColumn]
+                                                          .length;
+                                                  final requiredHeight =
+                                                      panelCount * 112.0 +
+                                                          (panelCount + 1) *
+                                                              7.0;
+                                                  final needsVerticalScroll =
+                                                      requiredHeight >
+                                                          constraints
+                                                                  .maxHeight +
+                                                              0.5;
+                                                  final controller =
+                                                      verticalControllers
+                                                          .putIfAbsent(
+                                                    displayColumn,
+                                                    ScrollController.new,
                                                   );
-                                                  if (panelCount <= 1) return;
-                                                  draftColumns[
-                                                          cell.sourceColumn]
-                                                      .removeAt(cell.sourceRow);
-                                                  if (draftColumns[
-                                                          cell.sourceColumn]
-                                                      .isEmpty) {
-                                                    draftColumns.removeAt(
-                                                        cell.sourceColumn);
-                                                  }
-                                                  selectedCol = -1;
-                                                  selectedRow = -1;
-                                                  setState(() {});
+                                                  return Scrollbar(
+                                                    key: ValueKey(
+                                                        'layout-column-scrollbar-$displayColumn'),
+                                                    controller: controller,
+                                                    thumbVisibility:
+                                                        needsVerticalScroll,
+                                                    interactive: true,
+                                                    child:
+                                                        SingleChildScrollView(
+                                                      key: ValueKey(
+                                                          'layout-column-scroll-$displayColumn'),
+                                                      controller: controller,
+                                                      child: SizedBox(
+                                                        height: math.max(
+                                                          constraints.maxHeight,
+                                                          requiredHeight,
+                                                        ),
+                                                        child: Column(
+                                                          children: [
+                                                            _layoutPanelDropTarget(
+                                                              context: ctx,
+                                                              columns:
+                                                                  draftColumns,
+                                                              targetColumn:
+                                                                  displayColumn,
+                                                              insertionRow: 0,
+                                                              setState:
+                                                                  setState,
+                                                              clearSelection:
+                                                                  () {
+                                                                selectedCol =
+                                                                    -1;
+                                                                selectedRow =
+                                                                    -1;
+                                                              },
+                                                            ),
+                                                            for (final cell
+                                                                in displayColumns[
+                                                                    displayColumn]) ...[
+                                                              _buildDraggableLayoutPanel(
+                                                                ctx,
+                                                                panel: draftColumns[
+                                                                    cell
+                                                                        .sourceColumn][cell
+                                                                    .sourceRow],
+                                                                sourceColumn: cell
+                                                                    .sourceColumn,
+                                                                sourceRow: cell
+                                                                    .sourceRow,
+                                                                panelNumber:
+                                                                    cell.plotIndex +
+                                                                        1,
+                                                                selected: selectedCol ==
+                                                                        cell
+                                                                            .sourceColumn &&
+                                                                    selectedRow ==
+                                                                        cell.sourceRow,
+                                                                onSelect: () =>
+                                                                    setState(
+                                                                        () {
+                                                                  selectedCol =
+                                                                      cell.sourceColumn;
+                                                                  selectedRow =
+                                                                      cell.sourceRow;
+                                                                }),
+                                                                onEdit:
+                                                                    () async {
+                                                                  final panel =
+                                                                      draftColumns[
+                                                                          cell
+                                                                              .sourceColumn][cell
+                                                                          .sourceRow];
+                                                                  final changed =
+                                                                      await _editLayoutPanel(
+                                                                    ctx,
+                                                                    app,
+                                                                    panel,
+                                                                    cell.plotIndex +
+                                                                        1,
+                                                                  );
+                                                                  if (changed &&
+                                                                      ctx.mounted) {
+                                                                    setState(
+                                                                        () {});
+                                                                  }
+                                                                },
+                                                                onDelete: () {
+                                                                  final panelCount =
+                                                                      draftColumns
+                                                                          .fold(
+                                                                    0,
+                                                                    (count, column) =>
+                                                                        count +
+                                                                        column
+                                                                            .length,
+                                                                  );
+                                                                  if (panelCount <=
+                                                                      1) {
+                                                                    return;
+                                                                  }
+                                                                  draftColumns[cell
+                                                                          .sourceColumn]
+                                                                      .removeAt(
+                                                                          cell.sourceRow);
+                                                                  if (draftColumns[
+                                                                          cell.sourceColumn]
+                                                                      .isEmpty) {
+                                                                    draftColumns
+                                                                        .removeAt(
+                                                                            cell.sourceColumn);
+                                                                  }
+                                                                  selectedCol =
+                                                                      -1;
+                                                                  selectedRow =
+                                                                      -1;
+                                                                  setState(
+                                                                      () {});
+                                                                },
+                                                              ),
+                                                              _layoutPanelDropTarget(
+                                                                context: ctx,
+                                                                columns:
+                                                                    draftColumns,
+                                                                targetColumn:
+                                                                    displayColumn,
+                                                                insertionRow:
+                                                                    cell.sourceRow +
+                                                                        1,
+                                                                setState:
+                                                                    setState,
+                                                                clearSelection:
+                                                                    () {
+                                                                  selectedCol =
+                                                                      -1;
+                                                                  selectedRow =
+                                                                      -1;
+                                                                },
+                                                              ),
+                                                            ],
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  );
                                                 },
                                               ),
-                                              _layoutPanelDropTarget(
-                                                context: ctx,
-                                                columns: draftColumns,
-                                                targetColumn: displayColumn,
-                                                insertionRow:
-                                                    cell.sourceRow + 1,
-                                                setState: setState,
-                                                clearSelection: () {
-                                                  selectedCol = -1;
-                                                  selectedRow = -1;
-                                                },
-                                              ),
-                                            ],
-                                          ],
+                                            ),
+                                          ]),
                                         ),
                                       ),
-                                    ]),
+                                    ),
                                   ),
+                                ],
+                                _layoutColumnDropTarget(
+                                  context: ctx,
+                                  columns: draftColumns,
+                                  insertionIndex: displayColumns.length,
+                                  setState: setState,
+                                  clearSelection: () {
+                                    selectedCol = -1;
+                                    selectedRow = -1;
+                                  },
                                 ),
-                              ),
+                              ],
                             ),
-                          ],
-                          _layoutColumnDropTarget(
-                            context: ctx,
-                            columns: draftColumns,
-                            insertionIndex: displayColumns.length,
-                            setState: setState,
-                            clearSelection: () {
-                              selectedCol = -1;
-                              selectedRow = -1;
-                            },
                           ),
-                        ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -1201,6 +1321,12 @@ class ToolbarWidget extends StatelessWidget {
         );
       }),
     );
+    dialogFuture.whenComplete(() {
+      horizontalController.dispose();
+      for (final controller in verticalControllers.values) {
+        controller.dispose();
+      }
+    });
   }
 
   List<List<Map<String, dynamic>>> _cloneLayoutColumns(
