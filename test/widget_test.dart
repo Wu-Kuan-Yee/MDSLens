@@ -285,6 +285,53 @@ void main() {
     ]);
   });
 
+  test(
+      'A configuration imported before login keeps its shot and loads after login',
+      () async {
+    var latestShotRequests = 0;
+    String? requestedConfig;
+    final app = AppState(
+      configOpenPicker: () async => ConfigOpenSelection(
+        name: 'before-login.toml',
+        bytes: Uint8List(0),
+      ),
+      configParser: (_) => '{"shot":"163807","columns":[[{"title":"Ip",'
+          '"signal_specs":[{"y_expr":"\\\\pcrl01","experiment":"pcs_east",'
+          '"server_ip":"202.127.204.12"}]}]]}',
+      loginWorker: (_, __, ___, ____) async =>
+          (token: 'test-token', usedSsh: false),
+      latestShotWorker: (_, __, ___) async {
+        latestShotRequests++;
+        return {'shot': 999999};
+      },
+      signalFetchWorker: (configJson, _, __) async {
+        requestedConfig = configJson;
+        return '[{"column":0,"row":0,"signal":0,"shot":"163807",'
+            '"series":{"error":"","points":[[0.0,7.0]]}}]';
+      },
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+
+    await app.openFile();
+    expect(app.loggedIn, isFalse);
+    expect(app.status, contains('Sign in to load shot 163807'));
+
+    await app.loginAndLoadLatest(
+      apiUrl: 'http://east.example/api',
+      user: 'user',
+      password: 'password',
+    );
+
+    expect(latestShotRequests, 0);
+    expect(app.shotText, '163807');
+    expect(app.displayedShot, '163807');
+    expect(jsonDecode(requestedConfig!)['columns'][0][0]['shot'], '163807');
+    expect(app.plots.single.series.single?.points, [
+      [0.0, 7.0]
+    ]);
+  });
+
   test('Imported layouts load every panel beyond the built-in six', () async {
     final columns = List.generate(
       3,

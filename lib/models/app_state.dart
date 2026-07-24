@@ -258,6 +258,7 @@ class AppState extends ChangeNotifier {
   String get shotText => _shotText;
   String _displayedShot = '';
   String get displayedShot => _displayedShot;
+  String? _pendingImportedShot;
   final _shotCtrl = TextEditingController();
   TextEditingController get shotCtrl => _shotCtrl;
   set shotText(String v) {
@@ -832,7 +833,11 @@ class AppState extends ChangeNotifier {
       await savePreferences();
       if (_disposed || generation != _sessionGeneration) return;
       notifyListeners();
-      await fetchLatestShot();
+      if (_pendingImportedShot != null) {
+        await _loadPendingImportedConfiguration();
+      } else {
+        await fetchLatestShot();
+      }
     } catch (error) {
       if (_disposed || generation != _sessionGeneration) return;
       _loggedIn = false;
@@ -1143,6 +1148,7 @@ class AppState extends ChangeNotifier {
       }
       _columns = cols;
       _plots.clear();
+      _displayedShot = '';
       for (final col in _columns) {
         for (final panel in col) {
           final sigCount = (panel['signal_specs'] as List?)?.length ?? 1;
@@ -1156,9 +1162,19 @@ class AppState extends ChangeNotifier {
       }
       _status =
           'Loaded: ${selection.name} (${_columns.length} cols, ${_plots.length} panels)';
-      savePreferences();
+      _pendingImportedShot = _shotText.trim().isEmpty ? null : _shotText.trim();
+      await savePreferences();
       notifyListeners();
-      if (_shotText.isNotEmpty) startRefresh();
+      if (_pendingImportedShot != null) {
+        if (hasActiveSession) {
+          await _loadPendingImportedConfiguration();
+        } else {
+          _status =
+              'Loaded: ${selection.name} (${_columns.length} cols, ${_plots.length} panels). '
+              'Sign in to load shot $_pendingImportedShot.';
+          notifyListeners();
+        }
+      }
     } catch (e) {
       _status = 'Open error: $e';
       notifyListeners();
@@ -1249,6 +1265,26 @@ class AppState extends ChangeNotifier {
     _doFetch(shot: _shotText);
   }
 
+  Future<void> _loadPendingImportedConfiguration() async {
+    final shot = _pendingImportedShot;
+    if (shot == null || shot.isEmpty) return;
+    if (!_requireActiveSession('load the imported configuration')) return;
+    if (_columns.isEmpty) return;
+    _clearCustomReadModes();
+    _shotText = shot;
+    _shotCtrl.text = shot;
+    _addToHistory(shot);
+    await savePreferences();
+    _viewResetId++;
+    await _doFetch(shot: shot);
+    if (_displayedShot == shot &&
+        _plots.any((plot) => plot.series.any(
+              (series) => series?.points != null && series!.points!.isNotEmpty,
+            ))) {
+      _pendingImportedShot = null;
+    }
+  }
+
   void refreshDisplayedShot() {
     if (!_requireActiveSession('refresh waveforms')) return;
     if (_columns.isEmpty) return;
@@ -1299,6 +1335,20 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  void _markUnresolvedSeries(String message) {
+    for (final plot in _plots) {
+      for (var index = 0; index < plot.series.length; index++) {
+        final series = plot.series[index];
+        if (series == null) {
+          plot.series[index] = SeriesData(error: message);
+        } else if ((series.points == null || series.points!.isEmpty) &&
+            (series.error == null || series.error!.isEmpty)) {
+          series.error = message;
+        }
+      }
+    }
+  }
+
   void _clearPanelSeries(int plotIdx) {
     if (plotIdx < 0 || plotIdx >= _plots.length) return;
     for (final series in _plots[plotIdx].series) {
@@ -1338,6 +1388,9 @@ class AppState extends ChangeNotifier {
       if (raw.isEmpty) {
         _fetching = false;
         _status = 'Empty raw from Rust';
+        _markUnresolvedSeries(
+          'The native data loader returned no response for this signal.',
+        );
         notifyListeners();
         return;
       }
@@ -1346,12 +1399,18 @@ class AppState extends ChangeNotifier {
         _fetching = false;
         _status =
             'Type: ${json.runtimeType} — ${raw.length > 300 ? raw.substring(0, 300) : raw}';
+        _markUnresolvedSeries(
+          'The native data loader returned an invalid response.',
+        );
         notifyListeners();
         return;
       }
       if (json.isEmpty) {
         _fetching = false;
         _status = 'Empty list';
+        _markUnresolvedSeries(
+          'No result was returned for the configured signal.',
+        );
         notifyListeners();
         return;
       }
@@ -1369,6 +1428,9 @@ class AppState extends ChangeNotifier {
               sig['signal'] as int, pts, err);
         }
       }
+      _markUnresolvedSeries(
+        'No result was returned for this configured signal.',
+      );
       _displayedShot = requestShot;
       _fetching = false;
       final loaded = _plots
@@ -1387,6 +1449,7 @@ class AppState extends ChangeNotifier {
       if (!_isCurrentFetch(generation)) return;
       _fetching = false;
       _status = 'Error: $e';
+      _markUnresolvedSeries('Loading this signal failed: $e');
       reportNetworkPermissionFailure(
         e,
         retry: () => _doFetch(shot: requestShot),
