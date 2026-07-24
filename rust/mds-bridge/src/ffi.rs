@@ -10,6 +10,7 @@ use std::sync::{Mutex, OnceLock};
 use crate::api as a;
 
 static API_TUNNEL_MANAGER: OnceLock<Mutex<mds_ssh::tunnel::SshTunnelManager>> = OnceLock::new();
+const MDS_BRIDGE_ABI_VERSION: u32 = 1;
 
 macro_rules! ffi_string {
     ($s:expr) => { CString::new($s).unwrap_or_default().into_raw() };
@@ -24,6 +25,14 @@ unsafe fn free_string(ptr: *mut c_char) {
 }
 
 // ── Environment I/O ──────────────────────────────────────────────────
+
+/// Increment whenever Dart and the native bridge make an incompatible ABI
+/// change. The Flutter loader rejects stale libraries before resolving the
+/// individual function table.
+#[no_mangle]
+pub extern "C" fn mds_bridge_abi_version() -> u32 {
+    MDS_BRIDGE_ABI_VERSION
+}
 
 #[no_mangle]
 pub extern "C" fn mds_parse_environment(path: *const c_char) -> *mut c_char {

@@ -561,4 +561,29 @@ y = "\\pcrl01"
         assert!(encoded.contains("shot = \"143850\""));
         std::fs::remove_file(&tmp).ok();
     }
+
+    #[test]
+    fn test_toml_parser_preserves_more_than_six_panels() {
+        let mut content = String::from("version = 1\nshot = \"163807\"\n\n");
+        for index in 0..9 {
+            let column = index / 3 + 1;
+            let row = index % 3 + 1;
+            content.push_str(&format!(
+                "[[panels]]\ncolumn = {column}\nrow = {row}\n\
+                 title = \"Panel {}\"\n\n[[panels.signals]]\n\
+                 tree = \"pcs_east\"\nserver = \"202.127.204.12\"\n\
+                 y = \"\\\\signal_{index}\"\n\n",
+                index + 1,
+            ));
+        }
+        let tmp = std::env::temp_dir().join("test_nine_panel_layout.toml");
+        std::fs::write(&tmp, content).unwrap();
+        let config = parse_toml_environment(tmp.to_str().unwrap());
+        std::fs::remove_file(&tmp).ok();
+
+        assert_eq!(config.columns.len(), 3);
+        assert_eq!(config.columns.iter().map(Vec::len).sum::<usize>(), 9);
+        assert_eq!(config.columns[2][2].title, "Panel 9");
+        assert_eq!(config.columns[2][2].signal_specs[0].y_expr, "\\signal_8");
+    }
 }

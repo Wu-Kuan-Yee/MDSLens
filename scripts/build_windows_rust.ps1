@@ -107,6 +107,23 @@ if (-not (Test-Path $library -PathType Leaf)) {
   throw "Rust build did not produce $library"
 }
 
+$dumpbin = Get-Command "dumpbin.exe" -ErrorAction SilentlyContinue
+if (-not $dumpbin) {
+  throw "dumpbin.exe is required to validate the Windows Rust bridge exports."
+}
+$exports = (& $dumpbin.Source /nologo /exports $library) -join "`n"
+foreach ($symbol in @(
+  "mds_bridge_abi_version",
+  "mds_parse_environment",
+  "mds_encode_environment",
+  "mds_fetch_signals",
+  "mds_free_string"
+)) {
+  if ($exports -notmatch "(?m)\b$([Regex]::Escape($symbol))\b") {
+    throw "Windows Rust library is missing required symbol: $symbol"
+  }
+}
+
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 Copy-Item -Force $library (Join-Path $OutputDirectory "mds_bridge.dll")
 Write-Host "Built Windows Rust library: $OutputDirectory\mds_bridge.dll"

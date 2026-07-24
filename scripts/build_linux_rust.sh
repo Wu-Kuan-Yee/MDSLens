@@ -53,6 +53,14 @@ if [ ! -f "$LIBRARY" ]; then
   exit 1
 fi
 
+EXPORTED_SYMBOLS=$(nm -D --defined-only "$LIBRARY")
+for symbol in mds_bridge_abi_version mds_parse_environment mds_encode_environment mds_fetch_signals mds_free_string; do
+  if ! printf '%s\n' "$EXPORTED_SYMBOLS" | grep -q " T ${symbol}$"; then
+    echo "Linux Rust library is missing required symbol: $symbol" >&2
+    exit 1
+  fi
+done
+
 mkdir -p "$(dirname "$OUTPUT")"
 cp "$LIBRARY" "$OUTPUT"
 echo "Built Linux Rust library: $OUTPUT"

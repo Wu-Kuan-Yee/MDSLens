@@ -191,7 +191,7 @@ void main() {
         '"y_label":"A","signal_specs":[{"y_expr":"\\\\ip"}]}]]}';
     String? desktopParsedPath;
     final desktop = AppState(
-      configOpenPicker: () async => const ConfigOpenSelection(
+      configOpenPicker: () async => ConfigOpenSelection(
         name: 'desktop.toml',
         path: '/chosen/desktop.toml',
       ),
@@ -283,6 +283,65 @@ void main() {
     expect(app.plots.single.series.single?.points, [
       [0.0, 1.0]
     ]);
+  });
+
+  test('Imported layouts load every panel beyond the built-in six', () async {
+    final columns = List.generate(
+      3,
+      (column) => List.generate(
+        3,
+        (row) => {
+          'title': 'Panel ${column * 3 + row + 1}',
+          'signal_specs': [
+            {
+              'y_expr': '\\signal_${column}_$row',
+              'experiment': 'pcs_east',
+              'server_ip': '202.127.204.12',
+            },
+          ],
+        },
+      ),
+    );
+    final loadedSignals = [
+      for (var column = 0; column < columns.length; column++)
+        for (var row = 0; row < columns[column].length; row++)
+          {
+            'column': column,
+            'row': row,
+            'signal': 0,
+            'shot': '163807',
+            'series': {
+              'error': '',
+              'points': [
+                [0.0, (column * 3 + row + 1).toDouble()],
+              ],
+            },
+          },
+    ];
+    final app = AppState(
+      configOpenPicker: () async => ConfigOpenSelection(
+        name: 'nine-panels.toml',
+        bytes: Uint8List(0),
+      ),
+      configParser: (_) => jsonEncode({
+        'shot': '163807',
+        'columns': columns,
+      }),
+      signalFetchWorker: (_, __, ___) async => jsonEncode(loadedSignals),
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setLoggedIn(true, 'test-token');
+
+    await app.openFile();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(app.plots, hasLength(9));
+    expect(
+      app.plots.map((plot) => plot.series.single?.points?.single.last).toList(),
+      [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+    );
+    expect(app.status, contains('9 panels with data'));
   });
 
   test('Cross-platform saver writes desktop paths and supplies mobile bytes',

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:ffi/ffi.dart';
 
 class RustBridge {
+  static const int _expectedAbiVersion = 1;
   static RustBridge? _i;
   // ignore: unused_field
   final DynamicLibrary _lib;
@@ -34,56 +35,89 @@ class RustBridge {
   static DynamicLibrary _openLib() {
     if (Platform.isIOS) {
       try {
-        return DynamicLibrary.process();
-      } catch (_) {}
+        final library = DynamicLibrary.process();
+        _requireCompatibleAbi(library, 'iOS application process');
+        return library;
+      } catch (error) {
+        throw Exception(
+          'The bundled iOS Rust bridge is missing or incompatible: $error. '
+          'Rebuild the application so Dart and Rust are packaged together.',
+        );
+      }
     }
 
     if (Platform.isAndroid) {
       try {
-        return DynamicLibrary.open('libmds_bridge.so');
+        final library = DynamicLibrary.open('libmds_bridge.so');
+        _requireCompatibleAbi(library, 'libmds_bridge.so');
+        return library;
       } catch (error) {
         throw Exception(
-          'Failed to load the bundled Android Rust library '
-          '(libmds_bridge.so): $error',
+          'Failed to load a compatible bundled Android Rust library '
+          '(libmds_bridge.so): $error. Rebuild the APK so its Dart and Rust '
+          'components come from the same source revision.',
         );
       }
     }
 
     final exeDir = File(Platform.resolvedExecutable).parent.path;
     final errors = <String>[];
+    var debugBuild = false;
+    assert(() {
+      debugBuild = true;
+      return true;
+    }());
     final names = Platform.isMacOS
         ? [
+            if (debugBuild) 'rust/target/debug/libmds_bridge.dylib',
             '$exeDir/../Frameworks/libmds_bridge.dylib',
             '$exeDir/libmds_bridge.dylib',
             'libmds_bridge.dylib',
             'rust/target/release/libmds_bridge.dylib',
-            'rust/target/debug/libmds_bridge.dylib',
           ]
         : Platform.isLinux
             ? [
+                if (debugBuild) 'rust/target/debug/libmds_bridge.so',
                 '$exeDir/lib/libmds_bridge.so',
                 '$exeDir/libmds_bridge.so',
                 'libmds_bridge.so',
                 'rust/target/release/libmds_bridge.so',
-                'rust/target/debug/libmds_bridge.so',
               ]
             : [
+                if (debugBuild) 'rust/target/debug/mds_bridge.dll',
                 '$exeDir/mds_bridge.dll',
                 'mds_bridge.dll',
                 'rust/target/release/mds_bridge.dll',
-                'rust/target/debug/mds_bridge.dll',
               ];
 
     for (final name in names) {
       try {
-        return DynamicLibrary.open(name);
+        final library = DynamicLibrary.open(name);
+        _requireCompatibleAbi(library, name);
+        return library;
       } catch (e) {
         errors.add('$name -> $e');
       }
     }
 
     throw Exception(
-        'Failed to load libmds_bridge library:\n${errors.join("\n")}');
+      'Failed to load a compatible libmds_bridge library. Rebuild the '
+      'application so Dart and Rust come from the same source revision:\n'
+      '${errors.join("\n")}',
+    );
+  }
+
+  static void _requireCompatibleAbi(
+    DynamicLibrary library,
+    String source,
+  ) {
+    final version = library.lookupFunction<Uint32 Function(), int Function()>(
+        'mds_bridge_abi_version')();
+    if (version != _expectedAbiVersion) {
+      throw StateError(
+        '$source has native ABI $version; expected $_expectedAbiVersion',
+      );
+    }
   }
 
   static String Function(String) _wrap1(DynamicLibrary lib, String name) {

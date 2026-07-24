@@ -90,7 +90,7 @@ mkdir -p "$(dirname "$OUTPUT")"
 # shellcheck disable=SC2086
 lipo -create $LIBRARIES -output "$OUTPUT"
 
-for symbol in mds_parse_environment mds_encode_environment mds_request_login mds_fetch_signals mds_free_string; do
+for symbol in mds_bridge_abi_version mds_parse_environment mds_encode_environment mds_request_login mds_fetch_signals mds_free_string; do
   if ! nm -gU "$OUTPUT" 2>/dev/null | grep -q "_${symbol}$"; then
     echo "iOS Rust library is missing required symbol: $symbol" >&2
     exit 1

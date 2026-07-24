@@ -149,27 +149,17 @@ fn retry_transient(
     callback: &SignalCallback,
     cancel: &Arc<AtomicBool>,
 ) {
-    let to_retry: Vec<usize> = {
-        let res = results.lock().unwrap();
-        requests.iter()
-            .filter_map(|req| {
-                res.get(req.loaded_index).and_then(|r| r.as_ref()).map(|fr| {
-                    if !fr.series.has_data() && fr.series.error.is_empty()
-                        { Some(req.loaded_index) } else { None }
-                })
-            })
-            .flatten()
-            .collect()
-    };
+    let to_retry = retry_indices(requests, &results.lock().unwrap());
 
     if to_retry.is_empty() { return; }
 
-    for batch in to_retry.chunks(8) {
+    // The first wave deliberately opens several connections for speed, but
+    // mobile SSH relays and some MDS servers can temporarily reject that
+    // burst. Retry every no-data result serially with its own server/tree/shot.
+    for index in to_retry {
         if cancel.load(Ordering::Relaxed) { break; }
-        let reqs: Vec<FetchRequest> = batch.iter()
-            .filter_map(|&i| requests.get(i).cloned())
-            .collect();
-        for fr in fetch_chunk_serial(&reqs, cancel) {
+        let Some(request) = requests.get(index) else { continue };
+        for fr in fetch_chunk_serial(std::slice::from_ref(request), cancel) {
             let idx = fr.loaded_index;
             let loaded = fetch_result_to_loaded(requests, &fr);
             callback(loaded);
@@ -178,6 +168,20 @@ fn retry_transient(
             }
         }
     }
+}
+
+fn retry_indices(
+    requests: &[FetchRequest],
+    results: &[Option<FetchResult>],
+) -> Vec<usize> {
+    requests.iter()
+        .filter_map(|request| {
+            let needs_retry = results.get(request.loaded_index)
+                .and_then(|result| result.as_ref())
+                .is_none_or(|result| !result.series.has_data());
+            needs_retry.then_some(request.loaded_index)
+        })
+        .collect()
 }
 
 // ── Internal: request building ────────────────────────────────────────────
@@ -317,5 +321,28 @@ mod tests {
         assert_eq!(effective_read_mode(DataReadMode::Full, None), DataReadMode::Full);
         // Equal modes
         assert_eq!(effective_read_mode(DataReadMode::Medium, Some(DataReadMode::Medium)), DataReadMode::Medium);
+    }
+
+    #[test]
+    fn retry_candidates_include_errors_and_missing_results() {
+        let requests = build_requests(&make_test_config(), DataReadMode::Thin);
+        let errored = vec![Some(FetchResult {
+            loaded_index: 0,
+            series: mds_core::types::SignalSeries {
+                error: "temporary connection failure".into(),
+                ..Default::default()
+            },
+        })];
+        assert_eq!(retry_indices(&requests, &errored), vec![0]);
+        assert_eq!(retry_indices(&requests, &[None]), vec![0]);
+
+        let loaded = vec![Some(FetchResult {
+            loaded_index: 0,
+            series: mds_core::types::SignalSeries {
+                points: vec![[0.0, 1.0]],
+                ..Default::default()
+            },
+        })];
+        assert!(retry_indices(&requests, &loaded).is_empty());
     }
 }

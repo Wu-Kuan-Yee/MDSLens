@@ -61,4 +61,11 @@ lipo -create \
 install_name_tool -id \
   "@executable_path/../Frameworks/libmds_bridge.dylib" "$OUTPUT"
 
+for symbol in mds_bridge_abi_version mds_parse_environment mds_encode_environment mds_fetch_signals mds_free_string; do
+  if ! nm -gU "$OUTPUT" 2>/dev/null | grep -q "_${symbol}$"; then
+    echo "macOS Rust library is missing required symbol: $symbol" >&2
+    exit 1
+  fi
+done
+
 echo "Built universal macOS Rust library: $OUTPUT"
