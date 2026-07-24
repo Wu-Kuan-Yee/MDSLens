@@ -22,6 +22,10 @@ fn main() {
     let git_dir = repo.join(".git");
     println!("cargo:rerun-if-changed={}", git_dir.join("HEAD").display());
     println!("cargo:rerun-if-changed={}", git_dir.join("refs").display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        git_dir.join("logs/HEAD").display()
+    );
     println!("cargo:rerun-if-env-changed=MDSSCOPE_VERSION");
 
     let public_version =

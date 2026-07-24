@@ -99,9 +99,14 @@ tasks.register('buildRustAndroid', Exec) {
     description = 'Builds and stages the Rust FFI library for Android.'
     inputs.files(rootProject.fileTree('../rust') {
         include '**/*.rs'
+        include '**/build.rs'
         include '**/Cargo.toml'
         include 'Cargo.lock'
     })
+    def gitHeadLog = rootProject.file('../.git/logs/HEAD')
+    if (gitHeadLog.isFile()) {
+        inputs.file(gitHeadLog)
+    }
     inputs.file(rustBuildScript)
     inputs.property('flutterTargetPlatforms', flutterTargetPlatforms)
     outputs.dir(rustJniOutput)

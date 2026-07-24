@@ -82,6 +82,7 @@ build_target() {
   exported_symbols="$($llvm_nm -D --defined-only "$library")"
   for symbol in \
     mds_bridge_abi_version \
+    mds_git_version \
     mds_parse_environment \
     mds_write_environment \
     mds_encode_environment \
