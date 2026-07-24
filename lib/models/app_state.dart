@@ -44,6 +44,7 @@ typedef ConfigSavePicker = Future<String?> Function(
 );
 typedef ConfigParser = String Function(String path);
 typedef ConfigEncoder = Future<Uint8List> Function(String configJson);
+typedef ImportedShotDecision = Future<bool> Function(String importedShot);
 typedef SshTestWorker = Future<String> Function(String settingsJson);
 
 typedef SignalFetchWorker = Future<String> Function(
@@ -1180,6 +1181,21 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  void _removeConfigurationShots(
+    List<List<Map<String, dynamic>>> columns,
+  ) {
+    for (final column in columns) {
+      for (final panel in column) {
+        panel.remove('shot');
+        final signals = panel['signal_specs'];
+        if (signals is! List) continue;
+        for (final rawSignal in signals) {
+          if (rawSignal is Map) rawSignal.remove('shot');
+        }
+      }
+    }
+  }
+
   List<Map<String, dynamic>> _configurationSignalsFor(
     Map<String, dynamic> panel,
   ) {
@@ -1319,7 +1335,9 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<void> openFile() async {
+  Future<void> openFile({
+    ImportedShotDecision? importedShotDecision,
+  }) async {
     Directory? temporaryDirectory;
     try {
       _status = 'Choose a .toml or .webscp configuration file...';
@@ -1375,10 +1393,14 @@ class AppState extends ChangeNotifier {
       }
       _invalidateFetchForSettingsChange();
       final fileShot = _configurationInitialShot(json, cols);
-      _makeConfigurationShotInheritable(cols, fileShot);
-      if (fileShot.isNotEmpty) {
+      final useFileShot = fileShot.isNotEmpty &&
+          (await importedShotDecision?.call(fileShot) ?? false);
+      if (useFileShot) {
+        _makeConfigurationShotInheritable(cols, fileShot);
         _shotText = fileShot;
         _shotCtrl.text = _shotText;
+      } else {
+        _removeConfigurationShots(cols);
       }
       _columns = cols;
       _plots.clear();

@@ -470,7 +470,7 @@ void main() {
     await app.preferencesReady;
     app.setLoggedIn(true, 'test-token');
 
-    await app.openFile();
+    await app.openFile(importedShotDecision: (_) async => true);
     await Future<void>.delayed(Duration.zero);
 
     expect(app.shotText, '143850');
@@ -478,6 +478,50 @@ void main() {
     expect(app.plots.single.series.single?.points, [
       [0.0, 1.0]
     ]);
+  });
+
+  test('Imported shots are ignored by default at every configuration level',
+      () async {
+    String? requestedConfig;
+    final app = AppState(
+      configOpenPicker: () async => ConfigOpenSelection(
+        name: 'layout-only.toml',
+        bytes: Uint8List(0),
+      ),
+      configParser: (_) =>
+          '{"shot":"143850","columns":[[{"title":"Signals","shot":"143851",'
+          '"signal_specs":['
+          '{"shot":"143852","y_expr":"\\\\first","experiment":"pcs_east"},'
+          '{"shot":"143853","y_expr":"\\\\second","experiment":"pcs_east"}'
+          ']}]]}',
+      signalFetchWorker: (configJson, _, __) async {
+        requestedConfig = configJson;
+        return '[]';
+      },
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setLoggedIn(true, 'test-token');
+    app.shotText = '163999';
+
+    await app.openFile();
+
+    expect(app.shotText, '163999');
+    expect(app.columns.single.single.containsKey('shot'), isFalse);
+    final storedSignals =
+        app.columns.single.single['signal_specs'] as List<dynamic>;
+    expect(
+        storedSignals.every((signal) => !(signal as Map).containsKey('shot')),
+        isTrue);
+
+    final requestedPanel =
+        jsonDecode(requestedConfig!)['columns'][0][0] as Map<String, dynamic>;
+    expect(requestedPanel['shot'], '163999');
+    final requestedSignals = requestedPanel['signal_specs'] as List<dynamic>;
+    expect(
+      requestedSignals.every((signal) => !(signal as Map).containsKey('shot')),
+      isTrue,
+    );
   });
 
   test('A user-selected shot overrides an imported configuration default',
@@ -534,7 +578,7 @@ void main() {
     addTearDown(app.dispose);
     app.setLoggedIn(true, 'test-token');
 
-    await app.openFile();
+    await app.openFile(importedShotDecision: (_) async => true);
     expect(app.displayedShot, '143850');
     var requestedPanel =
         (requestedConfigs.single['columns'] as List).first.first as Map;
@@ -585,7 +629,7 @@ void main() {
     await app.preferencesReady;
     addTearDown(app.dispose);
 
-    await app.openFile();
+    await app.openFile(importedShotDecision: (_) async => true);
     expect(app.loggedIn, isFalse);
     expect(app.status, contains('Sign in to load shot 163807'));
 
@@ -626,7 +670,7 @@ void main() {
     addTearDown(app.dispose);
     app.setLoggedIn(true, 'test-token');
 
-    await app.openFile();
+    await app.openFile(importedShotDecision: (_) async => true);
 
     final requestedPanel =
         jsonDecode(requestedConfig!)['columns'][0][0] as Map<String, dynamic>;
@@ -727,7 +771,7 @@ void main() {
     addTearDown(app.dispose);
     app.setLoggedIn(true, 'test-token');
 
-    await app.openFile();
+    await app.openFile(importedShotDecision: (_) async => true);
     await Future<void>.delayed(Duration.zero);
 
     expect(app.plots, hasLength(9));
@@ -810,6 +854,44 @@ void main() {
     await tester.pumpAndSettle();
     expect(saveCalls, 1);
     expect(app.status, 'Saved to config.toml');
+  });
+
+  testWidgets('Configuration import asks before applying its shot',
+      (tester) async {
+    final app = AppState(
+      configOpenPicker: () async => ConfigOpenSelection(
+        name: 'with-shot.toml',
+        path: '/with-shot.toml',
+      ),
+      configParser: (_) =>
+          '{"shot":"143850","columns":[[{"title":"Imported layout",'
+          '"signal_specs":[]}]]}',
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.shotText = '163999';
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Open configuration'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Use the configuration shot?'), findsOneWidget);
+    expect(find.textContaining('143850'), findsWidgets);
+    final ignoreButton = find.byKey(
+      const ValueKey('ignore-imported-configuration-shot'),
+    );
+    expect(tester.widget<FilledButton>(ignoreButton).autofocus, isTrue);
+
+    await tester.tap(ignoreButton);
+    await tester.pumpAndSettle();
+
+    expect(app.shotText, '163999');
+    expect(app.columns.single.single['title'], 'Imported layout');
   });
 
   testWidgets('Toolbar restores and persists the default waveform layout',
