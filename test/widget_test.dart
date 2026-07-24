@@ -50,6 +50,7 @@ void main() {
   });
 
   test('Release versions are compared semantically', () {
+    expect(currentMdsScopeVersion, '7.0');
     expect(compareVersions('v7.1.0', '7.0.9'), greaterThan(0));
     expect(compareVersions('7.0', '7.0.0'), 0);
     expect(compareVersions('6.9.9', '7.0.0'), lessThan(0));

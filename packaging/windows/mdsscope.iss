@@ -8,7 +8,7 @@
   #define OutputBase "mdsscope-windows-x64"
 #endif
 #ifndef AppVersion
-  #define AppVersion "7.0.0"
+  #define AppVersion "7.0"
 #endif
 
 [Setup]

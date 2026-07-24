@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-const currentMdsScopeVersion = '7.0.0';
+const currentMdsScopeVersion = '7.0';
 const mdsScopeReleasesUrl = 'https://github.com/wwktz/MdsScope/releases';
 
 class ReleaseUpdate {
