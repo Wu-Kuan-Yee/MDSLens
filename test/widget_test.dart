@@ -2803,6 +2803,57 @@ void main() {
     }
   });
 
+  test('Layout reorder helpers move columns and panels across columns', () {
+    Map<String, dynamic> panel(String title) => {'title': title};
+
+    final columns = [
+      [panel('Column 1')],
+      [panel('Column 2')],
+      [panel('Column 3')],
+      [panel('Column 4')],
+      [panel('Column 5')],
+    ];
+    expect(reorderLayoutColumn(columns, 4, 2), isTrue);
+    expect(
+      columns.map((column) => column.single['title']).toList(),
+      ['Column 1', 'Column 2', 'Column 5', 'Column 3', 'Column 4'],
+    );
+
+    final panels = [
+      [panel('1-1'), panel('1-2'), panel('1-3'), panel('1-4')],
+      [panel('2-1')],
+      [panel('3-1'), panel('3-2')],
+    ];
+    expect(
+      reorderLayoutPanel(
+        panels,
+        sourceColumn: 2,
+        sourceRow: 1,
+        targetColumn: 0,
+        insertionRow: 3,
+      ),
+      isTrue,
+    );
+    expect(
+      panels[0].map((item) => item['title']).toList(),
+      ['1-1', '1-2', '1-3', '3-2', '1-4'],
+    );
+    expect(panels[2].map((item) => item['title']).toList(), ['3-1']);
+
+    expect(
+      reorderLayoutPanel(
+        panels,
+        sourceColumn: 1,
+        sourceRow: 0,
+        targetColumn: 0,
+        insertionRow: 0,
+      ),
+      isTrue,
+    );
+    expect(panels, hasLength(2));
+    expect(panels[0].first['title'], '2-1');
+  });
+
   testWidgets('Layout Setup selects and deletes columns with icon actions',
       (tester) async {
     final app = AppState();
@@ -2822,6 +2873,35 @@ void main() {
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Layout setup'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget(
+        find.byKey(const ValueKey('layout-column-drag-1')),
+      ),
+      isA<LongPressDraggable>(),
+    );
+    expect(
+      tester.widget(
+        find.byKey(const ValueKey('layout-panel-drag-1')),
+      ),
+      isA<LongPressDraggable>(),
+    );
+    expect(
+      find.byKey(const ValueKey('layout-column-drop-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('layout-panel-drop-0-1')),
+      findsOneWidget,
+    );
+    final dragPreview = await tester.startGesture(
+      tester.getCenter(
+        find.byKey(const ValueKey('layout-column-header-1')),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.text('1 panels'), findsOneWidget);
+    await dragPreview.cancel();
     await tester.pumpAndSettle();
 
     await tester.tap(
