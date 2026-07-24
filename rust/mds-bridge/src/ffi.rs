@@ -35,6 +35,11 @@ pub extern "C" fn mds_bridge_abi_version() -> u32 {
 }
 
 #[no_mangle]
+pub extern "C" fn mds_git_version() -> *mut c_char {
+    ffi_string!(env!("MDS_SCOPE_GIT_VERSION"))
+}
+
+#[no_mangle]
 pub extern "C" fn mds_parse_environment(path: *const c_char) -> *mut c_char {
     let path = to_rust(path);
     let config = a::parse_environment(path);

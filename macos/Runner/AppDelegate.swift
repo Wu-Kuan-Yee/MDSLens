@@ -7,6 +7,7 @@ class AppDelegate: FlutterAppDelegate {
   var themeChannel: FlutterMethodChannel?
   var permissionsChannel: FlutterMethodChannel?
   var identityFileChannel: FlutterMethodChannel?
+  var systemInfoChannel: FlutterMethodChannel?
   var activeIdentityFileURLs: [URL] = []
 
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -27,6 +28,32 @@ class AppDelegate: FlutterAppDelegate {
       } else {
         result(FlutterMethodNotImplemented)
       }
+    }
+    let systemChannel = FlutterMethodChannel(
+      name: "mdsscope/system_info",
+      binaryMessenger: controller.engine.binaryMessenger
+    )
+    systemInfoChannel = systemChannel
+    systemChannel.setMethodCallHandler { call, result in
+      guard call.method == "get" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      let version = ProcessInfo.processInfo.operatingSystemVersion
+      let versionText = "\(version.majorVersion).\(version.minorVersion)"
+        + (version.patchVersion > 0 ? ".\(version.patchVersion)" : "")
+      #if arch(arm64)
+        let architecture = "arm64"
+      #elseif arch(x86_64)
+        let architecture = "x86_64"
+      #else
+        let architecture = "unknown"
+      #endif
+      result([
+        "name": "macOS",
+        "version": versionText,
+        "architecture": architecture,
+      ])
     }
     let identityChannel = FlutterMethodChannel(
       name: "mdsscope/identity_file_access",

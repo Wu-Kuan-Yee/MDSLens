@@ -1,8 +1,7 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../../services/external_url_launcher.dart';
+import '../../services/runtime_build_info.dart';
 import '../../services/update_service.dart';
 import 'keyboard_safe_dialog.dart';
 
@@ -11,11 +10,15 @@ typedef ReleaseUpdateChecker = Future<ReleaseUpdate> Function();
 class AboutDialogWidget extends StatefulWidget {
   final ExternalUriOpener? urlOpener;
   final ReleaseUpdateChecker? updateChecker;
+  final RuntimeSystemInfoLoader? systemInfoLoader;
+  final GitVersionLoader? gitVersionLoader;
 
   const AboutDialogWidget({
     super.key,
     this.urlOpener,
     this.updateChecker,
+    this.systemInfoLoader,
+    this.gitVersionLoader,
   });
 
   static void show(BuildContext context) {
@@ -32,6 +35,27 @@ class AboutDialogWidget extends StatefulWidget {
 class _AboutDialogWidgetState extends State<AboutDialogWidget> {
   String _updateStatus = '';
   bool _checkingUpdate = false;
+  late RuntimeSystemInfo _systemInfo;
+  String _gitVersion = 'Loading...';
+
+  @override
+  void initState() {
+    super.initState();
+    _systemInfo = RuntimeSystemInfo.fallback();
+    _loadBuildInformation();
+  }
+
+  Future<void> _loadBuildInformation() async {
+    final values = await Future.wait<Object>([
+      (widget.systemInfoLoader ?? loadRuntimeSystemInfo)(),
+      (widget.gitVersionLoader ?? loadMdsScopeGitVersion)(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _systemInfo = values[0] as RuntimeSystemInfo;
+      _gitVersion = values[1] as String;
+    });
+  }
 
   Future<bool> _openUrl(String url) async {
     final opened = await openExternalWebUrl(url, opener: widget.urlOpener);
@@ -191,9 +215,6 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
     final theme = Theme.of(context);
     final screenSize = MediaQuery.sizeOf(context);
     final maxHeight = (screenSize.height - 32).clamp(240.0, 720.0);
-    final systemVersion = Platform.operatingSystemVersion.split(' ').first;
-    final systemText = '${Platform.operatingSystem} ($systemVersion)';
-
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -287,8 +308,7 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
                       ),
                       _buildRow(
                         'Git Version',
-                        Text('v$currentMdsScopeVersion-flutter',
-                            style: _valueStyle(context)),
+                        Text(_gitVersion, style: _valueStyle(context)),
                       ),
                       _buildRow(
                         'Framework & Engine',
@@ -301,7 +321,7 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
                       _buildRow(
                         'System',
                         Text(
-                          systemText,
+                          _systemInfo.displayText,
                           style: _valueStyle(context),
                           softWrap: true,
                         ),

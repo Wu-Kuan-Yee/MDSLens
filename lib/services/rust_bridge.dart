@@ -139,6 +139,19 @@ class RustBridge {
     };
   }
 
+  String buildGitVersion() {
+    final function =
+        _lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>(
+            'mds_git_version');
+    final freeResult = _rustStringFree(_lib);
+    final result = function();
+    try {
+      return _readResult(result, 'mds_git_version');
+    } finally {
+      if (result != nullptr) freeResult(result);
+    }
+  }
+
   static String Function(String, String) _wrap2(
       DynamicLibrary lib, String name) {
     final f = lib.lookupFunction<

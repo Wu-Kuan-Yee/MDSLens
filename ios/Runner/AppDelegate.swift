@@ -9,6 +9,7 @@ import CoreTelephony
 {
   private var permissionsChannel: FlutterMethodChannel?
   private var stylusChannel: FlutterMethodChannel?
+  private var systemInfoChannel: FlutterMethodChannel?
   private var pencilInteraction: UIPencilInteraction?
   private var pencilUsesEraser = false
   private var cellularDataMonitor: CTCellularData?
@@ -60,6 +61,28 @@ import CoreTelephony
       name: "mdsscope/stylus",
       binaryMessenger: engineBridge.applicationRegistrar.messenger()
     )
+    systemInfoChannel = FlutterMethodChannel(
+      name: "mdsscope/system_info",
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
+    )
+    systemInfoChannel?.setMethodCallHandler { call, result in
+      guard call.method == "get" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      #if arch(arm64)
+        let architecture = "arm64"
+      #elseif arch(x86_64)
+        let architecture = "x86_64"
+      #else
+        let architecture = "unknown"
+      #endif
+      result([
+        "name": UIDevice.current.systemName,
+        "version": UIDevice.current.systemVersion,
+        "architecture": architecture,
+      ])
+    }
     DispatchQueue.main.async { [weak self] in
       self?.installPencilInteraction()
     }

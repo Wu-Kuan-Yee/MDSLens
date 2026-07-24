@@ -13,6 +13,7 @@ import 'package:mdsscope/models/app_state.dart';
 import 'package:mdsscope/services/external_url_launcher.dart';
 import 'package:mdsscope/services/identity_file_access.dart';
 import 'package:mdsscope/services/platform_file_dialog.dart';
+import 'package:mdsscope/services/runtime_build_info.dart';
 import 'package:mdsscope/services/update_service.dart';
 import 'package:mdsscope/theme/mdsscope_theme.dart';
 import 'package:mdsscope/widgets/dialogs/about.dart';
@@ -55,6 +56,26 @@ void main() {
     expect(compareVersions('v7.1.0', '7.0.9'), greaterThan(0));
     expect(compareVersions('7.0', '7.0.0'), 0);
     expect(compareVersions('6.9.9', '7.0.0'), lessThan(0));
+  });
+
+  test('Runtime system information normalizes versions and architectures', () {
+    expect(
+      normalizedOperatingSystemVersion(
+        'Version 15.5 (Build 24F74)',
+      ),
+      '15.5',
+    );
+    expect(normalizedArchitecture('androidArm64'), 'arm64');
+    expect(normalizedArchitecture('arm64-v8a'), 'arm64');
+    expect(normalizedArchitecture('windowsX64'), 'x86_64');
+    expect(
+      const RuntimeSystemInfo(
+        name: 'Android',
+        version: '15',
+        architecture: 'arm64',
+      ).displayText,
+      'Android (15) (arm64)',
+    );
   });
 
   test('Customize Fonts values are applied to the application theme', () {
@@ -3517,6 +3538,12 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: AboutDialogWidget(
+          systemInfoLoader: () async => const RuntimeSystemInfo(
+            name: 'iOS',
+            version: '18.5',
+            architecture: 'arm64',
+          ),
+          gitVersionLoader: () async => '7.0.r42.g123456789',
           urlOpener: (uri) async {
             openedUrls.add(uri);
             return true;
@@ -3530,6 +3557,9 @@ void main() {
         ),
       ),
     );
+    await tester.pump();
+    expect(find.text('7.0.r42.g123456789'), findsOneWidget);
+    expect(find.text('iOS (18.5) (arm64)'), findsOneWidget);
 
     final narrowVersionRow = find.byKey(
       const ValueKey('about-row-narrow-MdsScope Version'),
