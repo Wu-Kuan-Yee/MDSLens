@@ -2115,6 +2115,15 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
     }
   }
 
+  void _selectHint(String hint) {
+    widget.controller.value = TextEditingValue(
+      text: hint,
+      selection: TextSelection.collapsed(offset: hint.length),
+    );
+    _removeOverlay();
+    widget.onChanged?.call();
+  }
+
   void _update() {
     final v = widget.controller.text.toLowerCase();
     final hints = v.isEmpty
@@ -2156,26 +2165,33 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
                       height: 1,
                       color: theme.dividerColor.withValues(alpha: 0.55),
                     ),
-                    itemBuilder: (_, i) => ListTile(
-                      dense: true,
-                      minTileHeight: 42,
-                      leading: Icon(
-                        Icons.search_rounded,
-                        size: 18,
-                        color: theme.colorScheme.primary,
+                    itemBuilder: (_, i) => Listener(
+                      key: ValueKey(
+                        'autocomplete-${widget.label.toLowerCase()}-option-$i',
                       ),
-                      title: Text(
-                        hints[i],
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      onTap: () {
-                        widget.controller.text = hints[i];
-                        widget.controller.selection = TextSelection.collapsed(
-                          offset: hints[i].length,
-                        );
-                        _removeOverlay();
-                        widget.onChanged?.call();
+                      behavior: HitTestBehavior.opaque,
+                      onPointerDown: (event) {
+                        if (event.kind == PointerDeviceKind.mouse ||
+                            event.kind == PointerDeviceKind.trackpad ||
+                            event.kind == PointerDeviceKind.stylus ||
+                            event.kind == PointerDeviceKind.invertedStylus) {
+                          _selectHint(hints[i]);
+                        }
                       },
+                      child: ListTile(
+                        dense: true,
+                        minTileHeight: 42,
+                        leading: Icon(
+                          Icons.search_rounded,
+                          size: 18,
+                          color: theme.colorScheme.primary,
+                        ),
+                        title: Text(
+                          hints[i],
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        onTap: () => _selectHint(hints[i]),
+                      ),
                     ),
                   ),
                 ),

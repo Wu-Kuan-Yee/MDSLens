@@ -2172,6 +2172,34 @@ void main() {
       find.descendant(of: treeMenu, matching: find.byType(ListView)),
     );
     expect(treeList.semanticChildCount, 18);
+
+    await tester.enterText(treeTextField, 'pcs');
+    await tester.pumpAndSettle();
+    final pcsTreeOption = find.text('pcs_east');
+    expect(pcsTreeOption, findsOneWidget);
+    final mouse = TestPointer(91, PointerDeviceKind.mouse);
+    final treeOptionCenter = tester.getCenter(pcsTreeOption);
+    await tester.sendEventToBinding(mouse.hover(treeOptionCenter));
+    await tester.sendEventToBinding(mouse.down(treeOptionCenter));
+    await tester.pump();
+    expect(
+        tester.widget<TextField>(treeTextField).controller?.text, 'pcs_east');
+    await tester.sendEventToBinding(mouse.up());
+
+    await tester.tap(signalTextField);
+    await tester.enterText(signalTextField, r'\pcrl');
+    await tester.pumpAndSettle();
+    final signalOption = find.text(r'\PCRL01');
+    expect(signalOption, findsOneWidget);
+    final signalOptionCenter = tester.getCenter(signalOption);
+    await tester.sendEventToBinding(mouse.hover(signalOptionCenter));
+    await tester.sendEventToBinding(mouse.down(signalOptionCenter));
+    await tester.pump();
+    expect(
+      tester.widget<TextField>(signalTextField).controller?.text,
+      r'\PCRL01',
+    );
+    await tester.sendEventToBinding(mouse.up());
     expect(tester.takeException(), isNull);
   });
 
