@@ -200,6 +200,12 @@ class ToolbarWidget extends StatelessWidget {
         ),
         _toolbarIconButton(
           context,
+          icon: Icons.settings_backup_restore_rounded,
+          tooltip: 'Restore default configuration',
+          onPressed: () => app.restoreDefaultConfig(),
+        ),
+        _toolbarIconButton(
+          context,
           icon: app.fetching ? Icons.stop_circle_outlined : Icons.refresh,
           tooltip: app.fetching ? 'Stop loading' : 'Refresh waveforms',
           onPressed: () =>

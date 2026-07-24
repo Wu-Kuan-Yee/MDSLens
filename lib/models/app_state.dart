@@ -1101,6 +1101,29 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> restoreDefaultConfig() async {
+    _invalidateFetchForSettingsChange();
+    _pendingImportedShot = null;
+    selectedCol = -1;
+    selectedRow = -1;
+    _maximizedPlot = null;
+    crosshairX = null;
+    crosshairSourcePlot = null;
+    crosshairSourceSeries = 0;
+    crosshairReadout.clear();
+    _pointLocked = false;
+    _viewResetId++;
+    loadDefaultConfig();
+    await savePreferences();
+
+    final shot = _displayedShot.trim().isNotEmpty
+        ? _displayedShot.trim()
+        : _shotText.trim();
+    if (hasActiveSession && shot.isNotEmpty) {
+      refreshDisplayedShot();
+    }
+  }
+
   Future<void> openFile() async {
     Directory? temporaryDirectory;
     try {

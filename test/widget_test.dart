@@ -540,6 +540,33 @@ void main() {
     expect(app.status, 'Saved to config.toml');
   });
 
+  testWidgets('Toolbar restores and persists the default waveform layout',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    app.applyLayout(1, 1);
+    expect(app.columns, hasLength(1));
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+    await tester.tap(find.byTooltip('Restore default configuration'));
+    await tester.pumpAndSettle();
+
+    expect(app.columns, hasLength(2));
+    expect(app.columns.map((column) => column.length), [3, 3]);
+    expect(app.plots.map((plot) => plot.title),
+        ['Ip', 'R', 'Z', 'Vloop', 'Ne', 'Pf1 current']);
+
+    final restored = AppState();
+    await restored.preferencesReady;
+    expect(restored.columns, hasLength(2));
+    expect(restored.columns.map((column) => column.length), [3, 3]);
+  });
+
   test('Waveform loading stays interactive and discards stale results',
       () async {
     final pending = <Completer<String>>[];
@@ -1770,7 +1797,7 @@ void main() {
     final modes = find.byKey(const ValueKey('toolbar-mode-actions'));
     final themes = find.byKey(const ValueKey('toolbar-theme-actions'));
     final appActions = find.byKey(const ValueKey('toolbar-app-actions'));
-    expectEqualRow(fileActions, outlinedButtons, 3);
+    expectEqualRow(fileActions, outlinedButtons, 4);
     expectEqualRow(navigation, outlinedButtons, 3);
     expectEqualRow(modes, outlinedButtons, 2);
     expect(
@@ -1787,6 +1814,7 @@ void main() {
     );
     expect(find.byTooltip('Open configuration'), findsOneWidget);
     expect(find.byTooltip('Save configuration'), findsOneWidget);
+    expect(find.byTooltip('Restore default configuration'), findsOneWidget);
     expect(find.byTooltip('Refresh waveforms'), findsOneWidget);
     expect(find.byTooltip('Previous shot'), findsOneWidget);
     expect(find.byTooltip('Next shot'), findsOneWidget);
