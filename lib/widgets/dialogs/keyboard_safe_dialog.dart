@@ -33,6 +33,31 @@ Future<void> _showTextInputIfFocused(
   }
 }
 
+class DialogResourceOwner extends StatefulWidget {
+  const DialogResourceOwner({
+    super.key,
+    required this.child,
+    required this.onDispose,
+  });
+
+  final Widget child;
+  final VoidCallback onDispose;
+
+  @override
+  State<DialogResourceOwner> createState() => _DialogResourceOwnerState();
+}
+
+class _DialogResourceOwnerState extends State<DialogResourceOwner> {
+  @override
+  void dispose() {
+    widget.onDispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
 class KeyboardSafeDialog extends StatelessWidget {
   const KeyboardSafeDialog({
     super.key,

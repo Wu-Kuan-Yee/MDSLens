@@ -64,115 +64,118 @@ class LoginDialog extends StatelessWidget {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-          builder: (ctx, setState) => KeyboardSafeDialog(
-                title: const Text('MdsScope Account'),
-                content: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Row(children: [
-                    Icon(
-                      app.hasActiveSession
-                          ? Icons.check_circle_rounded
-                          : Icons.account_circle_outlined,
-                      color: app.hasActiveSession
-                          ? const Color(0xFF16A34A)
-                          : Theme.of(ctx).colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(notice)),
-                    if (loading)
-                      const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+      builder: (ctx) => DialogResourceOwner(
+        onDispose: () {
+          apiCtrl.dispose();
+          userCtrl.dispose();
+          passCtrl.dispose();
+          apiFocus.dispose();
+          userFocus.dispose();
+          passFocus.dispose();
+        },
+        child: StatefulBuilder(
+            builder: (ctx, setState) => KeyboardSafeDialog(
+                  title: const Text('MdsScope Account'),
+                  content: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Row(children: [
+                      Icon(
+                        app.hasActiveSession
+                            ? Icons.check_circle_rounded
+                            : Icons.account_circle_outlined,
+                        color: app.hasActiveSession
+                            ? const Color(0xFF16A34A)
+                            : Theme.of(ctx).colorScheme.onSurfaceVariant,
                       ),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(notice)),
+                      if (loading)
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                    ]),
+                    if (error.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      SelectableText(error,
+                          style:
+                              const TextStyle(color: Colors.red, fontSize: 13)),
+                    ],
+                    const SizedBox(height: 12),
+                    TextField(
+                      key: const ValueKey('login-api-url'),
+                      controller: apiCtrl,
+                      focusNode: apiFocus,
+                      enabled: !loading,
+                      decoration: const InputDecoration(labelText: 'API URL'),
+                      keyboardType: TextInputType.url,
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.url],
+                      onSubmitted: (_) => focusAndShowKeyboard(ctx, userFocus),
+                    ),
+                    TextField(
+                      key: const ValueKey('login-username'),
+                      controller: userCtrl,
+                      focusNode: userFocus,
+                      enabled: !loading,
+                      decoration: const InputDecoration(labelText: 'Username'),
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.username],
+                      onSubmitted: (_) => focusAndShowKeyboard(ctx, passFocus),
+                    ),
+                    TextField(
+                      key: const ValueKey('login-password'),
+                      controller: passCtrl,
+                      focusNode: passFocus,
+                      enabled: !loading,
+                      decoration: const InputDecoration(labelText: 'Password'),
+                      obscureText: true,
+                      enableSuggestions: false,
+                      autocorrect: false,
+                      keyboardType: TextInputType.visiblePassword,
+                      textInputAction: TextInputAction.done,
+                      autofillHints: const [AutofillHints.password],
+                      onTap: () => focusAndShowKeyboard(ctx, passFocus),
+                      onSubmitted: (_) => doLogin(setState, ctx),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(children: [
+                      Checkbox(
+                        value: app.rememberLogin,
+                        onChanged: loading
+                            ? null
+                            : (v) {
+                                if (v != null) {
+                                  setState(() => app.rememberLogin = v);
+                                }
+                              },
+                      ),
+                      const Expanded(
+                        child: Text('Remember Credentials',
+                            style: TextStyle(fontSize: 13)),
+                      ),
+                    ]),
                   ]),
-                  if (error.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    SelectableText(error,
-                        style:
-                            const TextStyle(color: Colors.red, fontSize: 13)),
-                  ],
-                  const SizedBox(height: 12),
-                  TextField(
-                    key: const ValueKey('login-api-url'),
-                    controller: apiCtrl,
-                    focusNode: apiFocus,
-                    enabled: !loading,
-                    decoration: const InputDecoration(labelText: 'API URL'),
-                    keyboardType: TextInputType.url,
-                    textInputAction: TextInputAction.next,
-                    autofillHints: const [AutofillHints.url],
-                    onSubmitted: (_) => focusAndShowKeyboard(ctx, userFocus),
-                  ),
-                  TextField(
-                    key: const ValueKey('login-username'),
-                    controller: userCtrl,
-                    focusNode: userFocus,
-                    enabled: !loading,
-                    decoration: const InputDecoration(labelText: 'Username'),
-                    textInputAction: TextInputAction.next,
-                    autofillHints: const [AutofillHints.username],
-                    onSubmitted: (_) => focusAndShowKeyboard(ctx, passFocus),
-                  ),
-                  TextField(
-                    key: const ValueKey('login-password'),
-                    controller: passCtrl,
-                    focusNode: passFocus,
-                    enabled: !loading,
-                    decoration: const InputDecoration(labelText: 'Password'),
-                    obscureText: true,
-                    enableSuggestions: false,
-                    autocorrect: false,
-                    keyboardType: TextInputType.visiblePassword,
-                    textInputAction: TextInputAction.done,
-                    autofillHints: const [AutofillHints.password],
-                    onTap: () => focusAndShowKeyboard(ctx, passFocus),
-                    onSubmitted: (_) => doLogin(setState, ctx),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(children: [
-                    Checkbox(
-                      value: app.rememberLogin,
-                      onChanged: loading
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Cancel'),
+                    ),
+                    OutlinedButton(
+                      key: const ValueKey('login-dialog-logout'),
+                      onPressed: loading || !app.hasActiveSession
                           ? null
-                          : (v) {
-                              if (v != null) {
-                                setState(() => app.rememberLogin = v);
-                              }
-                            },
+                          : () => doLogout(setState),
+                      child: const Text('Logout'),
                     ),
-                    const Expanded(
-                      child: Text('Remember Credentials',
-                          style: TextStyle(fontSize: 13)),
+                    FilledButton(
+                      key: const ValueKey('login-dialog-login'),
+                      onPressed: loading ? null : () => doLogin(setState, ctx),
+                      child: const Text('Login'),
                     ),
-                  ]),
-                ]),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('Cancel'),
-                  ),
-                  OutlinedButton(
-                    key: const ValueKey('login-dialog-logout'),
-                    onPressed: loading || !app.hasActiveSession
-                        ? null
-                        : () => doLogout(setState),
-                    child: const Text('Logout'),
-                  ),
-                  FilledButton(
-                    key: const ValueKey('login-dialog-login'),
-                    onPressed: loading ? null : () => doLogin(setState, ctx),
-                    child: const Text('Login'),
-                  ),
-                ],
-              )),
-    ).whenComplete(() {
-      apiCtrl.dispose();
-      userCtrl.dispose();
-      passCtrl.dispose();
-      apiFocus.dispose();
-      userFocus.dispose();
-      passFocus.dispose();
-    });
+                  ],
+                )),
+      ),
+    );
   }
 }
