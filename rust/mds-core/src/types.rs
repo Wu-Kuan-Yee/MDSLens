@@ -59,6 +59,8 @@ pub struct SignalSpec {
     pub y_expr: String,
     /// Optional MDSplus X expression (empty = use dim_of(y)).
     pub x_expr: String,
+    /// Optional user-facing legend label (empty = derive from y_expr).
+    pub legend: String,
     /// MDSplus tree / experiment name (e.g. `pcs_east`).
     pub experiment: String,
     /// MDSIP server IP address.

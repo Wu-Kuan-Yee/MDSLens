@@ -46,6 +46,13 @@ String resolveDataSourceShot({
   return '';
 }
 
+String signalLegendLabel(Map<dynamic, dynamic> signal) {
+  final custom = signal['legend']?.toString().trim() ?? '';
+  if (custom.isNotEmpty) return custom;
+  return (signal['y_expr']?.toString().trim() ?? '')
+      .replaceFirst(RegExp(r'^\\+'), '');
+}
+
 Future<bool> showPanelSetupEditor(
   BuildContext context,
   Map<String, dynamic> panel,
@@ -541,9 +548,109 @@ class _PlotPanelState extends State<PlotPanel> {
                                   fontSize: unitSize,
                                   color: textColor))))),
             ),
+            _buildLegend(
+              panel,
+              theme,
+              app,
+              gridW,
+              gridH,
+              plot.title.isNotEmpty ? legendSize + 8 : 6,
+            ),
           ],
         );
       },
+    );
+  }
+
+  Widget _buildLegend(
+    Map<String, dynamic> panel,
+    ThemeData theme,
+    AppState app,
+    double gridWidth,
+    double gridHeight,
+    double top,
+  ) {
+    final rawSignals = panel['signal_specs'];
+    if (rawSignals is! List) return const SizedBox.shrink();
+    final entries = <({int index, Map<dynamic, dynamic> signal})>[
+      for (var index = 0; index < rawSignals.length; index++)
+        if (rawSignals[index] is Map &&
+            (rawSignals[index] as Map)['hidden'] != true &&
+            signalLegendLabel(rawSignals[index] as Map).isNotEmpty)
+          (index: index, signal: rawSignals[index] as Map),
+    ];
+    if (entries.isEmpty) return const SizedBox.shrink();
+
+    final maxWidth = math.max(72.0, math.min(220.0, gridWidth * 0.48));
+    final maxHeight = math.max(20.0, gridHeight - top - 4);
+    return Positioned(
+      right: 6,
+      top: top,
+      child: IgnorePointer(
+        child: SizedBox(
+          width: maxWidth,
+          height: maxHeight,
+          child: Align(
+            alignment: Alignment.topRight,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.topRight,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface.withValues(alpha: 0.82),
+                  border: Border.all(
+                    color:
+                        theme.colorScheme.outlineVariant.withValues(alpha: 0.7),
+                  ),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final entry in entries)
+                        Padding(
+                          key: ValueKey(
+                            'plot-legend-${widget.plotIdx}-${entry.index}',
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 1),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: _sigColor(
+                                    entry.index,
+                                    rawSignals.cast<Map>(),
+                                  ),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                signalLegendLabel(entry.signal),
+                                style: TextStyle(
+                                  color: theme.colorScheme.onSurface,
+                                  fontFamily: app.effectiveFontFamily,
+                                  fontSize: app.fontLegendSize.toDouble(),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -1853,6 +1960,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
         ),
       ),
       y: TextEditingController(text: s?['y_expr']?.toString() ?? ''),
+      legend: TextEditingController(text: s?['legend']?.toString() ?? ''),
       tree: TextEditingController(
           text: s?['experiment']?.toString() ?? 'pcs_east'),
       server: TextEditingController(
@@ -1908,12 +2016,14 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                     final treeCtrl = TextEditingController(
                         text: last?.tree.text ?? 'pcs_east');
                     final yCtrl = TextEditingController();
+                    final legendCtrl = TextEditingController();
                     final serverCtrl = TextEditingController(
                         text: last?.server.text ?? '202.127.204.12');
                     final defaultRate = context.read<AppState>().dataMode;
                     final newRow = _DSRow(
                         shot: shotCtrl,
                         y: yCtrl,
+                        legend: legendCtrl,
                         tree: treeCtrl,
                         server: serverCtrl,
                         xExpr: '')
@@ -1937,11 +2047,12 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                   0: FixedColumnWidth(84),
                   1: FixedColumnWidth(124),
                   2: FixedColumnWidth(184),
-                  3: FixedColumnWidth(144),
-                  4: FixedColumnWidth(34),
-                  5: FixedColumnWidth(46),
-                  6: FixedColumnWidth(136),
-                  7: FixedColumnWidth(26),
+                  3: FixedColumnWidth(130),
+                  4: FixedColumnWidth(144),
+                  5: FixedColumnWidth(34),
+                  6: FixedColumnWidth(46),
+                  7: FixedColumnWidth(136),
+                  8: FixedColumnWidth(26),
                 },
                 defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                 children: [
@@ -1949,6 +2060,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                     _hdrCell('Shot', 4),
                     _hdrCell('Tree', 4),
                     _hdrCell('Signal', 4),
+                    _hdrCell('Legend', 4),
                     _hdrCell('Server IP', 4),
                     _hdrCell('Color', 4),
                     _hdrCell('Hide', 2),
@@ -1981,7 +2093,19 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                               key: ValueKey('data-signal-$i'),
                               controller: _rows[i].y,
                               options: _rows[i]._signalOptions,
-                              label: 'Signal')),
+                              label: 'Signal',
+                              onChanged: () => setState(() {}))),
+                      Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: TextField(
+                              key: ValueKey('data-legend-$i'),
+                              controller: _rows[i].legend,
+                              decoration: _dsDeco().copyWith(
+                                hintText: signalLegendLabel({
+                                  'y_expr': _rows[i].y.text,
+                                }),
+                              ),
+                              style: const TextStyle(fontSize: 12))),
                       Padding(
                           padding: const EdgeInsets.only(right: 4),
                           child: TextField(
@@ -2074,6 +2198,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
         'shot': shot.isNotEmpty ? shot : widget.defaultShot,
         'y_expr': r.y.text.trim(),
         'x_expr': r.xExpr,
+        'legend': r.legend.text.trim(),
         'experiment': r.tree.text.trim(),
         'server_ip': r.server.text.trim(),
         'color_name':
@@ -2410,7 +2535,7 @@ class _HsvPainter extends CustomPainter {
 }
 
 class _DSRow {
-  final TextEditingController shot, y, tree, server;
+  final TextEditingController shot, y, legend, tree, server;
   final String xExpr;
   bool hidden = false;
   int readMode = 0;
@@ -2420,12 +2545,14 @@ class _DSRow {
   _DSRow(
       {required this.shot,
       required this.y,
+      required this.legend,
       required this.tree,
       required this.server,
       required this.xExpr});
   void dispose() {
     shot.dispose();
     y.dispose();
+    legend.dispose();
     tree.dispose();
     server.dispose();
   }

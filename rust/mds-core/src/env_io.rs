@@ -146,6 +146,9 @@ pub fn parse_toml_environment(path: &str) -> LayoutConfig {
                 if let Some(v) = sig.get("x").and_then(|v| v.as_str()) {
                     signal.x_expr = v.to_string();
                 }
+                if let Some(v) = sig.get("legend").and_then(|v| v.as_str()) {
+                    signal.legend = v.to_string();
+                }
                 if let Some(v) = sig.get("color").and_then(|v| v.as_str()) {
                     signal.color_name = v.to_string();
                     signal.manual_color = sig.get("manual_color")
@@ -349,6 +352,7 @@ pub fn encode_environment_toml(config: &LayoutConfig) -> String {
                 writeln!(out, "server = {:?}", signal.server_ip).unwrap();
                 writeln!(out, "y = {:?}", signal.y_expr).unwrap();
                 writeln!(out, "x = {:?}", signal.x_expr).unwrap();
+                writeln!(out, "legend = {:?}", signal.legend).unwrap();
                 writeln!(out, "color = {:?}", resolved_color).unwrap();
                 writeln!(out, "manual_color = {}", signal.manual_color).unwrap();
                 writeln!(out, "hidden = {}", signal.hidden).unwrap();
@@ -582,6 +586,7 @@ y = "\\pcrl01"
                         shot: "163899".into(),
                         y_expr: "\\FIRST".into(),
                         x_expr: "dim_of(\\FIRST)".into(),
+                        legend: "Primary current".into(),
                         experiment: "tree_a".into(),
                         server_ip: "10.0.0.1".into(),
                         color_name: "#123456".into(),
@@ -608,6 +613,7 @@ y = "\\pcrl01"
         let encoded = encode_environment_toml(&config);
         assert!(encoded.contains("shot = \"163899\""));
         assert!(encoded.contains("x = \"dim_of(\\\\FIRST)\""));
+        assert!(encoded.contains("legend = \"Primary current\""));
         assert!(encoded.contains("color = \"#123456\""));
         assert!(encoded.contains("manual_color = true"));
         assert!(encoded.contains("hidden = true"));
@@ -624,6 +630,7 @@ y = "\\pcrl01"
         let second = &decoded.columns[0][0].signal_specs[1];
         assert_eq!(first.shot, "163899");
         assert_eq!(first.x_expr, "dim_of(\\FIRST)");
+        assert_eq!(first.legend, "Primary current");
         assert_eq!(first.color_name, "#123456");
         assert!(first.manual_color);
         assert!(first.hidden);

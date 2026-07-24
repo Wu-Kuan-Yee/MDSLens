@@ -10,6 +10,7 @@ pub struct FrbSignalSpec {
     pub shot: String,
     pub y_expr: String,
     pub x_expr: String,
+    pub legend: String,
     pub experiment: String,
     pub server_ip: String,
     pub color_name: String,
@@ -114,7 +115,7 @@ pub struct FrbShotInfo {
 
 impl From<mds_core::types::SignalSpec> for FrbSignalSpec {
     fn from(s: mds_core::types::SignalSpec) -> Self {
-        Self { shot: s.shot, y_expr: s.y_expr, x_expr: s.x_expr, experiment: s.experiment, server_ip: s.server_ip, color_name: s.color_name, manual_color: s.manual_color, hidden: s.hidden, read_mode: s.read_mode.map_or(0, |m| match m { mds_core::types::DataReadMode::Medium => 1, mds_core::types::DataReadMode::Full => 2, _ => 0 }) }
+        Self { shot: s.shot, y_expr: s.y_expr, x_expr: s.x_expr, legend: s.legend, experiment: s.experiment, server_ip: s.server_ip, color_name: s.color_name, manual_color: s.manual_color, hidden: s.hidden, read_mode: s.read_mode.map_or(0, |m| match m { mds_core::types::DataReadMode::Medium => 1, mds_core::types::DataReadMode::Full => 2, _ => 0 }) }
     }
 }
 
@@ -203,7 +204,7 @@ impl FrbLayoutConfig {
                     ymin: p.ymin.unwrap_or(f64::NAN),
                     ymax: p.ymax.unwrap_or(f64::NAN),
                     signal_specs: p.signal_specs.into_iter().map(|s| mds_core::types::SignalSpec {
-                        shot: s.shot, y_expr: s.y_expr, x_expr: s.x_expr,
+                        shot: s.shot, y_expr: s.y_expr, x_expr: s.x_expr, legend: s.legend,
                         experiment: s.experiment, server_ip: s.server_ip,
                         color_name: s.color_name, manual_color: s.manual_color, hidden: s.hidden,
                         read_mode: match s.read_mode { 1 => Some(mds_core::types::DataReadMode::Medium), 2 => Some(mds_core::types::DataReadMode::Full), _ => None },
@@ -362,12 +363,13 @@ mod tests {
         let orig = mds_core::types::SignalSpec {
             y_expr: "\\pcrl01".into(), experiment: "pcs_east".into(),
             server_ip: "202.127.204.12".into(), color_name: "#123456".into(),
-            manual_color: true, ..Default::default()
+            legend: "Plasma current".into(), manual_color: true, ..Default::default()
         };
         let frb = FrbSignalSpec::from(orig.clone());
         assert_eq!(frb.y_expr, "\\pcrl01");
         assert_eq!(frb.experiment, "pcs_east");
         assert_eq!(frb.color_name, "#123456");
+        assert_eq!(frb.legend, "Plasma current");
         assert!(frb.manual_color);
     }
 

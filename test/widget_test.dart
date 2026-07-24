@@ -369,6 +369,7 @@ void main() {
       'shot': '163899',
       'y_expr': r'\FIRST',
       'x_expr': 'dim_of(\\FIRST)',
+      'legend': '',
       'experiment': 'tree_a',
       'server_ip': '10.0.0.1',
       'color_name': '#123456',
@@ -380,6 +381,7 @@ void main() {
       'shot': '163900',
       'y_expr': r'\SECOND',
       'x_expr': '',
+      'legend': '',
       'experiment': 'tree_b',
       'server_ip': '10.0.0.2',
       'color_name': '#c44e52',
@@ -1365,6 +1367,71 @@ void main() {
     expect(charts, hasLength(2));
     expect(charts[0].data.extraLinesData.horizontalLines.single.y, 12);
     expect(charts[1].data.extraLinesData.horizontalLines.single.y, 22);
+  });
+
+  testWidgets('Plot legend uses signal names and supports custom labels',
+      (tester) async {
+    expect(signalLegendLabel({'y_expr': r'\PCRL01'}), 'PCRL01');
+    expect(
+      signalLegendLabel({'y_expr': r'\DFSDEV', 'legend': 'Density'}),
+      'Density',
+    );
+
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.columns[0][0]['signal_specs'] = [
+      {
+        'y_expr': r'\PCRL01',
+        'color_name': '#123456',
+      },
+      {
+        'y_expr': r'\DFSDEV',
+        'legend': 'Density',
+        'color_name': '#654321',
+      },
+    ];
+    app.updatePlotSeriesByColRow(
+      0,
+      0,
+      0,
+      [
+        [0, 1],
+        [1, 2],
+      ],
+      null,
+    );
+    app.updatePlotSeriesByColRow(
+      0,
+      0,
+      1,
+      [
+        [0, 2],
+        [1, 3],
+      ],
+      null,
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 500,
+              height: 400,
+              child: PlotPanel(plotIdx: 0),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('plot-legend-0-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('plot-legend-0-1')), findsOneWidget);
+    expect(find.text('PCRL01'), findsOneWidget);
+    expect(find.text('Density'), findsOneWidget);
+    expect(find.text(r'\PCRL01'), findsNothing);
   });
 
   testWidgets('Point mode continuously follows a held touch drag',
@@ -2434,6 +2501,14 @@ void main() {
       find.byKey(const ValueKey('data-shot-0')),
     );
     expect(shotField.controller?.text, '163888');
+    await tester.enterText(
+      find.byKey(const ValueKey('data-legend-0')),
+      'Primary current',
+    );
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(signals.single['legend'], 'Primary current');
+    expect(signals.single['shot'], '163888');
   });
 
   testWidgets('SSH mode and font family use polished dropdown menus',

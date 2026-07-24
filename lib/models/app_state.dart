@@ -505,7 +505,7 @@ class AppState extends ChangeNotifier {
             title: p['title']?.toString() ?? '',
             xLabel: p['x_label']?.toString() ?? 's',
             yLabel: p['y_label']?.toString() ?? 'a.u.',
-            series: List.filled(sc > 0 ? sc : 1, null)));
+            series: List.filled(sc > 0 ? sc : 1, null, growable: true)));
       }
     }
   }
@@ -1077,6 +1077,7 @@ class AppState extends ChangeNotifier {
               'shot': shot.isNotEmpty ? shot : inheritedShot,
               'y_expr': signal['y_expr']?.toString() ?? '',
               'x_expr': signal['x_expr']?.toString() ?? '',
+              'legend': signal['legend']?.toString() ?? '',
               'experiment': signal['experiment']?.toString() ?? '',
               'server_ip': signal['server_ip']?.toString() ?? '',
               'color_name': color.isNotEmpty
@@ -1113,7 +1114,8 @@ class AppState extends ChangeNotifier {
             title: panel['title']?.toString() ?? '',
             xLabel: panel['x_label']?.toString() ?? 's',
             yLabel: panel['y_label']?.toString() ?? 'a.u.',
-            series: List.filled(sigCount > 0 ? sigCount : 1, null),
+            series:
+                List.filled(sigCount > 0 ? sigCount : 1, null, growable: true),
           ));
         }
       }
@@ -1157,7 +1159,7 @@ class AppState extends ChangeNotifier {
             title: panel['title']?.toString() ?? '',
             xLabel: 's',
             yLabel: 'a.u.',
-            series: List.filled(1, null)));
+            series: List.filled(1, null, growable: true)));
       }
     }
     _status = 'Default config loaded. Login + Refresh to fetch data.';
@@ -1272,7 +1274,8 @@ class AppState extends ChangeNotifier {
             title: panel['title']?.toString() ?? '',
             xLabel: panel['x_label']?.toString() ?? 's',
             yLabel: panel['y_label']?.toString() ?? 'a.u.',
-            series: List.filled(sigCount > 0 ? sigCount : 1, null),
+            series:
+                List.filled(sigCount > 0 ? sigCount : 1, null, growable: true),
           ));
         }
       }
