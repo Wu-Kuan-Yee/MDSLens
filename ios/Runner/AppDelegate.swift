@@ -1,6 +1,7 @@
 import Flutter
 import UIKit
 import Darwin
+import CoreTelephony
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate,
@@ -10,6 +11,12 @@ import Darwin
   private var stylusChannel: FlutterMethodChannel?
   private var pencilInteraction: UIPencilInteraction?
   private var pencilUsesEraser = false
+  private var cellularDataMonitor: CTCellularData?
+  private var networkProbeSession: URLSession?
+  private var networkProbeResult: FlutterResult?
+  private var networkProbeTimeout: DispatchWorkItem?
+  private var cellularStateBeforeProbe: CTCellularDataRestrictedState =
+    .restrictedStateUnknown
 
   override func application(
     _ application: UIApplication,
@@ -32,6 +39,10 @@ import Darwin
         result(true)
         return
       }
+      if call.method == "prepareNetworkAccess" {
+        self.prepareNetworkAccess(call, result: result)
+        return
+      }
       guard call.method == "openAppSettings" else {
         result(FlutterMethodNotImplemented)
         return
@@ -52,6 +63,93 @@ import Darwin
     DispatchQueue.main.async { [weak self] in
       self?.installPencilInteraction()
     }
+  }
+
+  private func prepareNetworkAccess(
+    _ call: FlutterMethodCall,
+    result: @escaping FlutterResult
+  ) {
+    guard
+      let arguments = call.arguments as? [String: Any],
+      let rawURL = arguments["url"] as? String,
+      let url = URL(string: rawURL),
+      let scheme = url.scheme?.lowercased(),
+      scheme == "http" || scheme == "https"
+    else {
+      result("unknown")
+      return
+    }
+
+    finishNetworkAccessPreparation(with: "unknown")
+    let monitor = CTCellularData()
+    cellularDataMonitor = monitor
+    cellularStateBeforeProbe = monitor.restrictedState
+    networkProbeResult = result
+
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.waitsForConnectivity = true
+    configuration.timeoutIntervalForRequest = 20
+    configuration.timeoutIntervalForResource = 20
+    let session = URLSession(configuration: configuration)
+    networkProbeSession = session
+
+    var request = URLRequest(url: url)
+    request.httpMethod = "HEAD"
+    request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+    session.dataTask(with: request) { [weak self, weak monitor] _, response, error in
+      DispatchQueue.main.async {
+        guard let self, let monitor else { return }
+        if monitor.restrictedState == .restricted {
+          self.finishDeniedNetworkAccessPreparation()
+        } else if monitor.restrictedState == .notRestricted ||
+          response != nil || error == nil
+        {
+          self.finishNetworkAccessPreparation(with: "ready")
+        }
+      }
+    }.resume()
+
+    monitor.cellularDataRestrictionDidUpdateNotifier = {
+      [weak self, weak monitor] state in
+      DispatchQueue.main.async {
+        guard let self, monitor === self.cellularDataMonitor else { return }
+        switch state {
+        case .restricted:
+          self.finishDeniedNetworkAccessPreparation()
+        case .notRestricted:
+          self.finishNetworkAccessPreparation(with: "ready")
+        case .restrictedStateUnknown:
+          break
+        @unknown default:
+          break
+        }
+      }
+    }
+
+    let timeout = DispatchWorkItem { [weak self] in
+      self?.finishNetworkAccessPreparation(with: "unknown")
+    }
+    networkProbeTimeout = timeout
+    DispatchQueue.main.asyncAfter(deadline: .now() + 20, execute: timeout)
+  }
+
+  private func finishDeniedNetworkAccessPreparation() {
+    let state = cellularStateBeforeProbe == .restricted
+      ? "deniedPreviously"
+      : "deniedDuringRequest"
+    finishNetworkAccessPreparation(with: state)
+  }
+
+  private func finishNetworkAccessPreparation(with state: String) {
+    guard let result = networkProbeResult else { return }
+    networkProbeResult = nil
+    networkProbeTimeout?.cancel()
+    networkProbeTimeout = nil
+    cellularDataMonitor?.cellularDataRestrictionDidUpdateNotifier = nil
+    cellularDataMonitor = nil
+    networkProbeSession?.invalidateAndCancel()
+    networkProbeSession = nil
+    result(state)
   }
 
   private func installPencilInteraction() {

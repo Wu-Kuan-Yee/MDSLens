@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -135,5 +136,79 @@ void main() {
       find.byKey(const ValueKey('network-permission-dialog')),
       findsNothing,
     );
+  });
+
+  testWidgets(
+      'First cellular denial stays with the system prompt and a later attempt offers settings',
+      (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    const channel = MethodChannel('mdsscope/permissions');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    var preparationCount = 0;
+    var loginCount = 0;
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(channel, null),
+    );
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'prepareNetworkAccess') {
+        preparationCount++;
+        return preparationCount == 1
+            ? 'deniedDuringRequest'
+            : 'deniedPreviously';
+      }
+      return true;
+    });
+    final app = AppState(
+      loginWorker: (_, __, ___, ____) async {
+        loginCount++;
+        return (token: 'unexpected', usedSsh: false);
+      },
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NetworkPermissionGate(
+          app: app,
+          enabled: true,
+          requestOnStartup: false,
+          child: const Scaffold(body: Text('MdsScope')),
+        ),
+      ),
+    );
+
+    await expectLater(
+      app.loginAndLoadLatest(
+        apiUrl: 'http://east.example/api',
+        user: 'user',
+        password: 'password',
+      ),
+      throwsA(anything),
+    );
+    await tester.pumpAndSettle();
+    expect(loginCount, 0);
+    expect(
+      find.byKey(const ValueKey('network-permission-dialog')),
+      findsNothing,
+    );
+
+    await expectLater(
+      app.loginAndLoadLatest(
+        apiUrl: 'http://east.example/api',
+        user: 'user',
+        password: 'password',
+      ),
+      throwsA(anything),
+    );
+    await tester.pumpAndSettle();
+    expect(loginCount, 0);
+    expect(
+      find.byKey(const ValueKey('network-permission-dialog')),
+      findsOneWidget,
+    );
+    debugDefaultTargetPlatformOverride = null;
   });
 }

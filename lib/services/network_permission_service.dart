@@ -1,6 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+enum NetworkAccessPreparation {
+  ready,
+  deniedDuringRequest,
+  deniedPreviously,
+  unknown,
+}
+
 class NetworkPermissionService {
   NetworkPermissionService._();
 
@@ -24,12 +31,37 @@ class NetworkPermissionService {
     }
   }
 
+  static Future<NetworkAccessPreparation> prepareNetworkAccess(
+    String apiUrl,
+  ) async {
+    if (defaultTargetPlatform != TargetPlatform.iOS) {
+      return NetworkAccessPreparation.ready;
+    }
+    try {
+      final result = await _channel.invokeMethod<String>(
+        'prepareNetworkAccess',
+        {'url': apiUrl},
+      );
+      return switch (result) {
+        'ready' => NetworkAccessPreparation.ready,
+        'deniedDuringRequest' => NetworkAccessPreparation.deniedDuringRequest,
+        'deniedPreviously' => NetworkAccessPreparation.deniedPreviously,
+        _ => NetworkAccessPreparation.unknown,
+      };
+    } on PlatformException {
+      return NetworkAccessPreparation.unknown;
+    } on MissingPluginException {
+      return NetworkAccessPreparation.unknown;
+    }
+  }
+
   static bool isLikelyPermissionFailure(Object error) {
     final message = error.toString().toLowerCase();
     return const [
       'local network denied',
       'localnetworkdenied',
       'local network permission',
+      'cellular data access was denied',
       'policy denied',
       'kdnsserviceerr_policydenied',
       'permission denied',
@@ -40,6 +72,17 @@ class NetworkPermissionService {
       'os error: 13',
       'eacces',
       'eperm',
+    ].any(message.contains);
+  }
+
+  static bool isConfirmedPermissionFailure(Object error) {
+    final message = error.toString().toLowerCase();
+    return const [
+      'localnetworkdenied',
+      'local network denied',
+      'kdnsserviceerr_policydenied',
+      'policy denied',
+      'cellular data access was denied',
     ].any(message.contains);
   }
 

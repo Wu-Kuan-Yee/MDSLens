@@ -788,9 +788,17 @@ class AppState extends ChangeNotifier {
     bool automatic = false,
   }) async {
     final generation = ++_sessionGeneration;
+    var networkAccess = NetworkAccessPreparation.unknown;
     _status = automatic ? 'Signing in automatically...' : 'Signing in...';
     notifyListeners();
     try {
+      networkAccess =
+          await NetworkPermissionService.prepareNetworkAccess(apiUrl);
+      if (_disposed || generation != _sessionGeneration) return;
+      if (networkAccess == NetworkAccessPreparation.deniedDuringRequest ||
+          networkAccess == NetworkAccessPreparation.deniedPreviously) {
+        throw 'Cellular data access was denied for MdsScope.';
+      }
       late ({String token, bool usedSsh}) result;
       if (_sshMode == 1 && _sshHost.trim().isNotEmpty) {
         try {
@@ -846,15 +854,21 @@ class AppState extends ChangeNotifier {
           automatic ? 'Automatic login failed: $error' : 'Login failed: $error';
       await savePreferences();
       if (!_disposed) notifyListeners();
-      reportNetworkPermissionFailure(
-        error,
-        retry: () => loginAndLoadLatest(
-          apiUrl: apiUrl,
-          user: user,
-          password: password,
-          automatic: automatic,
-        ),
-      );
+      final shouldOfferSettings =
+          networkAccess == NetworkAccessPreparation.deniedPreviously ||
+              NetworkPermissionService.isConfirmedPermissionFailure(error);
+      if (shouldOfferSettings &&
+          networkAccess != NetworkAccessPreparation.deniedDuringRequest) {
+        reportNetworkPermissionFailure(
+          error,
+          retry: () => loginAndLoadLatest(
+            apiUrl: apiUrl,
+            user: user,
+            password: password,
+            automatic: automatic,
+          ),
+        );
+      }
       rethrow;
     }
   }
