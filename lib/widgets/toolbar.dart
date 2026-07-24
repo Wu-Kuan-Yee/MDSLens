@@ -266,24 +266,30 @@ class ToolbarWidget extends StatelessWidget {
           style:
               TextStyle(fontSize: uiSize, color: theme.colorScheme.onSurface)),
       if (app.shotHistory.isNotEmpty)
-        PopupMenuButton<String>(
-          padding: EdgeInsets.zero,
-          iconSize: 16,
-          icon: Icon(Icons.arrow_drop_down,
-              size: 16, color: theme.colorScheme.onSurface),
+        PolishedDropdown<String>(
+          key: const ValueKey('toolbar-shot-history-dropdown'),
+          id: 'toolbar-shot-history',
+          value: app.shotText,
+          leadingIcon: Icons.history_rounded,
+          height: 40,
+          fontSize: uiSize,
+          minimumMenuWidth: 180,
+          menuMaxHeight: 320,
+          iconOnly: true,
           tooltip: 'Shot history',
-          position: PopupMenuPosition.under,
-          onSelected: (v) {
+          options: app.shotHistory
+              .map(
+                (shot) => PolishedDropdownOption(
+                  value: shot,
+                  label: shot,
+                  icon: Icons.history_rounded,
+                ),
+              )
+              .toList(),
+          onChanged: (v) {
             app.shotText = v;
             app.startRefresh();
           },
-          itemBuilder: (_) => separatedPopupMenuItems(
-            app.shotHistory
-                .map((s) => PopupMenuItem(
-                    value: s,
-                    child: Text(s, style: TextStyle(fontSize: uiSize))))
-                .toList(),
-          ),
         ),
       const SizedBox(width: 6),
       Expanded(

@@ -24,6 +24,8 @@ class PolishedDropdown<T> extends StatefulWidget {
     this.fontSize,
     this.minimumMenuWidth = 172,
     this.menuMaxHeight = 280,
+    this.iconOnly = false,
+    this.tooltip,
   });
 
   final String id;
@@ -35,6 +37,8 @@ class PolishedDropdown<T> extends StatefulWidget {
   final double? fontSize;
   final double minimumMenuWidth;
   final double menuMaxHeight;
+  final bool iconOnly;
+  final String? tooltip;
 
   @override
   State<PolishedDropdown<T>> createState() => _PolishedDropdownState<T>();
@@ -93,97 +97,141 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
           _menuOption(context, widget.options[index], index),
         ],
       ],
-      builder: (context, controller, _) => Semantics(
-        button: true,
-        expanded: _open,
-        label: '${widget.id}: ${selected.label}',
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: () =>
-                controller.isOpen ? controller.close() : controller.open(),
-            child: AnimatedContainer(
-              key: ValueKey('${widget.id}-anchor'),
-              duration: const Duration(milliseconds: 150),
-              height: widget.height,
-              padding: const EdgeInsets.fromLTRB(10, 0, 7, 0),
-              decoration: BoxDecoration(
-                color: _open
-                    ? Color.alphaBlend(
-                        colors.primary.withValues(alpha: 0.09),
-                        colors.surfaceContainerLow,
-                      )
-                    : colors.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: _open ? colors.primary : colors.outlineVariant,
-                  width: _open ? 1.5 : 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: colors.shadow.withValues(alpha: 0.08),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+      builder: (context, controller, _) => Tooltip(
+        message: widget.tooltip ?? widget.id,
+        child: Semantics(
+          button: true,
+          expanded: _open,
+          label: widget.iconOnly
+              ? (widget.tooltip ?? widget.id)
+              : '${widget.id}: ${selected.label}',
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () =>
+                  controller.isOpen ? controller.close() : controller.open(),
+              child: AnimatedContainer(
+                key: ValueKey('${widget.id}-anchor'),
+                duration: const Duration(milliseconds: 150),
+                width: widget.iconOnly ? widget.height : null,
+                height: widget.height,
+                padding: widget.iconOnly
+                    ? EdgeInsets.zero
+                    : const EdgeInsets.fromLTRB(10, 0, 7, 0),
+                decoration: BoxDecoration(
+                  color: _open
+                      ? Color.alphaBlend(
+                          colors.primary.withValues(alpha: 0.09),
+                          colors.surfaceContainerLow,
+                        )
+                      : colors.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _open ? colors.primary : colors.outlineVariant,
+                    width: _open ? 1.5 : 1,
                   ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  if (widget.leadingIcon != null) ...[
-                    Container(
-                      width: 26,
-                      height: 26,
-                      decoration: BoxDecoration(
-                        color: colors.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        widget.leadingIcon,
-                        size: 16,
-                        color: colors.primary,
-                      ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: colors.shadow.withValues(alpha: 0.08),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
                     ),
-                    const SizedBox(width: 8),
                   ],
-                  Expanded(
-                    child: Text(
-                      selected.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontSize: widget.fontSize,
-                        fontWeight: FontWeight.w600,
-                        color: colors.onSurface,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  AnimatedRotation(
-                    turns: _open ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 150),
-                    child: Container(
-                      width: 26,
-                      height: 26,
-                      decoration: BoxDecoration(
-                        color: _open
-                            ? colors.primary.withValues(alpha: 0.14)
-                            : colors.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        size: 19,
-                        color: _open ? colors.primary : colors.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ],
+                ),
+                child: widget.iconOnly
+                    ? _compactAnchor(colors)
+                    : _regularAnchor(theme, colors, selected),
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _compactAnchor(ColorScheme colors) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Icon(
+          widget.leadingIcon ?? Icons.more_horiz_rounded,
+          size: 20,
+          color: _open ? colors.primary : colors.onSurfaceVariant,
+        ),
+        Positioned(
+          right: 3,
+          bottom: 3,
+          child: AnimatedRotation(
+            turns: _open ? 0.5 : 0,
+            duration: const Duration(milliseconds: 150),
+            child: Icon(
+              Icons.arrow_drop_down_rounded,
+              size: 13,
+              color: _open ? colors.primary : colors.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _regularAnchor(
+    ThemeData theme,
+    ColorScheme colors,
+    PolishedDropdownOption<T> selected,
+  ) {
+    return Row(
+      children: [
+        if (widget.leadingIcon != null) ...[
+          Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              color: colors.primary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              widget.leadingIcon,
+              size: 16,
+              color: colors.primary,
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+        Expanded(
+          child: Text(
+            selected.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontSize: widget.fontSize,
+              fontWeight: FontWeight.w600,
+              color: colors.onSurface,
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        AnimatedRotation(
+          turns: _open ? 0.5 : 0,
+          duration: const Duration(milliseconds: 150),
+          child: Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              color: _open
+                  ? colors.primary.withValues(alpha: 0.14)
+                  : colors.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 19,
+              color: _open ? colors.primary : colors.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ],
     );
   }
 

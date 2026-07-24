@@ -1660,6 +1660,47 @@ void main() {
     expect(find.byType(PopupMenuDivider), findsNWidgets(3));
   });
 
+  testWidgets('Shot history uses the polished compact dropdown',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'shotHistory': '["163702","163701"]',
+      'shot': '163703',
+    });
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('toolbar-shot-history-dropdown')),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Shot history'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('toolbar-shot-entry')),
+        matching: find.byType(PopupMenuButton<String>),
+      ),
+      findsNothing,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('toolbar-shot-history-dropdown')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('toolbar-shot-history-divider-1')),
+      findsOneWidget,
+    );
+    expect(find.text('163702'), findsOneWidget);
+    expect(find.text('163701'), findsOneWidget);
+  });
+
   testWidgets('Waveform context menu is polished, grouped, and actionable',
       (tester) async {
     final app = AppState();
