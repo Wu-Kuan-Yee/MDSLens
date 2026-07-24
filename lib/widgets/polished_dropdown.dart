@@ -12,6 +12,20 @@ class PolishedDropdownOption<T> {
   final IconData? icon;
 }
 
+class PolishedDropdownAction {
+  const PolishedDropdownAction({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    this.destructive = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+  final bool destructive;
+}
+
 class PolishedDropdown<T> extends StatefulWidget {
   const PolishedDropdown({
     super.key,
@@ -26,6 +40,7 @@ class PolishedDropdown<T> extends StatefulWidget {
     this.menuMaxHeight = 280,
     this.iconOnly = false,
     this.tooltip,
+    this.menuAction,
   });
 
   final String id;
@@ -39,6 +54,7 @@ class PolishedDropdown<T> extends StatefulWidget {
   final double menuMaxHeight;
   final bool iconOnly;
   final String? tooltip;
+  final PolishedDropdownAction? menuAction;
 
   @override
   State<PolishedDropdown<T>> createState() => _PolishedDropdownState<T>();
@@ -85,6 +101,16 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
         ),
       ),
       menuChildren: [
+        if (widget.menuAction != null) ...[
+          _menuAction(context, widget.menuAction!),
+          Divider(
+            key: ValueKey('${widget.id}-action-divider'),
+            height: 7,
+            indent: 8,
+            endIndent: 8,
+            color: theme.dividerColor.withValues(alpha: 0.7),
+          ),
+        ],
         for (var index = 0; index < widget.options.length; index++) ...[
           if (index > 0)
             Divider(
@@ -146,6 +172,54 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _menuAction(
+    BuildContext context,
+    PolishedDropdownAction action,
+  ) {
+    final colors = Theme.of(context).colorScheme;
+    final foreground =
+        action.destructive ? colors.error : colors.onSurfaceVariant;
+    final background = action.destructive
+        ? colors.errorContainer.withValues(alpha: 0.46)
+        : colors.surfaceContainerHighest;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 1, 2, 4),
+      child: MenuItemButton(
+        key: ValueKey('${widget.id}-menu-action'),
+        onPressed: () {
+          MenuController.maybeOf(context)?.close();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            action.onPressed();
+          });
+        },
+        leadingIcon: Icon(action.icon, size: 19, color: foreground),
+        trailingIcon: Icon(
+          Icons.chevron_right_rounded,
+          size: 19,
+          color: foreground,
+        ),
+        style: ButtonStyle(
+          minimumSize: const WidgetStatePropertyAll(Size(0, 46)),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          backgroundColor: WidgetStatePropertyAll(background),
+          foregroundColor: WidgetStatePropertyAll(foreground),
+          textStyle: WidgetStatePropertyAll(
+            Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontSize: widget.fontSize,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+        ),
+        child: Text(action.label, maxLines: 1),
       ),
     );
   }

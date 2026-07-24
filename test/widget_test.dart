@@ -2326,6 +2326,99 @@ void main() {
     expect(find.text('163701'), findsOneWidget);
   });
 
+  testWidgets('Shot history supports selective and confirmed full clearing',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'shotHistory': '["163703","163702","163701"]',
+      'shot': '163704',
+    });
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('toolbar-shot-history-dropdown')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(
+        const ValueKey('toolbar-shot-history-menu-action'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        const ValueKey('toolbar-shot-history-action-divider'),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(
+        const ValueKey('toolbar-shot-history-menu-action'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Clear Shot History'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('shot-history-clear-selected')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('shot-history-selection-list')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('shot-history-select-163702')),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey('shot-history-selection-confirm')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Clear selected shot history?'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('shot-history-confirm-selected')),
+    );
+    await tester.pumpAndSettle();
+    expect(app.shotHistory, ['163703', '163701']);
+
+    await tester.tap(
+      find.byKey(const ValueKey('toolbar-shot-history-dropdown')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(
+        const ValueKey('toolbar-shot-history-menu-action'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('shot-history-clear-all')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Clear all shot history?'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('shot-history-confirm-all')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(app.shotHistory, isEmpty);
+    final preferences = await SharedPreferences.getInstance();
+    expect(preferences.getString('shotHistory'), '[]');
+    expect(
+      find.byKey(const ValueKey('toolbar-shot-history-dropdown')),
+      findsNothing,
+    );
+  });
+
   testWidgets('Waveform context menu is polished, grouped, and actionable',
       (tester) async {
     final app = AppState();

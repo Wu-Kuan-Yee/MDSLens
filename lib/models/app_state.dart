@@ -300,6 +300,23 @@ class AppState extends ChangeNotifier {
     if (_shotHistory.length > 20) _shotHistory.removeLast();
   }
 
+  Future<void> clearShotHistory() async {
+    if (_shotHistory.isEmpty) return;
+    _shotHistory.clear();
+    notifyListeners();
+    await savePreferences();
+  }
+
+  Future<void> removeShotHistory(Iterable<String> shots) async {
+    final selected = shots.toSet();
+    if (selected.isEmpty) return;
+    final previousLength = _shotHistory.length;
+    _shotHistory.removeWhere(selected.contains);
+    if (_shotHistory.length == previousLength) return;
+    notifyListeners();
+    await savePreferences();
+  }
+
   late final Future<void> preferencesReady;
 
   AppState({

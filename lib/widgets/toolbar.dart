@@ -23,6 +23,8 @@ class _LayoutDragData {
   bool get isColumn => row == null;
 }
 
+enum _ShotHistoryAction { clearAll, clearSelected }
+
 bool reorderLayoutColumn(
   List<List<Map<String, dynamic>>> columns,
   int sourceColumn,
@@ -380,6 +382,12 @@ class ToolbarWidget extends StatelessWidget {
           menuMaxHeight: 320,
           iconOnly: true,
           tooltip: 'Shot history',
+          menuAction: PolishedDropdownAction(
+            label: 'Clear shot history',
+            icon: Icons.delete_sweep_rounded,
+            destructive: true,
+            onPressed: () => _showShotHistoryManager(context, app),
+          ),
           options: app.shotHistory
               .map(
                 (shot) => PolishedDropdownOption(
@@ -1938,6 +1946,316 @@ class ToolbarWidget extends StatelessWidget {
           icon: const Icon(Icons.add, size: 16),
           onPressed: value < 28 ? () => onChanged(value + 1) : null),
     ]);
+  }
+
+  Future<void> _showShotHistoryManager(
+    BuildContext context,
+    AppState app,
+  ) async {
+    if (!context.mounted || app.shotHistory.isEmpty) return;
+    final action = await showDialog<_ShotHistoryAction>(
+      context: context,
+      builder: (dialogContext) {
+        final colors = Theme.of(dialogContext).colorScheme;
+        return KeyboardSafeDialog(
+          maxWidth: 500,
+          title: const Row(
+            children: [
+              Icon(Icons.manage_history_rounded),
+              SizedBox(width: 10),
+              Flexible(child: Text('Clear Shot History')),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '${app.shotHistory.length} recent shot numbers are stored on '
+                'this device. Choose what you want to remove.',
+                style: TextStyle(color: colors.onSurfaceVariant),
+              ),
+              const SizedBox(height: 16),
+              _historyActionCard(
+                dialogContext,
+                key: const ValueKey('shot-history-clear-selected'),
+                icon: Icons.checklist_rounded,
+                title: 'Clear selected shots',
+                subtitle: 'Choose individual shot numbers to remove.',
+                onTap: () => Navigator.pop(
+                  dialogContext,
+                  _ShotHistoryAction.clearSelected,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _historyActionCard(
+                dialogContext,
+                key: const ValueKey('shot-history-clear-all'),
+                icon: Icons.delete_forever_rounded,
+                title: 'Clear all history',
+                subtitle: 'Remove every saved recent shot number.',
+                destructive: true,
+                onTap: () => Navigator.pop(
+                  dialogContext,
+                  _ShotHistoryAction.clearAll,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton.icon(
+              key: const ValueKey('shot-history-manager-cancel'),
+              onPressed: () => Navigator.pop(dialogContext),
+              icon: const Icon(Icons.close_rounded),
+              label: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+    if (!context.mounted || action == null) return;
+
+    if (action == _ShotHistoryAction.clearAll) {
+      final confirmed = await _confirmShotHistoryClear(
+        context,
+        title: 'Clear all shot history?',
+        message:
+            'This will remove all ${app.shotHistory.length} saved shot numbers '
+            'from this device. This action cannot be undone.',
+        confirmLabel: 'Clear all',
+        confirmKey: const ValueKey('shot-history-confirm-all'),
+      );
+      if (confirmed) await app.clearShotHistory();
+      return;
+    }
+
+    final selected = await _selectShotHistory(context, app.shotHistory);
+    if (!context.mounted || selected == null || selected.isEmpty) return;
+    final preview = selected.take(6).join(', ');
+    final suffix = selected.length > 6 ? ', …' : '';
+    final confirmed = await _confirmShotHistoryClear(
+      context,
+      title: 'Clear selected shot history?',
+      message:
+          'Remove ${selected.length} selected shot number${selected.length == 1 ? '' : 's'} '
+          '($preview$suffix)? This action cannot be undone.',
+      confirmLabel: 'Clear selected',
+      confirmKey: const ValueKey('shot-history-confirm-selected'),
+    );
+    if (confirmed) await app.removeShotHistory(selected);
+  }
+
+  Widget _historyActionCard(
+    BuildContext context, {
+    required Key key,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    bool destructive = false,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+    final accent = destructive ? colors.error : colors.primary;
+    return Material(
+      key: key,
+      color: destructive
+          ? colors.errorContainer.withValues(alpha: 0.34)
+          : colors.primaryContainer.withValues(alpha: 0.3),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: accent.withValues(alpha: 0.36)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: accent),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: accent,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: accent),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<Set<String>?> _selectShotHistory(
+    BuildContext context,
+    List<String> history,
+  ) async {
+    final selected = <String>{};
+    final scrollController = ScrollController();
+    try {
+      return await showDialog<Set<String>>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, setState) => KeyboardSafeDialog(
+            maxWidth: 480,
+            maxHeight: 660,
+            title: const Row(
+              children: [
+                Icon(Icons.checklist_rounded),
+                SizedBox(width: 10),
+                Flexible(child: Text('Select Shot Numbers')),
+              ],
+            ),
+            content: SizedBox(
+              height: 320,
+              child: Material(
+                color: Theme.of(dialogContext).colorScheme.surfaceContainerLow,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(
+                    color: Theme.of(dialogContext).colorScheme.outlineVariant,
+                  ),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Scrollbar(
+                  controller: scrollController,
+                  thumbVisibility: history.length > 6,
+                  interactive: true,
+                  child: ListView.separated(
+                    key: const ValueKey('shot-history-selection-list'),
+                    controller: scrollController,
+                    itemCount: history.length,
+                    separatorBuilder: (_, index) => Divider(
+                      key: ValueKey('shot-history-selection-divider-$index'),
+                      height: 1,
+                      indent: 16,
+                      endIndent: 16,
+                    ),
+                    itemBuilder: (_, index) {
+                      final shot = history[index];
+                      return CheckboxListTile(
+                        key: ValueKey('shot-history-select-$shot'),
+                        value: selected.contains(shot),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        secondary: const Icon(Icons.show_chart_rounded),
+                        title: Text(
+                          shot,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        onChanged: (checked) => setState(() {
+                          checked == true
+                              ? selected.add(shot)
+                              : selected.remove(shot);
+                        }),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton.icon(
+                key: const ValueKey('shot-history-selection-confirm'),
+                onPressed: selected.isEmpty
+                    ? null
+                    : () => Navigator.pop(dialogContext, Set.of(selected)),
+                icon: const Icon(Icons.check_rounded),
+                label: Text(
+                  selected.isEmpty
+                      ? 'Select shots'
+                      : 'Continue (${selected.length})',
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } finally {
+      scrollController.dispose();
+    }
+  }
+
+  Future<bool> _confirmShotHistoryClear(
+    BuildContext context, {
+    required String title,
+    required String message,
+    required String confirmLabel,
+    required Key confirmKey,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        final colors = Theme.of(dialogContext).colorScheme;
+        return KeyboardSafeDialog(
+          maxWidth: 460,
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: colors.error),
+              const SizedBox(width: 10),
+              Flexible(child: Text(title)),
+            ],
+          ),
+          content: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: colors.errorContainer.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: colors.error.withValues(alpha: 0.32),
+              ),
+            ),
+            child: Text(message),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              key: confirmKey,
+              style: FilledButton.styleFrom(
+                backgroundColor: colors.error,
+                foregroundColor: colors.onError,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              icon: const Icon(Icons.delete_rounded),
+              label: Text(confirmLabel),
+            ),
+          ],
+        );
+      },
+    );
+    return confirmed ?? false;
   }
 
   Widget _toolbarIconButton(
