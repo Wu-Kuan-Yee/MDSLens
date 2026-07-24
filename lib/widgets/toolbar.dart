@@ -8,6 +8,7 @@ import '../services/rust_bridge.dart';
 import 'dialogs/login.dart';
 import 'dialogs/ssh.dart';
 import 'dialogs/about.dart';
+import 'dialogs/keyboard_safe_dialog.dart';
 import 'dropdown_items.dart';
 import 'plot_panel.dart';
 import 'polished_dropdown.dart';
@@ -115,6 +116,28 @@ class ResponsiveToolbar extends StatelessWidget {
         if (!offersCollapse) return const ToolbarWidget();
 
         final theme = Theme.of(context);
+        final tinyWidth = constraints.maxWidth < 320;
+        final tinyHeight = screenHeight < 520;
+        final tinyScreen = tinyWidth || tinyHeight;
+        final collapseControlWidth =
+            math.min(170.0, constraints.maxWidth * 0.75);
+        final expandedToolbar = tinyScreen
+            ? SizedBox(
+                height: (screenHeight * 0.42).clamp(80.0, 260.0),
+                child: AdaptiveTwoAxisScrollView(
+                  keyPrefix: 'toolbar-controls',
+                  enableHorizontal: tinyWidth,
+                  enableVertical: tinyHeight,
+                  showHorizontalScrollbar: tinyWidth,
+                  showVerticalScrollbar: tinyHeight,
+                  minContentWidth: 320,
+                  child: SizedBox(
+                    width: tinyWidth ? 320 : constraints.maxWidth,
+                    child: const ToolbarWidget(),
+                  ),
+                ),
+              )
+            : const ToolbarWidget();
         final metadata = _shotMetadata(app)
             .map((entry) => '${entry.$1}: ${entry.$2}')
             .join('   •   ');
@@ -123,28 +146,34 @@ class ResponsiveToolbar extends StatelessWidget {
                 height: 40,
                 child: Row(
                   children: [
-                    InkWell(
-                      key: const ValueKey('toolbar-collapse-control'),
-                      onTap: () => app.toolbarCollapsed = false,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.keyboard_arrow_down_rounded,
-                              size: 22,
-                              color: theme.colorScheme.primary,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Expand controls',
-                              style: TextStyle(
+                    SizedBox(
+                      width: collapseControlWidth,
+                      child: InkWell(
+                        key: const ValueKey('toolbar-collapse-control'),
+                        onTap: () => app.toolbarCollapsed = false,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                size: 22,
                                 color: theme.colorScheme.primary,
-                                fontWeight: FontWeight.w600,
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Expand controls',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: theme.colorScheme.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -192,14 +221,17 @@ class ResponsiveToolbar extends StatelessWidget {
                           color: theme.colorScheme.primary,
                         ),
                         const SizedBox(width: 6),
-                        Text(
-                          'Collapse controls',
-                          style: TextStyle(
-                            color: theme.colorScheme.primary,
-                            fontWeight: FontWeight.w600,
+                        Expanded(
+                          child: Text(
+                            'Collapse controls',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                        const Spacer(),
                       ],
                     ),
                   ),
@@ -214,7 +246,7 @@ class ResponsiveToolbar extends StatelessWidget {
               alignment: Alignment.topCenter,
               child: app.toolbarCollapsed
                   ? const SizedBox(width: double.infinity)
-                  : const ToolbarWidget(),
+                  : expandedToolbar,
             ),
             Material(
               color: theme.colorScheme.surfaceContainerHigh,
@@ -741,7 +773,8 @@ class ToolbarWidget extends StatelessWidget {
     showDialog(
       context: ctx,
       builder: (ctx) => StatefulBuilder(
-          builder: (ctx, setState) => AlertDialog(
+          builder: (ctx, setState) => KeyboardSafeDialog(
+                maxWidth: 460,
                 title: const Text('Internal Web Pages'),
                 content: SizedBox(
                   width: 400,
@@ -845,7 +878,7 @@ class ToolbarWidget extends StatelessWidget {
     final urlCtrl = TextEditingController();
     showDialog(
       context: ctx,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => KeyboardSafeDialog(
         title: const Text('Add Web Bookmark'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(
@@ -880,7 +913,7 @@ class ToolbarWidget extends StatelessWidget {
     final bookmarks = app.webBookmarks;
     showDialog(
       context: ctx,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => KeyboardSafeDialog(
         title: const Text('Remove Bookmark'),
         content: SizedBox(
           width: 300,
@@ -962,9 +995,9 @@ class ToolbarWidget extends StatelessWidget {
             selectedCol = -1;
             selectedRow = -1;
           }),
-          child: AlertDialog(
-            insetPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
+          child: KeyboardSafeDialog(
+            maxWidth: 760,
+            maxHeight: 720,
             title: const Text('Layout Setup'),
             content: SizedBox(
               width: contentWidth,
@@ -1837,7 +1870,7 @@ class ToolbarWidget extends StatelessWidget {
     showDialog(
       context: ctx,
       builder: (ctx) => StatefulBuilder(
-          builder: (ctx, setState) => AlertDialog(
+          builder: (ctx, setState) => KeyboardSafeDialog(
                 title: const Text('Customize Fonts'),
                 content: Column(mainAxisSize: MainAxisSize.min, children: [
                   Row(children: [

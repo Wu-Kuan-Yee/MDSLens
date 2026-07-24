@@ -12,6 +12,7 @@ import 'polished_popup_menu.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/app_state.dart';
 import '../services/platform_file_dialog.dart';
+import 'dialogs/keyboard_safe_dialog.dart';
 
 const _colors = [
   Color(0xFF2364aa),
@@ -1693,7 +1694,7 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
 
   @override
   Widget build(BuildContext ctx) {
-    return AlertDialog(
+    return KeyboardSafeDialog(
       title: const Text('Panel Setup'),
       content: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -2000,7 +2001,8 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
       key: const ValueKey('data-source-dialog-surface'),
       behavior: HitTestBehavior.translucent,
       onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-      child: AlertDialog(
+      child: KeyboardSafeDialog(
+        maxWidth: 960,
         title: Row(children: [
           const Expanded(
             child: FittedBox(
@@ -2420,7 +2422,7 @@ class _ColorPicker extends StatelessWidget {
     showDialog(
         context: ctx,
         builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) {
-              return AlertDialog(
+              return KeyboardSafeDialog(
                 title: Row(children: [
                   const Text('Curve Color'),
                   const SizedBox(width: 12),

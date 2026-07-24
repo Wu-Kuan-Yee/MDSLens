@@ -16,6 +16,7 @@ import 'package:mdsscope/services/platform_file_dialog.dart';
 import 'package:mdsscope/services/update_service.dart';
 import 'package:mdsscope/theme/mdsscope_theme.dart';
 import 'package:mdsscope/widgets/dialogs/about.dart';
+import 'package:mdsscope/widgets/dialogs/login.dart';
 import 'package:mdsscope/widgets/plot_panel.dart';
 import 'package:mdsscope/widgets/plot_grid.dart';
 import 'package:mdsscope/widgets/plot_render_cache.dart';
@@ -2731,6 +2732,89 @@ void main() {
     expect(find.byKey(const ValueKey('toolbar-root')), findsOneWidget);
   });
 
+  testWidgets('Extremely small screens scroll controls but not the plot area',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(220, 300);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: MainPage()),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('toolbar-controls-horizontal-scrollbar')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('toolbar-controls-vertical-scrollbar')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('toolbar-collapse-control')),
+      findsOneWidget,
+    );
+    expect(find.byType(PlotGrid), findsOneWidget);
+    expect(tester.getSize(find.byType(PlotGrid)).height, greaterThan(0));
+    expect(
+      find.descendant(
+        of: find.byType(PlotGrid),
+        matching: find.byType(Scrollable),
+      ),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Settings dialogs gain two-axis scrolling on tiny screens',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(220, 300);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => LoginDialog.show(context),
+              child: const Text('Open login'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open login'));
+    await tester.pumpAndSettle();
+
+    final horizontal = tester.widget<Scrollbar>(
+      find.byKey(const ValueKey('adaptive-dialog-horizontal-scrollbar')),
+    );
+    final vertical = tester.widget<Scrollbar>(
+      find.byKey(const ValueKey('adaptive-dialog-vertical-scrollbar')),
+    );
+    expect(horizontal.thumbVisibility, isTrue);
+    expect(vertical.thumbVisibility, isTrue);
+    expect(horizontal.controller?.position.maxScrollExtent, greaterThan(0));
+    expect(vertical.controller?.position.maxScrollExtent, greaterThan(0));
+    final dialogSize = tester.getSize(
+      find.byKey(const ValueKey('keyboard-safe-dialog')),
+    );
+    expect(dialogSize.width, lessThanOrEqualTo(220));
+    expect(dialogSize.height, lessThanOrEqualTo(300));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Collapsed toolbar keeps controls fixed and scrolls metadata',
       (tester) async {
     final app = AppState();
@@ -3090,7 +3174,9 @@ void main() {
     expect(find.byKey(const ValueKey('layout-edit-panel-1')), findsOneWidget);
     expect(find.byKey(const ValueKey('layout-delete-panel-1')), findsOneWidget);
 
-    final layoutDialog = tester.getRect(find.byType(AlertDialog));
+    final layoutDialog = tester.getRect(
+      find.byKey(const ValueKey('keyboard-safe-dialog')),
+    );
     await tester.tapAt(Offset(layoutDialog.right - 20, layoutDialog.top + 20));
     await tester.pump();
     expect(find.byKey(const ValueKey('layout-edit-panel-1')), findsNothing);

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../models/app_state.dart';
 import '../services/network_permission_service.dart';
+import 'dialogs/keyboard_safe_dialog.dart';
 
 enum _NetworkPermissionAction { cancel, settings, retry }
 
@@ -96,10 +97,15 @@ class _NetworkPermissionGateState extends State<NetworkPermissionGate> {
     final details = widget.app.networkPermissionFailureDetails;
     final action = await showDialog<_NetworkPermissionAction>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => KeyboardSafeDialog(
         key: const ValueKey('network-permission-dialog'),
-        icon: const Icon(Icons.lan_outlined),
-        title: const Text('Local Network Access Required'),
+        title: const Row(
+          children: [
+            Icon(Icons.lan_outlined),
+            SizedBox(width: 10),
+            Expanded(child: Text('Local Network Access Required')),
+          ],
+        ),
         content: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 440),
           child: SingleChildScrollView(
