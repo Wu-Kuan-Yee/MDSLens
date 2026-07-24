@@ -325,7 +325,7 @@ class ToolbarWidget extends StatelessWidget {
           context,
           icon: Icons.settings_backup_restore_rounded,
           tooltip: 'Restore default configuration',
-          onPressed: () => app.restoreDefaultConfig(),
+          onPressed: () => _confirmRestoreDefaultConfiguration(context, app),
         ),
         _toolbarIconButton(
           context,
@@ -2528,6 +2528,63 @@ class ToolbarWidget extends StatelessWidget {
       },
     );
     return confirmed ?? false;
+  }
+
+  Future<void> _confirmRestoreDefaultConfiguration(
+    BuildContext context,
+    AppState app,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        final colors = Theme.of(dialogContext).colorScheme;
+        return KeyboardSafeDialog(
+          maxWidth: 480,
+          title: Row(
+            children: [
+              Icon(Icons.settings_backup_restore_rounded, color: colors.error),
+              const SizedBox(width: 10),
+              const Flexible(child: Text('Restore default configuration?')),
+            ],
+          ),
+          content: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: colors.errorContainer.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: colors.error.withValues(alpha: 0.32),
+              ),
+            ),
+            child: const Text(
+              'This will discard the current waveform layout and panel '
+              'settings, then restore the built-in default configuration. '
+              'This action cannot be undone.',
+            ),
+          ),
+          actions: [
+            TextButton(
+              key: const ValueKey('restore-default-cancel'),
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              key: const ValueKey('restore-default-confirm'),
+              style: FilledButton.styleFrom(
+                backgroundColor: colors.error,
+                foregroundColor: colors.onError,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              icon: const Icon(Icons.settings_backup_restore_rounded),
+              label: const Text('Restore defaults'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed == true) {
+      await app.restoreDefaultConfig();
+    }
   }
 
   Widget _toolbarIconButton(

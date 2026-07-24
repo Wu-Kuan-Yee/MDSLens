@@ -792,6 +792,16 @@ void main() {
     await tester.tap(find.byTooltip('Restore default configuration'));
     await tester.pumpAndSettle();
 
+    expect(find.text('Restore default configuration?'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('restore-default-cancel')));
+    await tester.pumpAndSettle();
+    expect(app.columns, hasLength(1));
+
+    await tester.tap(find.byTooltip('Restore default configuration'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('restore-default-confirm')));
+    await tester.pumpAndSettle();
+
     expect(app.columns, hasLength(2));
     expect(app.columns.map((column) => column.length), [3, 3]);
     expect(app.plots.map((plot) => plot.title),
