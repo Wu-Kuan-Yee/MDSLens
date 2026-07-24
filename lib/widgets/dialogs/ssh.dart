@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../models/app_state.dart';
+import '../../services/identity_file_access.dart';
 import '../../services/rust_bridge.dart';
 import '../polished_dropdown.dart';
 import 'keyboard_safe_dialog.dart';
@@ -33,7 +34,6 @@ class SshDialog extends StatelessWidget {
       void Function(void Function()) setState,
       BuildContext ctx,
     ) async {
-      final identityFile = keyCtrl.text.trim();
       setState(() {
         testing = true;
         result = '';
@@ -45,6 +45,13 @@ class SshDialog extends StatelessWidget {
             result = 'Host is required';
           });
           return;
+        }
+        final identityFile = await IdentityFileAccess.authorize(
+          keyCtrl.text,
+        );
+        if (!ctx.mounted) return;
+        if (identityFile != keyCtrl.text.trim()) {
+          keyCtrl.text = identityFile;
         }
         final settingsJson = jsonEncode({
           'host': hostCtrl.text,
@@ -219,7 +226,11 @@ class SshDialog extends StatelessWidget {
                     onPressed: () async {
                       final r = await FilePicker.platform.pickFiles();
                       if (r != null && r.files.single.path != null) {
-                        keyCtrl.text = r.files.single.path!;
+                        final path = r.files.single.path!;
+                        keyCtrl.text = await IdentityFileAccess.authorize(
+                          path,
+                          promptIfNeeded: false,
+                        );
                       }
                     },
                     child: const Text('Browse')),
@@ -239,7 +250,7 @@ class SshDialog extends StatelessWidget {
                     app.setSshPort(int.tryParse(portCtrl.text) ?? 22);
                     app.setSshUser(userCtrl.text);
                     app.setSshPass(passCtrl.text);
-                  app.setSshIdentity(keyCtrl.text.trim());
+                    app.setSshIdentity(keyCtrl.text.trim());
                     app.sshMode = mode;
                     app.setSshTestResult(result == 'ok' && mode > 0);
                     app.setStatus(result == 'ok'

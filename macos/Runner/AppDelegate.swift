@@ -6,6 +6,8 @@ import Darwin
 class AppDelegate: FlutterAppDelegate {
   var themeChannel: FlutterMethodChannel?
   var permissionsChannel: FlutterMethodChannel?
+  var identityFileChannel: FlutterMethodChannel?
+  var activeIdentityFileURLs: [URL] = []
 
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     return true
@@ -26,6 +28,27 @@ class AppDelegate: FlutterAppDelegate {
         result(FlutterMethodNotImplemented)
       }
     }
+    let identityChannel = FlutterMethodChannel(
+      name: "mdsscope/identity_file_access",
+      binaryMessenger: controller.engine.binaryMessenger
+    )
+    identityFileChannel = identityChannel
+    identityChannel.setMethodCallHandler { [weak self] call, result in
+      guard
+        call.method == "authorizeIdentityFile",
+        let arguments = call.arguments as? [String: Any],
+        let path = arguments["path"] as? String
+      else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      self?.authorizeIdentityFile(
+        path: path,
+        promptIfNeeded: arguments["promptIfNeeded"] as? Bool ?? true,
+        result: result
+      )
+    }
+    restoreIdentityFileBookmarks()
     let permissionChannel = FlutterMethodChannel(
       name: "mdsscope/permissions",
       binaryMessenger: controller.engine.binaryMessenger
@@ -104,6 +127,127 @@ class AppDelegate: FlutterAppDelegate {
         }
         .joined()
     )
+  }
+
+  private var identityFileBookmarks: [String: Data] {
+    get {
+      UserDefaults.standard.dictionary(forKey: "MdsScopeIdentityFileBookmarks")
+        as? [String: Data] ?? [:]
+    }
+    set {
+      UserDefaults.standard.set(newValue, forKey: "MdsScopeIdentityFileBookmarks")
+    }
+  }
+
+  private func restoreIdentityFileBookmarks() {
+    for (_, bookmark) in identityFileBookmarks {
+      var stale = false
+      guard let url = try? URL(
+        resolvingBookmarkData: bookmark,
+        options: [.withSecurityScope],
+        relativeTo: nil,
+        bookmarkDataIsStale: &stale
+      ) else {
+        continue
+      }
+      _ = beginIdentityFileAccess(url)
+      if stale {
+        persistIdentityFileBookmark(url, originalPath: url.path)
+      }
+    }
+  }
+
+  private func authorizeIdentityFile(
+    path: String,
+    promptIfNeeded: Bool,
+    result: @escaping FlutterResult
+  ) {
+    let expandedPath = NSString(string: path).expandingTildeInPath
+    let requestedURL = URL(fileURLWithPath: expandedPath).standardizedFileURL
+
+    if let bookmark = identityFileBookmarks[path] {
+      var stale = false
+      if let bookmarkedURL = try? URL(
+        resolvingBookmarkData: bookmark,
+        options: [.withSecurityScope],
+        relativeTo: nil,
+        bookmarkDataIsStale: &stale
+      ), beginIdentityFileAccess(bookmarkedURL) {
+        if stale {
+          persistIdentityFileBookmark(bookmarkedURL, originalPath: path)
+        }
+        result(bookmarkedURL.path)
+        return
+      }
+    }
+
+    if FileManager.default.isReadableFile(atPath: requestedURL.path) {
+      _ = beginIdentityFileAccess(requestedURL)
+      persistIdentityFileBookmark(requestedURL, originalPath: path)
+      result(requestedURL.path)
+      return
+    }
+
+    guard promptIfNeeded else {
+      result(path)
+      return
+    }
+
+    let panel = NSOpenPanel()
+    panel.title = "Authorize SSH Identity File"
+    panel.message = "MdsScope needs permission to read this private key."
+    panel.prompt = "Authorize"
+    panel.canChooseFiles = true
+    panel.canChooseDirectories = false
+    panel.allowsMultipleSelection = false
+    panel.directoryURL = requestedURL.deletingLastPathComponent()
+    panel.nameFieldStringValue = requestedURL.lastPathComponent
+    panel.begin { [weak self] response in
+      guard response == .OK, let selectedURL = panel.url else {
+        result(FlutterError(
+          code: "IDENTITY_FILE_ACCESS_DENIED",
+          message: "Permission to read the SSH identity file was not granted.",
+          details: requestedURL.path
+        ))
+        return
+      }
+      guard self?.beginIdentityFileAccess(selectedURL) == true else {
+        result(FlutterError(
+          code: "IDENTITY_FILE_UNREADABLE",
+          message: "The selected SSH identity file is not readable.",
+          details: selectedURL.path
+        ))
+        return
+      }
+      self?.persistIdentityFileBookmark(selectedURL, originalPath: path)
+      result(selectedURL.path)
+    }
+  }
+
+  private func beginIdentityFileAccess(_ url: URL) -> Bool {
+    if activeIdentityFileURLs.contains(where: {
+      $0.standardizedFileURL.path == url.standardizedFileURL.path
+    }) {
+      return FileManager.default.isReadableFile(atPath: url.path)
+    }
+    if url.startAccessingSecurityScopedResource() {
+      activeIdentityFileURLs.append(url)
+    }
+    return FileManager.default.isReadableFile(atPath: url.path)
+  }
+
+  private func persistIdentityFileBookmark(_ url: URL, originalPath: String) {
+    guard let data = try? url.bookmarkData(
+      options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess],
+      includingResourceValuesForKeys: nil,
+      relativeTo: nil
+    ) else {
+      return
+    }
+    var bookmarks = identityFileBookmarks
+    bookmarks[originalPath] = data
+    bookmarks[url.path] = data
+    identityFileBookmarks = bookmarks
   }
 
   private func setIPv6LocalAddressHostPart(

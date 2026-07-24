@@ -11,6 +11,7 @@ import 'package:mdsscope/app.dart';
 import 'package:mdsscope/pages/main_page.dart';
 import 'package:mdsscope/models/app_state.dart';
 import 'package:mdsscope/services/external_url_launcher.dart';
+import 'package:mdsscope/services/identity_file_access.dart';
 import 'package:mdsscope/services/platform_file_dialog.dart';
 import 'package:mdsscope/services/update_service.dart';
 import 'package:mdsscope/theme/mdsscope_theme.dart';
@@ -966,6 +967,32 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(app.sshIdentity, '~/.ssh/id_ed25519');
+  });
+
+  test('Identity file authorization returns the platform-authorized path',
+      () async {
+    const channel = MethodChannel('mdsscope/identity_file_access');
+    MethodCall? receivedCall;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      receivedCall = call;
+      return '/authorized/id_ed25519';
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    final path = await IdentityFileAccess.authorize(
+      '  ~/.ssh/id_ed25519  ',
+    );
+
+    expect(path, '/authorized/id_ed25519');
+    expect(receivedCall?.method, 'authorizeIdentityFile');
+    expect(receivedCall?.arguments, {
+      'path': '~/.ssh/id_ed25519',
+      'promptIfNeeded': true,
+    });
   });
 
   testWidgets('SSH button lights only while a reachable tunnel is in use',
