@@ -329,35 +329,33 @@ pub fn encode_environment_toml(config: &LayoutConfig) -> String {
             }
             out.push('\n');
 
-            for (_s, signal) in plot.signal_specs.iter().enumerate() {
+            for (s, signal) in plot.signal_specs.iter().enumerate() {
                 out.push_str("[[panels.signals]]\n");
                 let signal_shot = signal.shot.trim();
-                if !signal_shot.is_empty() && signal_shot != default_shot {
-                    writeln!(out, "shot = {:?}", signal_shot).unwrap();
-                }
-                if !signal.experiment.is_empty() {
-                    writeln!(out, "tree = {:?}", signal.experiment).unwrap();
-                }
-                if !signal.server_ip.is_empty() {
-                    writeln!(out, "server = {:?}", signal.server_ip).unwrap();
-                }
-                if !signal.y_expr.is_empty() {
-                    writeln!(out, "y = {:?}", signal.y_expr).unwrap();
-                }
-                if !signal.x_expr.is_empty() {
-                    writeln!(out, "x = {:?}", signal.x_expr).unwrap();
-                }
-                if signal.manual_color {
-                    writeln!(out, "color = {:?}", signal.color_name).unwrap();
-                    writeln!(out, "manual_color = true").unwrap();
-                }
-                if signal.hidden {
-                    writeln!(out, "hidden = true").unwrap();
-                }
+                let resolved_shot = if !signal_shot.is_empty() {
+                    signal_shot
+                } else if !plot.shot.trim().is_empty() {
+                    plot.shot.trim()
+                } else {
+                    default_shot.as_str()
+                };
+                let resolved_color = if signal.color_name.trim().is_empty() {
+                    crate::colors::color_for_index(s)
+                } else {
+                    signal.color_name.clone()
+                };
+                writeln!(out, "shot = {:?}", resolved_shot).unwrap();
+                writeln!(out, "tree = {:?}", signal.experiment).unwrap();
+                writeln!(out, "server = {:?}", signal.server_ip).unwrap();
+                writeln!(out, "y = {:?}", signal.y_expr).unwrap();
+                writeln!(out, "x = {:?}", signal.x_expr).unwrap();
+                writeln!(out, "color = {:?}", resolved_color).unwrap();
+                writeln!(out, "manual_color = {}", signal.manual_color).unwrap();
+                writeln!(out, "hidden = {}", signal.hidden).unwrap();
                 match signal.read_mode {
                     Some(crate::types::DataReadMode::Full) => writeln!(out, "read_mode = \"full\"").unwrap(),
                     Some(crate::types::DataReadMode::Medium) => writeln!(out, "read_mode = \"medium\"").unwrap(),
-                    _ => {}
+                    _ => writeln!(out, "read_mode = \"thin\"").unwrap(),
                 }
                 out.push('\n');
             }
@@ -571,6 +569,70 @@ y = "\\pcrl01"
         assert_eq!(config.shot, "143850");
         let encoded = encode_environment_toml(&config);
         assert!(encoded.contains("shot = \"143850\""));
+        std::fs::remove_file(&tmp).ok();
+    }
+
+    #[test]
+    fn test_toml_roundtrip_preserves_every_signal_setting() {
+        let config = LayoutConfig {
+            shot: "163900".into(),
+            columns: vec![vec![crate::types::PlotSpec {
+                signal_specs: vec![
+                    crate::types::SignalSpec {
+                        shot: "163899".into(),
+                        y_expr: "\\FIRST".into(),
+                        x_expr: "dim_of(\\FIRST)".into(),
+                        experiment: "tree_a".into(),
+                        server_ip: "10.0.0.1".into(),
+                        color_name: "#123456".into(),
+                        manual_color: true,
+                        hidden: true,
+                        read_mode: Some(crate::types::DataReadMode::Full),
+                    },
+                    crate::types::SignalSpec {
+                        shot: "163900".into(),
+                        y_expr: "\\SECOND".into(),
+                        experiment: "tree_b".into(),
+                        server_ip: "10.0.0.2".into(),
+                        color_name: "#c44e52".into(),
+                        manual_color: false,
+                        hidden: false,
+                        read_mode: Some(crate::types::DataReadMode::Medium),
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            }]],
+            ..Default::default()
+        };
+        let encoded = encode_environment_toml(&config);
+        assert!(encoded.contains("shot = \"163899\""));
+        assert!(encoded.contains("x = \"dim_of(\\\\FIRST)\""));
+        assert!(encoded.contains("color = \"#123456\""));
+        assert!(encoded.contains("manual_color = true"));
+        assert!(encoded.contains("hidden = true"));
+        assert!(encoded.contains("read_mode = \"full\""));
+        assert!(encoded.contains("shot = \"163900\""));
+        assert!(encoded.contains("manual_color = false"));
+        assert!(encoded.contains("hidden = false"));
+        assert!(encoded.contains("read_mode = \"medium\""));
+
+        let tmp = std::env::temp_dir().join("test_complete_signal_settings.toml");
+        std::fs::write(&tmp, encoded).unwrap();
+        let decoded = parse_toml_environment(tmp.to_str().unwrap());
+        let first = &decoded.columns[0][0].signal_specs[0];
+        let second = &decoded.columns[0][0].signal_specs[1];
+        assert_eq!(first.shot, "163899");
+        assert_eq!(first.x_expr, "dim_of(\\FIRST)");
+        assert_eq!(first.color_name, "#123456");
+        assert!(first.manual_color);
+        assert!(first.hidden);
+        assert_eq!(first.read_mode, Some(crate::types::DataReadMode::Full));
+        assert_eq!(second.shot, "163900");
+        assert_eq!(second.color_name, crate::colors::color_for_index(1));
+        assert!(!second.manual_color);
+        assert!(!second.hidden);
+        assert_eq!(second.read_mode, Some(crate::types::DataReadMode::Medium));
         std::fs::remove_file(&tmp).ok();
     }
 

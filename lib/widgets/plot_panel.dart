@@ -1857,6 +1857,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
           text: s?['experiment']?.toString() ?? 'pcs_east'),
       server: TextEditingController(
           text: s?['server_ip']?.toString() ?? '202.127.204.12'),
+      xExpr: s?['x_expr']?.toString() ?? '',
     )
       ..hidden = s?['hidden'] == true
       ..colorIdx = i % _presetColors.length
@@ -1914,7 +1915,8 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                         shot: shotCtrl,
                         y: yCtrl,
                         tree: treeCtrl,
-                        server: serverCtrl)
+                        server: serverCtrl,
+                        xExpr: '')
                       ..colorIdx = _rows.length % _presetColors.length
                       ..readMode = defaultRate;
                     setState(() {
@@ -2069,12 +2071,14 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
       final colorValue = r.customColor ??
           Color(_presetColors[r.colorIdx % _presetColors.length]);
       widget.signals.add({
+        'shot': shot.isNotEmpty ? shot : widget.defaultShot,
         'y_expr': r.y.text.trim(),
+        'x_expr': r.xExpr,
         'experiment': r.tree.text.trim(),
         'server_ip': r.server.text.trim(),
-        if (shot.isNotEmpty && shot != widget.defaultShot) 'shot': shot,
         'color_name':
             '#${colorValue.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}',
+        'manual_color': true,
         'hidden': r.hidden,
         'read_mode': r.readMode,
       });
@@ -2407,6 +2411,7 @@ class _HsvPainter extends CustomPainter {
 
 class _DSRow {
   final TextEditingController shot, y, tree, server;
+  final String xExpr;
   bool hidden = false;
   int readMode = 0;
   int colorIdx = 0;
@@ -2416,7 +2421,8 @@ class _DSRow {
       {required this.shot,
       required this.y,
       required this.tree,
-      required this.server});
+      required this.server,
+      required this.xExpr});
   void dispose() {
     shot.dispose();
     y.dispose();

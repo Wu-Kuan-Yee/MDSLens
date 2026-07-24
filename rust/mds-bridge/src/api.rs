@@ -13,6 +13,7 @@ pub struct FrbSignalSpec {
     pub experiment: String,
     pub server_ip: String,
     pub color_name: String,
+    pub manual_color: bool,
     pub hidden: bool,
     pub read_mode: i32, // 0=Thin, 1=Medium, 2=Full (per-signal override)
 }
@@ -113,7 +114,7 @@ pub struct FrbShotInfo {
 
 impl From<mds_core::types::SignalSpec> for FrbSignalSpec {
     fn from(s: mds_core::types::SignalSpec) -> Self {
-        Self { shot: s.shot, y_expr: s.y_expr, x_expr: s.x_expr, experiment: s.experiment, server_ip: s.server_ip, color_name: s.color_name, hidden: s.hidden, read_mode: s.read_mode.map_or(0, |m| match m { mds_core::types::DataReadMode::Medium => 1, mds_core::types::DataReadMode::Full => 2, _ => 0 }) }
+        Self { shot: s.shot, y_expr: s.y_expr, x_expr: s.x_expr, experiment: s.experiment, server_ip: s.server_ip, color_name: s.color_name, manual_color: s.manual_color, hidden: s.hidden, read_mode: s.read_mode.map_or(0, |m| match m { mds_core::types::DataReadMode::Medium => 1, mds_core::types::DataReadMode::Full => 2, _ => 0 }) }
     }
 }
 
@@ -204,7 +205,7 @@ impl FrbLayoutConfig {
                     signal_specs: p.signal_specs.into_iter().map(|s| mds_core::types::SignalSpec {
                         shot: s.shot, y_expr: s.y_expr, x_expr: s.x_expr,
                         experiment: s.experiment, server_ip: s.server_ip,
-                        color_name: s.color_name, hidden: s.hidden,
+                        color_name: s.color_name, manual_color: s.manual_color, hidden: s.hidden,
                         read_mode: match s.read_mode { 1 => Some(mds_core::types::DataReadMode::Medium), 2 => Some(mds_core::types::DataReadMode::Full), _ => None },
                         ..Default::default()
                     }).collect(),
@@ -360,11 +361,14 @@ mod tests {
     fn test_convert_roundtrip_signal_spec() {
         let orig = mds_core::types::SignalSpec {
             y_expr: "\\pcrl01".into(), experiment: "pcs_east".into(),
-            server_ip: "202.127.204.12".into(), ..Default::default()
+            server_ip: "202.127.204.12".into(), color_name: "#123456".into(),
+            manual_color: true, ..Default::default()
         };
         let frb = FrbSignalSpec::from(orig.clone());
         assert_eq!(frb.y_expr, "\\pcrl01");
         assert_eq!(frb.experiment, "pcs_east");
+        assert_eq!(frb.color_name, "#123456");
+        assert!(frb.manual_color);
     }
 
     #[test]

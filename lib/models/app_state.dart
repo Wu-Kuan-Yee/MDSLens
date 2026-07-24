@@ -10,6 +10,21 @@ import '../services/platform_file_dialog.dart';
 import '../services/network_permission_service.dart';
 import '../services/rust_bridge.dart';
 
+const _configurationSignalColors = [
+  '#2364aa',
+  '#c44e52',
+  '#2f855a',
+  '#805ad5',
+  '#d97706',
+  '#0f766e',
+  '#9f1239',
+  '#4a5568',
+  '#db2777',
+  '#16a34a',
+  '#ea580c',
+  '#0891b2',
+];
+
 class ConfigOpenSelection {
   const ConfigOpenSelection({
     required this.name,
@@ -1034,6 +1049,49 @@ class AppState extends ChangeNotifier {
     panel['grid'] ??= true;
   }
 
+  List<Map<String, dynamic>> _configurationSignalsFor(
+    Map<String, dynamic> panel,
+  ) {
+    final panelShot = panel['shot']?.toString().trim() ?? '';
+    final inheritedShot = panelShot.isNotEmpty ? panelShot : _shotText.trim();
+    final rawSignals = panel['signal_specs'];
+    if (rawSignals is! List) return [];
+
+    return [
+      for (var index = 0; index < rawSignals.length; index++)
+        if (rawSignals[index] is Map)
+          () {
+            final signal = Map<String, dynamic>.from(rawSignals[index] as Map);
+            final shot = signal['shot']?.toString().trim() ?? '';
+            final color = signal['color_name']?.toString().trim() ?? '';
+            final rawMode = signal['read_mode'];
+            final parsedMode = rawMode is num
+                ? rawMode.toInt()
+                : int.tryParse(rawMode?.toString() ?? '');
+            final mode =
+                parsedMode != null && parsedMode >= 0 && parsedMode <= 2
+                    ? parsedMode
+                    : _dataMode;
+            return <String, dynamic>{
+              ...signal,
+              'shot': shot.isNotEmpty ? shot : inheritedShot,
+              'y_expr': signal['y_expr']?.toString() ?? '',
+              'x_expr': signal['x_expr']?.toString() ?? '',
+              'experiment': signal['experiment']?.toString() ?? '',
+              'server_ip': signal['server_ip']?.toString() ?? '',
+              'color_name': color.isNotEmpty
+                  ? color
+                  : _configurationSignalColors[
+                      index % _configurationSignalColors.length],
+              'manual_color': signal['manual_color'] == true ||
+                  (color.isNotEmpty && signal['manual_color'] != false),
+              'hidden': signal['hidden'] == true,
+              'read_mode': mode,
+            };
+          }(),
+    ];
+  }
+
   void _applyConfigJsonString(String raw) {
     try {
       final json = jsonDecode(raw);
@@ -1252,6 +1310,7 @@ class AppState extends ChangeNotifier {
       final cols = _columns
           .map((col) => col.map((panel) {
                 final m = Map<String, dynamic>.from(panel);
+                m['signal_specs'] = _configurationSignalsFor(m);
                 m.remove('shot');
                 _normalizePanelDefaults(m);
                 if (m['custom_x_range'] != true) {

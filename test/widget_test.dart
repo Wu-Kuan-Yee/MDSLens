@@ -328,6 +328,67 @@ void main() {
     expect(app.status, 'Saved to config.toml');
   });
 
+  test('Configuration save materializes every per-curve data source field',
+      () async {
+    String? encodedJson;
+    final app = AppState(
+      configEncoder: (configJson) async {
+        encodedJson = configJson;
+        return Uint8List.fromList(utf8.encode('version = 1'));
+      },
+      configSavePicker: (_, __) async => '/saved/complete.toml',
+    );
+    await app.preferencesReady;
+    app.shotText = '163900';
+    app.dataMode = 1;
+    app.columns[0][0]['signal_specs'] = [
+      {
+        'shot': '163899',
+        'y_expr': r'\FIRST',
+        'x_expr': 'dim_of(\\FIRST)',
+        'experiment': 'tree_a',
+        'server_ip': '10.0.0.1',
+        'color_name': '#123456',
+        'manual_color': true,
+        'hidden': true,
+        'read_mode': 2,
+      },
+      {
+        'y_expr': r'\SECOND',
+        'experiment': 'tree_b',
+        'server_ip': '10.0.0.2',
+      },
+    ];
+
+    await app.saveFile();
+
+    final signals = (jsonDecode(encodedJson!)['columns'][0][0]['signal_specs'])
+        as List<dynamic>;
+    expect(signals, hasLength(2));
+    expect(signals[0], {
+      'shot': '163899',
+      'y_expr': r'\FIRST',
+      'x_expr': 'dim_of(\\FIRST)',
+      'experiment': 'tree_a',
+      'server_ip': '10.0.0.1',
+      'color_name': '#123456',
+      'manual_color': true,
+      'hidden': true,
+      'read_mode': 2,
+    });
+    expect(signals[1], {
+      'shot': '163900',
+      'y_expr': r'\SECOND',
+      'x_expr': '',
+      'experiment': 'tree_b',
+      'server_ip': '10.0.0.2',
+      'color_name': '#c44e52',
+      'manual_color': false,
+      'hidden': false,
+      'read_mode': 1,
+    });
+  });
+
   test('Opening a portable configuration restores its shot and fetches data',
       () async {
     String? requestedConfig;
