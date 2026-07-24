@@ -31,6 +31,22 @@ class NetworkPermissionService {
     }
   }
 
+  static Future<NetworkAccessPreparation> requestAllStartupPermissions(
+    String apiUrl,
+  ) async {
+    var networkAccess = NetworkAccessPreparation.ready;
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      // Trigger and await the system WLAN/cellular-data decision first. The
+      // local-network prompt is deliberately last so system dialogs cannot
+      // compete with each other during first launch.
+      networkAccess = await prepareNetworkAccess(apiUrl);
+    }
+    if (needsLocalNetworkPrivacyHandling) {
+      await requestInitialLocalNetworkAccess();
+    }
+    return networkAccess;
+  }
+
   static Future<NetworkAccessPreparation> prepareNetworkAccess(
     String apiUrl,
   ) async {

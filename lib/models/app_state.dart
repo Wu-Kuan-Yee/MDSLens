@@ -786,14 +786,18 @@ class AppState extends ChangeNotifier {
     required String user,
     required String password,
     bool automatic = false,
+    NetworkAccessPreparation? preparedNetworkAccess,
   }) async {
     final generation = ++_sessionGeneration;
-    var networkAccess = NetworkAccessPreparation.unknown;
+    var networkAccess =
+        preparedNetworkAccess ?? NetworkAccessPreparation.unknown;
     _status = automatic ? 'Signing in automatically...' : 'Signing in...';
     notifyListeners();
     try {
-      networkAccess =
-          await NetworkPermissionService.prepareNetworkAccess(apiUrl);
+      if (preparedNetworkAccess == null) {
+        networkAccess =
+            await NetworkPermissionService.prepareNetworkAccess(apiUrl);
+      }
       if (_disposed || generation != _sessionGeneration) return;
       if (networkAccess == NetworkAccessPreparation.deniedDuringRequest ||
           networkAccess == NetworkAccessPreparation.deniedPreviously) {
@@ -873,7 +877,9 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<void> initializeStartupSession() async {
+  Future<void> initializeStartupSession({
+    NetworkAccessPreparation? preparedNetworkAccess,
+  }) async {
     await preferencesReady;
     if (_disposed || !_rememberLogin || _explicitlyLoggedOut) return;
     if (_loginUser.trim().isNotEmpty) {
@@ -883,6 +889,7 @@ class AppState extends ChangeNotifier {
           user: _loginUser,
           password: _loginPass,
           automatic: true,
+          preparedNetworkAccess: preparedNetworkAccess,
         );
       } catch (_) {}
       return;

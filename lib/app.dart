@@ -93,6 +93,7 @@ class _MdsScopeAppState extends State<MdsScopeApp> with WidgetsBindingObserver {
       themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
       home: NetworkPermissionGate(
         app: app,
+        requestOnStartup: false,
         child: const MainPage(),
       ),
     );

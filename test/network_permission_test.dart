@@ -138,6 +138,36 @@ void main() {
     );
   });
 
+  test('First-launch Apple permission requests are issued sequentially',
+      () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    const channel = MethodChannel('mdsscope/permissions');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final calls = <String>[];
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(channel, null),
+    );
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call.method);
+      if (call.method == 'prepareNetworkAccess') return 'ready';
+      if (call.method == 'requestLocalNetworkAccess') return true;
+      return null;
+    });
+
+    final result = await NetworkPermissionService.requestAllStartupPermissions(
+      'http://east.example/api',
+    );
+
+    expect(result, NetworkAccessPreparation.ready);
+    expect(calls, [
+      'prepareNetworkAccess',
+      'requestLocalNetworkAccess',
+    ]);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
   testWidgets(
       'First cellular denial stays with the system prompt and a later attempt offers settings',
       (tester) async {
