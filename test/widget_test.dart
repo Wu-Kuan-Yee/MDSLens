@@ -2782,6 +2782,95 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+      'Bookmark removal supports selection, select all, and confirmation',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.addWebBookmark('Diagnostics', 'http://10.0.0.8/diagnostics');
+    app.addWebBookmark('Archive', 'http://10.0.0.8/archive');
+    app.addWebBookmark('Status', 'http://10.0.0.8/status');
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Internal web pages'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove...'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('bookmark-removal-selection-list')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('bookmark-select-all')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('bookmark-remove-1')),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey('bookmark-delete-selected')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Remove selected bookmarks?'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('bookmark-removal-confirm-cancel')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('bookmark-removal-selection-list')),
+      findsOneWidget,
+    );
+    expect(app.webBookmarks, hasLength(3));
+
+    await tester.tap(
+      find.byKey(const ValueKey('bookmark-delete-selected')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('bookmark-removal-confirm')),
+    );
+    await tester.pumpAndSettle();
+    expect(app.webBookmarks.map((item) => item.keys.first), [
+      'Diagnostics',
+      'Status',
+    ]);
+    expect(
+      find.byKey(const ValueKey('bookmark-removal-selection-list')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('bookmark-select-all')),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey('bookmark-delete-selected')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('bookmark-removal-confirm')),
+    );
+    await tester.pumpAndSettle();
+    expect(app.webBookmarks, isEmpty);
+    expect(find.text('No bookmarks remain'), findsWidgets);
+
+    await tester.tap(
+      find.byKey(const ValueKey('bookmark-removal-close')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('No Saved Web Addresses'), findsOneWidget);
+  });
+
   testWidgets('Toolbar remains bounded with enlarged customized UI fonts',
       (tester) async {
     final app = AppState();

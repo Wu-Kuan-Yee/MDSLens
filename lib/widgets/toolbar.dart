@@ -943,32 +943,250 @@ class ToolbarWidget extends StatelessWidget {
 
   void _removeBookmark(
       BuildContext ctx, AppState app, void Function(VoidCallback) setState) {
-    final bookmarks = app.webBookmarks;
-    showDialog(
+    final bookmarks = app.webBookmarks
+        .asMap()
+        .entries
+        .map((entry) => (index: entry.key, value: entry.value))
+        .toList();
+    final selected = <int>{};
+    final scrollController = ScrollController();
+    final dialog = showDialog<void>(
       context: ctx,
-      builder: (ctx) => KeyboardSafeDialog(
-        title: const Text('Remove Bookmark'),
-        content: SizedBox(
-          width: 300,
-          height: 200,
-          child: ListView.builder(
-            itemCount: bookmarks.length,
-            itemBuilder: (_, i) => ListTile(
-              title: Text(bookmarks[i].keys.first),
-              onTap: () {
-                app.removeWebBookmark(i);
-                Navigator.pop(ctx);
-                setState(() {});
-              },
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final allSelected =
+              bookmarks.isNotEmpty && selected.length == bookmarks.length;
+          final colors = Theme.of(dialogContext).colorScheme;
+          return KeyboardSafeDialog(
+            maxWidth: 520,
+            maxHeight: 680,
+            title: const Row(
+              children: [
+                Icon(Icons.link_off_rounded),
+                SizedBox(width: 10),
+                Flexible(child: Text('Remove Bookmark')),
+              ],
             ),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel'))
-        ],
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                CheckboxListTile(
+                  key: const ValueKey('bookmark-select-all'),
+                  value: allSelected,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  secondary: const Icon(Icons.select_all_rounded),
+                  title: const Text(
+                    'Select all',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Text(
+                    bookmarks.isEmpty
+                        ? 'No bookmarks remain'
+                        : '${selected.length} of ${bookmarks.length} selected',
+                  ),
+                  onChanged: bookmarks.isEmpty
+                      ? null
+                      : (checked) => setDialogState(() {
+                            if (checked == true) {
+                              selected.addAll(
+                                bookmarks.map((bookmark) => bookmark.index),
+                              );
+                            } else {
+                              selected.clear();
+                            }
+                          }),
+                ),
+                const Divider(height: 1),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: 420,
+                  height: 310,
+                  child: bookmarks.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.bookmarks_outlined,
+                                size: 42,
+                                color: colors.onSurfaceVariant,
+                              ),
+                              const SizedBox(height: 8),
+                              const Text('No bookmarks remain'),
+                            ],
+                          ),
+                        )
+                      : Material(
+                          color: colors.surfaceContainerLow,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            side: BorderSide(color: colors.outlineVariant),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Scrollbar(
+                            controller: scrollController,
+                            thumbVisibility: bookmarks.length > 5,
+                            interactive: true,
+                            child: ListView.separated(
+                              key: const ValueKey(
+                                  'bookmark-removal-selection-list'),
+                              controller: scrollController,
+                              itemCount: bookmarks.length,
+                              separatorBuilder: (_, index) => Divider(
+                                key:
+                                    ValueKey('bookmark-removal-divider-$index'),
+                                height: 1,
+                                indent: 16,
+                                endIndent: 16,
+                              ),
+                              itemBuilder: (_, listIndex) {
+                                final bookmark = bookmarks[listIndex];
+                                final alias = bookmark.value.keys.first;
+                                final url = bookmark.value.values.first;
+                                return CheckboxListTile(
+                                  key: ValueKey(
+                                      'bookmark-remove-${bookmark.index}'),
+                                  value: selected.contains(bookmark.index),
+                                  controlAffinity:
+                                      ListTileControlAffinity.leading,
+                                  secondary: const Icon(Icons.language_rounded),
+                                  title: Text(
+                                    alias,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                  subtitle: Text(
+                                    url,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  onChanged: (checked) => setDialogState(() {
+                                    checked == true
+                                        ? selected.add(bookmark.index)
+                                        : selected.remove(bookmark.index);
+                                  }),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton.icon(
+                key: const ValueKey('bookmark-removal-close'),
+                onPressed: () => Navigator.pop(dialogContext),
+                icon: const Icon(Icons.close_rounded),
+                label: const Text('Close'),
+              ),
+              FilledButton.icon(
+                key: const ValueKey('bookmark-delete-selected'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: colors.error,
+                  foregroundColor: colors.onError,
+                ),
+                onPressed: selected.isEmpty
+                    ? null
+                    : () async {
+                        final pending = Set<int>.of(selected);
+                        final aliases = bookmarks
+                            .where(
+                                (bookmark) => pending.contains(bookmark.index))
+                            .map((bookmark) => bookmark.value.keys.first)
+                            .toList();
+                        final preview = aliases.take(5).join(', ');
+                        final suffix = aliases.length > 5 ? ', …' : '';
+                        final confirmed = await _confirmBookmarkRemoval(
+                          dialogContext,
+                          count: pending.length,
+                          preview: '$preview$suffix',
+                        );
+                        if (!confirmed || !dialogContext.mounted) return;
+                        await app.removeWebBookmarks(pending);
+                        bookmarks
+                          ..clear()
+                          ..addAll(
+                            app.webBookmarks.asMap().entries.map(
+                                  (entry) =>
+                                      (index: entry.key, value: entry.value),
+                                ),
+                          );
+                        selected.clear();
+                        if (dialogContext.mounted) {
+                          setDialogState(() {});
+                          setState(() {});
+                        }
+                      },
+                icon: const Icon(Icons.delete_rounded),
+                label: Text(
+                  selected.isEmpty
+                      ? 'Select bookmarks'
+                      : 'Remove (${selected.length})',
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
+    dialog.whenComplete(scrollController.dispose);
+  }
+
+  Future<bool> _confirmBookmarkRemoval(
+    BuildContext context, {
+    required int count,
+    required String preview,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        final colors = Theme.of(dialogContext).colorScheme;
+        return KeyboardSafeDialog(
+          maxWidth: 460,
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: colors.error),
+              const SizedBox(width: 10),
+              const Flexible(child: Text('Remove selected bookmarks?')),
+            ],
+          ),
+          content: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: colors.errorContainer.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: colors.error.withValues(alpha: 0.32),
+              ),
+            ),
+            child: Text(
+              'Remove $count selected bookmark${count == 1 ? '' : 's'} '
+              '($preview)? This action cannot be undone.',
+            ),
+          ),
+          actions: [
+            TextButton(
+              key: const ValueKey('bookmark-removal-confirm-cancel'),
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              key: const ValueKey('bookmark-removal-confirm'),
+              style: FilledButton.styleFrom(
+                backgroundColor: colors.error,
+                foregroundColor: colors.onError,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              icon: const Icon(Icons.delete_rounded),
+              label: const Text('Remove'),
+            ),
+          ],
+        );
+      },
+    );
+    return confirmed ?? false;
   }
 
   Future<void> _openUrl(String url, AppState app) async {

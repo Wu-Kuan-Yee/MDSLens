@@ -479,6 +479,20 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Future<void> removeWebBookmarks(Iterable<int> indexes) async {
+    final valid = indexes
+        .where((index) => index >= 0 && index < _webBookmarks.length)
+        .toSet()
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
+    if (valid.isEmpty) return;
+    for (final index in valid) {
+      _webBookmarks.removeAt(index);
+    }
+    notifyListeners();
+    await savePreferences();
+  }
+
   // Layout
   void applyLayout(int cols, int rows) {
     applyLayoutList(List.filled(cols, rows));
