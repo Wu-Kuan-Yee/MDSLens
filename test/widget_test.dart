@@ -2628,6 +2628,47 @@ void main() {
     expect(find.byIcon(Icons.info_outline_rounded), findsOneWidget);
   });
 
+  testWidgets('Internal web pages use separated polished list items',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.addWebBookmark('Diagnostics', 'http://10.0.0.8/diagnostics');
+    app.addWebBookmark('Archive', 'http://10.0.0.8/archive');
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Internal web pages'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('internal-web-pages-list')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('internal-web-page-0')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('internal-web-page-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('internal-web-page-divider-0')),
+      findsOneWidget,
+    );
+    expect(find.text('Diagnostics'), findsOneWidget);
+    expect(find.text('Archive'), findsOneWidget);
+    expect(find.byIcon(Icons.open_in_new_rounded), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Toolbar remains bounded with enlarged customized UI fonts',
       (tester) async {
     final app = AppState();

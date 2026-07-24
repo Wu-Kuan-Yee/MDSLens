@@ -750,16 +750,70 @@ class ToolbarWidget extends StatelessWidget {
                       ? const Center(
                           child: Text('No Saved Web Addresses',
                               style: TextStyle(color: Colors.grey)))
-                      : ListView.builder(
+                      : ListView.separated(
+                          key: const ValueKey('internal-web-pages-list'),
                           itemCount: bookmarks.length,
-                          itemBuilder: (_, i) => ListTile(
-                            title: Text(bookmarks[i].keys.first),
-                            subtitle: Text(bookmarks[i].values.first,
-                                style: const TextStyle(fontSize: 11)),
-                            onTap: () {
-                              Navigator.pop(ctx);
-                              _openUrl(bookmarks[i].values.first, app);
-                            },
+                          separatorBuilder: (_, i) => Divider(
+                            key: ValueKey('internal-web-page-divider-$i'),
+                            height: 12,
+                            thickness: 1,
+                            indent: 14,
+                            endIndent: 14,
+                          ),
+                          itemBuilder: (_, i) => Material(
+                            key: ValueKey('internal-web-page-$i'),
+                            color:
+                                Theme.of(ctx).colorScheme.surfaceContainerLow,
+                            shape: RoundedRectangleBorder(
+                              side: BorderSide(
+                                color: Theme.of(ctx).colorScheme.outlineVariant,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 5,
+                              ),
+                              leading: CircleAvatar(
+                                radius: 18,
+                                backgroundColor:
+                                    Theme.of(ctx).colorScheme.primaryContainer,
+                                foregroundColor:
+                                    Theme.of(ctx).colorScheme.primary,
+                                child: const Icon(Icons.language_rounded,
+                                    size: 19),
+                              ),
+                              title: Text(
+                                bookmarks[i].keys.first,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600),
+                              ),
+                              subtitle: Padding(
+                                padding: const EdgeInsets.only(top: 3),
+                                child: Text(
+                                  bookmarks[i].values.first,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Theme.of(ctx)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                              trailing: Icon(
+                                Icons.open_in_new_rounded,
+                                size: 19,
+                                color: Theme.of(ctx).colorScheme.primary,
+                              ),
+                              onTap: () {
+                                Navigator.pop(ctx);
+                                _openUrl(bookmarks[i].values.first, app);
+                              },
+                            ),
                           ),
                         ),
                 ),
@@ -767,17 +821,19 @@ class ToolbarWidget extends StatelessWidget {
                   TextButton(
                       onPressed: () => Navigator.pop(ctx),
                       child: const Text('Close')),
-                  TextButton(
+                  TextButton.icon(
                       onPressed: () {
                         _addBookmark(ctx, app, setState);
                       },
-                      child: const Text('Add...')),
+                      icon: const Icon(Icons.add_link_rounded, size: 18),
+                      label: const Text('Add...')),
                   if (bookmarks.isNotEmpty)
-                    TextButton(
+                    TextButton.icon(
                         onPressed: () {
                           _removeBookmark(ctx, app, setState);
                         },
-                        child: const Text('Remove...')),
+                        icon: const Icon(Icons.link_off_rounded, size: 18),
+                        label: const Text('Remove...')),
                 ],
               )),
     );
