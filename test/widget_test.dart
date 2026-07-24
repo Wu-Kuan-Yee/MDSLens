@@ -100,6 +100,43 @@ void main() {
         ThemeMode.light);
   });
 
+  testWidgets('Auto theme keeps the authoritative startup brightness',
+      (tester) async {
+    const channel = MethodChannel('mdsscope/theme');
+    var nativeBrightnessQueries = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'isDark') {
+        nativeBrightnessQueries++;
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        return false;
+      }
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+      tester.binding.platformDispatcher.clearPlatformBrightnessTestValue();
+    });
+    tester.binding.platformDispatcher.platformBrightnessTestValue =
+        Brightness.dark;
+
+    final app = AppState();
+    await app.preferencesReady;
+    app.themeMode = 2;
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MdsScopeApp(),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+        ThemeMode.dark);
+    expect(nativeBrightnessQueries, 0);
+  });
+
   testWidgets('Tapping empty main-page space dismisses the Shot keyboard',
       (tester) async {
     final app = AppState();

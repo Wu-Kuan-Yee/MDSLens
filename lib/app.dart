@@ -30,9 +30,9 @@ class _MdsScopeAppState extends State<MdsScopeApp> with WidgetsBindingObserver {
     StylusModeChannel.init(
       (eraser) => context.read<AppState>().setStylusEraserMode(eraser),
     );
-    ThemeChannel.isDark().then((d) {
-      if (mounted && d != null) setState(() => _sysDark = d);
-    });
+    // platformBrightness is authoritative during startup. A native method
+    // query can complete before the host appearance has settled and overwrite
+    // the correct initial value with a stale light-mode result.
     _themeSubscription = ThemeChannel.onThemeChanged.listen((d) {
       if (mounted) setState(() => _sysDark = d);
     });
