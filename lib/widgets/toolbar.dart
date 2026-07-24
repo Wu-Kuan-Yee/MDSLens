@@ -271,7 +271,8 @@ class ToolbarWidget extends StatelessWidget {
       Text('Shot:',
           style:
               TextStyle(fontSize: uiSize, color: theme.colorScheme.onSurface)),
-      if (app.shotHistory.isNotEmpty)
+      if (app.shotHistory.isNotEmpty) ...[
+        const SizedBox(width: 6),
         PolishedDropdown<String>(
           key: const ValueKey('toolbar-shot-history-dropdown'),
           id: 'toolbar-shot-history',
@@ -297,6 +298,7 @@ class ToolbarWidget extends StatelessWidget {
             app.startRefresh();
           },
         ),
+      ],
       const SizedBox(width: 6),
       Expanded(
         flex: 3,

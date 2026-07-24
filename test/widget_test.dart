@@ -2055,6 +2055,15 @@ void main() {
       findsOneWidget,
     );
     expect(find.byTooltip('Shot history'), findsOneWidget);
+    final shotLabel = find.descendant(
+      of: find.byKey(const ValueKey('toolbar-shot-entry')),
+      matching: find.text('Shot:'),
+    );
+    final history = find.byKey(const ValueKey('toolbar-shot-history-dropdown'));
+    expect(
+      tester.getTopLeft(history).dx - tester.getTopRight(shotLabel).dx,
+      closeTo(6, 0.01),
+    );
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('toolbar-shot-entry')),
