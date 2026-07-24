@@ -408,9 +408,8 @@ class ToolbarWidget extends StatelessWidget {
           iconOnly: true,
           tooltip: 'Shot history',
           menuAction: PolishedDropdownAction(
-            label: 'Clear shot history',
-            icon: Icons.delete_sweep_rounded,
-            destructive: true,
+            label: 'Manage shot history',
+            icon: Icons.manage_history_rounded,
             onPressed: () => _showShotHistoryManager(context, app),
           ),
           options: app.shotHistory
@@ -2306,6 +2305,18 @@ class ToolbarWidget extends StatelessWidget {
     final history = List<String>.of(app.shotHistory);
     final selected = <String>{};
     final scrollController = ScrollController();
+    final limitController = TextEditingController(
+      text: app.shotHistoryLimit.toString(),
+    );
+    String? limitError;
+
+    void syncHistory() {
+      history
+        ..clear()
+        ..addAll(app.shotHistory);
+      selected.removeWhere((shot) => !history.contains(shot));
+    }
+
     try {
       await showDialog<void>(
         context: context,
@@ -2321,13 +2332,109 @@ class ToolbarWidget extends StatelessWidget {
                 children: [
                   Icon(Icons.manage_history_rounded),
                   SizedBox(width: 10),
-                  Flexible(child: Text('Clear Shot History')),
+                  Flexible(child: Text('Manage Shot History')),
                 ],
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  Material(
+                    color: colors.surfaceContainerLow,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      side: BorderSide(color: colors.outlineVariant),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 4, 8, 10),
+                      child: Column(
+                        children: [
+                          SwitchListTile(
+                            key: const ValueKey(
+                                'shot-history-retention-enabled'),
+                            value: app.limitShotHistory,
+                            controlAffinity: ListTileControlAffinity.leading,
+                            secondary: const Icon(Icons.auto_delete_outlined),
+                            title: Text(
+                              app.limitShotHistory
+                                  ? 'Keep only the most recent '
+                                      '${app.shotHistoryLimit} shots'
+                                  : 'Keep all shot history',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            subtitle: Text(
+                              app.limitShotHistory
+                                  ? 'Older entries are removed automatically.'
+                                  : 'Entries remain until you delete them.',
+                            ),
+                            onChanged: (enabled) {
+                              app.setShotHistoryRetentionEnabled(enabled);
+                              syncHistory();
+                              setState(() {});
+                            },
+                          ),
+                          Row(
+                            children: [
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: TextField(
+                                  key: const ValueKey(
+                                      'shot-history-retention-limit'),
+                                  controller: limitController,
+                                  enabled: app.limitShotHistory,
+                                  keyboardType: TextInputType.number,
+                                  decoration: InputDecoration(
+                                    labelText: 'Maximum saved shots',
+                                    helperText:
+                                        'From 1 to ${AppState.maximumShotHistoryLimit}',
+                                    errorText: limitError,
+                                    isDense: true,
+                                  ),
+                                  onChanged: (raw) {
+                                    final value = int.tryParse(raw.trim());
+                                    if (value == null ||
+                                        value < 1 ||
+                                        value >
+                                            AppState.maximumShotHistoryLimit) {
+                                      setState(() {
+                                        limitError = 'Enter a valid number';
+                                      });
+                                      return;
+                                    }
+                                    app.setShotHistoryLimit(value);
+                                    syncHistory();
+                                    setState(() => limitError = null);
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton.filledTonal(
+                                key: const ValueKey(
+                                    'shot-history-retention-restore-default'),
+                                tooltip: 'Restore the default limit '
+                                    '(${AppState.defaultShotHistoryLimit})',
+                                onPressed: () {
+                                  app.restoreDefaultShotHistoryLimit();
+                                  limitController.text = AppState
+                                      .defaultShotHistoryLimit
+                                      .toString();
+                                  limitController.selection =
+                                      TextSelection.collapsed(
+                                    offset: limitController.text.length,
+                                  );
+                                  syncHistory();
+                                  setState(() => limitError = null);
+                                },
+                                icon: const Icon(Icons.restore_rounded),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   CheckboxListTile(
                     key: const ValueKey('shot-history-select-all'),
                     value: allSelected,
@@ -2355,7 +2462,7 @@ class ToolbarWidget extends StatelessWidget {
                   const Divider(height: 1),
                   const SizedBox(height: 10),
                   SizedBox(
-                    height: 300,
+                    height: 180,
                     child: history.isEmpty
                         ? Center(
                             child: Column(
@@ -2472,7 +2579,11 @@ class ToolbarWidget extends StatelessWidget {
         ),
       );
     } finally {
+      // showDialog completes when the route is popped, before its reverse
+      // transition has completely detached the text field.
+      await Future<void>.delayed(const Duration(milliseconds: 250));
       scrollController.dispose();
+      limitController.dispose();
     }
   }
 

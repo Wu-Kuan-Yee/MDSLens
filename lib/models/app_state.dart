@@ -217,6 +217,9 @@ Future<dynamic> _fetchLatestShotFromApi(
 }
 
 class AppState extends ChangeNotifier {
+  static const int defaultShotHistoryLimit = 50;
+  static const int maximumShotHistoryLimit = 10000;
+
   final SignalFetchWorker _signalFetchWorker;
   final ShotInfoFetchWorker _shotInfoFetchWorker;
   final LoginWorker _loginWorker;
@@ -291,14 +294,45 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Shot history (last 20)
+  // Shot history
   final List<String> _shotHistory = [];
   List<String> get shotHistory => _shotHistory;
+  bool _limitShotHistory = true;
+  bool get limitShotHistory => _limitShotHistory;
+  int _shotHistoryLimit = defaultShotHistoryLimit;
+  int get shotHistoryLimit => _shotHistoryLimit;
+
   void _addToHistory(String shot) {
     if (shot.isEmpty) return;
     _shotHistory.remove(shot);
     _shotHistory.insert(0, shot);
-    if (_shotHistory.length > 20) _shotHistory.removeLast();
+    _trimShotHistory();
+  }
+
+  void _trimShotHistory() {
+    if (!_limitShotHistory || _shotHistory.length <= _shotHistoryLimit) return;
+    _shotHistory.removeRange(_shotHistoryLimit, _shotHistory.length);
+  }
+
+  void setShotHistoryRetentionEnabled(bool enabled) {
+    if (_limitShotHistory == enabled) return;
+    _limitShotHistory = enabled;
+    _trimShotHistory();
+    savePreferences();
+    notifyListeners();
+  }
+
+  void setShotHistoryLimit(int value) {
+    final normalized = value.clamp(1, maximumShotHistoryLimit);
+    if (_shotHistoryLimit == normalized) return;
+    _shotHistoryLimit = normalized;
+    _trimShotHistory();
+    savePreferences();
+    notifyListeners();
+  }
+
+  void restoreDefaultShotHistoryLimit() {
+    setShotHistoryLimit(defaultShotHistoryLimit);
   }
 
   Future<void> clearShotHistory() async {
@@ -998,6 +1032,11 @@ class AppState extends ChangeNotifier {
       _fontAxisSize = prefs.getInt('fontAxisSize') ?? _fontAxisSize;
       _fontUnitSize = prefs.getInt('fontUnitSize') ?? _fontUnitSize;
       _fontUiSize = prefs.getInt('fontUiSize') ?? _fontUiSize;
+      _limitShotHistory =
+          prefs.getBool('limitShotHistory') ?? _limitShotHistory;
+      _shotHistoryLimit =
+          (prefs.getInt('shotHistoryLimit') ?? defaultShotHistoryLimit)
+              .clamp(1, maximumShotHistoryLimit);
 
       final bookmarksJson = prefs.getString('webBookmarks');
       if (bookmarksJson != null) {
@@ -1019,9 +1058,7 @@ class AppState extends ChangeNotifier {
             ..addAll(list.map((item) => item.toString()).where(
                   (item) => item.isNotEmpty,
                 ));
-          if (_shotHistory.length > 20) {
-            _shotHistory.removeRange(20, _shotHistory.length);
-          }
+          _trimShotHistory();
         }
       }
 
@@ -1064,6 +1101,8 @@ class AppState extends ChangeNotifier {
       await prefs.setInt('fontAxisSize', _fontAxisSize);
       await prefs.setInt('fontUnitSize', _fontUnitSize);
       await prefs.setInt('fontUiSize', _fontUiSize);
+      await prefs.setBool('limitShotHistory', _limitShotHistory);
+      await prefs.setInt('shotHistoryLimit', _shotHistoryLimit);
       await prefs.setString('webBookmarks', jsonEncode(_webBookmarks));
       await prefs.setString('shotHistory', jsonEncode(_shotHistory));
 

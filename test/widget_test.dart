@@ -281,6 +281,42 @@ void main() {
     expect(second.columns[0][0]['xmin'], isNull);
   });
 
+  test('Shot history retention is bounded, optional, and persisted', () async {
+    final history = List<String>.generate(55, (index) => '${170000 - index}');
+    SharedPreferences.setMockInitialValues({
+      'shotHistory': jsonEncode(history),
+    });
+
+    final first = AppState();
+    await first.preferencesReady;
+    addTearDown(first.dispose);
+
+    expect(first.limitShotHistory, isTrue);
+    expect(first.shotHistoryLimit, AppState.defaultShotHistoryLimit);
+    expect(first.shotHistory, history.take(50));
+
+    first.setShotHistoryLimit(3);
+    expect(first.shotHistory, history.take(3));
+
+    first.setShotHistoryRetentionEnabled(false);
+    first.setShotHistoryLimit(1);
+    expect(first.shotHistory, history.take(3));
+    await first.savePreferences();
+
+    final second = AppState();
+    await second.preferencesReady;
+    addTearDown(second.dispose);
+    expect(second.limitShotHistory, isFalse);
+    expect(second.shotHistoryLimit, 1);
+    expect(second.shotHistory, history.take(3));
+
+    second.setShotHistoryRetentionEnabled(true);
+    expect(second.shotHistory, history.take(1));
+    second.restoreDefaultShotHistoryLimit();
+    expect(second.shotHistoryLimit, AppState.defaultShotHistoryLimit);
+    expect(second.shotHistory, history.take(1));
+  });
+
   test('Configuration open accepts desktop paths and mobile file bytes',
       () async {
     const parsedConfig = '{"columns":[[{"title":"Opened panel","x_label":"s",'
@@ -2538,7 +2574,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Clear Shot History'), findsOneWidget);
+    expect(find.text('Manage Shot History'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('shot-history-selection-list')),
       findsOneWidget,
@@ -2547,10 +2583,51 @@ void main() {
       find.byKey(const ValueKey('shot-history-select-all')),
       findsOneWidget,
     );
-
-    await tester.tap(
-      find.byKey(const ValueKey('shot-history-select-163702')),
+    expect(
+      find.byKey(const ValueKey('shot-history-retention-enabled')),
+      findsOneWidget,
     );
+    expect(
+      find.byKey(const ValueKey('shot-history-retention-limit')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('shot-history-retention-restore-default')),
+      findsOneWidget,
+    );
+
+    final retentionToggle =
+        find.byKey(const ValueKey('shot-history-retention-enabled'));
+    await tester.tap(retentionToggle);
+    await tester.pump();
+    expect(app.limitShotHistory, isFalse);
+    await tester.tap(retentionToggle);
+    await tester.pump();
+    expect(app.limitShotHistory, isTrue);
+
+    final retentionLimit =
+        find.byKey(const ValueKey('shot-history-retention-limit'));
+    await tester.tap(retentionLimit);
+    await tester.enterText(retentionLimit, '75');
+    await tester.pump();
+    expect(app.shotHistoryLimit, 75);
+    await tester.tap(
+      find.byKey(const ValueKey('shot-history-retention-restore-default')),
+    );
+    await tester.pump();
+    expect(app.shotHistoryLimit, AppState.defaultShotHistoryLimit);
+    expect(
+      tester.widget<TextField>(retentionLimit).controller?.text,
+      '${AppState.defaultShotHistoryLimit}',
+    );
+    tester.testTextInput.hide();
+    await tester.pumpAndSettle();
+
+    final selectedShot =
+        find.byKey(const ValueKey('shot-history-select-163702'));
+    await tester.ensureVisible(selectedShot);
+    await tester.pumpAndSettle();
+    await tester.tap(selectedShot);
     await tester.pump();
     await tester.tap(
       find.byKey(const ValueKey('shot-history-delete-selected')),
@@ -2581,9 +2658,10 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(
-      find.byKey(const ValueKey('shot-history-select-all')),
-    );
+    final selectAll = find.byKey(const ValueKey('shot-history-select-all'));
+    await tester.ensureVisible(selectAll);
+    await tester.pumpAndSettle();
+    await tester.tap(selectAll);
     await tester.pump();
     await tester.tap(
       find.byKey(const ValueKey('shot-history-delete-selected')),
@@ -2597,7 +2675,7 @@ void main() {
 
     expect(app.shotHistory, isEmpty);
     expect(find.text('Shot history is empty'), findsOneWidget);
-    expect(find.text('Clear Shot History'), findsOneWidget);
+    expect(find.text('Manage Shot History'), findsOneWidget);
     final preferences = await SharedPreferences.getInstance();
     expect(preferences.getString('shotHistory'), '[]');
     await tester.tap(
