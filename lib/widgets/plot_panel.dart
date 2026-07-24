@@ -1996,187 +1996,192 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
 
   @override
   Widget build(BuildContext ctx) {
-    return AlertDialog(
-      title: Row(children: [
-        const Expanded(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text('Data Source Setup'),
+    return GestureDetector(
+      key: const ValueKey('data-source-dialog-surface'),
+      behavior: HitTestBehavior.translucent,
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      child: AlertDialog(
+        title: Row(children: [
+          const Expanded(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text('Data Source Setup'),
+            ),
           ),
-        ),
-        IconButton(
-            icon: const Icon(Icons.add, size: 18),
-            tooltip: 'Add Curve',
-            onPressed: _rows.length < 8
-                ? () {
-                    final last = _rows.isNotEmpty ? _rows.last : null;
-                    final shotCtrl = TextEditingController(
-                        text: last?.shot.text ?? widget.defaultShot);
-                    final treeCtrl = TextEditingController(
-                        text: last?.tree.text ?? 'pcs_east');
-                    final yCtrl = TextEditingController();
-                    final legendCtrl = TextEditingController();
-                    final serverCtrl = TextEditingController(
-                        text: last?.server.text ?? '202.127.204.12');
-                    final defaultRate = context.read<AppState>().dataMode;
-                    final newRow = _DSRow(
-                        shot: shotCtrl,
-                        y: yCtrl,
-                        legend: legendCtrl,
-                        tree: treeCtrl,
-                        server: serverCtrl,
-                        xExpr: '')
-                      ..colorIdx = _rows.length % _presetColors.length
-                      ..readMode = defaultRate;
-                    setState(() {
-                      _rows.add(newRow);
-                    });
-                    _updateSignalOptions(newRow);
-                  }
-                : null),
-      ]),
-      content: SizedBox(
-        height: 180,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: IntrinsicWidth(
-            child: SingleChildScrollView(
-              child: Table(
-                columnWidths: const {
-                  0: FixedColumnWidth(84),
-                  1: FixedColumnWidth(124),
-                  2: FixedColumnWidth(184),
-                  3: FixedColumnWidth(130),
-                  4: FixedColumnWidth(144),
-                  5: FixedColumnWidth(34),
-                  6: FixedColumnWidth(46),
-                  7: FixedColumnWidth(136),
-                  8: FixedColumnWidth(26),
-                },
-                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                children: [
-                  TableRow(children: [
-                    _hdrCell('Shot', 4),
-                    _hdrCell('Tree', 4),
-                    _hdrCell('Signal', 4),
-                    _hdrCell('Legend', 4),
-                    _hdrCell('Server IP', 4),
-                    _hdrCell('Color', 4),
-                    _hdrCell('Hide', 2),
-                    _hdrCell('Data', 4),
-                    _hdrCell('Del', 0),
-                  ]),
-                  for (var i = 0; i < _rows.length; i++)
+          IconButton(
+              icon: const Icon(Icons.add, size: 18),
+              tooltip: 'Add Curve',
+              onPressed: _rows.length < 8
+                  ? () {
+                      final last = _rows.isNotEmpty ? _rows.last : null;
+                      final shotCtrl = TextEditingController(
+                          text: last?.shot.text ?? widget.defaultShot);
+                      final treeCtrl = TextEditingController(
+                          text: last?.tree.text ?? 'pcs_east');
+                      final yCtrl = TextEditingController();
+                      final legendCtrl = TextEditingController();
+                      final serverCtrl = TextEditingController(
+                          text: last?.server.text ?? '202.127.204.12');
+                      final defaultRate = context.read<AppState>().dataMode;
+                      final newRow = _DSRow(
+                          shot: shotCtrl,
+                          y: yCtrl,
+                          legend: legendCtrl,
+                          tree: treeCtrl,
+                          server: serverCtrl,
+                          xExpr: '')
+                        ..colorIdx = _rows.length % _presetColors.length
+                        ..readMode = defaultRate;
+                      setState(() {
+                        _rows.add(newRow);
+                      });
+                      _updateSignalOptions(newRow);
+                    }
+                  : null),
+        ]),
+        content: SizedBox(
+          height: 180,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: IntrinsicWidth(
+              child: SingleChildScrollView(
+                child: Table(
+                  columnWidths: const {
+                    0: FixedColumnWidth(84),
+                    1: FixedColumnWidth(124),
+                    2: FixedColumnWidth(184),
+                    3: FixedColumnWidth(130),
+                    4: FixedColumnWidth(144),
+                    5: FixedColumnWidth(34),
+                    6: FixedColumnWidth(46),
+                    7: FixedColumnWidth(136),
+                    8: FixedColumnWidth(26),
+                  },
+                  defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                  children: [
                     TableRow(children: [
-                      Padding(
-                          padding: const EdgeInsets.only(right: 4),
-                          child: TextField(
-                              key: ValueKey('data-shot-$i'),
-                              controller: _rows[i].shot,
-                              decoration: _dsDeco(),
-                              style: const TextStyle(fontSize: 12))),
-                      Padding(
-                          padding: const EdgeInsets.only(right: 4),
-                          child: _AutocompleteField(
-                              key: ValueKey('data-tree-$i'),
-                              controller: _rows[i].tree,
-                              options: _treeNames,
-                              label: 'Tree',
-                              onChanged: () {
-                                _updateSignalOptions(_rows[i]);
-                                setState(() {});
-                              })),
-                      Padding(
-                          padding: const EdgeInsets.only(right: 4),
-                          child: _AutocompleteField(
-                              key: ValueKey('data-signal-$i'),
-                              controller: _rows[i].y,
-                              options: _rows[i]._signalOptions,
-                              label: 'Signal',
-                              onChanged: () => setState(() {}))),
-                      Padding(
-                          padding: const EdgeInsets.only(right: 4),
-                          child: TextField(
-                              key: ValueKey('data-legend-$i'),
-                              controller: _rows[i].legend,
-                              decoration: _dsDeco().copyWith(
-                                hintText: signalLegendLabel({
-                                  'y_expr': _rows[i].y.text,
-                                }),
-                              ),
-                              style: const TextStyle(fontSize: 12))),
-                      Padding(
-                          padding: const EdgeInsets.only(right: 4),
-                          child: TextField(
-                              controller: _rows[i].server,
-                              decoration: _dsDeco(),
-                              style: const TextStyle(fontSize: 12))),
-                      Padding(
-                          padding: const EdgeInsets.only(right: 4),
-                          child: Center(
-                              child: _ColorPicker(
-                                  row: _rows[i],
-                                  onChanged: () => setState(() {})))),
-                      Padding(
-                          padding: const EdgeInsets.only(right: 2),
-                          child: Center(
-                              child: Checkbox(
-                                  value: _rows[i].hidden,
-                                  onChanged: (v) => setState(
-                                      () => _rows[i].hidden = v ?? false)))),
-                      Padding(
-                          padding: const EdgeInsets.only(right: 4),
-                          child: PolishedDropdown<int>(
-                            key: ValueKey('data-mode-dropdown-$i'),
-                            id: 'data-mode-$i',
-                            value: _rows[i].readMode,
-                            height: 42,
-                            fontSize: 11,
-                            leadingIcon: Icons.data_usage_rounded,
-                            minimumMenuWidth: 190,
-                            options: const [
-                              PolishedDropdownOption(
-                                value: 0,
-                                label: 'Thin',
-                                icon: Icons.compress_rounded,
-                              ),
-                              PolishedDropdownOption(
-                                value: 1,
-                                label: 'Medium',
-                                icon: Icons.format_line_spacing_rounded,
-                              ),
-                              PolishedDropdownOption(
-                                value: 2,
-                                label: 'Full',
-                                icon: Icons.stacked_line_chart_rounded,
-                              ),
-                            ],
-                            onChanged: (value) =>
-                                setState(() => _rows[i].readMode = value),
-                          )),
-                      _rows.length > 1
-                          ? GestureDetector(
-                              onTap: () => setState(() {
-                                    _rows[i].dispose();
-                                    _rows.removeAt(i);
-                                  }),
-                              child: const Icon(Icons.close,
-                                  size: 16, color: Colors.red))
-                          : const SizedBox(width: 16),
+                      _hdrCell('Shot', 4),
+                      _hdrCell('Tree', 4),
+                      _hdrCell('Signal', 4),
+                      _hdrCell('Legend', 4),
+                      _hdrCell('Server IP', 4),
+                      _hdrCell('Color', 4),
+                      _hdrCell('Hide', 2),
+                      _hdrCell('Data', 4),
+                      _hdrCell('Del', 0),
                     ]),
-                ],
+                    for (var i = 0; i < _rows.length; i++)
+                      TableRow(children: [
+                        Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: TextField(
+                                key: ValueKey('data-shot-$i'),
+                                controller: _rows[i].shot,
+                                decoration: _dsDeco(),
+                                style: const TextStyle(fontSize: 12))),
+                        Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: _AutocompleteField(
+                                key: ValueKey('data-tree-$i'),
+                                controller: _rows[i].tree,
+                                options: _treeNames,
+                                label: 'Tree',
+                                onChanged: () {
+                                  _updateSignalOptions(_rows[i]);
+                                  setState(() {});
+                                })),
+                        Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: _AutocompleteField(
+                                key: ValueKey('data-signal-$i'),
+                                controller: _rows[i].y,
+                                options: _rows[i]._signalOptions,
+                                label: 'Signal',
+                                onChanged: () => setState(() {}))),
+                        Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: TextField(
+                                key: ValueKey('data-legend-$i'),
+                                controller: _rows[i].legend,
+                                decoration: _dsDeco().copyWith(
+                                  hintText: signalLegendLabel({
+                                    'y_expr': _rows[i].y.text,
+                                  }),
+                                ),
+                                style: const TextStyle(fontSize: 12))),
+                        Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: TextField(
+                                controller: _rows[i].server,
+                                decoration: _dsDeco(),
+                                style: const TextStyle(fontSize: 12))),
+                        Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: Center(
+                                child: _ColorPicker(
+                                    row: _rows[i],
+                                    onChanged: () => setState(() {})))),
+                        Padding(
+                            padding: const EdgeInsets.only(right: 2),
+                            child: Center(
+                                child: Checkbox(
+                                    value: _rows[i].hidden,
+                                    onChanged: (v) => setState(
+                                        () => _rows[i].hidden = v ?? false)))),
+                        Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: PolishedDropdown<int>(
+                              key: ValueKey('data-mode-dropdown-$i'),
+                              id: 'data-mode-$i',
+                              value: _rows[i].readMode,
+                              height: 42,
+                              fontSize: 11,
+                              leadingIcon: Icons.data_usage_rounded,
+                              minimumMenuWidth: 190,
+                              options: const [
+                                PolishedDropdownOption(
+                                  value: 0,
+                                  label: 'Thin',
+                                  icon: Icons.compress_rounded,
+                                ),
+                                PolishedDropdownOption(
+                                  value: 1,
+                                  label: 'Medium',
+                                  icon: Icons.format_line_spacing_rounded,
+                                ),
+                                PolishedDropdownOption(
+                                  value: 2,
+                                  label: 'Full',
+                                  icon: Icons.stacked_line_chart_rounded,
+                                ),
+                              ],
+                              onChanged: (value) =>
+                                  setState(() => _rows[i].readMode = value),
+                            )),
+                        _rows.length > 1
+                            ? GestureDetector(
+                                onTap: () => setState(() {
+                                      _rows[i].dispose();
+                                      _rows.removeAt(i);
+                                    }),
+                                child: const Icon(Icons.close,
+                                    size: 16, color: Colors.red))
+                            : const SizedBox(width: 16),
+                      ]),
+                  ],
+                ),
               ),
             ),
           ),
         ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(onPressed: _save, child: const Text('OK'))
+        ],
       ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel')),
-        TextButton(onPressed: _save, child: const Text('OK'))
-      ],
     );
   }
 

@@ -2551,6 +2551,16 @@ void main() {
       find.byKey(const ValueKey('data-shot-0')),
     );
     expect(shotField.controller?.text, '163888');
+    await tester.tap(find.byKey(const ValueKey('data-shot-0')));
+    await tester.pump();
+    final focusedShot = FocusManager.instance.primaryFocus;
+    expect(focusedShot?.hasFocus, isTrue);
+    final surfaceRect = tester.getRect(
+      find.byKey(const ValueKey('data-source-dialog-surface')),
+    );
+    await tester.tapAt(Offset(surfaceRect.left + 4, surfaceRect.center.dy));
+    await tester.pump();
+    expect(focusedShot?.hasFocus, isFalse);
     await tester.enterText(
       find.byKey(const ValueKey('data-legend-0')),
       'Primary current',
