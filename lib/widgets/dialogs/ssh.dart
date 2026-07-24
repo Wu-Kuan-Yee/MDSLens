@@ -175,6 +175,10 @@ class SshDialog extends StatelessWidget {
                 ],
                 onChanged: (value) => setState(() => mode = value),
               ),
+              const SizedBox(
+                key: ValueKey('ssh-mode-host-gap'),
+                height: 12,
+              ),
               TextField(
                   key: const ValueKey('ssh-host'),
                   controller: hostCtrl,
@@ -183,6 +187,10 @@ class SshDialog extends StatelessWidget {
                       labelText: 'Host', hintText: 'ssh.example.com'),
                   textInputAction: TextInputAction.next,
                   onSubmitted: (_) => focusAndShowKeyboard(ctx, userFocus)),
+              const SizedBox(
+                key: ValueKey('ssh-host-user-gap'),
+                height: 12,
+              ),
               Row(children: [
                 Expanded(
                     flex: 3,
@@ -208,6 +216,10 @@ class SshDialog extends StatelessWidget {
                         onSubmitted: (_) =>
                             focusAndShowKeyboard(ctx, passFocus))),
               ]),
+              const SizedBox(
+                key: ValueKey('ssh-user-password-gap'),
+                height: 12,
+              ),
               TextField(
                   key: const ValueKey('ssh-password'),
                   controller: passCtrl,
@@ -221,6 +233,10 @@ class SshDialog extends StatelessWidget {
                   autofillHints: const [AutofillHints.password],
                   onTap: () => focusAndShowKeyboard(ctx, passFocus),
                   onSubmitted: (_) => testConnection(setState, ctx)),
+              const SizedBox(
+                key: ValueKey('ssh-password-identity-gap'),
+                height: 12,
+              ),
               Row(children: [
                 Expanded(
                     child: TextField(

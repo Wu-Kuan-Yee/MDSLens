@@ -1129,6 +1129,71 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Credential form labels have room without keyboard compression',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(900, 700);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Login'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('login-username'))).dy -
+          tester.getBottomLeft(find.byKey(const ValueKey('login-api-url'))).dy,
+      greaterThanOrEqualTo(12),
+    );
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('login-password'))).dy -
+          tester.getBottomLeft(find.byKey(const ValueKey('login-username'))).dy,
+      greaterThanOrEqualTo(12),
+    );
+
+    tester.view.viewInsets = const FakeViewPadding(bottom: 360);
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSize(find.byKey(const ValueKey('login-password'))).height,
+      greaterThanOrEqualTo(48),
+    );
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    tester.view.viewInsets = FakeViewPadding.zero;
+
+    await tester.tap(find.byTooltip('SSH tunnel'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('ssh-user'))).dy -
+          tester.getBottomLeft(find.byKey(const ValueKey('ssh-host'))).dy,
+      greaterThanOrEqualTo(12),
+    );
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('ssh-password'))).dy -
+          tester.getBottomLeft(find.byKey(const ValueKey('ssh-user'))).dy,
+      greaterThanOrEqualTo(12),
+    );
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('ssh-identity'))).dy -
+          tester.getBottomLeft(find.byKey(const ValueKey('ssh-password'))).dy,
+      greaterThanOrEqualTo(12),
+    );
+
+    tester.view.viewInsets = const FakeViewPadding(bottom: 360);
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSize(find.byKey(const ValueKey('ssh-password'))).height,
+      greaterThanOrEqualTo(48),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('SSH dialog preserves a manually entered identity file path',
       (tester) async {
     final app = AppState();

@@ -113,6 +113,10 @@ class LoginDialog extends StatelessWidget {
                       autofillHints: const [AutofillHints.url],
                       onSubmitted: (_) => focusAndShowKeyboard(ctx, userFocus),
                     ),
+                    const SizedBox(
+                      key: ValueKey('login-api-user-gap'),
+                      height: 12,
+                    ),
                     TextField(
                       key: const ValueKey('login-username'),
                       controller: userCtrl,
@@ -122,6 +126,10 @@ class LoginDialog extends StatelessWidget {
                       textInputAction: TextInputAction.next,
                       autofillHints: const [AutofillHints.username],
                       onSubmitted: (_) => focusAndShowKeyboard(ctx, passFocus),
+                    ),
+                    const SizedBox(
+                      key: ValueKey('login-user-password-gap'),
+                      height: 12,
                     ),
                     TextField(
                       key: const ValueKey('login-password'),
