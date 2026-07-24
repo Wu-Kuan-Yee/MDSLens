@@ -79,6 +79,33 @@ bool reorderLayoutPanel(
   return true;
 }
 
+bool moveLayoutPanelToNewColumn(
+  List<List<Map<String, dynamic>>> columns, {
+  required int sourceColumn,
+  required int sourceRow,
+  required int insertionIndex,
+}) {
+  if (sourceColumn < 0 ||
+      sourceColumn >= columns.length ||
+      sourceRow < 0 ||
+      sourceRow >= columns[sourceColumn].length ||
+      insertionIndex < 0 ||
+      insertionIndex > columns.length) {
+    return false;
+  }
+
+  final sourceWasSingleton = columns[sourceColumn].length == 1;
+  final panel = columns[sourceColumn].removeAt(sourceRow);
+  var adjustedInsertionIndex = insertionIndex;
+  if (columns[sourceColumn].isEmpty) {
+    columns.removeAt(sourceColumn);
+    if (insertionIndex > sourceColumn) adjustedInsertionIndex--;
+  }
+  adjustedInsertionIndex = adjustedInsertionIndex.clamp(0, columns.length);
+  columns.insert(adjustedInsertionIndex, [panel]);
+  return !sourceWasSingleton || adjustedInsertionIndex != sourceColumn;
+}
+
 List<(String, String)> _shotMetadata(AppState app) {
   String valueWithUnit(String value, String unit) {
     if (value.isEmpty) return app.fetching ? '...' : '--';
@@ -1124,6 +1151,32 @@ class ToolbarWidget extends StatelessWidget {
                                                 height: 32,
                                                 child: Row(
                                                   children: [
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                              left: 3),
+                                                      child: _layoutDragHandle(
+                                                        context: ctx,
+                                                        key: ValueKey(
+                                                            'layout-column-drag-handle-${displayColumn + 1}'),
+                                                        data: _LayoutDragData
+                                                            .column(
+                                                          displayColumn,
+                                                        ),
+                                                        tooltip:
+                                                            'Drag column ${displayColumn + 1}',
+                                                        feedback:
+                                                            _layoutDragFeedback(
+                                                          ctx,
+                                                          icon: Icons
+                                                              .view_column_rounded,
+                                                          label:
+                                                              'Column ${displayColumn + 1}',
+                                                          subtitle:
+                                                              '${draftColumns[displayColumn].length} panels',
+                                                        ),
+                                                      ),
+                                                    ),
                                                     Expanded(
                                                       child: Center(
                                                         child: FittedBox(
@@ -1503,39 +1556,109 @@ class ToolbarWidget extends StatelessWidget {
   }) {
     return DragTarget<_LayoutDragData>(
       key: ValueKey('layout-column-drop-$insertionIndex'),
-      onWillAcceptWithDetails: (details) => details.data.isColumn,
+      onWillAcceptWithDetails: (_) => true,
       onAcceptWithDetails: (details) {
-        if (reorderLayoutColumn(
-          columns,
-          details.data.column,
-          insertionIndex,
-        )) {
+        final changed = details.data.isColumn
+            ? reorderLayoutColumn(
+                columns,
+                details.data.column,
+                insertionIndex,
+              )
+            : moveLayoutPanelToNewColumn(
+                columns,
+                sourceColumn: details.data.column,
+                sourceRow: details.data.row!,
+                insertionIndex: insertionIndex,
+              );
+        if (changed) {
           clearSelection();
           setState(() {});
         }
       },
-      builder: (context, candidates, rejected) => AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        width: candidates.isEmpty ? 8 : 14,
-        margin: const EdgeInsets.symmetric(vertical: 6),
-        decoration: BoxDecoration(
-          color: candidates.isEmpty
-              ? Colors.transparent
-              : Theme.of(context).colorScheme.primary,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: candidates.isEmpty
-              ? null
-              : [
-                  BoxShadow(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .primary
-                        .withValues(alpha: 0.35),
-                    blurRadius: 8,
-                  ),
-                ],
+      builder: (context, candidates, rejected) {
+        final isPanel =
+            candidates.any((data) => data != null && !data.isColumn);
+        final active = candidates.isNotEmpty;
+        return Tooltip(
+          message: 'Drop a panel here to create a new column',
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            width: active ? 32 : 14,
+            margin: const EdgeInsets.symmetric(vertical: 6),
+            decoration: BoxDecoration(
+              color: active
+                  ? Theme.of(context)
+                      .colorScheme
+                      .primaryContainer
+                      .withValues(alpha: 0.9)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+              border: active
+                  ? Border.all(
+                      color: Theme.of(context).colorScheme.primary,
+                      width: 1.5,
+                    )
+                  : null,
+              boxShadow: active
+                  ? [
+                      BoxShadow(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withValues(alpha: 0.35),
+                        blurRadius: 8,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: active
+                ? Icon(
+                    isPanel ? Icons.add_box_rounded : Icons.swap_horiz_rounded,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.primary,
+                  )
+                : null,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _layoutDragHandle({
+    required BuildContext context,
+    required Key key,
+    required _LayoutDragData data,
+    required String tooltip,
+    required Widget feedback,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+    final handle = Tooltip(
+      message: tooltip,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.grab,
+        child: Container(
+          width: 26,
+          height: 26,
+          decoration: BoxDecoration(
+            color: colors.surfaceContainerHighest.withValues(alpha: 0.84),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: colors.outlineVariant),
+          ),
+          child: Icon(
+            Icons.drag_indicator_rounded,
+            size: 17,
+            color: colors.onSurfaceVariant,
+          ),
         ),
       ),
+    );
+    return Draggable<_LayoutDragData>(
+      key: key,
+      data: data,
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      feedback: feedback,
+      childWhenDragging: Opacity(opacity: 0.35, child: handle),
+      child: handle,
     );
   }
 
@@ -1655,19 +1778,21 @@ class ToolbarWidget extends StatelessWidget {
   }) {
     final colors = Theme.of(context).colorScheme;
     final title = panel['title']?.toString().trim() ?? '';
+    final dragData = _LayoutDragData.panel(sourceColumn, sourceRow);
+    final dragFeedback = _layoutDragFeedback(
+      context,
+      icon: Icons.space_dashboard_rounded,
+      label: 'Panel $panelNumber',
+      subtitle: title,
+      width: 170,
+    );
     return Expanded(
       child: LongPressDraggable<_LayoutDragData>(
         key: ValueKey('layout-panel-drag-$panelNumber'),
-        data: _LayoutDragData.panel(sourceColumn, sourceRow),
+        data: dragData,
         delay: const Duration(milliseconds: 320),
         hapticFeedbackOnStart: true,
-        feedback: _layoutDragFeedback(
-          context,
-          icon: Icons.space_dashboard_rounded,
-          label: 'Panel $panelNumber',
-          subtitle: title,
-          width: 170,
-        ),
+        feedback: dragFeedback,
         childWhenDragging: Opacity(
           opacity: 0.22,
           child: Container(
@@ -1699,6 +1824,13 @@ class ToolbarWidget extends StatelessWidget {
               selected: selected,
               onEdit: onEdit,
               onDelete: onDelete,
+              dragHandle: _layoutDragHandle(
+                context: context,
+                key: ValueKey('layout-panel-drag-handle-$panelNumber'),
+                data: dragData,
+                tooltip: 'Drag panel $panelNumber',
+                feedback: dragFeedback,
+              ),
             ),
           ),
         ),
@@ -1713,6 +1845,7 @@ class ToolbarWidget extends StatelessWidget {
     required bool selected,
     required VoidCallback onEdit,
     required VoidCallback onDelete,
+    required Widget dragHandle,
   }) {
     final textColor = Theme.of(context).colorScheme.onSurfaceVariant;
     final details = <Widget>[
@@ -1762,13 +1895,14 @@ class ToolbarWidget extends StatelessWidget {
       children: [
         Positioned.fill(
           child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(4, 4, 4, selected ? 32 : 4),
+            padding: EdgeInsets.fromLTRB(4, 4, 31, selected ? 32 : 4),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: details,
             ),
           ),
         ),
+        Positioned(right: 2, top: 2, child: dragHandle),
         if (selected)
           Positioned(
             left: 2,

@@ -3071,6 +3071,30 @@ void main() {
     );
     expect(panels, hasLength(2));
     expect(panels[0].first['title'], '2-1');
+
+    final splitColumns = [
+      [panel('A'), panel('B')],
+      [panel('C')],
+    ];
+    expect(
+      moveLayoutPanelToNewColumn(
+        splitColumns,
+        sourceColumn: 0,
+        sourceRow: 1,
+        insertionIndex: 1,
+      ),
+      isTrue,
+    );
+    expect(
+      splitColumns
+          .map((column) => column.map((item) => item['title']).toList())
+          .toList(),
+      [
+        ['A'],
+        ['B'],
+        ['C'],
+      ],
+    );
   });
 
   testWidgets('Layout Setup selects and deletes columns with icon actions',
@@ -3104,6 +3128,18 @@ void main() {
         find.byKey(const ValueKey('layout-panel-drag-1')),
       ),
       isA<LongPressDraggable>(),
+    );
+    expect(
+      tester.widget(
+        find.byKey(const ValueKey('layout-column-drag-handle-1')),
+      ),
+      isA<Draggable>(),
+    );
+    expect(
+      tester.widget(
+        find.byKey(const ValueKey('layout-panel-drag-handle-1')),
+      ),
+      isA<Draggable>(),
     );
     expect(
       find.byKey(const ValueKey('layout-column-drop-1')),
@@ -3166,6 +3202,44 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'Apply'));
     await tester.pumpAndSettle();
     expect(app.columns, hasLength(1));
+  });
+
+  testWidgets('A panel drag handle can create a column between columns',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.applyLayoutList([2, 1]);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(700, 900);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Layout setup'));
+    await tester.pumpAndSettle();
+
+    final handle = find.byKey(const ValueKey('layout-panel-drag-handle-2'));
+    final betweenColumns = find.byKey(const ValueKey('layout-column-drop-1'));
+    final drag = await tester.startGesture(tester.getCenter(handle));
+    await drag.moveTo(tester.getCenter(betweenColumns));
+    await tester.pump(const Duration(milliseconds: 200));
+    await drag.up();
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('layout-preview-column-2')),
+      findsOneWidget,
+    );
+    await tester.tap(find.widgetWithText(TextButton, 'Apply'));
+    await tester.pumpAndSettle();
+    expect(app.columns.map((column) => column.length), [1, 1, 1]);
   });
 
   testWidgets('Layout Setup scrolls wide columns and tall panel lists',
