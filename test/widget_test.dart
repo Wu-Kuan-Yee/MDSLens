@@ -2803,6 +2803,72 @@ void main() {
     }
   });
 
+  testWidgets('Layout Setup selects and deletes columns with icon actions',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.applyLayoutList([1, 1]);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(700, 900);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Layout setup'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('layout-column-header-2')),
+    );
+    await tester.pump();
+    final deleteColumn = find.byKey(const ValueKey('layout-delete-column-2'));
+    expect(deleteColumn, findsOneWidget);
+    expect(tester.widget(deleteColumn), isA<IconButton>());
+
+    await tester.tap(
+      find.byKey(const ValueKey('layout-setup-blank-area')),
+    );
+    await tester.pump();
+    expect(deleteColumn, findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('layout-preview-panel-0')));
+    await tester.pump();
+    expect(
+      tester.widget(
+        find.byKey(const ValueKey('layout-edit-panel-1')),
+      ),
+      isA<IconButton>(),
+    );
+    expect(
+      tester.widget(
+        find.byKey(const ValueKey('layout-delete-panel-1')),
+      ),
+      isA<IconButton>(),
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('layout-column-header-2')),
+    );
+    await tester.pump();
+    await tester.tap(deleteColumn);
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('layout-preview-column-1')),
+      findsNothing,
+    );
+
+    await tester.tap(find.widgetWithText(TextButton, 'Apply'));
+    await tester.pumpAndSettle();
+    expect(app.columns, hasLength(1));
+  });
+
   testWidgets('Layout Setup shows metadata and supports draft panel actions',
       (tester) async {
     final app = AppState(

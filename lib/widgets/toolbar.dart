@@ -870,121 +870,176 @@ class ToolbarWidget extends StatelessWidget {
                               displayColumn++) ...[
                             if (displayColumn > 0) const SizedBox(width: 6),
                             Expanded(
-                              child: Container(
-                                key: ValueKey(
-                                    'layout-preview-column-$displayColumn'),
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                      color: Theme.of(ctx).dividerColor),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Column(children: [
-                                  GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onTap: () => setState(() {
-                                      selectedCol = -1;
-                                      selectedRow = -1;
-                                    }),
-                                    child: SizedBox(
-                                      height: 28,
-                                      child: Center(
-                                        child: FittedBox(
-                                          fit: BoxFit.scaleDown,
-                                          child: Text(
-                                            'Column ${displayColumn + 1}',
-                                            style: const TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.translucent,
+                                onTap: () => setState(() {
+                                  selectedCol = displayColumn;
+                                  selectedRow = -1;
+                                }),
+                                child: Container(
+                                  key: ValueKey(
+                                      'layout-preview-column-$displayColumn'),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: selectedCol == displayColumn &&
+                                              selectedRow < 0
+                                          ? Theme.of(ctx).colorScheme.primary
+                                          : Theme.of(ctx).dividerColor,
+                                      width: selectedCol == displayColumn &&
+                                              selectedRow < 0
+                                          ? 2
+                                          : 1,
+                                    ),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Column(children: [
+                                    GestureDetector(
+                                      key: ValueKey(
+                                          'layout-column-header-${displayColumn + 1}'),
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: () => setState(() {
+                                        selectedCol = displayColumn;
+                                        selectedRow = -1;
+                                      }),
+                                      child: SizedBox(
+                                        height: 32,
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              child: Center(
+                                                child: FittedBox(
+                                                  fit: BoxFit.scaleDown,
+                                                  child: Text(
+                                                    'Column ${displayColumn + 1}',
+                                                    style: const TextStyle(
+                                                      fontSize: 10,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
                                             ),
-                                          ),
+                                            if (selectedCol == displayColumn &&
+                                                selectedRow < 0)
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                    right: 3),
+                                                child: _layoutIconButton(
+                                                  context: ctx,
+                                                  key: ValueKey(
+                                                      'layout-delete-column-${displayColumn + 1}'),
+                                                  icon: Icons
+                                                      .delete_outline_rounded,
+                                                  tooltip: draftColumns.length >
+                                                          1
+                                                      ? 'Delete column'
+                                                      : 'At least one column is required',
+                                                  destructive: true,
+                                                  onPressed:
+                                                      draftColumns.length > 1
+                                                          ? () {
+                                                              draftColumns.removeAt(
+                                                                  displayColumn);
+                                                              selectedCol = -1;
+                                                              selectedRow = -1;
+                                                              setState(() {});
+                                                            }
+                                                          : null,
+                                                ),
+                                              ),
+                                          ],
                                         ),
                                       ),
                                     ),
-                                  ),
-                                  Expanded(
-                                    child: Column(
-                                      children: displayColumns[displayColumn]
-                                          .map((cell) {
-                                        final selected =
-                                            selectedCol == cell.sourceColumn &&
-                                                selectedRow == cell.sourceRow;
-                                        final panel =
-                                            draftColumns[cell.sourceColumn]
-                                                [cell.sourceRow];
-                                        return Expanded(
-                                          child: GestureDetector(
-                                            onTap: () => setState(() {
-                                              selectedCol = cell.sourceColumn;
-                                              selectedRow = cell.sourceRow;
-                                            }),
-                                            child: Container(
-                                              key: ValueKey(
-                                                  'layout-preview-panel-${cell.plotIndex}'),
-                                              width: double.infinity,
-                                              margin: const EdgeInsets.all(4),
-                                              decoration: BoxDecoration(
-                                                border: Border.all(
-                                                  color: selected
-                                                      ? Theme.of(ctx)
-                                                          .colorScheme
-                                                          .primary
-                                                      : Colors.grey.shade400,
-                                                  width: selected ? 2 : 1,
+                                    Expanded(
+                                      child: Column(
+                                        children: displayColumns[displayColumn]
+                                            .map((cell) {
+                                          final selected = selectedCol ==
+                                                  cell.sourceColumn &&
+                                              selectedRow == cell.sourceRow;
+                                          final panel =
+                                              draftColumns[cell.sourceColumn]
+                                                  [cell.sourceRow];
+                                          return Expanded(
+                                            child: GestureDetector(
+                                              onTap: () => setState(() {
+                                                selectedCol = cell.sourceColumn;
+                                                selectedRow = cell.sourceRow;
+                                              }),
+                                              child: Container(
+                                                key: ValueKey(
+                                                    'layout-preview-panel-${cell.plotIndex}'),
+                                                width: double.infinity,
+                                                margin: const EdgeInsets.all(4),
+                                                decoration: BoxDecoration(
+                                                  border: Border.all(
+                                                    color: selected
+                                                        ? Theme.of(ctx)
+                                                            .colorScheme
+                                                            .primary
+                                                        : Colors.grey.shade400,
+                                                    width: selected ? 2 : 1,
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
+                                                  color: Theme.of(ctx)
+                                                      .colorScheme
+                                                      .primaryContainer
+                                                      .withValues(alpha: 0.3),
                                                 ),
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                                color: Theme.of(ctx)
-                                                    .colorScheme
-                                                    .primaryContainer
-                                                    .withValues(alpha: 0.3),
-                                              ),
-                                              child: _buildLayoutPanelPreview(
-                                                ctx,
-                                                panel: panel,
-                                                panelNumber: cell.plotIndex + 1,
-                                                selected: selected,
-                                                onEdit: () async {
-                                                  final changed =
-                                                      await _editLayoutPanel(
-                                                    ctx,
-                                                    app,
-                                                    panel,
-                                                    cell.plotIndex + 1,
-                                                  );
-                                                  if (changed && ctx.mounted) {
-                                                    setState(() {});
-                                                  }
-                                                },
-                                                onDelete: () {
-                                                  final panelCount =
-                                                      draftColumns.fold(
-                                                    0,
-                                                    (count, column) =>
-                                                        count + column.length,
-                                                  );
-                                                  if (panelCount <= 1) return;
-                                                  draftColumns[
-                                                          cell.sourceColumn]
-                                                      .removeAt(cell.sourceRow);
-                                                  if (draftColumns[
-                                                          cell.sourceColumn]
-                                                      .isEmpty) {
-                                                    draftColumns.removeAt(
-                                                      cell.sourceColumn,
+                                                child: _buildLayoutPanelPreview(
+                                                  ctx,
+                                                  panel: panel,
+                                                  panelNumber:
+                                                      cell.plotIndex + 1,
+                                                  selected: selected,
+                                                  onEdit: () async {
+                                                    final changed =
+                                                        await _editLayoutPanel(
+                                                      ctx,
+                                                      app,
+                                                      panel,
+                                                      cell.plotIndex + 1,
                                                     );
-                                                  }
-                                                  selectedCol = -1;
-                                                  selectedRow = -1;
-                                                  setState(() {});
-                                                },
+                                                    if (changed &&
+                                                        ctx.mounted) {
+                                                      setState(() {});
+                                                    }
+                                                  },
+                                                  onDelete: () {
+                                                    final panelCount =
+                                                        draftColumns.fold(
+                                                      0,
+                                                      (count, column) =>
+                                                          count + column.length,
+                                                    );
+                                                    if (panelCount <= 1) return;
+                                                    draftColumns[
+                                                            cell.sourceColumn]
+                                                        .removeAt(
+                                                            cell.sourceRow);
+                                                    if (draftColumns[
+                                                            cell.sourceColumn]
+                                                        .isEmpty) {
+                                                      draftColumns.removeAt(
+                                                        cell.sourceColumn,
+                                                      );
+                                                    }
+                                                    selectedCol = -1;
+                                                    selectedRow = -1;
+                                                    setState(() {});
+                                                  },
+                                                ),
                                               ),
                                             ),
-                                          ),
-                                        );
-                                      }).toList(),
+                                          );
+                                        }).toList(),
+                                      ),
                                     ),
-                                  ),
-                                ]),
+                                  ]),
+                                ),
                               ),
                             ),
                           ],
@@ -1072,6 +1127,39 @@ class ToolbarWidget extends StatelessWidget {
         'signal_specs': <Map<String, dynamic>>[],
       };
 
+  Widget _layoutIconButton({
+    required BuildContext context,
+    required Key key,
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback? onPressed,
+    bool destructive = false,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+    final foreground = destructive ? colors.error : colors.primary;
+    final background = destructive
+        ? colors.errorContainer.withValues(alpha: 0.72)
+        : colors.primaryContainer.withValues(alpha: 0.8);
+    return IconButton(
+      key: key,
+      onPressed: onPressed,
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints.tightFor(width: 26, height: 26),
+      padding: EdgeInsets.zero,
+      style: IconButton.styleFrom(
+        foregroundColor: foreground,
+        backgroundColor: background,
+        disabledForegroundColor:
+            colors.onSurfaceVariant.withValues(alpha: 0.35),
+        disabledBackgroundColor:
+            colors.surfaceContainerHighest.withValues(alpha: 0.5),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      icon: Icon(icon, size: 15),
+    );
+  }
+
   Widget _buildLayoutPanelPreview(
     BuildContext context, {
     required Map<String, dynamic> panel,
@@ -1140,30 +1228,25 @@ class ToolbarWidget extends StatelessWidget {
             left: 2,
             right: 2,
             bottom: 2,
-            height: 28,
+            height: 30,
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Expanded(
-                  child: TextButton(
-                    key: ValueKey('layout-edit-panel-$panelNumber'),
-                    onPressed: onEdit,
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    child: const Text('Edit', style: TextStyle(fontSize: 8)),
-                  ),
+                _layoutIconButton(
+                  context: context,
+                  key: ValueKey('layout-edit-panel-$panelNumber'),
+                  icon: Icons.edit_rounded,
+                  tooltip: 'Edit panel $panelNumber',
+                  onPressed: onEdit,
                 ),
-                Expanded(
-                  child: TextButton(
-                    key: ValueKey('layout-delete-panel-$panelNumber'),
-                    onPressed: onDelete,
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    child: const Text('Delete', style: TextStyle(fontSize: 8)),
-                  ),
+                const SizedBox(width: 5),
+                _layoutIconButton(
+                  context: context,
+                  key: ValueKey('layout-delete-panel-$panelNumber'),
+                  icon: Icons.delete_outline_rounded,
+                  tooltip: 'Delete panel $panelNumber',
+                  destructive: true,
+                  onPressed: onDelete,
                 ),
               ],
             ),
