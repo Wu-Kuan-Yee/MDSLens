@@ -109,8 +109,7 @@ void main() {
         .setMockMethodCallHandler(channel, (call) async {
       if (call.method == 'isDark') {
         nativeBrightnessQueries++;
-        await Future<void>.delayed(const Duration(milliseconds: 50));
-        return false;
+        return nativeBrightnessQueries == 1 ? false : true;
       }
       return null;
     });
@@ -131,11 +130,47 @@ void main() {
         child: const MdsScopeApp(),
       ),
     );
-    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(milliseconds: 400));
 
     expect(tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
         ThemeMode.dark);
-    expect(nativeBrightnessQueries, 0);
+    expect(nativeBrightnessQueries, 2);
+  });
+
+  testWidgets('Auto theme corrects a stale light startup value on macOS',
+      (tester) async {
+    const channel = MethodChannel('mdsscope/theme');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      return call.method == 'isDark' ? true : null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+      tester.binding.platformDispatcher.clearPlatformBrightnessTestValue();
+    });
+    tester.binding.platformDispatcher.platformBrightnessTestValue =
+        Brightness.light;
+
+    final app = AppState();
+    await app.preferencesReady;
+    app.themeMode = 2;
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MdsScopeApp(),
+      ),
+    );
+    expect(tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+        ThemeMode.light);
+
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+        ThemeMode.dark);
+
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+        ThemeMode.dark);
   });
 
   testWidgets('Tapping empty main-page space dismisses the Shot keyboard',

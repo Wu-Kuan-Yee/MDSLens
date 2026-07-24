@@ -18,6 +18,8 @@ class MdsScopeApp extends StatefulWidget {
 
 class _MdsScopeAppState extends State<MdsScopeApp> with WidgetsBindingObserver {
   bool _sysDark = false;
+  int _themeEventRevision = 0;
+  Timer? _themeCalibrationTimer;
   StreamSubscription<bool>? _themeSubscription;
 
   @override
@@ -34,10 +36,40 @@ class _MdsScopeAppState extends State<MdsScopeApp> with WidgetsBindingObserver {
     // query can complete before the host appearance has settled and overwrite
     // the correct initial value with a stale light-mode result.
     _themeSubscription = ThemeChannel.onThemeChanged.listen((d) {
-      if (mounted) setState(() => _sysDark = d);
+      _themeEventRevision++;
+      if (mounted && d != _sysDark) setState(() => _sysDark = d);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scheduleThemeCalibration();
     });
     // Global Shift key tracking for Shift+drag pan
     HardwareKeyboard.instance.addHandler(_onAppKey);
+  }
+
+  void _scheduleThemeCalibration() {
+    final revision = _themeEventRevision;
+    _themeCalibrationTimer?.cancel();
+    _themeCalibrationTimer = Timer(const Duration(milliseconds: 80), () async {
+      final earlyNativeDark = await ThemeChannel.isDark();
+      if (!mounted || revision != _themeEventRevision) return;
+
+      // A dark result is safe to apply early and fixes platforms that briefly
+      // report light through platformBrightness during startup. A light result
+      // waits for the host appearance to settle so it cannot overwrite a
+      // correct dark dispatcher value with a transient native value.
+      if (earlyNativeDark == true && !_sysDark) {
+        setState(() => _sysDark = true);
+      }
+
+      _themeCalibrationTimer =
+          Timer(const Duration(milliseconds: 180), () async {
+        final settledNativeDark = await ThemeChannel.isDark();
+        if (!mounted || revision != _themeEventRevision) return;
+        if (settledNativeDark != null && settledNativeDark != _sysDark) {
+          setState(() => _sysDark = settledNativeDark);
+        }
+      });
+    });
   }
 
   bool _onAppKey(KeyEvent event) {
@@ -56,6 +88,7 @@ class _MdsScopeAppState extends State<MdsScopeApp> with WidgetsBindingObserver {
   @override
   void didChangePlatformBrightness() {
     if (!mounted) return;
+    _themeEventRevision++;
     final isDark =
         WidgetsBinding.instance.platformDispatcher.platformBrightness ==
             Brightness.dark;
@@ -63,9 +96,17 @@ class _MdsScopeAppState extends State<MdsScopeApp> with WidgetsBindingObserver {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _scheduleThemeCalibration();
+    }
+  }
+
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     HardwareKeyboard.instance.removeHandler(_onAppKey);
+    _themeCalibrationTimer?.cancel();
     _themeSubscription?.cancel();
     StylusModeChannel.dispose();
     super.dispose();
