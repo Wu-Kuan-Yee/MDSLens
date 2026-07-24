@@ -145,15 +145,20 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
           );
           if (constraints.maxWidth < 390) {
             return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              key: ValueKey('about-row-narrow-$name'),
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                label,
+                Center(child: label),
                 const SizedBox(height: 4),
-                valueWidget,
+                Align(
+                  alignment: Alignment.center,
+                  widthFactor: 1,
+                  child: valueWidget,
+                ),
               ],
             );
           }
-          return Row(children: [
+          return Row(key: ValueKey('about-row-wide-$name'), children: [
             label,
             const SizedBox(width: 16),
             Expanded(

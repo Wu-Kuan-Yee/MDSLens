@@ -3170,6 +3170,20 @@ void main() {
       ),
     );
 
+    final narrowVersionRow = find.byKey(
+      const ValueKey('about-row-narrow-MdsScope Version'),
+    );
+    expect(narrowVersionRow, findsOneWidget);
+    expect(
+      tester.widget<Column>(narrowVersionRow).crossAxisAlignment,
+      CrossAxisAlignment.center,
+    );
+    await tester.ensureVisible(find.text('MdsScope Version'));
+    expect(
+      tester.getCenter(find.text('MdsScope Version')).dx,
+      closeTo(tester.getCenter(find.text(currentMdsScopeVersion)).dx, 0.5),
+    );
+
     await tester.ensureVisible(find.text('GitHub'));
     await tester.tap(find.text('GitHub'));
     await tester.pump();
