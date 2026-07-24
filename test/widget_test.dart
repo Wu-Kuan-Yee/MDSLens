@@ -2326,7 +2326,7 @@ void main() {
     expect(find.text('163701'), findsOneWidget);
   });
 
-  testWidgets('Shot history supports selective and confirmed full clearing',
+  testWidgets('Shot history uses one selectable list with nested confirmation',
       (tester) async {
     SharedPreferences.setMockInitialValues({
       'shotHistory': '["163703","163702","163701"]',
@@ -2366,12 +2366,12 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Clear Shot History'), findsOneWidget);
-    await tester.tap(
-      find.byKey(const ValueKey('shot-history-clear-selected')),
-    );
-    await tester.pumpAndSettle();
     expect(
       find.byKey(const ValueKey('shot-history-selection-list')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('shot-history-select-all')),
       findsOneWidget,
     );
 
@@ -2380,39 +2380,57 @@ void main() {
     );
     await tester.pump();
     await tester.tap(
-      find.byKey(const ValueKey('shot-history-selection-confirm')),
+      find.byKey(const ValueKey('shot-history-delete-selected')),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Clear selected shot history?'), findsOneWidget);
+    expect(find.text('Delete selected shot history?'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('shot-history-confirm-cancel')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('shot-history-selection-list')),
+      findsOneWidget,
+    );
+    expect(app.shotHistory, ['163703', '163702', '163701']);
+
+    await tester.tap(
+      find.byKey(const ValueKey('shot-history-delete-selected')),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(
       find.byKey(const ValueKey('shot-history-confirm-selected')),
     );
     await tester.pumpAndSettle();
     expect(app.shotHistory, ['163703', '163701']);
+    expect(
+      find.byKey(const ValueKey('shot-history-selection-list')),
+      findsOneWidget,
+    );
 
     await tester.tap(
-      find.byKey(const ValueKey('toolbar-shot-history-dropdown')),
+      find.byKey(const ValueKey('shot-history-select-all')),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey('shot-history-delete-selected')),
     );
     await tester.pumpAndSettle();
+    expect(find.text('Delete selected shot history?'), findsOneWidget);
     await tester.tap(
-      find.byKey(
-        const ValueKey('toolbar-shot-history-menu-action'),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const ValueKey('shot-history-clear-all')),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Clear all shot history?'), findsOneWidget);
-    await tester.tap(
-      find.byKey(const ValueKey('shot-history-confirm-all')),
+      find.byKey(const ValueKey('shot-history-confirm-selected')),
     );
     await tester.pumpAndSettle();
 
     expect(app.shotHistory, isEmpty);
+    expect(find.text('Shot history is empty'), findsOneWidget);
+    expect(find.text('Clear Shot History'), findsOneWidget);
     final preferences = await SharedPreferences.getInstance();
     expect(preferences.getString('shotHistory'), '[]');
+    await tester.tap(
+      find.byKey(const ValueKey('shot-history-manager-close')),
+    );
+    await tester.pumpAndSettle();
     expect(
       find.byKey(const ValueKey('toolbar-shot-history-dropdown')),
       findsNothing,
