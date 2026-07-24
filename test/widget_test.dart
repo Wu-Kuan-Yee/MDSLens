@@ -2278,6 +2278,24 @@ void main() {
       find.descendant(of: treeMenu, matching: find.byType(ListView)),
     );
     expect(treeList.semanticChildCount, 18);
+    final treeScrollbar = find.descendant(
+      of: treeMenu,
+      matching: find.byType(Scrollbar),
+    );
+    expect(treeScrollbar, findsOneWidget);
+    expect(tester.widget<Scrollbar>(treeScrollbar).interactive, isTrue);
+    final treeMenuRect = tester.getRect(treeMenu);
+    final scrollbarDrag = await tester.startGesture(
+      Offset(treeMenuRect.right - 2, treeMenuRect.top + 24),
+      kind: PointerDeviceKind.mouse,
+    );
+    await scrollbarDrag.moveBy(const Offset(0, 100));
+    await tester.pump();
+    expect(treeMenu, findsOneWidget);
+    expect(tester.widget<TextField>(treeTextField).focusNode?.hasFocus, isTrue);
+    await scrollbarDrag.up();
+    await tester.pumpAndSettle();
+    expect(treeMenu, findsOneWidget);
 
     await tester.enterText(treeTextField, 'pcs');
     await tester.pumpAndSettle();

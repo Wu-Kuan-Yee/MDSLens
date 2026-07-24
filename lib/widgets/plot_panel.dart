@@ -2101,6 +2101,8 @@ class _AutocompleteField extends StatefulWidget {
 
 class _AutocompleteFieldState extends State<_AutocompleteField> {
   final _node = FocusNode();
+  final _scrollController = ScrollController();
+  final _tapRegionGroup = Object();
   OverlayEntry? _overlay;
   final _layerLink = LayerLink();
 
@@ -2127,6 +2129,7 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
     widget.controller.removeListener(_update);
     _node.removeListener(_handleFocusChange);
     _node.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -2170,55 +2173,65 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
               link: _layerLink,
               showWhenUnlinked: false,
               offset: const Offset(0, 42),
-              child: Material(
-                color: theme.colorScheme.surfaceContainerHigh,
-                elevation: 8,
-                shadowColor: theme.colorScheme.shadow.withValues(alpha: 0.22),
-                shape: RoundedRectangleBorder(
-                  side: BorderSide(
-                    color: theme.colorScheme.outlineVariant,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: ConstrainedBox(
-                  key: ValueKey(
-                      'autocomplete-${widget.label.toLowerCase()}-menu'),
-                  constraints: const BoxConstraints(maxHeight: 240),
-                  child: ListView.separated(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    shrinkWrap: true,
-                    itemCount: hints.length,
-                    separatorBuilder: (_, __) => Divider(
-                      height: 1,
-                      color: theme.dividerColor.withValues(alpha: 0.55),
+              child: TapRegion(
+                groupId: _tapRegionGroup,
+                child: Material(
+                  color: theme.colorScheme.surfaceContainerHigh,
+                  elevation: 8,
+                  shadowColor: theme.colorScheme.shadow.withValues(alpha: 0.22),
+                  shape: RoundedRectangleBorder(
+                    side: BorderSide(
+                      color: theme.colorScheme.outlineVariant,
                     ),
-                    itemBuilder: (_, i) => Listener(
-                      key: ValueKey(
-                        'autocomplete-${widget.label.toLowerCase()}-option-$i',
-                      ),
-                      behavior: HitTestBehavior.opaque,
-                      onPointerDown: (event) {
-                        if (event.kind == PointerDeviceKind.mouse ||
-                            event.kind == PointerDeviceKind.trackpad ||
-                            event.kind == PointerDeviceKind.stylus ||
-                            event.kind == PointerDeviceKind.invertedStylus) {
-                          _selectHint(hints[i]);
-                        }
-                      },
-                      child: ListTile(
-                        dense: true,
-                        minTileHeight: 42,
-                        leading: Icon(
-                          Icons.search_rounded,
-                          size: 18,
-                          color: theme.colorScheme.primary,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: ConstrainedBox(
+                    key: ValueKey(
+                        'autocomplete-${widget.label.toLowerCase()}-menu'),
+                    constraints: const BoxConstraints(maxHeight: 240),
+                    child: Scrollbar(
+                      controller: _scrollController,
+                      thumbVisibility: true,
+                      interactive: true,
+                      child: ListView.separated(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        shrinkWrap: true,
+                        itemCount: hints.length,
+                        separatorBuilder: (_, __) => Divider(
+                          height: 1,
+                          color: theme.dividerColor.withValues(alpha: 0.55),
                         ),
-                        title: Text(
-                          hints[i],
-                          style: const TextStyle(fontSize: 12),
+                        itemBuilder: (_, i) => Listener(
+                          key: ValueKey(
+                            'autocomplete-${widget.label.toLowerCase()}-option-$i',
+                          ),
+                          behavior: HitTestBehavior.opaque,
+                          onPointerDown: (event) {
+                            if (event.kind == PointerDeviceKind.mouse ||
+                                event.kind == PointerDeviceKind.trackpad ||
+                                event.kind == PointerDeviceKind.stylus ||
+                                event.kind ==
+                                    PointerDeviceKind.invertedStylus) {
+                              _selectHint(hints[i]);
+                            }
+                          },
+                          child: ListTile(
+                            dense: true,
+                            minTileHeight: 42,
+                            leading: Icon(
+                              Icons.search_rounded,
+                              size: 18,
+                              color: theme.colorScheme.primary,
+                            ),
+                            title: Text(
+                              hints[i],
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            onTap: () => _selectHint(hints[i]),
+                          ),
                         ),
-                        onTap: () => _selectHint(hints[i]),
                       ),
                     ),
                   ),
@@ -2236,6 +2249,7 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
   Widget build(BuildContext ctx) => CompositedTransformTarget(
       link: _layerLink,
       child: TextField(
+          groupId: _tapRegionGroup,
           controller: widget.controller,
           focusNode: _node,
           decoration: _DataSourceDialogState._dsDeco(),
