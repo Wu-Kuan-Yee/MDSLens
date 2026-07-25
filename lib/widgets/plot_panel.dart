@@ -1875,12 +1875,14 @@ class _InteractiveHorizontalScrollViewState
       scrollbarOrientation: ScrollbarOrientation.bottom,
       notificationPredicate: (notification) =>
           notification.metrics.axis == Axis.horizontal,
-      child: SingleChildScrollView(
-        key: widget.scrollViewKey,
-        controller: _controller,
-        scrollDirection: Axis.horizontal,
+      child: Padding(
         padding: widget.padding,
-        child: widget.child,
+        child: SingleChildScrollView(
+          key: widget.scrollViewKey,
+          controller: _controller,
+          scrollDirection: Axis.horizontal,
+          child: widget.child,
+        ),
       ),
     );
   }

@@ -3132,6 +3132,16 @@ void main() {
     expect(rebuiltScrollbar.controller, same(horizontalController));
     expect(rebuiltScrollbar.controller?.hasClients, isTrue);
     expect(rebuiltScrollbar.controller?.offset, preservedOffset);
+    final scrollbarRect = tester.getRect(
+      find.byKey(const ValueKey('data-source-horizontal-scrollbar')),
+    );
+    final horizontalViewportRect = tester.getRect(
+      find.byKey(const ValueKey('data-source-horizontal-scroll')),
+    );
+    expect(
+      scrollbarRect.bottom - horizontalViewportRect.bottom,
+      greaterThanOrEqualTo(9),
+    );
     horizontalController.jumpTo(0);
     await tester.pump();
     final shotField = tester.widget<TextField>(
