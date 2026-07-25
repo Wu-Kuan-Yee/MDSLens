@@ -26,10 +26,23 @@ pub enum AuthMethod { PublicKey, Agent, Password, KeyboardInteractive }
 struct Tunnel {
     local_port: u16,
     cancel: Arc<AtomicBool>,
+    active: Arc<AtomicBool>,
 }
 
 impl Tunnel {
     fn cancel(&self) { self.cancel.store(true, Ordering::Relaxed); }
+
+    fn is_healthy(&self) -> bool {
+        !self.cancel.load(Ordering::Relaxed) && self.active.load(Ordering::Acquire)
+    }
+}
+
+struct RelayActiveGuard(Arc<AtomicBool>);
+
+impl Drop for RelayActiveGuard {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
 }
 
 pub struct SshTunnelManager {
@@ -91,7 +104,13 @@ impl SshTunnelManager {
 
     pub fn ensure_tunnel(&mut self, endpoint: &str) -> Result<String, String> {
         if let Some(t) = self.tunnels.get(endpoint) {
-            return Ok(format!("127.0.0.1:{}", t.local_port));
+            if t.is_healthy() {
+                return Ok(format!("127.0.0.1:{}", t.local_port));
+            }
+        }
+        if let Some(stale) = self.tunnels.remove(endpoint) {
+            stale.cancel();
+            self.state = TunnelState::Ready;
         }
         let (host, port) = split_endpoint(endpoint);
         if matches!(self.settings.mode, SshMode::Auto) && tcp_reachable(&host, port, PROBE_TIMEOUT_MS) {
@@ -121,9 +140,11 @@ impl SshTunnelManager {
         listener.set_nonblocking(true).ok();
 
         let cancel = Arc::new(AtomicBool::new(false));
+        let active = Arc::new(AtomicBool::new(true));
         let rh = _host.to_string();
         let rp = _remote_port;
         let cc = cancel.clone();
+        let relay_active = active.clone();
 
         // Spawn relay: accept local → create fresh SSH session per connection → direct-tcpip → relay
         let ssh_host = self.settings.host.clone();
@@ -132,6 +153,7 @@ impl SshTunnelManager {
         let ssh_pass = self.settings.password.clone();
         let ssh_key = self.settings.identity_file.clone();
         std::thread::spawn(move || {
+            let _active_guard = RelayActiveGuard(relay_active);
             loop {
                 if cc.load(Ordering::Relaxed) { break; }
                 match listener.accept() {
@@ -165,6 +187,7 @@ impl SshTunnelManager {
         self.tunnels.insert(endpoint.to_string(), Tunnel {
             local_port,
             cancel,
+            active,
         });
         Ok(())
     }
@@ -557,6 +580,23 @@ mod tests {
         });
         assert_eq!(mgr.state(), TunnelState::Ready);
         assert_eq!(mgr.settings().host, "second");
+    }
+
+    #[test]
+    fn stale_cached_tunnel_is_not_reused() {
+        let mut mgr = SshTunnelManager::new();
+        mgr.tunnels.insert(
+            "internal.example:80".into(),
+            Tunnel {
+                local_port: 12345,
+                cancel: Arc::new(AtomicBool::new(false)),
+                active: Arc::new(AtomicBool::new(false)),
+            },
+        );
+
+        let error = mgr.ensure_tunnel("internal.example:80").unwrap_err();
+        assert_eq!(error, "SSH host not configured");
+        assert!(!mgr.tunnels.contains_key("internal.example:80"));
     }
 
     #[test]
