@@ -652,6 +652,7 @@ class AppState extends ChangeNotifier {
   String _loginPass = '';
   String get loginPass => _loginPass;
   int _sessionGeneration = 0;
+  final SourceIndexMemory sourceIndexMemory = SourceIndexMemory();
 
   // SSH
   String _sshHost = '';
@@ -2046,7 +2047,7 @@ class AppState extends ChangeNotifier {
       return;
     }
     final configured = configuredSignals[signal] as Map;
-    SourceIndexMemory.remember(
+    sourceIndexMemory.remember(
       configured['experiment']?.toString() ?? '',
       configured['y_expr']?.toString() ?? '',
     );

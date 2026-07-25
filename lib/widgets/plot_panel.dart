@@ -2228,6 +2228,8 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
   List<String> _treeNames = [];
   final Map<String, List<String>> _signalCache = {};
   final Map<String, Set<String>> _treesBySignal = {};
+  SourceIndexMemory get _sourceIndexMemory =>
+      context.read<AppState>().sourceIndexMemory;
 
   static const _presetColors = [
     0xFF2364aa,
@@ -2266,7 +2268,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
     } catch (_) {
       _treeNames = ['pcs_east'];
     }
-    for (final rememberedTree in SourceIndexMemory.trees) {
+    for (final rememberedTree in _sourceIndexMemory.trees) {
       if (!_treeNames
           .any((tree) => tree.toLowerCase() == rememberedTree.toLowerCase())) {
         _treeNames.add(rememberedTree);
@@ -2306,7 +2308,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
       final sigs = text
           .split('\n')
           .expand(sourceIndexSignalNames)
-          .followedBy(SourceIndexMemory.signalsForTree(tree))
+          .followedBy(_sourceIndexMemory.signalsForTree(tree))
           .toSet()
           .toList()
         ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
@@ -2314,7 +2316,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
       _indexTreeSignals(tree, sigs);
       return sigs;
     } catch (_) {
-      final remembered = SourceIndexMemory.signalsForTree(tree).toList()
+      final remembered = _sourceIndexMemory.signalsForTree(tree).toList()
         ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
       _signalCache[key] = remembered;
       _indexTreeSignals(tree, remembered);

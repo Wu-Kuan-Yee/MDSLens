@@ -72,12 +72,13 @@ void main() {
     expect(sourceIndexSignalNames('PCRL02'), [r'\PCRL02']);
     expect(sourceIndexSignalKey(r'\PCRL01 / 1000'), 'pcrl01');
 
-    SourceIndexMemory.remember(
+    final memory = SourceIndexMemory();
+    memory.remember(
       'test_tree_for_source_index',
       r'\NEW_SIGNAL * 2',
     );
     expect(
-      SourceIndexMemory.signalsForTree('TEST_TREE_FOR_SOURCE_INDEX'),
+      memory.signalsForTree('TEST_TREE_FOR_SOURCE_INDEX'),
       contains(r'\NEW_SIGNAL'),
     );
   });

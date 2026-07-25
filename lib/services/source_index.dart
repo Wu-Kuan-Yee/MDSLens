@@ -33,11 +33,9 @@ String sourceIndexSignalKey(String expression) {
 }
 
 class SourceIndexMemory {
-  SourceIndexMemory._();
+  final Map<String, Set<String>> _signalsByTree = {};
 
-  static final Map<String, Set<String>> _signalsByTree = {};
-
-  static void remember(String tree, String expression) {
+  void remember(String tree, String expression) {
     final normalizedTree = tree.trim().toLowerCase();
     if (normalizedTree.isEmpty) return;
     final nodes = sourceIndexSignalNames(expression);
@@ -45,9 +43,9 @@ class SourceIndexMemory {
     _signalsByTree.putIfAbsent(normalizedTree, () => <String>{}).addAll(nodes);
   }
 
-  static List<String> signalsForTree(String tree) => List<String>.unmodifiable(
+  List<String> signalsForTree(String tree) => List<String>.unmodifiable(
         _signalsByTree[tree.trim().toLowerCase()] ?? const <String>{},
       );
 
-  static Set<String> get trees => Set<String>.unmodifiable(_signalsByTree.keys);
+  Set<String> get trees => Set<String>.unmodifiable(_signalsByTree.keys);
 }
