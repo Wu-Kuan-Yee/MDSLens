@@ -766,6 +766,30 @@ void main() {
     expect((stored[1] as Map)['hide_mode'], signalHideModePersistent);
   });
 
+  test('Rate refresh preserves X range and resets Y range', () async {
+    final app = AppState(
+      signalFetchWorker: (_, __, ___) async => '[]',
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setLoggedIn(true, 'test-token');
+    app.shotText = '170001';
+    app.plots.first.setViewRange(0.25, 0.75, -4, 8);
+    final fullReset = app.viewResetId;
+    final rateReset = app.rateViewResetId;
+
+    app.dataMode = 1;
+    app.startRateRefresh();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(app.viewResetId, fullReset);
+    expect(app.rateViewResetId, rateReset + 1);
+    expect(app.plots.first.viewMinX, 0.25);
+    expect(app.plots.first.viewMaxX, 0.75);
+    expect(app.plots.first.viewMinY, isNull);
+    expect(app.plots.first.viewMaxY, isNull);
+  });
+
   test(
       'A configuration imported before login keeps its shot and loads after login',
       () async {

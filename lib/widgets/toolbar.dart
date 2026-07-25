@@ -407,7 +407,7 @@ class ToolbarWidget extends StatelessWidget {
           ],
           onChanged: (value) {
             app.dataMode = value;
-            app.startRefresh();
+            app.startRateRefresh();
           },
         ),
       ),

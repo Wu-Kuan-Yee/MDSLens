@@ -684,6 +684,8 @@ class AppState extends ChangeNotifier {
   // View reset — incremented on each Refresh/Apply to reset zoom/pan
   int _viewResetId = 0;
   int get viewResetId => _viewResetId;
+  int _rateViewResetId = 0;
+  int get rateViewResetId => _rateViewResetId;
   void resetAllViews() {
     for (final plot in _plots) {
       plot.clearViewRange();
@@ -1659,6 +1661,24 @@ class AppState extends ChangeNotifier {
     }
     _synchronizeSignalRuntimeSettings(_shotText);
     _addToHistory(_shotText);
+    savePreferences();
+    _doFetch(shot: _shotText);
+  }
+
+  void startRateRefresh() {
+    _pendingImportedShot = null;
+    if (!_requireActiveSession('change waveform rate')) return;
+    if (_columns.isEmpty) return;
+    if (_shotCtrl.text.trim().isNotEmpty) {
+      _shotText = _shotCtrl.text.trim();
+    }
+    _synchronizeSignalRuntimeSettings(_shotText);
+    _addToHistory(_shotText);
+    for (final plot in _plots) {
+      plot.viewMinY = null;
+      plot.viewMaxY = null;
+    }
+    _rateViewResetId++;
     savePreferences();
     _doFetch(shot: _shotText);
   }

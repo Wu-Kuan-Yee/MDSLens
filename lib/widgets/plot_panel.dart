@@ -146,6 +146,7 @@ class _PlotPanelState extends State<PlotPanel> {
       _viewMinY = double.nan,
       _viewMaxY = double.nan;
   int _lastResetId = -1;
+  int _lastRateResetId = -1;
   bool _midPanning = false;
   Offset? _lastMidPanPos;
   bool _inRubberBand = false;
@@ -179,9 +180,11 @@ class _PlotPanelState extends State<PlotPanel> {
     final plot = app.plots[widget.plotIdx];
     if (_lastResetId < 0) {
       _lastResetId = app.viewResetId;
+      _lastRateResetId = app.rateViewResetId;
       _restoreView(plot, app);
     } else if (app.viewResetId != _lastResetId) {
       _lastResetId = app.viewResetId;
+      _lastRateResetId = app.rateViewResetId;
       _resetView(plot);
       if (app.sharedXMin != null) {
         _viewMinX = app.sharedXMin!;
@@ -192,6 +195,12 @@ class _PlotPanelState extends State<PlotPanel> {
         _viewMaxY = app.sharedYMax!;
       }
       _storeView(plot);
+    } else if (app.rateViewResetId != _lastRateResetId) {
+      _lastRateResetId = app.rateViewResetId;
+      _viewMinY = double.nan;
+      _viewMaxY = double.nan;
+      plot.viewMinY = null;
+      plot.viewMaxY = null;
     }
 
     final panel = _findPanel(app);
