@@ -14,6 +14,7 @@ import 'package:mdsscope/services/external_url_launcher.dart';
 import 'package:mdsscope/services/identity_file_access.dart';
 import 'package:mdsscope/services/platform_file_dialog.dart';
 import 'package:mdsscope/services/runtime_build_info.dart';
+import 'package:mdsscope/services/source_index.dart';
 import 'package:mdsscope/services/update_service.dart';
 import 'package:mdsscope/theme/mdsscope_theme.dart';
 import 'package:mdsscope/widgets/dialogs/about.dart';
@@ -59,6 +60,25 @@ void main() {
         -1,
       ),
       10,
+    );
+  });
+
+  test('Source index extracts MDS nodes from expressions and remembers them',
+      () {
+    expect(
+      sourceIndexSignalNames(r'build_signal(\PCRL01 / 1000, \TIMEBASE)'),
+      [r'\PCRL01', r'\TIMEBASE'],
+    );
+    expect(sourceIndexSignalNames('PCRL02'), [r'\PCRL02']);
+    expect(sourceIndexSignalKey(r'\PCRL01 / 1000'), 'pcrl01');
+
+    SourceIndexMemory.remember(
+      'test_tree_for_source_index',
+      r'\NEW_SIGNAL * 2',
+    );
+    expect(
+      SourceIndexMemory.signalsForTree('TEST_TREE_FOR_SOURCE_INDEX'),
+      contains(r'\NEW_SIGNAL'),
     );
   });
 

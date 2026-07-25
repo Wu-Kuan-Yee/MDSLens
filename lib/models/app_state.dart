@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/platform_file_dialog.dart';
 import '../services/network_permission_service.dart';
 import '../services/rust_bridge.dart';
+import '../services/source_index.dart';
 
 const _configurationSignalColors = [
   '#2364aa',
@@ -1861,6 +1862,7 @@ class AppState extends ChangeNotifier {
           final decoded = _decodeLoadedSeries(sig['series']);
           final err = decoded.error;
           if (err != null && err.isNotEmpty) firstErr ??= err;
+          _rememberLoadedSource(col, row, signal, decoded.points);
           updatePlotSeriesByColRow(
             col,
             row,
@@ -1960,6 +1962,12 @@ class AppState extends ChangeNotifier {
                 final decoded = _decodeLoadedSeries(sig['series']);
                 final err = decoded.error;
                 if (err != null && err.isNotEmpty) firstErr ??= err;
+                _rememberLoadedSource(
+                  targetCol,
+                  targetRow,
+                  signal,
+                  decoded.points,
+                );
                 updatePlotSeriesByColRow(
                   targetCol,
                   targetRow,
@@ -1986,6 +1994,33 @@ class AppState extends ChangeNotifier {
       );
     }
     if (_isCurrentFetch(generation)) notifyListeners();
+  }
+
+  void _rememberLoadedSource(
+    int column,
+    int row,
+    int signal,
+    List<List<double>>? points,
+  ) {
+    if (points?.isNotEmpty != true ||
+        column < 0 ||
+        column >= _columns.length ||
+        row < 0 ||
+        row >= _columns[column].length) {
+      return;
+    }
+    final configuredSignals = _columns[column][row]['signal_specs'] as List?;
+    if (configuredSignals == null ||
+        signal < 0 ||
+        signal >= configuredSignals.length ||
+        configuredSignals[signal] is! Map) {
+      return;
+    }
+    final configured = configuredSignals[signal] as Map;
+    SourceIndexMemory.remember(
+      configured['experiment']?.toString() ?? '',
+      configured['y_expr']?.toString() ?? '',
+    );
   }
 
   Future<void> _fetchTopInfo(String shot, int generation) async {

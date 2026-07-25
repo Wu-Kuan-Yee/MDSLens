@@ -12,6 +12,7 @@ import 'polished_popup_menu.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/app_state.dart';
 import '../services/platform_file_dialog.dart';
+import '../services/source_index.dart';
 import 'dialogs/keyboard_safe_dialog.dart';
 
 const _colors = [
@@ -2217,6 +2218,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
   final _rows = <_DSRow>[];
   List<String> _treeNames = [];
   final Map<String, List<String>> _signalCache = {};
+  final Map<String, Set<String>> _treesBySignal = {};
 
   static const _presetColors = [
     0xFF2364aa,
@@ -2255,6 +2257,13 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
     } catch (_) {
       _treeNames = ['pcs_east'];
     }
+    for (final rememberedTree in SourceIndexMemory.trees) {
+      if (!_treeNames
+          .any((tree) => tree.toLowerCase() == rememberedTree.toLowerCase())) {
+        _treeNames.add(rememberedTree);
+      }
+    }
+    _treeNames.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     _signalCache.remove('__all__');
     await _signalsForTree('');
     if (!mounted) return;
@@ -2287,15 +2296,40 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
       final text = await _loadAsset('assets/source_index/signals/$key.txt');
       final sigs = text
           .split('\n')
-          .map((l) => l.trim())
-          .where((l) => l.isNotEmpty)
-          .toList();
+          .expand(sourceIndexSignalNames)
+          .followedBy(SourceIndexMemory.signalsForTree(tree))
+          .toSet()
+          .toList()
+        ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
       _signalCache[key] = sigs;
+      _indexTreeSignals(tree, sigs);
       return sigs;
     } catch (_) {
-      _signalCache[key] = [];
-      return [];
+      final remembered = SourceIndexMemory.signalsForTree(tree).toList()
+        ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      _signalCache[key] = remembered;
+      _indexTreeSignals(tree, remembered);
+      return remembered;
     }
+  }
+
+  void _indexTreeSignals(String tree, Iterable<String> signals) {
+    final normalizedTree = tree.trim();
+    if (normalizedTree.isEmpty) return;
+    for (final signal in signals) {
+      final key = sourceIndexSignalKey(signal);
+      if (key.isEmpty) continue;
+      _treesBySignal.putIfAbsent(key, () => <String>{}).add(normalizedTree);
+    }
+  }
+
+  List<String> _treeOptionsFor(_DSRow row) {
+    if (row.tree.text.trim().isNotEmpty) return _treeNames;
+    final key = sourceIndexSignalKey(row.y.text);
+    final matches = _treesBySignal[key]?.toList();
+    if (matches == null || matches.isEmpty) return _treeNames;
+    matches.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return matches;
   }
 
   static InputDecoration _dsDeco() => InputDecoration(
@@ -2462,7 +2496,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                             child: _AutocompleteField(
                                 key: ValueKey('data-tree-$i'),
                                 controller: _rows[i].tree,
-                                options: _treeNames,
+                                options: _treeOptionsFor(_rows[i]),
                                 label: 'Tree',
                                 onChanged: () {
                                   _updateSignalOptions(_rows[i]);
@@ -2693,9 +2727,12 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
 
   void _update() {
     final v = widget.controller.text.toLowerCase();
-    final hints = v.isEmpty
+    final matchingHints = v.isEmpty
         ? widget.options
         : widget.options.where((o) => o.toLowerCase().contains(v)).toList();
+    final hints = v.isNotEmpty && matchingHints.length > 128
+        ? matchingHints.sublist(0, 128)
+        : matchingHints;
     _removeOverlay();
     if (hints.isNotEmpty && _node.hasFocus) {
       // Don't show if there's exactly one hint that matches the current text exactly
