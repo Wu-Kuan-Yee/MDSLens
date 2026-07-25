@@ -319,7 +319,7 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
                         ),
                       ),
                       _buildRow(
-                        'System',
+                        'Runtime System',
                         Text(
                           _systemInfo.displayText,
                           style: _valueStyle(context),

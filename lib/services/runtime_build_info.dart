@@ -23,12 +23,10 @@ class RuntimeSystemInfo {
   }
 
   factory RuntimeSystemInfo.fallback() {
-    return RuntimeSystemInfo(
-      name: normalizedOperatingSystemName(Platform.operatingSystem),
-      version: normalizedOperatingSystemVersion(
-        Platform.operatingSystemVersion,
-      ),
-      architecture: normalizedArchitecture(Abi.current().toString()),
+    return runtimeSystemInfoForValues(
+      operatingSystem: Platform.operatingSystem,
+      operatingSystemVersion: Platform.operatingSystemVersion,
+      architecture: Abi.current().toString(),
     );
   }
 }
@@ -40,6 +38,18 @@ const _systemInfoChannel = MethodChannel('mdsscope/system_info');
 
 Future<RuntimeSystemInfo> loadRuntimeSystemInfo() async {
   final fallback = RuntimeSystemInfo.fallback();
+  if (Platform.isLinux) {
+    try {
+      final osRelease = await File('/etc/os-release').readAsString();
+      return linuxRuntimeSystemInfo(
+        osRelease: osRelease,
+        kernelVersion: Platform.operatingSystemVersion,
+        architecture: Abi.current().toString(),
+      );
+    } catch (_) {
+      return fallback;
+    }
+  }
   try {
     final result =
         await _systemInfoChannel.invokeMapMethod<String, dynamic>('get');
@@ -56,6 +66,97 @@ Future<RuntimeSystemInfo> loadRuntimeSystemInfo() async {
   } catch (_) {
     return fallback;
   }
+}
+
+RuntimeSystemInfo runtimeSystemInfoForValues({
+  required String operatingSystem,
+  required String operatingSystemVersion,
+  required String architecture,
+}) {
+  final normalizedArchitectureValue = normalizedArchitecture(architecture);
+  if (operatingSystem.toLowerCase() == 'windows') {
+    return windowsRuntimeSystemInfo(
+      operatingSystemVersion,
+      normalizedArchitectureValue,
+    );
+  }
+  return RuntimeSystemInfo(
+    name: normalizedOperatingSystemName(operatingSystem),
+    version: normalizedOperatingSystemVersion(operatingSystemVersion),
+    architecture: normalizedArchitectureValue,
+  );
+}
+
+RuntimeSystemInfo windowsRuntimeSystemInfo(
+  String rawVersion,
+  String architecture,
+) {
+  final buildMatch =
+      RegExp(r'\b10\.0\.(\d+)(?:\.(\d+))?').firstMatch(rawVersion);
+  final build = int.tryParse(buildMatch?.group(1) ?? '');
+  if (build == null) {
+    return RuntimeSystemInfo(
+      name: 'Windows',
+      version: normalizedOperatingSystemVersion(rawVersion),
+      architecture: architecture,
+    );
+  }
+  final revision = buildMatch?.group(2);
+  final completeBuild =
+      revision == null ? build.toString() : '$build.$revision';
+  final isWindows11 = build >= 22000;
+  final release = switch (build) {
+    >= 28000 => '26H1',
+    >= 26200 => '25H2',
+    >= 26100 => '24H2',
+    >= 22631 => '23H2',
+    >= 22621 => '22H2',
+    >= 22000 => '21H2',
+    _ => '',
+  };
+  final version = [
+    if (release.isNotEmpty) release,
+    'build $completeBuild',
+  ].join(', ');
+  return RuntimeSystemInfo(
+    name: isWindows11 ? 'Windows 11' : 'Windows 10',
+    version: version,
+    architecture: architecture,
+  );
+}
+
+RuntimeSystemInfo linuxRuntimeSystemInfo({
+  required String osRelease,
+  required String kernelVersion,
+  required String architecture,
+}) {
+  final values = <String, String>{};
+  for (final line in osRelease.split('\n')) {
+    final separator = line.indexOf('=');
+    if (separator <= 0) continue;
+    final key = line.substring(0, separator).trim();
+    var value = line.substring(separator + 1).trim();
+    if (value.length >= 2 &&
+        ((value.startsWith('"') && value.endsWith('"')) ||
+            (value.startsWith("'") && value.endsWith("'")))) {
+      value = value.substring(1, value.length - 1);
+    }
+    values[key] = value
+        .replaceAll(r'\"', '"')
+        .replaceAll(r'\n', '\n')
+        .replaceAll(r'\\', '\\');
+  }
+  final name = values['PRETTY_NAME']?.trim().isNotEmpty == true
+      ? values['PRETTY_NAME']!.trim()
+      : 'Linux';
+  final kernelMatch =
+      RegExp(r'(?:^|\bLinux\s+)([0-9][^\s]*)').firstMatch(kernelVersion);
+  final kernel = kernelMatch?.group(1) ?? kernelVersion.trim();
+  return RuntimeSystemInfo(
+    name: name,
+    version: kernel.isEmpty ? '' : 'kernel $kernel',
+    architecture: normalizedArchitecture(architecture),
+  );
 }
 
 Future<String> loadMdsScopeGitVersion() async {

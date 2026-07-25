@@ -69,6 +69,22 @@ void main() {
     expect(normalizedArchitecture('arm64-v8a'), 'arm64');
     expect(normalizedArchitecture('windowsX64'), 'x86_64');
     expect(
+      runtimeSystemInfoForValues(
+        operatingSystem: 'windows',
+        operatingSystemVersion: 'Windows 10 Pro 10.0.26200.8875',
+        architecture: 'windowsX64',
+      ).displayText,
+      'Windows 11 (25H2, build 26200.8875) (x86_64)',
+    );
+    expect(
+      linuxRuntimeSystemInfo(
+        osRelease: 'NAME=Fedora\nPRETTY_NAME="Fedora Linux 44"\n',
+        kernelVersion: 'Linux 7.0.11-200.fc44.x86_64 #1 SMP PREEMPT_DYNAMIC',
+        architecture: 'linuxX64',
+      ).displayText,
+      'Fedora Linux 44 (kernel 7.0.11-200.fc44.x86_64) (x86_64)',
+    );
+    expect(
       const RuntimeSystemInfo(
         name: 'Android',
         version: '15',
