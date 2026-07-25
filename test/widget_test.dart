@@ -813,6 +813,40 @@ void main() {
     ]);
   });
 
+  test(
+      'Manual login reloads the entered shot instead of replacing it with latest',
+      () async {
+    var latestShotRequests = 0;
+    String? requestedConfig;
+    final app = AppState(
+      loginWorker: (_, __, ___, ____) async =>
+          (token: 'test-token', usedSsh: false),
+      latestShotWorker: (_, __, ___) async {
+        latestShotRequests++;
+        return {'shot': 999999};
+      },
+      signalFetchWorker: (configJson, _, __) async {
+        requestedConfig = configJson;
+        return '[{"column":0,"row":0,"signal":0,"shot":"170123",'
+            '"series":{"error":"","points":[[0.0,7.0]]}}]';
+      },
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.shotText = '170123';
+
+    await app.loginAndLoadLatest(
+      apiUrl: 'http://east.example/api',
+      user: 'user',
+      password: 'password',
+    );
+
+    expect(latestShotRequests, 0);
+    expect(app.shotText, '170123');
+    expect(app.displayedShot, '170123');
+    expect(jsonDecode(requestedConfig!)['columns'][0][0]['shot'], '170123');
+  });
+
   test('Imported zero-point panels are repaired before waveform loading',
       () async {
     String? requestedConfig;

@@ -990,6 +990,15 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       if (_pendingImportedShot != null) {
         await _loadPendingImportedConfiguration();
+      } else if (!automatic && _shotText.trim().isNotEmpty) {
+        final shot = _shotText.trim();
+        _shotText = shot;
+        _shotCtrl.text = shot;
+        _synchronizeSignalRuntimeSettings(shot);
+        _addToHistory(shot);
+        await savePreferences();
+        _viewResetId++;
+        await _doFetch(shot: shot);
       } else {
         await fetchLatestShot();
       }
