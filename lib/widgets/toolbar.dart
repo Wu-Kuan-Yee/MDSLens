@@ -869,10 +869,30 @@ class ToolbarWidget extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                              trailing: Icon(
-                                Icons.open_in_new_rounded,
-                                size: 19,
-                                color: Theme.of(ctx).colorScheme.primary,
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    key: ValueKey('internal-web-page-edit-$i'),
+                                    tooltip: 'Edit web page',
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: () => _editBookmark(
+                                      ctx,
+                                      app,
+                                      setState,
+                                      i,
+                                    ),
+                                    icon: const Icon(
+                                      Icons.edit_rounded,
+                                      size: 19,
+                                    ),
+                                  ),
+                                  Icon(
+                                    Icons.open_in_new_rounded,
+                                    size: 19,
+                                    color: Theme.of(ctx).colorScheme.primary,
+                                  ),
+                                ],
                               ),
                               onTap: () {
                                 Navigator.pop(ctx);
@@ -935,6 +955,98 @@ class ToolbarWidget extends StatelessWidget {
                 }
               },
               child: const Text('Add')),
+        ],
+      ),
+    );
+  }
+
+  void _editBookmark(
+    BuildContext context,
+    AppState app,
+    void Function(VoidCallback) refreshParent,
+    int index,
+  ) {
+    if (index < 0 || index >= app.webBookmarks.length) return;
+    final bookmark = app.webBookmarks[index];
+    final aliasCtrl = TextEditingController(text: bookmark.keys.first);
+    final urlCtrl = TextEditingController(text: bookmark.values.first);
+    final formKey = GlobalKey<FormState>();
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => KeyboardSafeDialog(
+        maxWidth: 480,
+        title: const Row(
+          children: [
+            Icon(Icons.edit_rounded),
+            SizedBox(width: 10),
+            Flexible(child: Text('Edit Web Page')),
+          ],
+        ),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                key: const ValueKey('edit-web-page-alias'),
+                controller: aliasCtrl,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Alias',
+                  prefixIcon: Icon(Icons.label_outline_rounded),
+                ),
+                validator: (value) => value == null || value.trim().isEmpty
+                    ? 'Enter a display name'
+                    : null,
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                key: const ValueKey('edit-web-page-url'),
+                controller: urlCtrl,
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+                decoration: const InputDecoration(
+                  labelText: 'URL',
+                  prefixIcon: Icon(Icons.link_rounded),
+                ),
+                validator: (value) => value == null || value.trim().isEmpty
+                    ? 'Enter a web address'
+                    : null,
+                onFieldSubmitted: (_) async {
+                  if (formKey.currentState?.validate() != true) return;
+                  await app.updateWebBookmark(
+                    index,
+                    aliasCtrl.text,
+                    urlCtrl.text,
+                  );
+                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                  refreshParent(() {});
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () => Navigator.pop(dialogContext),
+            icon: const Icon(Icons.close_rounded),
+            label: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            key: const ValueKey('edit-web-page-save'),
+            onPressed: () async {
+              if (formKey.currentState?.validate() != true) return;
+              await app.updateWebBookmark(
+                index,
+                aliasCtrl.text,
+                urlCtrl.text,
+              );
+              if (dialogContext.mounted) Navigator.pop(dialogContext);
+              refreshParent(() {});
+            },
+            icon: const Icon(Icons.save_rounded),
+            label: const Text('Save'),
+          ),
         ],
       ),
     );

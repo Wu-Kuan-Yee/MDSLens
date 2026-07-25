@@ -3203,6 +3203,38 @@ void main() {
     expect(find.text('Diagnostics'), findsOneWidget);
     expect(find.text('Archive'), findsOneWidget);
     expect(find.byIcon(Icons.open_in_new_rounded), findsNWidgets(2));
+    expect(
+      find.byKey(const ValueKey('internal-web-page-edit-0')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('internal-web-page-edit-0')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Edit Web Page'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const ValueKey('edit-web-page-alias')),
+      'Live diagnostics',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('edit-web-page-url')),
+      'http://10.0.0.9/live',
+    );
+    await tester.tap(find.byKey(const ValueKey('edit-web-page-save')));
+    await tester.pumpAndSettle();
+
+    expect(app.webBookmarks.first, {
+      'Live diagnostics': 'http://10.0.0.9/live',
+    });
+    expect(find.text('Live diagnostics'), findsOneWidget);
+    expect(find.text('http://10.0.0.9/live'), findsOneWidget);
+    final restored = AppState();
+    await restored.preferencesReady;
+    addTearDown(restored.dispose);
+    expect(restored.webBookmarks.first, {
+      'Live diagnostics': 'http://10.0.0.9/live',
+    });
     expect(tester.takeException(), isNull);
   });
 

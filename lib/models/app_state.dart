@@ -540,6 +540,16 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updateWebBookmark(int index, String alias, String url) async {
+    if (index < 0 || index >= _webBookmarks.length) return;
+    final normalizedAlias = alias.trim();
+    final normalizedUrl = url.trim();
+    if (normalizedAlias.isEmpty || normalizedUrl.isEmpty) return;
+    _webBookmarks[index] = {normalizedAlias: normalizedUrl};
+    notifyListeners();
+    await savePreferences();
+  }
+
   void removeWebBookmark(int i) {
     if (i >= 0 && i < _webBookmarks.length) {
       _webBookmarks.removeAt(i);
