@@ -109,7 +109,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final info = await loadRuntimeSystemInfo();
+    final info = await loadRuntimeSystemInfo(useLinuxReleaseInfo: false);
 
     expect(
       info.displayText,

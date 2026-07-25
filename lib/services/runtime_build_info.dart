@@ -36,9 +36,11 @@ typedef GitVersionLoader = Future<String> Function();
 
 const _systemInfoChannel = MethodChannel('mdsscope/system_info');
 
-Future<RuntimeSystemInfo> loadRuntimeSystemInfo() async {
+Future<RuntimeSystemInfo> loadRuntimeSystemInfo({
+  bool? useLinuxReleaseInfo,
+}) async {
   final fallback = RuntimeSystemInfo.fallback();
-  if (Platform.isLinux) {
+  if (useLinuxReleaseInfo ?? Platform.isLinux) {
     try {
       final osRelease = await File('/etc/os-release').readAsString();
       return linuxRuntimeSystemInfo(
