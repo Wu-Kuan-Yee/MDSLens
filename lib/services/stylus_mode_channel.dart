@@ -9,13 +9,26 @@ class StylusModeChannel {
 
   static void init(void Function(bool eraser) onModeChanged) {
     _onModeChanged = onModeChanged;
-    if (_initialized) return;
-    _initialized = true;
-    _channel.setMethodCallHandler((call) async {
-      if (call.method == 'stylusModeChanged' && call.arguments is bool) {
-        _onModeChanged?.call(call.arguments as bool);
-      }
-    });
+    if (!_initialized) {
+      _initialized = true;
+      _channel.setMethodCallHandler((call) async {
+        if (call.method == 'stylusModeChanged' && call.arguments is bool) {
+          _onModeChanged?.call(call.arguments as bool);
+        }
+      });
+    }
+    _syncNativeMode();
+  }
+
+  static Future<void> _syncNativeMode() async {
+    try {
+      final eraser = await _channel.invokeMethod<bool>('getMode');
+      if (eraser != null) _onModeChanged?.call(eraser);
+    } on MissingPluginException {
+      // Platforms without a hardware tool toggle stay in write/pan mode.
+    } on PlatformException {
+      // A transient native-channel failure must not disable stylus input.
+    }
   }
 
   static void dispose() {

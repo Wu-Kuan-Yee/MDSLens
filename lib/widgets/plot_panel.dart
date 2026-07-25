@@ -920,7 +920,8 @@ class _PlotPanelState extends State<PlotPanel> {
       _stylusLongPressTriggered = false;
       final app = context.read<AppState>();
       _stylusShouldErase = event.kind == PointerDeviceKind.invertedStylus ||
-          app.stylusEraserMode;
+          app.stylusEraserMode ||
+          _hasStylusButton(event.buttons);
       _startLongPressTimer(event, stylus: true);
       if (app.interactionMode == 1) {
         _updateTouchCrosshair(event.localPosition, unlock: true);
@@ -998,14 +999,13 @@ class _PlotPanelState extends State<PlotPanel> {
       }
       if (app.interactionMode != 0) return;
       if (!_stylusDragStarted) {
+        _stylusShouldErase =
+            _stylusShouldErase || _hasStylusButton(event.buttons);
         if (moved <= _stylusLongPressSlop) return;
         final dragStart = _stylusDownLocal ?? event.localPosition;
-        final barrelButton =
-            (event.buttons & (kPrimaryStylusButton | kSecondaryStylusButton)) !=
-                0;
         _stylusDragStarted = true;
         _cancelLongPressTimer();
-        if (_stylusShouldErase && !barrelButton) {
+        if (_stylusShouldErase) {
           _beginRubberBand(dragStart);
         } else {
           _midPanning = true;
@@ -1147,6 +1147,9 @@ class _PlotPanelState extends State<PlotPanel> {
   bool _isStylusKind(PointerDeviceKind kind) =>
       kind == PointerDeviceKind.stylus ||
       kind == PointerDeviceKind.invertedStylus;
+
+  bool _hasStylusButton(int buttons) =>
+      (buttons & (kPrimaryStylusButton | kSecondaryStylusButton)) != 0;
 
   void _beginRubberBand(Offset localPosition) {
     _inRubberBand = true;

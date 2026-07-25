@@ -61,6 +61,13 @@ import CoreTelephony
       name: "mdsscope/stylus",
       binaryMessenger: engineBridge.applicationRegistrar.messenger()
     )
+    stylusChannel?.setMethodCallHandler { [weak self] call, result in
+      guard call.method == "getMode" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      result(self?.pencilUsesEraser ?? false)
+    }
     systemInfoChannel = FlutterMethodChannel(
       name: "mdsscope/system_info",
       binaryMessenger: engineBridge.applicationRegistrar.messenger()
@@ -84,7 +91,7 @@ import CoreTelephony
       ])
     }
     DispatchQueue.main.async { [weak self] in
-      self?.installPencilInteraction()
+      self?.installPencilInteraction(on: self?.activeRootView)
     }
   }
 
@@ -175,24 +182,55 @@ import CoreTelephony
     result(state)
   }
 
-  private func installPencilInteraction() {
-    guard pencilInteraction == nil,
-      let rootView = window?.rootViewController?.view
-    else {
+  private var activeRootView: UIView? {
+    let activeWindow = UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .flatMap(\.windows)
+      .first { $0.isKeyWindow }
+    return activeWindow?.rootViewController?.view
+      ?? window?.rootViewController?.view
+  }
+
+  func installPencilInteraction(on rootView: UIView?) {
+    guard let rootView else { return }
+    if pencilInteraction?.view === rootView {
+      pencilInteraction?.isEnabled = true
       return
+    }
+    if let previousInteraction = pencilInteraction,
+      let previousView = previousInteraction.view
+    {
+      previousView.removeInteraction(previousInteraction)
     }
     let interaction = UIPencilInteraction()
     interaction.delegate = self
+    interaction.isEnabled = true
     rootView.addInteraction(interaction)
     pencilInteraction = interaction
   }
 
   func pencilInteractionDidTap(_ interaction: UIPencilInteraction) {
-    let preferredAction = UIPencilInteraction.preferredTapAction
-    guard preferredAction == .switchEraser || preferredAction == .switchPrevious
-    else {
-      return
-    }
+    togglePencilTool()
+  }
+
+  @available(iOS 17.5, *)
+  func pencilInteraction(
+    _ interaction: UIPencilInteraction,
+    didReceiveTap tap: UIPencilInteraction.Tap
+  ) {
+    togglePencilTool()
+  }
+
+  @available(iOS 17.5, *)
+  func pencilInteraction(
+    _ interaction: UIPencilInteraction,
+    didReceiveSqueeze squeeze: UIPencilInteraction.Squeeze
+  ) {
+    guard squeeze.phase == .ended else { return }
+    togglePencilTool()
+  }
+
+  private func togglePencilTool() {
     pencilUsesEraser.toggle()
     stylusChannel?.invokeMethod(
       "stylusModeChanged",

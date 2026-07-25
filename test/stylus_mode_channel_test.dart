@@ -10,17 +10,30 @@ void main() {
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     addTearDown(StylusModeChannel.dispose);
+    var nativeModeRequested = false;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      expect(call.method, 'getMode');
+      nativeModeRequested = true;
+      return true;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
     bool? eraser;
     StylusModeChannel.init((value) => eraser = value);
+    await TestAsyncUtils.guard(() async {
+      await Future<void>.delayed(Duration.zero);
+    });
+    expect(nativeModeRequested, isTrue);
+    expect(eraser, isTrue);
+
     await messenger.handlePlatformMessage(
       channel.name,
       const StandardMethodCodec().encodeMethodCall(
-        const MethodCall('stylusModeChanged', true),
+        const MethodCall('stylusModeChanged', false),
       ),
       (_) {},
     );
 
-    expect(eraser, isTrue);
+    expect(eraser, isFalse);
   });
 }

@@ -2301,6 +2301,50 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('A standard stylus button temporarily selects rubber-band zoom',
+      (tester) async {
+    final app = AppState();
+    addTearDown(app.dispose);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 0],
+          [5, 5],
+          [10, 10]
+        ],
+        null);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 500,
+              height: 400,
+              child: PlotPanel(plotIdx: 0),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final eraser = await tester.startGesture(
+      const Offset(150, 100),
+      kind: PointerDeviceKind.stylus,
+      buttons: kPrimaryStylusButton,
+    );
+    await eraser.moveTo(const Offset(390, 300));
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('plot-rubber-band-0')), findsOneWidget);
+    await eraser.up();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Stylus long press tolerates jitter and opens context menu',
       (tester) async {
     final app = AppState();
