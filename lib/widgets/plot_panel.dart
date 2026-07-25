@@ -1327,6 +1327,7 @@ class _PlotPanelState extends State<PlotPanel> {
     final pointer = e.pointer;
     _longPressTimer = Timer(const Duration(milliseconds: 500), () {
       if (mounted && _longPressStartPos != null) {
+        final menuPosition = _longPressStartPos!;
         if (stylus && pointer == _activeStylusPointer) {
           _stylusLongPressTriggered = true;
           _stylusDragStarted = false;
@@ -1340,7 +1341,12 @@ class _PlotPanelState extends State<PlotPanel> {
             });
           }
         }
-        _showContextMenu(context, _longPressStartPos!);
+        // A modal popup can consume the original pointer's up/cancel event,
+        // notably for Apple Pencil on iPadOS. Release the plot's gesture state
+        // before opening it so later finger gestures cannot be blocked by a
+        // stale active stylus or touch pointer.
+        _releasePointersForPopup();
+        _showContextMenu(context, menuPosition);
       }
       _longPressTimer = null;
       _longPressStartPos = null;
@@ -1368,10 +1374,27 @@ class _PlotPanelState extends State<PlotPanel> {
     _stylusShouldErase = false;
   }
 
-  void _showContextMenu(BuildContext ctx, Offset globalPosition) {
+  void _releasePointersForPopup() {
+    _cancelLongPressTimer();
+    _activeStylusPointer = null;
+    _clearStylusGesture();
+    _touchPositions.clear();
+    _multiTouchActive = false;
+    _lastMultiTouchFocalPoint = null;
+    _lastMultiTouchSpan = null;
+    _midPanning = false;
+    _lastMidPanPos = null;
+    _trackpadGestureActive = false;
+    _lastTrackpadScale = 1;
+  }
+
+  Future<void> _showContextMenu(
+    BuildContext ctx,
+    Offset globalPosition,
+  ) async {
     final app = ctx.read<AppState>();
     final isMaxed = app.maximizedPlot != null;
-    showPolishedPopupMenu<String>(
+    final value = await showPolishedPopupMenu<String>(
       context: ctx,
       globalPosition: globalPosition,
       id: 'plot-context-menu',
@@ -1453,46 +1476,49 @@ class _PlotPanelState extends State<PlotPanel> {
           ],
         ),
       ],
-    ).then((value) {
-      if (value == null || !mounted) return;
-      switch (value) {
-        case 'max':
-          app.maximizePlot(widget.plotIdx);
-          break;
-        case 'showAll':
-          app.showAllPanels();
-          break;
-        case 'reset':
-          _resetView(app.plots[widget.plotIdx]);
-          app.clearCrosshair();
-          break;
-        case 'resetAll':
-          app.sharedXMin = null;
-          app.sharedXMax = null;
-          app.sharedYMin = null;
-          app.sharedYMax = null;
-          app.resetAllViews();
-          app.clearCrosshair();
-          break;
-        case 'sameX':
-          final r = _currentRange(app);
-          app.applySharedXScale(r != null ? r[0] : 0, r != null ? r[1] : 1);
-          break;
-        case 'sameY':
-          final r = _currentRange(app);
-          app.applySharedYScale(r != null ? r[2] : 0, r != null ? r[3] : 1);
-          break;
-        case 'export':
-          _exportCsv(app);
-          break;
-        case 'dataSource':
-          _showDataSourceSetup(context, app);
-          break;
-        case 'setup':
-          _showPanelSetup(context, app);
-          break;
-      }
-    });
+    );
+    if (!mounted) return;
+    // Also sanitize state after every close path: selecting an action, tapping
+    // outside the popup, pressing Escape, or a platform-driven dismissal.
+    _releasePointersForPopup();
+    if (value == null) return;
+    switch (value) {
+      case 'max':
+        app.maximizePlot(widget.plotIdx);
+        break;
+      case 'showAll':
+        app.showAllPanels();
+        break;
+      case 'reset':
+        _resetView(app.plots[widget.plotIdx]);
+        app.clearCrosshair();
+        break;
+      case 'resetAll':
+        app.sharedXMin = null;
+        app.sharedXMax = null;
+        app.sharedYMin = null;
+        app.sharedYMax = null;
+        app.resetAllViews();
+        app.clearCrosshair();
+        break;
+      case 'sameX':
+        final r = _currentRange(app);
+        app.applySharedXScale(r != null ? r[0] : 0, r != null ? r[1] : 1);
+        break;
+      case 'sameY':
+        final r = _currentRange(app);
+        app.applySharedYScale(r != null ? r[2] : 0, r != null ? r[3] : 1);
+        break;
+      case 'export':
+        _exportCsv(app);
+        break;
+      case 'dataSource':
+        _showDataSourceSetup(context, app);
+        break;
+      case 'setup':
+        _showPanelSetup(context, app);
+        break;
+    }
   }
 
   Map<String, dynamic> _findPanel(AppState app) {

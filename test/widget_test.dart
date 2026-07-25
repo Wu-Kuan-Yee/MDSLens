@@ -2393,6 +2393,112 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+      'Closing a stylus context menu releases the plot for finger gestures',
+      (tester) async {
+    final app = AppState();
+    addTearDown(app.dispose);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 0],
+          [5, 5],
+          [10, 10]
+        ],
+        null);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 500,
+              height: 400,
+              child: PlotPanel(plotIdx: 0),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    LineChart chart() => tester.widget<LineChart>(find.byType(LineChart));
+    final stylus = await tester.startGesture(
+      const Offset(240, 200),
+      pointer: 41,
+      kind: PointerDeviceKind.stylus,
+    );
+    await stylus.moveBy(const Offset(4, 3));
+    await tester.pump(const Duration(milliseconds: 550));
+    expect(
+      find.byKey(const ValueKey('plot-context-menu-maximize')),
+      findsOneWidget,
+    );
+
+    // Reproduce iPadOS consuming the Pencil-up event: dismiss the popup while
+    // the original test pointer is still down.
+    await tester.tapAt(const Offset(5, 5), pointer: 42);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('plot-context-menu-maximize')),
+      findsNothing,
+    );
+
+    final centerBefore = (chart().data.minX + chart().data.maxX) / 2;
+    final finger = await tester.startGesture(
+      const Offset(180, 180),
+      pointer: 43,
+      kind: PointerDeviceKind.touch,
+    );
+    await finger.moveTo(const Offset(330, 250));
+    await tester.pump();
+    await finger.up();
+    await tester.pumpAndSettle();
+    final centerAfter = (chart().data.minX + chart().data.maxX) / 2;
+
+    expect(centerAfter, lessThan(centerBefore));
+
+    final widthBeforePinch = chart().data.maxX - chart().data.minX;
+    final firstFinger = await tester.startGesture(
+      const Offset(220, 200),
+      pointer: 44,
+      kind: PointerDeviceKind.touch,
+    );
+    final secondFinger = await tester.startGesture(
+      const Offset(280, 200),
+      pointer: 45,
+      kind: PointerDeviceKind.touch,
+    );
+    await tester.pump();
+    await firstFinger.moveTo(const Offset(190, 200));
+    await secondFinger.moveTo(const Offset(340, 200));
+    await tester.pump();
+    await firstFinger.up();
+    await secondFinger.up();
+    await tester.pump();
+    final widthAfterPinch = chart().data.maxX - chart().data.minX;
+    expect(widthAfterPinch, lessThan(widthBeforePinch));
+
+    final longPressFinger = await tester.startGesture(
+      const Offset(220, 180),
+      pointer: 46,
+      kind: PointerDeviceKind.touch,
+    );
+    await tester.pump(const Duration(milliseconds: 550));
+    expect(
+      find.byKey(const ValueKey('plot-context-menu-maximize')),
+      findsOneWidget,
+    );
+    await tester.tapAt(const Offset(5, 5), pointer: 47);
+    await tester.pumpAndSettle();
+    await longPressFinger.up();
+    await stylus.up();
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Plot view survives panel disposal and reconstruction',
       (tester) async {
     final app = AppState();
