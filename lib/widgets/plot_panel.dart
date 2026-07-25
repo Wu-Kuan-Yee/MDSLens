@@ -54,6 +54,40 @@ String signalLegendLabel(Map<dynamic, dynamic> signal) {
       .replaceFirst(RegExp(r'^\\+'), '');
 }
 
+double? interpolateWaveformY(List<List<double>> points, double x) {
+  if (points.isEmpty || !x.isFinite) return null;
+  if (points.length == 1) return points.first[1];
+  final ascending = points.first[0] <= points.last[0];
+  final firstX = points.first[0];
+  final lastX = points.last[0];
+  if ((ascending && x <= firstX) || (!ascending && x >= firstX)) {
+    return points.first[1];
+  }
+  if ((ascending && x >= lastX) || (!ascending && x <= lastX)) {
+    return points.last[1];
+  }
+
+  var low = 0;
+  var high = points.length - 1;
+  while (low + 1 < high) {
+    final middle = (low + high) ~/ 2;
+    final middleX = points[middle][0];
+    if ((ascending && middleX <= x) || (!ascending && middleX >= x)) {
+      low = middle;
+    } else {
+      high = middle;
+    }
+  }
+  final left = points[low];
+  final right = points[high];
+  final dx = right[0] - left[0];
+  if (!dx.isFinite || dx == 0) {
+    return (x - left[0]).abs() <= (right[0] - x).abs() ? left[1] : right[1];
+  }
+  final y = left[1] + (right[1] - left[1]) * (x - left[0]) / dx;
+  return y.isFinite ? y : null;
+}
+
 Future<bool> showPanelSetupEditor(
   BuildContext context,
   Map<String, dynamic> panel,
@@ -201,12 +235,7 @@ class _PlotPanelState extends State<PlotPanel> {
           final a = context.read<AppState>();
           if (a.interactionMode != 1) return;
           if (a.pointLocked) a.pointLocked = false;
-          if (_ensureViewInitialized(a)) {
-            a.setCrosshair(
-              _pxToDataX(details.localPosition.dx),
-              sourcePlot: widget.plotIdx,
-            );
-          }
+          _updatePointCrosshair(details.localPosition, chooseSeries: true);
         },
         onSecondaryTapUp: (details) {
           if (_isStylusKind(details.kind)) return;
@@ -320,7 +349,8 @@ class _PlotPanelState extends State<PlotPanel> {
     final axisSize = app.fontAxisSize.toDouble();
     final unitSize = app.fontUnitSize.toDouble();
     final cx = app.crosshairX;
-    final crosshairY = _crosshairY(bars, cx, app);
+    final crosshair = _crosshairValue(plot, panel, cx, app);
+    final crosshairY = crosshair?.y;
     final showGrid = panel['grid'] ?? true;
     final customX = panel['custom_x_range'] == true;
     final customY = panel['custom_y_range'] == true;
@@ -435,8 +465,7 @@ class _PlotPanelState extends State<PlotPanel> {
                           VerticalLine(
                               x: cx,
                               color: const Color(0xFFFF00FF),
-                              strokeWidth: 1,
-                              label: _crosshairLabel(bars, cx, app))
+                              strokeWidth: 1)
                         ]
                       : [],
                   horizontalLines: crosshairY != null
@@ -557,6 +586,31 @@ class _PlotPanelState extends State<PlotPanel> {
               gridH,
               plot.title.isNotEmpty ? legendSize + 8 : 6,
             ),
+            if (cx != null &&
+                crosshair != null &&
+                xMin != null &&
+                xMax != null &&
+                yMin != null &&
+                yMax != null &&
+                xMax > xMin &&
+                yMax > yMin)
+              ..._buildPointReadoutOverlay(
+                plot: plot,
+                panel: panel,
+                app: app,
+                theme: theme,
+                x: cx,
+                y: crosshair.y,
+                seriesIndex: crosshair.seriesIndex,
+                gridLeft: gridLeft,
+                gridTop: gridTop,
+                gridWidth: gridW,
+                gridHeight: gridH,
+                minX: xMin,
+                maxX: xMax,
+                minY: yMin,
+                maxY: yMax,
+              ),
           ],
         );
       },
@@ -723,27 +777,6 @@ class _PlotPanelState extends State<PlotPanel> {
     return 'No data';
   }
 
-  VerticalLineLabel? _crosshairLabel(
-      List<LineChartBarData> bars, double? cx, AppState app) {
-    if (cx == null || bars.isEmpty) return null;
-    final parts = <String>[];
-    for (final bar in bars) {
-      if (bar.spots.isEmpty) continue;
-      final idx = _nearest(bar.spots, cx);
-      parts.add(
-          '${cx.toStringAsFixed(3)}, ${bar.spots[idx].y.toStringAsFixed(4)}');
-    }
-    if (parts.isEmpty) return null;
-    return VerticalLineLabel(
-        show: true,
-        labelResolver: (_) => parts.join('\n'),
-        style: TextStyle(
-          fontFamily: app.effectiveFontFamily,
-          fontSize: app.fontLegendSize.toDouble(),
-          color: const Color(0xFFFF00FF),
-        ));
-  }
-
   double _gridLeftInset(AppState app) {
     return math.max(
       50,
@@ -758,34 +791,160 @@ class _PlotPanelState extends State<PlotPanel> {
     );
   }
 
-  double? _crosshairY(List<LineChartBarData> bars, double? x, AppState app) {
-    if (x == null || bars.isEmpty) return null;
-    final requestedSeries = app.crosshairSourcePlot == widget.plotIdx
-        ? app.crosshairSourceSeries
-        : 0;
-    final seriesIndex = requestedSeries.clamp(0, bars.length - 1);
-    final spots = bars[seriesIndex].spots;
-    if (spots.isEmpty) return null;
-    return spots[_nearest(spots, x)].y;
+  ({int seriesIndex, double y})? _crosshairValue(
+    PlotData plot,
+    Map<String, dynamic> panel,
+    double? x,
+    AppState app,
+  ) {
+    if (x == null) return null;
+    final seriesIndex =
+        _usableSeriesIndex(plot, panel, app.crosshairSourceSeries);
+    if (seriesIndex == null) return null;
+    final points = plot.series[seriesIndex]?.points;
+    if (points == null) return null;
+    final y = interpolateWaveformY(points, x);
+    return y == null ? null : (seriesIndex: seriesIndex, y: y);
   }
 
-  int _nearest(List<FlSpot> spots, double x) {
-    var lo = 0;
-    var hi = spots.length - 1;
-    while (lo < hi) {
-      final mid = (lo + hi) ~/ 2;
-      if (spots[mid].x < x) {
-        lo = mid + 1;
-      } else {
-        hi = mid;
-      }
+  int? _usableSeriesIndex(
+    PlotData plot,
+    Map<String, dynamic> panel,
+    int preferred,
+  ) {
+    final signals = panel['signal_specs'] as List?;
+    bool usable(int index) =>
+        index >= 0 &&
+        index < plot.series.length &&
+        plot.series[index]?.points?.isNotEmpty == true &&
+        (signals == null ||
+            index >= signals.length ||
+            signals[index] is! Map ||
+            !signalIsHidden(signals[index] as Map));
+    if (usable(preferred)) return preferred;
+    for (var index = 0; index < plot.series.length; index++) {
+      if (usable(index)) return index;
     }
-    if (lo > 0 &&
-        (lo >= spots.length ||
-            (x - spots[lo - 1].x).abs() < (spots[lo].x - x).abs())) {
-      return lo - 1;
+    return null;
+  }
+
+  List<Widget> _buildPointReadoutOverlay({
+    required PlotData plot,
+    required Map<String, dynamic> panel,
+    required AppState app,
+    required ThemeData theme,
+    required double x,
+    required double y,
+    required int seriesIndex,
+    required double gridLeft,
+    required double gridTop,
+    required double gridWidth,
+    required double gridHeight,
+    required double minX,
+    required double maxX,
+    required double minY,
+    required double maxY,
+  }) {
+    final markerX = gridLeft + (x - minX) / (maxX - minX) * gridWidth;
+    final markerY = gridTop + (maxY - y) / (maxY - minY) * gridHeight;
+    if (!markerX.isFinite ||
+        !markerY.isFinite ||
+        markerX < gridLeft ||
+        markerX > gridLeft + gridWidth ||
+        markerY < gridTop ||
+        markerY > gridTop + gridHeight) {
+      return const [];
     }
-    return lo;
+
+    final signals = (panel['signal_specs'] as List?)?.cast<Map>() ?? const [];
+    final color = _sigColor(seriesIndex, signals);
+    final lines = <String>['x: ${_fmtPointValue(x)}'];
+    for (var index = 0; index < plot.series.length; index++) {
+      final usable = _usableSeriesIndex(plot, panel, index);
+      if (usable != index) continue;
+      final points = plot.series[index]?.points;
+      final value = points == null ? null : interpolateWaveformY(points, x);
+      if (value == null) continue;
+      final name = index < signals.length
+          ? signalLegendLabel(signals[index])
+          : 'Signal ${index + 1}';
+      lines.add('${name.isEmpty ? "Signal ${index + 1}" : name}: '
+          '${_fmtPointValue(value)}');
+    }
+
+    final labelWidth = math.min(240.0, math.max(132.0, gridWidth * 0.46));
+    final estimatedHeight =
+        14.0 + lines.length * (app.fontLegendSize.toDouble() + 4);
+    final placeRight = markerX < gridLeft + gridWidth / 2;
+    final placeBelow = markerY < gridTop + gridHeight / 2;
+    final labelLeft = placeRight
+        ? math.min(markerX + 10, gridLeft + gridWidth - labelWidth)
+        : math.max(gridLeft, markerX - labelWidth - 10);
+    final labelTop = placeBelow
+        ? math.min(markerY + 10, gridTop + gridHeight - estimatedHeight)
+        : math.max(gridTop, markerY - estimatedHeight - 10);
+
+    return [
+      Positioned(
+        key: ValueKey('plot-point-marker-${widget.plotIdx}'),
+        left: markerX - 5,
+        top: markerY - 5,
+        child: IgnorePointer(
+          child: Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              shape: BoxShape.circle,
+              border: Border.all(color: color, width: 2),
+            ),
+          ),
+        ),
+      ),
+      Positioned(
+        key: ValueKey('plot-point-readout-${widget.plotIdx}'),
+        left: labelLeft,
+        top: labelTop,
+        width: labelWidth,
+        child: IgnorePointer(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface.withValues(alpha: 0.88),
+              border: Border.all(
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.8),
+              ),
+              borderRadius: BorderRadius.circular(7),
+              boxShadow: [
+                BoxShadow(
+                  color: theme.colorScheme.shadow.withValues(alpha: 0.12),
+                  blurRadius: 4,
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+              child: Text(
+                lines.join('\n'),
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface,
+                  fontFamily: app.effectiveFontFamily,
+                  fontSize: app.fontLegendSize.toDouble(),
+                  height: 1.15,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ];
+  }
+
+  String _fmtPointValue(double value) {
+    final magnitude = value.abs();
+    if ((magnitude >= 100000 || (magnitude > 0 && magnitude < 0.0001))) {
+      return value.toStringAsExponential(5);
+    }
+    return value.toStringAsPrecision(7);
   }
 
   RenderBox? get _listenerBox =>
@@ -831,6 +990,121 @@ class _PlotPanelState extends State<PlotPanel> {
     final gy = chartLocal.dy;
     final gh = cb.size.height - gridBottom;
     return _viewMaxY - (gy / gh) * (_viewMaxY - _viewMinY);
+  }
+
+  Offset? _listenerToChart(Offset localPosition) {
+    final listener = _listenerBox;
+    final chart = _chartBox;
+    if (listener == null || chart == null) return null;
+    return chart.globalToLocal(listener.localToGlobal(localPosition));
+  }
+
+  int? _pickSeriesAt(
+    Offset localPosition, {
+    required double maximumDistance,
+  }) {
+    final app = context.read<AppState>();
+    if (widget.plotIdx >= app.plots.length) return null;
+    final plot = app.plots[widget.plotIdx];
+    final panel = _findPanel(app);
+    final chartPosition = _listenerToChart(localPosition);
+    final chart = _chartBox;
+    if (chartPosition == null || chart == null) return null;
+    final gridLeft = _gridLeftInset(app);
+    final gridBottom = _gridBottomInset(app);
+    final gridWidth = chart.size.width - gridLeft;
+    final gridHeight = chart.size.height - gridBottom;
+    if (gridWidth <= 0 ||
+        gridHeight <= 0 ||
+        !_viewMinX.isFinite ||
+        !_viewMinY.isFinite) {
+      return null;
+    }
+
+    Offset toPixel(FlSpot spot) => Offset(
+          gridLeft + (spot.x - _viewMinX) / (_viewMaxX - _viewMinX) * gridWidth,
+          (_viewMaxY - spot.y) / (_viewMaxY - _viewMinY) * gridHeight,
+        );
+
+    var bestDistance = double.infinity;
+    int? bestSeries;
+    final signals = panel['signal_specs'] as List?;
+    for (var seriesIndex = 0; seriesIndex < plot.series.length; seriesIndex++) {
+      if (signals != null &&
+          seriesIndex < signals.length &&
+          signals[seriesIndex] is Map &&
+          signalIsHidden(signals[seriesIndex] as Map)) {
+        continue;
+      }
+      final series = plot.series[seriesIndex];
+      if (series?.points?.isNotEmpty != true) continue;
+      final spots = _renderCache.render(series!).spots;
+      if (spots.length == 1) {
+        final distance = (toPixel(spots.first) - chartPosition).distance;
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestSeries = seriesIndex;
+        }
+        continue;
+      }
+      for (var index = 0; index + 1 < spots.length; index++) {
+        final distance = _distanceToSegment(
+          chartPosition,
+          toPixel(spots[index]),
+          toPixel(spots[index + 1]),
+        );
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestSeries = seriesIndex;
+        }
+      }
+    }
+    return bestDistance <= maximumDistance ? bestSeries : null;
+  }
+
+  double _distanceToSegment(Offset point, Offset start, Offset end) {
+    final segment = end - start;
+    final lengthSquared = segment.dx * segment.dx + segment.dy * segment.dy;
+    if (lengthSquared <= 0) return (point - start).distance;
+    final relative = point - start;
+    final fraction =
+        ((relative.dx * segment.dx + relative.dy * segment.dy) / lengthSquared)
+            .clamp(0.0, 1.0);
+    final closest = start + segment * fraction;
+    return (point - closest).distance;
+  }
+
+  void _updatePointCrosshair(
+    Offset localPosition, {
+    bool chooseSeries = false,
+    double pickRadius = 16,
+  }) {
+    final app = context.read<AppState>();
+    if (app.interactionMode != 1 ||
+        app.pointLocked ||
+        !_ensureViewInitialized(app)) {
+      return;
+    }
+    var seriesIndex = app.crosshairSourcePlot == widget.plotIdx
+        ? app.crosshairSourceSeries
+        : 0;
+    if (chooseSeries) {
+      seriesIndex = _pickSeriesAt(
+            localPosition,
+            maximumDistance: pickRadius,
+          ) ??
+          (_usableSeriesIndex(
+                app.plots[widget.plotIdx],
+                _findPanel(app),
+                seriesIndex,
+              ) ??
+              0);
+    }
+    app.setCrosshair(
+      _pxToDataX(localPosition.dx),
+      sourcePlot: widget.plotIdx,
+      sourceSeries: seriesIndex,
+    );
   }
 
   void _handleScrollWheel(PointerSignalEvent event) {
@@ -924,7 +1198,11 @@ class _PlotPanelState extends State<PlotPanel> {
           _hasStylusButton(event.buttons);
       _startLongPressTimer(event, stylus: true);
       if (app.interactionMode == 1) {
-        _updateTouchCrosshair(event.localPosition, unlock: true);
+        _updateTouchCrosshair(
+          event.localPosition,
+          unlock: true,
+          pickRadius: 22,
+        );
         return;
       }
       if (app.interactionMode != 0) return;
@@ -938,7 +1216,11 @@ class _PlotPanelState extends State<PlotPanel> {
         _beginMultiTouch();
         _resetMultiTouchMetrics();
       } else {
-        _updateTouchCrosshair(event.localPosition, unlock: true);
+        _updateTouchCrosshair(
+          event.localPosition,
+          unlock: true,
+          pickRadius: 22,
+        );
       }
       return;
     }
@@ -990,10 +1272,7 @@ class _PlotPanelState extends State<PlotPanel> {
       if (app.interactionMode == 1) {
         if (moved > _stylusLongPressSlop) _cancelLongPressTimer();
         if (!app.pointLocked && _ensureViewInitialized(app)) {
-          app.setCrosshair(
-            _pxToDataX(event.localPosition.dx),
-            sourcePlot: widget.plotIdx,
-          );
+          _updatePointCrosshair(event.localPosition);
         }
         return;
       }
@@ -1127,20 +1406,21 @@ class _PlotPanelState extends State<PlotPanel> {
         !_ensureViewInitialized(app)) {
       return;
     }
-    app.setCrosshair(
-      _pxToDataX(event.localPosition.dx),
-      sourcePlot: widget.plotIdx,
-    );
+    _updatePointCrosshair(event.localPosition, chooseSeries: true);
   }
 
-  void _updateTouchCrosshair(Offset localPosition, {bool unlock = false}) {
+  void _updateTouchCrosshair(
+    Offset localPosition, {
+    bool unlock = false,
+    double pickRadius = 16,
+  }) {
     final app = context.read<AppState>();
     if (app.interactionMode != 1) return;
     if (unlock && app.pointLocked) app.pointLocked = false;
-    if (app.pointLocked || !_ensureViewInitialized(app)) return;
-    app.setCrosshair(
-      _pxToDataX(localPosition.dx),
-      sourcePlot: widget.plotIdx,
+    _updatePointCrosshair(
+      localPosition,
+      chooseSeries: unlock,
+      pickRadius: pickRadius,
     );
   }
 

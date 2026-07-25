@@ -29,6 +29,39 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  test('Point readout interpolates ascending and descending waveforms', () {
+    expect(
+      interpolateWaveformY(
+        [
+          [0, 10],
+          [2, 20],
+        ],
+        0.5,
+      ),
+      12.5,
+    );
+    expect(
+      interpolateWaveformY(
+        [
+          [2, 20],
+          [0, 10],
+        ],
+        0.5,
+      ),
+      12.5,
+    );
+    expect(
+      interpolateWaveformY(
+        [
+          [0, 10],
+          [2, 20],
+        ],
+        -1,
+      ),
+      10,
+    );
+  });
+
   test('Waveform render geometry is reused until series data changes', () {
     final points = List<List<double>>.generate(
       12000,
@@ -1822,6 +1855,8 @@ void main() {
     expect(charts, hasLength(2));
     expect(charts[0].data.extraLinesData.horizontalLines.single.y, 12);
     expect(charts[1].data.extraLinesData.horizontalLines.single.y, 22);
+    expect(find.byKey(const ValueKey('plot-point-marker-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('plot-point-marker-1')), findsOneWidget);
   });
 
   testWidgets('Plot legend uses signal names and supports custom labels',
