@@ -94,6 +94,29 @@ void main() {
     );
   });
 
+  test('Runtime system information prefers the native platform channel',
+      () async {
+    const channel = MethodChannel('mdsscope/system_info');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      expect(call.method, 'get');
+      return {
+        'name': 'Windows 11 Pro',
+        'version': '25H2, build 26200.8875',
+        'architecture': 'AMD64',
+      };
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final info = await loadRuntimeSystemInfo();
+
+    expect(
+      info.displayText,
+      'Windows 11 Pro (25H2, build 26200.8875) (x86_64)',
+    );
+  });
+
   test('Customize Fonts values are applied to the application theme', () {
     final theme = MdsScopeTheme.light(
       fontFamily: 'Courier New',
