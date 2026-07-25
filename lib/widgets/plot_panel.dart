@@ -1838,6 +1838,7 @@ class _InteractiveHorizontalScrollView extends StatefulWidget {
     required this.scrollViewKey,
     required this.child,
     required this.thickness,
+    required this.revision,
     this.padding = EdgeInsets.zero,
   });
 
@@ -1845,6 +1846,7 @@ class _InteractiveHorizontalScrollView extends StatefulWidget {
   final Key scrollViewKey;
   final Widget child;
   final double thickness;
+  final Object revision;
   final EdgeInsetsGeometry padding;
 
   @override
@@ -1864,24 +1866,27 @@ class _InteractiveHorizontalScrollViewState
 
   @override
   Widget build(BuildContext context) {
-    return Scrollbar(
+    return KeyedSubtree(
       key: widget.scrollbarKey,
-      controller: _controller,
-      thumbVisibility: true,
-      trackVisibility: true,
-      interactive: true,
-      thickness: widget.thickness,
-      radius: const Radius.circular(4),
-      scrollbarOrientation: ScrollbarOrientation.bottom,
-      notificationPredicate: (notification) =>
-          notification.metrics.axis == Axis.horizontal,
-      child: Padding(
-        padding: widget.padding,
-        child: SingleChildScrollView(
-          key: widget.scrollViewKey,
-          controller: _controller,
-          scrollDirection: Axis.horizontal,
-          child: widget.child,
+      child: Scrollbar(
+        key: ValueKey(widget.revision),
+        controller: _controller,
+        thumbVisibility: true,
+        trackVisibility: true,
+        interactive: true,
+        thickness: widget.thickness,
+        radius: const Radius.circular(4),
+        scrollbarOrientation: ScrollbarOrientation.bottom,
+        notificationPredicate: (notification) =>
+            notification.metrics.axis == Axis.horizontal,
+        child: Padding(
+          padding: widget.padding,
+          child: SingleChildScrollView(
+            key: widget.scrollViewKey,
+            controller: _controller,
+            scrollDirection: Axis.horizontal,
+            child: widget.child,
+          ),
         ),
       ),
     );
@@ -2105,6 +2110,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
             scrollbarKey: const ValueKey('data-source-horizontal-scrollbar'),
             scrollViewKey: const ValueKey('data-source-horizontal-scroll'),
             thickness: 5,
+            revision: _rows.length,
             padding: const EdgeInsets.only(bottom: 9),
             child: IntrinsicWidth(
               child: SingleChildScrollView(

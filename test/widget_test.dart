@@ -3105,8 +3105,14 @@ void main() {
 
     await tester.tap(find.text('Open data source'));
     await tester.pumpAndSettle();
+    final scrollbarHost = find.byKey(
+      const ValueKey('data-source-horizontal-scrollbar'),
+    );
     final dataSourceScrollbar = tester.widget<Scrollbar>(
-      find.byKey(const ValueKey('data-source-horizontal-scrollbar')),
+      find.descendant(
+        of: scrollbarHost,
+        matching: find.byType(Scrollbar),
+      ),
     );
     expect(dataSourceScrollbar.thumbVisibility, isTrue);
     expect(dataSourceScrollbar.trackVisibility, isTrue);
@@ -3116,6 +3122,7 @@ void main() {
       dataSourceScrollbar.controller?.position.maxScrollExtent,
       greaterThan(0),
     );
+    final initialScrollbarRevision = dataSourceScrollbar.key;
     final horizontalController = dataSourceScrollbar.controller!;
     horizontalController.jumpTo(
       horizontalController.position.maxScrollExtent / 2,
@@ -3125,10 +3132,14 @@ void main() {
     await tester.tap(find.byTooltip('Add Curve'));
     await tester.pumpAndSettle();
     final rebuiltScrollbar = tester.widget<Scrollbar>(
-      find.byKey(const ValueKey('data-source-horizontal-scrollbar')),
+      find.descendant(
+        of: scrollbarHost,
+        matching: find.byType(Scrollbar),
+      ),
     );
     expect(rebuiltScrollbar.thumbVisibility, isTrue);
     expect(rebuiltScrollbar.trackVisibility, isTrue);
+    expect(rebuiltScrollbar.key, isNot(initialScrollbarRevision));
     expect(rebuiltScrollbar.controller, same(horizontalController));
     expect(rebuiltScrollbar.controller?.hasClients, isTrue);
     expect(rebuiltScrollbar.controller?.offset, preservedOffset);
