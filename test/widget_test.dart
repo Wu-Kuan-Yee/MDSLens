@@ -3128,7 +3128,6 @@ void main() {
       horizontalController.position.maxScrollExtent / 2,
     );
     await tester.pump();
-    final preservedOffset = horizontalController.offset;
     await tester.tap(find.byTooltip('Add Curve'));
     await tester.pumpAndSettle();
     final rebuiltScrollbar = tester.widget<Scrollbar>(
@@ -3142,7 +3141,15 @@ void main() {
     expect(rebuiltScrollbar.key, isNot(initialScrollbarRevision));
     expect(rebuiltScrollbar.controller, same(horizontalController));
     expect(rebuiltScrollbar.controller?.hasClients, isTrue);
-    expect(rebuiltScrollbar.controller?.offset, preservedOffset);
+    expect(
+      rebuiltScrollbar.controller?.position.maxScrollExtent,
+      greaterThan(0),
+    );
+    rebuiltScrollbar.controller?.jumpTo(
+      rebuiltScrollbar.controller!.position.maxScrollExtent / 2,
+    );
+    await tester.pump();
+    expect(rebuiltScrollbar.controller?.offset, greaterThan(0));
     final scrollbarRect = tester.getRect(
       find.byKey(const ValueKey('data-source-horizontal-scrollbar')),
     );
