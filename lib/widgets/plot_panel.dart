@@ -1868,6 +1868,7 @@ class _InteractiveHorizontalScrollViewState
       key: widget.scrollbarKey,
       controller: _controller,
       thumbVisibility: true,
+      trackVisibility: true,
       interactive: true,
       thickness: widget.thickness,
       radius: const Radius.circular(4),
@@ -2069,6 +2070,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
               tooltip: 'Add Curve',
               onPressed: _rows.length < 8
                   ? () {
+                      FocusManager.instance.primaryFocus?.unfocus();
                       final last = _rows.isNotEmpty ? _rows.last : null;
                       final shotCtrl = TextEditingController(
                           text: last?.shot.text ?? widget.defaultShot);

@@ -3109,12 +3109,31 @@ void main() {
       find.byKey(const ValueKey('data-source-horizontal-scrollbar')),
     );
     expect(dataSourceScrollbar.thumbVisibility, isTrue);
+    expect(dataSourceScrollbar.trackVisibility, isTrue);
     expect(dataSourceScrollbar.interactive, isTrue);
     expect(dataSourceScrollbar.thickness, 5);
     expect(
       dataSourceScrollbar.controller?.position.maxScrollExtent,
       greaterThan(0),
     );
+    final horizontalController = dataSourceScrollbar.controller!;
+    horizontalController.jumpTo(
+      horizontalController.position.maxScrollExtent / 2,
+    );
+    await tester.pump();
+    final preservedOffset = horizontalController.offset;
+    await tester.tap(find.byTooltip('Add Curve'));
+    await tester.pumpAndSettle();
+    final rebuiltScrollbar = tester.widget<Scrollbar>(
+      find.byKey(const ValueKey('data-source-horizontal-scrollbar')),
+    );
+    expect(rebuiltScrollbar.thumbVisibility, isTrue);
+    expect(rebuiltScrollbar.trackVisibility, isTrue);
+    expect(rebuiltScrollbar.controller, same(horizontalController));
+    expect(rebuiltScrollbar.controller?.hasClients, isTrue);
+    expect(rebuiltScrollbar.controller?.offset, preservedOffset);
+    horizontalController.jumpTo(0);
+    await tester.pump();
     final shotField = tester.widget<TextField>(
       find.byKey(const ValueKey('data-shot-0')),
     );
