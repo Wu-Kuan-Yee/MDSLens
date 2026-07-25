@@ -5,11 +5,13 @@ class PolishedDropdownOption<T> {
     required this.value,
     required this.label,
     this.icon,
+    this.fontFamily,
   });
 
   final T value;
   final String label;
   final IconData? icon;
+  final String? fontFamily;
 }
 
 class PolishedDropdownAction {
@@ -280,6 +282,7 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.bodyMedium?.copyWith(
               fontSize: widget.fontSize,
+              fontFamily: selected.fontFamily,
               fontWeight: FontWeight.w600,
               color: colors.onSurface,
             ),
@@ -354,7 +357,11 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
               ),
         ),
       ),
-      child: Text(option.label, maxLines: 1),
+      child: Text(
+        option.label,
+        maxLines: 1,
+        style: TextStyle(fontFamily: option.fontFamily),
+      ),
     );
   }
 }

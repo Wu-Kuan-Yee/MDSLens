@@ -3238,6 +3238,29 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('font-family-divider-1')), findsOneWidget);
     expect(find.byKey(const ValueKey('font-family-divider-7')), findsOneWidget);
+    const fontFamilies = <String>[
+      'Arial',
+      'Helvetica',
+      'Times New Roman',
+      'Courier New',
+      'Georgia',
+      'Verdana',
+      'Monaco',
+    ];
+    for (var index = 0; index < fontFamilies.length; index++) {
+      final family = fontFamilies[index];
+      final optionLabel = tester.widget<Text>(
+        find
+            .descendant(
+              of: find.byKey(
+                ValueKey('font-family-option-${index + 1}'),
+              ),
+              matching: find.text(family),
+            )
+            .last,
+      );
+      expect(optionLabel.style?.fontFamily, family);
+    }
     expect(tester.takeException(), isNull);
   });
 

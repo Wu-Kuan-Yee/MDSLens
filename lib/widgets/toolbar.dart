@@ -2397,6 +2397,7 @@ class ToolbarWidget extends StatelessWidget {
                             PolishedDropdownOption(
                               value: family,
                               label: family,
+                              fontFamily: family == 'System' ? null : family,
                               icon: family == 'System'
                                   ? Icons.devices_rounded
                                   : Icons.text_fields_rounded,
