@@ -212,23 +212,7 @@ class ResponsiveToolbar extends StatelessWidget {
                       color: theme.dividerColor,
                     ),
                     Expanded(
-                      child: SingleChildScrollView(
-                        key:
-                            const ValueKey('toolbar-collapsed-metadata-scroll'),
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Center(
-                          child: Text(
-                            metadata,
-                            key: const ValueKey('toolbar-collapsed-summary'),
-                            maxLines: 1,
-                            softWrap: false,
-                            style: TextStyle(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      ),
+                      child: _CollapsedMetadataScroller(metadata: metadata),
                     ),
                   ],
                 ),
@@ -282,6 +266,59 @@ class ResponsiveToolbar extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _CollapsedMetadataScroller extends StatefulWidget {
+  const _CollapsedMetadataScroller({required this.metadata});
+
+  final String metadata;
+
+  @override
+  State<_CollapsedMetadataScroller> createState() =>
+      _CollapsedMetadataScrollerState();
+}
+
+class _CollapsedMetadataScrollerState
+    extends State<_CollapsedMetadataScroller> {
+  final ScrollController _controller = ScrollController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scrollbar(
+      key: const ValueKey('toolbar-collapsed-metadata-scrollbar'),
+      controller: _controller,
+      thumbVisibility: true,
+      interactive: true,
+      thickness: 2,
+      radius: const Radius.circular(2),
+      scrollbarOrientation: ScrollbarOrientation.bottom,
+      notificationPredicate: (notification) =>
+          notification.metrics.axis == Axis.horizontal,
+      child: SingleChildScrollView(
+        key: const ValueKey('toolbar-collapsed-metadata-scroll'),
+        controller: _controller,
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 3),
+        child: Center(
+          child: Text(
+            widget.metadata,
+            key: const ValueKey('toolbar-collapsed-summary'),
+            maxLines: 1,
+            softWrap: false,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

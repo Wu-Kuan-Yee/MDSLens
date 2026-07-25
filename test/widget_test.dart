@@ -3082,6 +3082,16 @@ void main() {
 
     await tester.tap(find.text('Open data source'));
     await tester.pumpAndSettle();
+    final dataSourceScrollbar = tester.widget<Scrollbar>(
+      find.byKey(const ValueKey('data-source-horizontal-scrollbar')),
+    );
+    expect(dataSourceScrollbar.thumbVisibility, isTrue);
+    expect(dataSourceScrollbar.interactive, isTrue);
+    expect(dataSourceScrollbar.thickness, 5);
+    expect(
+      dataSourceScrollbar.controller?.position.maxScrollExtent,
+      greaterThan(0),
+    );
     final shotField = tester.widget<TextField>(
       find.byKey(const ValueKey('data-shot-0')),
     );
@@ -3512,6 +3522,12 @@ void main() {
     await tester.tap(find.text('Collapse controls'));
     await tester.pumpAndSettle();
 
+    final metadataScrollbar = tester.widget<Scrollbar>(
+      find.byKey(const ValueKey('toolbar-collapsed-metadata-scrollbar')),
+    );
+    expect(metadataScrollbar.thumbVisibility, isTrue);
+    expect(metadataScrollbar.interactive, isTrue);
+    expect(metadataScrollbar.thickness, 2);
     final summaryFinder =
         find.byKey(const ValueKey('toolbar-collapsed-summary'));
     final summary = tester.widget<Text>(summaryFinder).data!;

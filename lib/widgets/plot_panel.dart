@@ -1832,6 +1832,59 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
   }
 }
 
+class _InteractiveHorizontalScrollView extends StatefulWidget {
+  const _InteractiveHorizontalScrollView({
+    required this.scrollbarKey,
+    required this.scrollViewKey,
+    required this.child,
+    required this.thickness,
+    this.padding = EdgeInsets.zero,
+  });
+
+  final Key scrollbarKey;
+  final Key scrollViewKey;
+  final Widget child;
+  final double thickness;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  State<_InteractiveHorizontalScrollView> createState() =>
+      _InteractiveHorizontalScrollViewState();
+}
+
+class _InteractiveHorizontalScrollViewState
+    extends State<_InteractiveHorizontalScrollView> {
+  final ScrollController _controller = ScrollController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scrollbar(
+      key: widget.scrollbarKey,
+      controller: _controller,
+      thumbVisibility: true,
+      interactive: true,
+      thickness: widget.thickness,
+      radius: const Radius.circular(4),
+      scrollbarOrientation: ScrollbarOrientation.bottom,
+      notificationPredicate: (notification) =>
+          notification.metrics.axis == Axis.horizontal,
+      child: SingleChildScrollView(
+        key: widget.scrollViewKey,
+        controller: _controller,
+        scrollDirection: Axis.horizontal,
+        padding: widget.padding,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
 class _DataSourceDialog extends StatefulWidget {
   final List<Map<String, dynamic>> signals;
   final String defaultShot;
@@ -2044,8 +2097,11 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
         ]),
         content: SizedBox(
           height: 180,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+          child: _InteractiveHorizontalScrollView(
+            scrollbarKey: const ValueKey('data-source-horizontal-scrollbar'),
+            scrollViewKey: const ValueKey('data-source-horizontal-scroll'),
+            thickness: 5,
+            padding: const EdgeInsets.only(bottom: 9),
             child: IntrinsicWidth(
               child: SingleChildScrollView(
                 child: Table(
