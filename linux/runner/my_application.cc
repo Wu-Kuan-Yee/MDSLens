@@ -1,6 +1,7 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
+#include <pango/pangocairo.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
@@ -13,6 +14,53 @@ struct _MyApplication {
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
+
+static gint compare_font_family_names(gconstpointer left,
+                                      gconstpointer right) {
+  const gchar* left_name = *static_cast<gchar* const*>(left);
+  const gchar* right_name = *static_cast<gchar* const*>(right);
+  return g_ascii_strcasecmp(left_name, right_name);
+}
+
+static void system_fonts_method_call_cb(
+    FlMethodChannel* channel,
+    FlMethodCall* method_call,
+    gpointer user_data) {
+  const gchar* method = fl_method_call_get_name(method_call);
+  if (g_strcmp0(method, "listFamilies") != 0) {
+    g_autoptr(FlMethodResponse) response =
+        FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
+    fl_method_call_respond(method_call, response, nullptr);
+    return;
+  }
+
+  PangoFontMap* font_map = pango_cairo_font_map_get_default();
+  PangoFontFamily** families = nullptr;
+  int family_count = 0;
+  pango_font_map_list_families(font_map, &families, &family_count);
+
+  g_autoptr(FlValue) result = fl_value_new_list();
+  GPtrArray* names = g_ptr_array_new_with_free_func(g_free);
+  for (int index = 0; index < family_count; ++index) {
+    const gchar* name = pango_font_family_get_name(families[index]);
+    if (name != nullptr && *name != '\0') {
+      g_ptr_array_add(names, g_strdup(name));
+    }
+  }
+  g_free(families);
+  g_ptr_array_sort(names, compare_font_family_names);
+  for (guint index = 0; index < names->len; ++index) {
+    fl_value_append_take(
+        result,
+        fl_value_new_string(static_cast<const gchar*>(
+            g_ptr_array_index(names, index))));
+  }
+  g_ptr_array_unref(names);
+
+  g_autoptr(FlMethodResponse) response =
+      FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+  fl_method_call_respond(method_call, response, nullptr);
+}
 
 static void set_window_icon(GtkWindow* window) {
   // Desktop packages expose the icon by application ID. The bundled PNG is a
@@ -79,6 +127,14 @@ static void my_application_activate(GApplication* application) {
       project, self->dart_entrypoint_arguments);
 
   FlView* view = fl_view_new(project);
+  FlEngine* engine = fl_view_get_engine(view);
+  FlBinaryMessenger* messenger = fl_engine_get_binary_messenger(engine);
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  g_autoptr(FlMethodChannel) system_fonts_channel =
+      fl_method_channel_new(messenger, "mdsscope/system_fonts",
+                            FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(
+      system_fonts_channel, system_fonts_method_call_cb, self, nullptr);
   GdkRGBA background_color;
   // Background defaults to black, override it here if necessary, e.g. #00000000
   // for transparent.

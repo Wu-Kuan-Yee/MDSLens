@@ -2,9 +2,11 @@
 
 #include <flutter/standard_method_codec.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <cwchar>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -118,6 +120,36 @@ flutter::EncodableValue ReadRuntimeSystemInfo() {
   return flutter::EncodableValue(result);
 }
 
+int CALLBACK CollectFontFamily(
+    const LOGFONTW* logical_font, const TEXTMETRICW*, DWORD, LPARAM context) {
+  auto* families = reinterpret_cast<std::set<std::wstring>*>(context);
+  const std::wstring family(logical_font->lfFaceName);
+  if (!family.empty() && family.front() != L'@') {
+    families->insert(family);
+  }
+  return 1;
+}
+
+flutter::EncodableValue ReadSystemFontFamilies() {
+  std::set<std::wstring> families;
+  HDC device_context = GetDC(nullptr);
+  if (device_context != nullptr) {
+    LOGFONTW query = {};
+    query.lfCharSet = DEFAULT_CHARSET;
+    EnumFontFamiliesExW(
+        device_context, &query,
+        reinterpret_cast<FONTENUMPROCW>(CollectFontFamily),
+        reinterpret_cast<LPARAM>(&families), 0);
+    ReleaseDC(nullptr, device_context);
+  }
+  flutter::EncodableList result;
+  result.reserve(families.size());
+  for (const auto& family : families) {
+    result.emplace_back(Utf8FromWide(family));
+  }
+  return flutter::EncodableValue(result);
+}
+
 }  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -155,6 +187,20 @@ bool FlutterWindow::OnCreate() {
         }
         result->Success(ReadRuntimeSystemInfo());
       });
+  system_fonts_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), "mdsscope/system_fonts",
+          &flutter::StandardMethodCodec::GetInstance());
+  system_fonts_channel_->SetMethodCallHandler(
+      [](const flutter::MethodCall<flutter::EncodableValue>& call,
+         std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+             result) {
+        if (call.method_name() != "listFamilies") {
+          result->NotImplemented();
+          return;
+        }
+        result->Success(ReadSystemFontFamilies());
+      });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -170,6 +216,7 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  system_fonts_channel_.reset();
   system_info_channel_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;

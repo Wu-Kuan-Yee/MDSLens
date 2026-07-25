@@ -8,6 +8,7 @@ class AppDelegate: FlutterAppDelegate {
   var permissionsChannel: FlutterMethodChannel?
   var identityFileChannel: FlutterMethodChannel?
   var systemInfoChannel: FlutterMethodChannel?
+  var systemFontsChannel: FlutterMethodChannel?
   var activeIdentityFileURLs: [URL] = []
 
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -54,6 +55,20 @@ class AppDelegate: FlutterAppDelegate {
         "version": versionText,
         "architecture": architecture,
       ])
+    }
+    let fontsChannel = FlutterMethodChannel(
+      name: "mdsscope/system_fonts",
+      binaryMessenger: controller.engine.binaryMessenger
+    )
+    systemFontsChannel = fontsChannel
+    fontsChannel.setMethodCallHandler { call, result in
+      guard call.method == "listFamilies" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      result(NSFontManager.shared.availableFontFamilies.sorted {
+        $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+      })
     }
     let identityChannel = FlutterMethodChannel(
       name: "mdsscope/identity_file_access",

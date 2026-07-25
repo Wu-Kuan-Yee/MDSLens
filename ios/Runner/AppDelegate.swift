@@ -10,6 +10,7 @@ import CoreTelephony
   private var permissionsChannel: FlutterMethodChannel?
   private var stylusChannel: FlutterMethodChannel?
   private var systemInfoChannel: FlutterMethodChannel?
+  private var systemFontsChannel: FlutterMethodChannel?
   private var pencilInteraction: UIPencilInteraction?
   private var pencilUsesEraser = false
   private var cellularDataMonitor: CTCellularData?
@@ -89,6 +90,19 @@ import CoreTelephony
         "version": UIDevice.current.systemVersion,
         "architecture": architecture,
       ])
+    }
+    systemFontsChannel = FlutterMethodChannel(
+      name: "mdsscope/system_fonts",
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
+    )
+    systemFontsChannel?.setMethodCallHandler { call, result in
+      guard call.method == "listFamilies" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      result(UIFont.familyNames.sorted {
+        $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+      })
     }
     DispatchQueue.main.async { [weak self] in
       self?.installPencilInteraction(on: self?.activeRootView)

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/app_state.dart';
 import '../services/external_url_launcher.dart';
 import '../services/rust_bridge.dart';
+import '../services/system_font_service.dart';
 import 'dialogs/login.dart';
 import 'dialogs/ssh.dart';
 import 'dialogs/about.dart';
@@ -2363,74 +2364,76 @@ class ToolbarWidget extends StatelessWidget {
     var axisSize = app.fontAxisSize;
     var unitSize = app.fontUnitSize;
     var uiSize = app.fontUiSize;
-    const families = [
+    var families = <String>[
       'System',
-      'Arial',
-      'Helvetica',
-      'Times New Roman',
-      'Courier New',
-      'Georgia',
-      'Verdana',
-      'Monaco'
+      ...SystemFontService.fallbackFamilies,
     ];
-    showDialog(
+    var fontLoadScheduled = false;
+    showDialog<void>(
       context: ctx,
-      builder: (ctx) => StatefulBuilder(
-          builder: (ctx, setState) => KeyboardSafeDialog(
-                title: const Text('Customize Fonts'),
-                content: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Row(children: [
-                    const SizedBox(width: 100, child: Text('Font')),
-                    Expanded(
-                      child: PolishedDropdown<String>(
-                        key: const ValueKey('font-family-dropdown'),
-                        id: 'font-family',
-                        value: families.contains(fontFamily)
-                            ? fontFamily
-                            : 'System',
-                        leadingIcon: Icons.font_download_outlined,
-                        fontSize: 12,
-                        minimumMenuWidth: 220,
-                        menuMaxHeight: 360,
-                        options: [
-                          for (final family in families)
-                            PolishedDropdownOption(
-                              value: family,
-                              label: family,
-                              fontFamily: family == 'System' ? null : family,
-                              icon: family == 'System'
-                                  ? Icons.devices_rounded
-                                  : Icons.text_fields_rounded,
-                            ),
-                        ],
-                        onChanged: (value) =>
-                            setState(() => fontFamily = value),
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setState) {
+        if (!fontLoadScheduled) {
+          fontLoadScheduled = true;
+          SystemFontService.loadFamilies().then((discovered) {
+            if (!ctx.mounted) return;
+            setState(() {
+              families = ['System', ...discovered];
+              if (!families.contains(fontFamily)) fontFamily = 'System';
+            });
+          });
+        }
+        return KeyboardSafeDialog(
+          title: const Text('Customize Fonts'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            Row(children: [
+              const SizedBox(width: 100, child: Text('Font')),
+              Expanded(
+                child: PolishedDropdown<String>(
+                  key: const ValueKey('font-family-dropdown'),
+                  id: 'font-family',
+                  value: families.contains(fontFamily) ? fontFamily : 'System',
+                  leadingIcon: Icons.font_download_outlined,
+                  fontSize: 12,
+                  minimumMenuWidth: 220,
+                  menuMaxHeight: 360,
+                  options: [
+                    for (final family in families)
+                      PolishedDropdownOption(
+                        value: family,
+                        label: family,
+                        fontFamily: family == 'System' ? null : family,
+                        icon: family == 'System'
+                            ? Icons.devices_rounded
+                            : Icons.text_fields_rounded,
                       ),
-                    ),
-                  ]),
-                  const SizedBox(height: 8),
-                  _fontRow('Legend size', legendSize,
-                      (v) => setState(() => legendSize = v)),
-                  _fontRow('Axis size', axisSize,
-                      (v) => setState(() => axisSize = v)),
-                  _fontRow('Unit size', unitSize,
-                      (v) => setState(() => unitSize = v)),
-                  _fontRow(
-                      'UI size', uiSize, (v) => setState(() => uiSize = v)),
-                ]),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Cancel')),
-                  TextButton(
-                      onPressed: () {
-                        app.applyFontSettings(
-                            fontFamily, legendSize, axisSize, unitSize, uiSize);
-                        Navigator.pop(ctx);
-                      },
-                      child: const Text('OK')),
-                ],
-              )),
+                  ],
+                  onChanged: (value) => setState(() => fontFamily = value),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 8),
+            _fontRow('Legend size', legendSize,
+                (v) => setState(() => legendSize = v)),
+            _fontRow(
+                'Axis size', axisSize, (v) => setState(() => axisSize = v)),
+            _fontRow(
+                'Unit size', unitSize, (v) => setState(() => unitSize = v)),
+            _fontRow('UI size', uiSize, (v) => setState(() => uiSize = v)),
+          ]),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            TextButton(
+                onPressed: () {
+                  app.applyFontSettings(
+                      fontFamily, legendSize, axisSize, unitSize, uiSize);
+                  Navigator.pop(ctx);
+                },
+                child: const Text('OK')),
+          ],
+        );
+      }),
     );
   }
 
