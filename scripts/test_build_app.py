@@ -84,7 +84,9 @@ class BuildAppTests(unittest.TestCase):
             ],
         )
 
-    def test_linux_portable_keeps_glibc_on_target_system(self) -> None:
+    def test_linux_portable_keeps_base_and_display_abis_on_target_system(
+        self,
+    ) -> None:
         for name in (
             "ld-linux-x86-64.so.2",
             "libc.so.6",
@@ -95,18 +97,36 @@ class BuildAppTests(unittest.TestCase):
             "libnss_files.so.2",
             "libnss_files-2.31.so",
             "ld-2.31.so",
+            "libstdc++.so.6",
+            "libgcc_s.so.1",
+            "libgcc_s-16-20260515.so.1",
+            "libX11.so.6",
+            "libxcb-render.so.0",
+            "libwayland-client.so.0",
+            "libxkbcommon-x11.so.0",
+            "libepoxy.so.0",
+            "libEGL.so.1",
+            "libGLX.so.0",
+            "libdrm_amdgpu.so.1",
         ):
             self.assertTrue(build_app.is_linux_system_runtime(name), name)
             self.assertIsNotNone(
                 verify_linux_portable.SYSTEM_RUNTIME.fullmatch(name),
                 name,
             )
-        for name in ("libgtk-3.so.0", "libstdc++.so.6", "libX11.so.6"):
+        for name in ("libgtk-3.so.0", "libglib-2.0.so.0", "libsecret-1.so.0"):
             self.assertFalse(build_app.is_linux_system_runtime(name), name)
             self.assertIsNone(
                 verify_linux_portable.SYSTEM_RUNTIME.fullmatch(name),
                 name,
             )
+        # The verifier accepts a newer target display stack's transitive
+        # libffi, but the packager must still carry the baseline SONAME used by
+        # its bundled GLib.
+        self.assertFalse(build_app.is_linux_system_runtime("libffi.so.7"))
+        self.assertIsNotNone(
+            verify_linux_portable.SYSTEM_RUNTIME.fullmatch("libffi.so.8")
+        )
 
     def test_linux_ldd_parser_finds_both_dependency_styles(self) -> None:
         self.assertEqual(

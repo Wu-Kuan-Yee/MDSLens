@@ -683,15 +683,25 @@ def is_linux_system_runtime(name: str) -> bool:
     """Return libraries that must come from the target Linux base system.
 
     Bundling glibc or its loader makes a package less portable and can break
-    NSS, DNS and thread-local runtime behavior. Everything above this small
-    ABI floor is carried in the portable archives.
+    NSS, DNS and thread-local runtime behavior. The compiler and display
+    runtimes must also stay aligned with the target system's graphics drivers;
+    mixing an older bundled X11/EGL stack with newer Mesa drivers can abort
+    Flutter before its first frame.
     """
     return bool(re.fullmatch(
         r"(?:"
         r"ld-linux[^/]*\.so(?:\..*)?|"
         r"ld-\d+(?:\.\d+)+\.so|"
         r"(?:libc|libdl|libm|libpthread|libresolv|librt|libutil|libanl|"
-        r"libnss_[A-Za-z0-9_-]+)(?:\.so(?:\..*)?|-\d+(?:\.\d+)+\.so)"
+        r"libnss_[A-Za-z0-9_-]+)(?:\.so(?:\..*)?|-\d+(?:\.\d+)+\.so)|"
+        r"(?:libstdc\+\+\.so(?:\..*)?|"
+        r"libgcc_s(?:-\d[\d.-]*)?\.so(?:\..*)?)|"
+        r"(?:libX11|libXau|libXdmcp|libXext|libXi|libXcursor|libXfixes|"
+        r"libXinerama|libXrandr|libXrender|libXcomposite|libXdamage|"
+        r"libxcb(?:-[A-Za-z0-9_-]+)?|libwayland-(?:client|cursor|egl)|"
+        r"libxkbcommon(?:-x11)?|libepoxy|libEGL|libGL|libGLX|libOpenGL|"
+        r"libGLESv2|libGLdispatch|libglapi|libgbm|libdrm(?:_[A-Za-z0-9_-]+)?)"
+        r"\.so(?:\..*)?"
         r")",
         name,
     ))

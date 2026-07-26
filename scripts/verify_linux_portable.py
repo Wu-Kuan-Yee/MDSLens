@@ -19,7 +19,19 @@ SYSTEM_RUNTIME = re.compile(
     r"ld-linux[^/]*\.so(?:\..*)?|"
     r"ld-\d+(?:\.\d+)+\.so|"
     r"(?:libc|libdl|libm|libpthread|libresolv|librt|libutil|libanl|"
-    r"libnss_[A-Za-z0-9_-]+)(?:\.so(?:\..*)?|-\d+(?:\.\d+)+\.so)"
+    r"libnss_[A-Za-z0-9_-]+)(?:\.so(?:\..*)?|-\d+(?:\.\d+)+\.so)|"
+    r"(?:libstdc\+\+\.so(?:\..*)?|"
+    r"libgcc_s(?:-\d[\d.-]*)?\.so(?:\..*)?)|"
+    # A newer target display stack can use a newer libffi SONAME than the
+    # bundled GTK baseline. ldd reports that transitive system dependency for
+    # every binary, while the older libffi needed by bundled GLib stays local.
+    r"libffi\.so(?:\..*)?|"
+    r"(?:libX11|libXau|libXdmcp|libXext|libXi|libXcursor|libXfixes|"
+    r"libXinerama|libXrandr|libXrender|libXcomposite|libXdamage|"
+    r"libxcb(?:-[A-Za-z0-9_-]+)?|libwayland-(?:client|cursor|egl)|"
+    r"libxkbcommon(?:-x11)?|libepoxy|libEGL|libGL|libGLX|libOpenGL|"
+    r"libGLESv2|libGLdispatch|libglapi|libgbm|libdrm(?:_[A-Za-z0-9_-]+)?)"
+    r"\.so(?:\..*)?"
     r")"
 )
 

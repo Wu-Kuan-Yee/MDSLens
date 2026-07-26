@@ -44,12 +44,14 @@ The entire Flutter application cannot become a single "fully static, zero-runtim
 This project statically links OpenSSL, libssh2, and zlib into the Rust bridge where practical; the macOS bridge has no external references beyond Apple system libraries. The desktop Flutter engine and operating system base libraries remain dynamically linked per platform conventions. Claiming they are "fully static" is both inaccurate and often breaks plugins, signing, or system compatibility.
 
 For Linux, the portable archives close the practical gap by bundling every
-linked user-space dependency except the glibc family/ELF loader and by isolating
-GTK/GIO lookup paths. They are built against glibc 2.31 and are intended to run
-unchanged on newer mainstream distributions of the same architecture. A package
-cannot promise literally every Linux system: older glibc, non-glibc systems
-(such as Alpine/musl), obsolete kernels and missing/incompatible graphics
-drivers require a different runtime baseline.
+application-level dependency while leaving the glibc family/ELF loader,
+compiler ABI, X11/Wayland clients, EGL/OpenGL dispatch, and graphics drivers
+aligned with the target system. GTK/GIO lookup paths remain isolated. The
+archives are built against glibc 2.31 and are intended to run unchanged on newer
+mainstream distributions of the same architecture. A package cannot promise
+literally every Linux system: older glibc, non-glibc systems (such as
+Alpine/musl), obsolete kernels and missing/incompatible display or graphics
+runtimes require a different runtime baseline.
 
 ## HarmonyOS NEXT
 
