@@ -1046,9 +1046,13 @@ def package_linux_flatpak(
         shutil.copy2(
             ROOT / "packaging/linux/com.mdsscope.app.desktop", applications
         )
-        icons = build_dir / "files/share/icons/hicolor/scalable/apps"
+        # Flatpak validates exported icons with the image loaders installed on
+        # the build host. A minimal runner may not provide the optional SVG
+        # loader even though desktop systems do, so export the canonical PNG
+        # asset and keep the bundle independent of that host plugin.
+        icons = build_dir / "files/share/icons/hicolor/256x256/apps"
         icons.mkdir(parents=True)
-        shutil.copy2(ROOT / "assets/app_icon.svg", icons / "com.mdsscope.app.svg")
+        shutil.copy2(ROOT / "assets/app_icon.png", icons / "com.mdsscope.app.png")
         run(
             flatpak, "build-finish",
             "--command=mdsscope",

@@ -231,6 +231,33 @@ class BuildAppTests(unittest.TestCase):
                 ],
             )
 
+    def test_flatpak_exports_png_icon_without_optional_svg_loader(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output = root / "mdsscope-linux-x64.flatpak"
+            with mock.patch.object(
+                build_app, "format_tool", return_value="/usr/bin/flatpak"
+            ):
+                with mock.patch.object(build_app, "replace_tree"):
+                    with mock.patch.object(build_app.shutil, "copy2") as copy:
+                        with mock.patch.object(build_app, "run"):
+                            build_app.package_linux_flatpak(
+                                root / "portable", output, "x64", {"flatpak"}
+                            )
+        icon_calls = [
+            call for call in copy.call_args_list
+            if Path(call.args[0]).name == "app_icon.png"
+        ]
+        self.assertEqual(len(icon_calls), 1)
+        self.assertEqual(
+            Path(icon_calls[0].args[1]).name,
+            "com.mdsscope.app.png",
+        )
+        self.assertIn(
+            "hicolor/256x256/apps",
+            Path(icon_calls[0].args[1]).as_posix(),
+        )
+
     def test_portable_zip_extraction_restores_unix_executable_mode(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
