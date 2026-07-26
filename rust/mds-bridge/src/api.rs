@@ -71,6 +71,9 @@ pub struct FrbLayoutConfig {
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct FrbSignalSeries {
     pub name: String,
+    pub unit: String,
+    pub x_name: String,
+    pub x_unit: String,
     pub error: String,
     pub uniform_y: Vec<f32>,
     pub uniform_start: f64,
@@ -178,7 +181,7 @@ impl From<mds_core::types::SignalSeries> for FrbSignalSeries {
         if had_samples && points.is_empty() && error.is_empty() {
             error = "signal contains no finite numeric samples".into();
         }
-        Self { name: s.name, error, uniform_y: s.uniform_y, uniform_start: s.uniform_start, uniform_step: s.uniform_step, uniform_min_y: s.uniform_min_y, uniform_max_y: s.uniform_max_y, points }
+        Self { name: s.name, unit: s.unit, x_name: s.x_name, x_unit: s.x_unit, error, uniform_y: s.uniform_y, uniform_start: s.uniform_start, uniform_step: s.uniform_step, uniform_min_y: s.uniform_min_y, uniform_max_y: s.uniform_max_y, points }
     }
 }
 

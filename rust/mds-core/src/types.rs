@@ -165,6 +165,12 @@ pub struct LayoutConfig {
 pub struct SignalSeries {
     /// Human-readable name (derived from MDS expression).
     pub name: String,
+    /// Unit reported by MDSplus for the Y expression.
+    pub unit: String,
+    /// Name reported by MDSplus for the X expression/dimension.
+    pub x_name: String,
+    /// Unit reported by MDSplus for the X expression/dimension.
+    pub x_unit: String,
     /// Error message if fetch failed, empty on success.
     pub error: String,
 

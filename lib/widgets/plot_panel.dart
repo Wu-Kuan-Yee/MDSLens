@@ -567,7 +567,7 @@ class _PlotPanelState extends State<PlotPanel> {
               right: 0,
               top: gridBottom + 16,
               child: Center(
-                  child: Text(plot.xLabel,
+                  child: Text(_effectiveXLabel(plot, panel),
                       style: TextStyle(
                           fontFamily: fontFamily,
                           fontSize: unitSize,
@@ -582,7 +582,7 @@ class _PlotPanelState extends State<PlotPanel> {
                       padding: const EdgeInsets.only(bottom: 2),
                       child: RotatedBox(
                           quarterTurns: -1,
-                          child: Text(plot.yLabel,
+                          child: Text(_effectiveYLabel(plot, panel),
                               style: TextStyle(
                                   fontFamily: fontFamily,
                                   fontSize: unitSize,
@@ -868,7 +868,8 @@ class _PlotPanelState extends State<PlotPanel> {
 
     final signals = (panel['signal_specs'] as List?)?.cast<Map>() ?? const [];
     final color = _sigColor(seriesIndex, signals);
-    final lines = <String>['x: ${_fmtPointValue(x)}'];
+    final xName = _effectiveXName(plot, panel, seriesIndex);
+    final lines = <String>['$xName: ${_fmtPointValue(x)}'];
     for (var index = 0; index < plot.series.length; index++) {
       final usable = _usableSeriesIndex(plot, panel, index);
       if (usable != index) continue;
@@ -955,6 +956,55 @@ class _PlotPanelState extends State<PlotPanel> {
       return value.toStringAsExponential(5);
     }
     return value.toStringAsPrecision(7);
+  }
+
+  String _effectiveXName(
+    PlotData plot,
+    Map<String, dynamic> panel,
+    int seriesIndex,
+  ) {
+    final metadataName = seriesIndex < plot.series.length
+        ? plot.series[seriesIndex]?.xName.trim() ?? ''
+        : '';
+    if (metadataName.isNotEmpty) return metadataName;
+    final signals = panel['signal_specs'] as List?;
+    if (signals != null &&
+        seriesIndex < signals.length &&
+        signals[seriesIndex] is Map) {
+      final expression =
+          (signals[seriesIndex] as Map)['x_expr']?.toString().trim() ?? '';
+      if (expression.isNotEmpty) {
+        return expression.replaceFirst(RegExp(r'^\\+'), '');
+      }
+    }
+    return 'x';
+  }
+
+  String _effectiveXLabel(PlotData plot, Map<String, dynamic> panel) {
+    final configured = plot.xLabel.trim();
+    if (configured.isNotEmpty && configured != 's') return configured;
+    for (final series in plot.series) {
+      final unit = series?.xUnit.trim() ?? '';
+      if (unit.isNotEmpty) return unit;
+    }
+    return configured.isEmpty ? 's' : configured;
+  }
+
+  String _effectiveYLabel(PlotData plot, Map<String, dynamic> panel) {
+    final configured = plot.yLabel.trim();
+    if (configured.isNotEmpty && configured != 'a.u.') return configured;
+    final signals = panel['signal_specs'] as List?;
+    for (var index = 0; index < plot.series.length; index++) {
+      if (signals != null &&
+          index < signals.length &&
+          signals[index] is Map &&
+          signalIsHidden(signals[index] as Map)) {
+        continue;
+      }
+      final unit = plot.series[index]?.unit.trim() ?? '';
+      if (unit.isNotEmpty) return unit;
+    }
+    return configured.isEmpty ? 'a.u.' : configured;
   }
 
   RenderBox? get _listenerBox =>

@@ -85,6 +85,10 @@ pub fn fetch_signal(
         DataReadMode::Full => fetch_full(socket, request, &mut result),
     }
 
+    if result.series.has_data() {
+        populate_series_metadata(socket, request, &mut result.series);
+    }
+
     result
 }
 
@@ -399,9 +403,126 @@ pub fn normalized_name(expr: &str) -> String {
     expr.trim().to_string()
 }
 
+fn populate_series_metadata(socket: &mut TcpStream, request: &FetchRequest, series: &mut SignalSeries) {
+    let y_expr = request.sig.y_expr.trim();
+    series.unit = query_text(socket, &format!("units_of({})", y_expr))
+        .map(|unit| scaled_si_unit(&unit, expression_numeric_scale(y_expr)))
+        .unwrap_or_default();
+
+    let configured_x = request.sig.x_expr.trim();
+    let x_expr = if configured_x.is_empty() {
+        format!("dim_of({})", y_expr)
+    } else {
+        configured_x.to_string()
+    };
+    series.x_unit = query_text(socket, &format!("units_of({})", x_expr)).unwrap_or_default();
+    series.x_name = if configured_x.is_empty() {
+        query_text(socket, &format!("name_of({})", x_expr))
+            .filter(|name| !name.eq_ignore_ascii_case("none"))
+            .unwrap_or_default()
+    } else {
+        normalized_name(configured_x).trim_start_matches('\\').to_string()
+    };
+}
+
+fn query_text(socket: &mut TcpStream, expr: &str) -> Option<String> {
+    let message = protocol::value(socket, expr).ok()?;
+    if message.status & 1 == 0 || message.dtype != 14 {
+        return None;
+    }
+    let value = String::from_utf8_lossy(&message.body)
+        .trim_matches(char::from(0))
+        .trim()
+        .trim_matches('"')
+        .to_string();
+    (!value.is_empty()).then_some(value)
+}
+
+fn expression_numeric_scale(expr: &str) -> f64 {
+    let compact: String = expr.chars().filter(|c| !c.is_whitespace()).collect();
+    for operator in ['/', '*'] {
+        if let Some(index) = compact.rfind(operator) {
+            if let Ok(value) = compact[index + 1..].trim_matches(['(', ')']).parse::<f64>() {
+                if value.is_finite() && value != 0.0 {
+                    return if operator == '/' { 1.0 / value } else { value };
+                }
+            }
+        }
+    }
+    1.0
+}
+
+fn scaled_si_unit(unit: &str, numeric_scale: f64) -> String {
+    let unit = unit.trim();
+    let absolute_scale = numeric_scale.abs();
+    if unit.is_empty() || !absolute_scale.is_finite() || absolute_scale == 0.0 {
+        return unit.to_string();
+    }
+    let prefix_steps_value = -absolute_scale.log(1000.0);
+    let prefix_steps = prefix_steps_value.round() as i32;
+    if (prefix_steps_value - f64::from(prefix_steps)).abs() > 1e-10 || prefix_steps == 0 {
+        return unit.to_string();
+    }
+
+    const PREFIXES: &[(&str, i32)] = &[
+        ("Y", 8), ("Z", 7), ("E", 6), ("P", 5), ("T", 4), ("G", 3),
+        ("M", 2), ("k", 1), ("m", -1), ("u", -2), ("µ", -2),
+        ("μ", -2), ("n", -3), ("p", -4), ("f", -5), ("a", -6),
+        ("z", -7), ("y", -8),
+    ];
+    const BASE_UNITS: &[&str] = &[
+        "mol", "kat", "rad", "bar", "Ohm", "Bq", "Gy", "Sv", "Hz", "Pa",
+        "Wb", "eV", "lm", "lx", "sr", "Ω", "W", "J", "V", "A", "s", "g",
+        "m", "K", "C", "N", "F", "S", "T", "H",
+    ];
+    let begins_with_unit = |text: &str| {
+        BASE_UNITS.iter().any(|base| {
+            text.strip_prefix(base).is_some_and(|rest| {
+                rest.is_empty() || rest.starts_with(['/', '*', '^', ' ', '·', '⋅'])
+            })
+        })
+    };
+
+    let mut current_steps = 0;
+    let mut base_unit = unit;
+    for (prefix, steps) in PREFIXES {
+        if let Some(candidate) = unit.strip_prefix(prefix) {
+            if begins_with_unit(candidate) {
+                current_steps = *steps;
+                base_unit = candidate;
+                break;
+            }
+        }
+    }
+    if base_unit == unit && !begins_with_unit(base_unit) {
+        return unit.to_string();
+    }
+    let target_steps = current_steps + prefix_steps;
+    if target_steps == 0 {
+        return base_unit.to_string();
+    }
+    PREFIXES
+        .iter()
+        .find(|(_, steps)| *steps == target_steps)
+        .map_or_else(|| unit.to_string(), |(prefix, _)| format!("{prefix}{base_unit}"))
+}
+
 /// Per-signal read mode overrides global; falls back to global when not set.
 pub fn effective_read_mode(global: DataReadMode, signal_mode: Option<DataReadMode>) -> DataReadMode {
     signal_mode.unwrap_or(global)
+}
+
+#[cfg(test)]
+mod metadata_tests {
+    use super::*;
+
+    #[test]
+    fn scales_exact_si_powers_for_simple_expressions() {
+        assert_eq!(expression_numeric_scale(r"\ip / 1000"), 0.001);
+        assert_eq!(scaled_si_unit("A", 0.001), "kA");
+        assert_eq!(scaled_si_unit("kA", 1000.0), "A");
+        assert_eq!(scaled_si_unit("V", 2.0), "V");
+    }
 }
 
 pub fn sampling_from_point_count(total: usize, max_points: usize) -> SamplingPlan {

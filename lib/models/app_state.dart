@@ -1762,19 +1762,31 @@ class AppState extends ChangeNotifier {
   ({
     List<List<double>>? points,
     String? error,
+    String unit,
+    String xName,
+    String xUnit,
   }) _decodeLoadedSeries(dynamic rawSeries) {
     if (rawSeries is! Map) {
       return (
         points: null,
         error: 'The server returned an invalid signal payload.',
+        unit: '',
+        xName: '',
+        xUnit: '',
       );
     }
     final rawError = rawSeries['error']?.toString().trim() ?? '';
+    final unit = rawSeries['unit']?.toString().trim() ?? '';
+    final xName = rawSeries['x_name']?.toString().trim() ?? '';
+    final xUnit = rawSeries['x_unit']?.toString().trim() ?? '';
     final rawPoints = rawSeries['points'];
     if (rawPoints == null) {
       return (
         points: null,
         error: rawError.isEmpty ? null : rawError,
+        unit: unit,
+        xName: xName,
+        xUnit: xUnit,
       );
     }
     if (rawPoints is! List) {
@@ -1783,6 +1795,9 @@ class AppState extends ChangeNotifier {
         error: rawError.isEmpty
             ? 'The server returned an invalid point list.'
             : rawError,
+        unit: unit,
+        xName: xName,
+        xUnit: xUnit,
       );
     }
 
@@ -1804,7 +1819,13 @@ class AppState extends ChangeNotifier {
           ? 'The signal returned no samples for this tree and shot.'
           : 'The signal returned no finite numeric samples for this tree and shot.';
     }
-    return (points: points, error: error);
+    return (
+      points: points,
+      error: error,
+      unit: unit,
+      xName: xName,
+      xUnit: xUnit,
+    );
   }
 
   int? _decodeSignalIndex(dynamic value) {
@@ -1899,6 +1920,9 @@ class AppState extends ChangeNotifier {
             signal,
             decoded.points,
             err,
+            unit: decoded.unit,
+            xName: decoded.xName,
+            xUnit: decoded.xUnit,
           );
         }
       }
@@ -2004,6 +2028,9 @@ class AppState extends ChangeNotifier {
                   signal,
                   decoded.points,
                   err,
+                  unit: decoded.unit,
+                  xName: decoded.xName,
+                  xUnit: decoded.xUnit,
                 );
               }
             }
@@ -2145,7 +2172,8 @@ class AppState extends ChangeNotifier {
   }
 
   void updatePlotSeriesByColRow(
-      int col, int row, int sigIdx, List<List<double>>? pts, String? err) {
+      int col, int row, int sigIdx, List<List<double>>? pts, String? err,
+      {String unit = '', String xName = '', String xUnit = ''}) {
     var pi = 0;
     for (var c = 0; c < _columns.length; c++) {
       if (c == col) break;
@@ -2156,7 +2184,13 @@ class AppState extends ChangeNotifier {
       while (_plots[pi].series.length <= sigIdx) {
         _plots[pi].series.add(null);
       }
-      _plots[pi].series[sigIdx] = SeriesData(points: pts, error: err);
+      _plots[pi].series[sigIdx] = SeriesData(
+        points: pts,
+        error: err,
+        unit: unit,
+        xName: xName,
+        xUnit: xUnit,
+      );
     }
   }
 
@@ -2204,5 +2238,14 @@ class PlotData {
 class SeriesData {
   List<List<double>>? points;
   String? error;
-  SeriesData({this.points, this.error});
+  String unit;
+  String xName;
+  String xUnit;
+  SeriesData({
+    this.points,
+    this.error,
+    this.unit = '',
+    this.xName = '',
+    this.xUnit = '',
+  });
 }
