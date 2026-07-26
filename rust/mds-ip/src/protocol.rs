@@ -8,15 +8,59 @@
 //! The MDSIP protocol uses a 48-byte BigEndian header followed by a variable-length body.
 //! Messages are sent over TCP to MDSplus servers (default port 8000).
 
-use std::io::{Read, Write};
-use std::net::TcpStream;
-use std::time::Duration;
+use std::io::{ErrorKind, Read, Write};
+use std::net::{Shutdown, TcpStream};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 /// MDSplus server default port.
 pub const MDS_PORT: u16 = 8000;
 
 /// Network timeout for MDSIP operations (milliseconds).
 pub const NETWORK_TIMEOUT_MS: u64 = 30000;
+
+#[derive(Clone)]
+struct CancelContext {
+    token: Arc<AtomicBool>,
+    preserve_connection: bool,
+}
+
+thread_local! {
+    static CANCEL_CONTEXT: std::cell::RefCell<Option<CancelContext>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+pub fn with_cancel_context<T>(
+    token: Arc<AtomicBool>,
+    preserve_connection: bool,
+    operation: impl FnOnce() -> T,
+) -> T {
+    let previous = CANCEL_CONTEXT.with(|context| {
+        context.replace(Some(CancelContext { token, preserve_connection }))
+    });
+    struct Restore(Option<CancelContext>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            CANCEL_CONTEXT.with(|context| {
+                context.replace(self.0.take());
+            });
+        }
+    }
+    let _restore = Restore(previous);
+    operation()
+}
+
+fn cancellation_state() -> Option<(bool, bool)> {
+    CANCEL_CONTEXT.with(|context| {
+        context.borrow().as_ref().map(|state| {
+            (
+                state.token.load(Ordering::Acquire),
+                state.preserve_connection,
+            )
+        })
+    })
+}
 
 /// A decoded MDSIP message.
 #[derive(Debug, Clone)]
@@ -86,10 +130,34 @@ pub fn flush_writes(socket: &mut TcpStream) -> Result<(), String> {
 /// Read exactly `size` bytes from the socket.
 pub fn read_fully(socket: &mut TcpStream, size: usize) -> Result<Vec<u8>, String> {
     socket
-        .set_read_timeout(Some(Duration::from_millis(NETWORK_TIMEOUT_MS)))
+        .set_read_timeout(Some(Duration::from_millis(50)))
         .map_err(|e| format!("set_read_timeout: {}", e))?;
     let mut buf = vec![0u8; size];
-    socket.read_exact(&mut buf).map_err(|e| format!("read error: {}", e))?;
+    let mut offset = 0;
+    let mut last_progress = Instant::now();
+    while offset < size {
+        if let Some((true, preserve_connection)) = cancellation_state() {
+            if !preserve_connection {
+                let _ = socket.shutdown(Shutdown::Both);
+                return Err("operation canceled".to_string());
+            }
+        }
+        match socket.read(&mut buf[offset..]) {
+            Ok(0) => return Err("read error: connection closed".to_string()),
+            Ok(read) => {
+                offset += read;
+                last_progress = Instant::now();
+            }
+            Err(error)
+                if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
+            {
+                if last_progress.elapsed() >= Duration::from_millis(NETWORK_TIMEOUT_MS) {
+                    return Err("read error: response timed out".to_string());
+                }
+            }
+            Err(error) => return Err(format!("read error: {}", error)),
+        }
+    }
     Ok(buf)
 }
 
@@ -136,9 +204,16 @@ pub fn next_message_id() -> u8 {
 
 /// Send an MDSplus expression and return the response.
 pub fn value(socket: &mut TcpStream, expr: &str) -> Result<Message, String> {
+    if cancellation_state().is_some_and(|(canceled, _)| canceled) {
+        return Err("operation canceled".to_string());
+    }
     let body = expr.as_bytes();
     write_message(socket, &message(14, 1, 0, next_message_id(), body))?;
-    read_message(socket)
+    let response = read_message(socket)?;
+    if cancellation_state().is_some_and(|(canceled, _)| canceled) {
+        return Err("operation canceled".to_string());
+    }
+    Ok(response)
 }
 
 /// Queue an expression for pipeline send (write without waiting for response).

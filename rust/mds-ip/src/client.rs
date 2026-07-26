@@ -8,6 +8,7 @@
 use crate::protocol;
 use std::collections::HashMap;
 use std::net::TcpStream;
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 /// A reusable MDSplus TCP connection with cached tree/shot state.
@@ -133,4 +134,55 @@ where
             std::cell::RefCell::new(ConnectionPool::new());
     }
     POOL.with(|p| f(&mut p.borrow_mut()))
+}
+
+const MAX_IDLE_CONNECTIONS_PER_SERVER: usize = 8;
+static SHARED_CONNECTIONS: OnceLock<Mutex<HashMap<String, Vec<MdsConnection>>>> =
+    OnceLock::new();
+
+fn shared_connections() -> &'static Mutex<HashMap<String, Vec<MdsConnection>>> {
+    SHARED_CONNECTIONS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn connection_key(host: &str, port: u16) -> String {
+    if host.contains(':') { host.to_string() } else { format!("{}:{}", host, port) }
+}
+
+/// Borrow a reusable connection without holding the pool lock during network
+/// I/O. Worker threads return healthy sockets to the process-wide pool so a
+/// rapid shot change can reuse them even after the original worker exits.
+pub fn with_reusable_connection<F, R>(
+    host: &str,
+    port: u16,
+    tree: &str,
+    shot: &str,
+    operation: F,
+) -> Result<R, String>
+where
+    F: FnOnce(&mut MdsConnection) -> (R, bool),
+{
+    let key = connection_key(host, port);
+    let mut connection = shared_connections()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .get_mut(&key)
+        .and_then(Vec::pop)
+        .map_or_else(|| MdsConnection::connect(host, port), Ok)?;
+
+    if connection.open_tree(tree, shot).is_err() {
+        connection = MdsConnection::connect(host, port)?;
+        connection.open_tree(tree, shot)?;
+    }
+
+    let (result, reusable) = operation(&mut connection);
+    if reusable {
+        let mut pool = shared_connections()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let idle = pool.entry(key).or_default();
+        if idle.len() < MAX_IDLE_CONNECTIONS_PER_SERVER {
+            idle.push(connection);
+        }
+    }
+    Ok(result)
 }

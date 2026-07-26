@@ -729,6 +729,7 @@ class AppState extends ChangeNotifier {
   String _status = 'Ready';
   String get status => _status;
   int _fetchGeneration = 0;
+  int? _activeNativeFetchId;
   int _networkPermissionFailureRevision = 0;
   int get networkPermissionFailureRevision => _networkPermissionFailureRevision;
   String _networkPermissionFailureDetails = '';
@@ -759,11 +760,24 @@ class AppState extends ChangeNotifier {
   }
 
   void _invalidateFetchForSettingsChange() {
+    _cancelActiveNativeFetch();
     _fetchGeneration++;
     _fetchingPlotIndex = null;
     if (_fetching) {
       _fetching = false;
       _status = 'Settings changed. Previous load discarded.';
+    }
+  }
+
+  void _cancelActiveNativeFetch() {
+    final requestId = _activeNativeFetchId;
+    _activeNativeFetchId = null;
+    if (requestId == null) return;
+    try {
+      RustBridge.instance.cancelFetch(requestId);
+    } catch (_) {
+      // The result-generation guard below still prevents stale data from
+      // reaching the UI when a development build has an older native bridge.
     }
   }
 
@@ -1684,7 +1698,7 @@ class AppState extends ChangeNotifier {
     _doFetch(shot: _shotText);
   }
 
-  String _buildSignalConfigJson(String shot) {
+  String _buildSignalConfigJson(String shot, int requestId) {
     final cols = _columns
         .map((col) => col.map((p) {
               final panel = Map<String, dynamic>.from(p);
@@ -1709,13 +1723,14 @@ class AppState extends ChangeNotifier {
               return panel;
             }).toList())
         .toList();
-    return jsonEncode({'columns': cols});
+    return jsonEncode({'request_id': requestId, 'columns': cols});
   }
 
   String _buildSinglePanelSignalConfigJson(
     String shot,
     int targetCol,
     int targetRow,
+    int requestId,
   ) {
     final cols = <List<Map<String, dynamic>>>[];
     for (var col = 0; col < _columns.length; col++) {
@@ -1731,7 +1746,7 @@ class AppState extends ChangeNotifier {
       }
       cols.add(panels);
     }
-    return jsonEncode({'columns': cols});
+    return jsonEncode({'request_id': requestId, 'columns': cols});
   }
 
   void _clearAllSeriesPoints() {
@@ -1857,18 +1872,21 @@ class AppState extends ChangeNotifier {
 
   Future<void> _doFetch({required String shot}) async {
     if (!_requireActiveSession('load waveforms')) return;
+    _cancelActiveNativeFetch();
     final generation = ++_fetchGeneration;
     final requestShot = shot;
-    final configJson = _buildSignalConfigJson(requestShot);
+    final configJson = _buildSignalConfigJson(requestShot, generation);
     final dataMode = _dataMode.toString();
     final sshSettings = _buildSshSettingsJson();
     _fetchingPlotIndex = null;
     _fetching = true;
+    _activeNativeFetchId = generation;
     _status = 'Fetching...';
     notifyListeners();
 
     try {
       final raw = await _signalFetchWorker(configJson, dataMode, sshSettings);
+      if (_activeNativeFetchId == generation) _activeNativeFetchId = null;
       if (!_isCurrentFetch(generation)) return;
       if (raw.isEmpty) {
         _fetching = false;
@@ -1944,6 +1962,7 @@ class AppState extends ChangeNotifier {
       }
       unawaited(_fetchTopInfo(requestShot, generation));
     } catch (e) {
+      if (_activeNativeFetchId == generation) _activeNativeFetchId = null;
       if (!_isCurrentFetch(generation)) return;
       _fetching = false;
       _status = 'Error: $e';
@@ -1957,6 +1976,7 @@ class AppState extends ChangeNotifier {
   }
 
   void stopFetch() {
+    _cancelActiveNativeFetch();
     _fetchGeneration++;
     _fetching = false;
     _fetchingPlotIndex = null;
@@ -1982,21 +2002,24 @@ class AppState extends ChangeNotifier {
     }
     if (targetCol < 0) return;
 
+    _cancelActiveNativeFetch();
     final generation = ++_fetchGeneration;
     final shot = _displayedShot.trim().isNotEmpty
         ? _displayedShot.trim()
         : _shotText.trim();
-    final configJson =
-        _buildSinglePanelSignalConfigJson(shot, targetCol, targetRow);
+    final configJson = _buildSinglePanelSignalConfigJson(
+        shot, targetCol, targetRow, generation);
     final dataMode = _dataMode.toString();
     final sshSettings = _buildSshSettingsJson();
     _fetchingPlotIndex = plotIdx;
     _fetching = true;
+    _activeNativeFetchId = generation;
     _status = 'Fetching panel ($targetCol, $targetRow)...';
     notifyListeners();
 
     try {
       final raw = await _signalFetchWorker(configJson, dataMode, sshSettings);
+      if (_activeNativeFetchId == generation) _activeNativeFetchId = null;
       if (!_isCurrentFetch(generation)) return;
       if (raw.isNotEmpty) {
         final json = jsonDecode(raw);
@@ -2041,6 +2064,7 @@ class AppState extends ChangeNotifier {
       _fetchingPlotIndex = null;
       _status = 'Updated panel ($targetCol, $targetRow)';
     } catch (e) {
+      if (_activeNativeFetchId == generation) _activeNativeFetchId = null;
       if (!_isCurrentFetch(generation)) return;
       _fetching = false;
       _fetchingPlotIndex = null;
@@ -2198,6 +2222,7 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _sessionGeneration++;
+    _cancelActiveNativeFetch();
     _fetchGeneration++;
     _shotCtrl.dispose();
     super.dispose();

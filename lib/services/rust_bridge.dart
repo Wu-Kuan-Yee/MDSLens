@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:ffi/ffi.dart';
 
 class RustBridge {
-  static const int _expectedAbiVersion = 1;
+  static const int _expectedAbiVersion = 2;
   static RustBridge? _i;
   // ignore: unused_field
   final DynamicLibrary _lib;
@@ -17,6 +17,7 @@ class RustBridge {
   final String Function(String) sshT;
   final String Function(String, String) fetchSig;
   final String Function(String, String, String) fetchSigSsh;
+  final bool Function(int) cancelFetch;
 
   RustBridge._(this._lib)
       : parseEnv = _wrap1(_lib, 'mds_parse_environment'),
@@ -28,7 +29,8 @@ class RustBridge {
         prepareUrl = _wrap2(_lib, 'mds_prepare_url'),
         sshT = _wrap1(_lib, 'mds_ssh_test'),
         fetchSig = _wrap2(_lib, 'mds_fetch_signals'),
-        fetchSigSsh = _wrap3(_lib, 'mds_fetch_signals_ssh');
+        fetchSigSsh = _wrap3(_lib, 'mds_fetch_signals_ssh'),
+        cancelFetch = _wrapCancelFetch(_lib);
 
   static RustBridge get instance => _i ??= RustBridge._(_openLib());
 
@@ -204,6 +206,13 @@ class RustBridge {
   static void Function(Pointer<Utf8>) _rustStringFree(DynamicLibrary lib) {
     return lib.lookupFunction<Void Function(Pointer<Utf8>),
         void Function(Pointer<Utf8>)>('mds_free_string');
+  }
+
+  static bool Function(int) _wrapCancelFetch(DynamicLibrary lib) {
+    final function =
+        lib.lookupFunction<Uint8 Function(Uint64), int Function(int)>(
+            'mds_cancel_fetch');
+    return (requestId) => function(requestId) != 0;
   }
 
   static String _readResult(Pointer<Utf8> result, String functionName) {

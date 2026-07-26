@@ -3,6 +3,9 @@
 
 // API types and functions for Flutter bridge. Use JSON serialization for FFI.
 
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
@@ -301,6 +304,44 @@ pub fn fetch_signals(config_json: String, mode: i32) -> Vec<FrbLoadedSignal> {
     fetch_signals_inner(config_json, mode, None)
 }
 
+static ACTIVE_FETCHES: OnceLock<Mutex<HashMap<u64, Arc<AtomicBool>>>> = OnceLock::new();
+
+fn active_fetches() -> &'static Mutex<HashMap<u64, Arc<AtomicBool>>> {
+    ACTIVE_FETCHES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+pub fn cancel_fetch(request_id: u64) -> bool {
+    let mut active = active_fetches()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let was_active = active.contains_key(&request_id);
+    active
+        .entry(request_id)
+        .or_insert_with(|| Arc::new(AtomicBool::new(true)))
+        .store(true, Ordering::Release);
+    if active.len() > 256 {
+        if let Some(oldest) = active.keys().copied().min() {
+            if oldest != request_id {
+                active.remove(&oldest);
+            }
+        }
+    }
+    was_active
+}
+
+struct FetchRegistration {
+    request_id: u64,
+}
+
+impl Drop for FetchRegistration {
+    fn drop(&mut self) {
+        active_fetches()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(&self.request_id);
+    }
+}
+
 /// Fetch signals with SSH tunneling. The manager stays alive for the duration
 /// of the blocking fetch and is then dropped, stopping its relay listeners.
 pub fn fetch_signals_ssh(config_json: String, mode: i32, ssh_settings_json: String) -> Vec<FrbLoadedSignal> {
@@ -319,6 +360,10 @@ pub fn fetch_signals_ssh(config_json: String, mode: i32, ssh_settings_json: Stri
 }
 
 fn fetch_signals_inner(config_json: String, mode: i32, ssh_settings: Option<FrbSshSettings>) -> Vec<FrbLoadedSignal> {
+    let request_id = serde_json::from_str::<serde_json::Value>(&config_json)
+        .ok()
+        .and_then(|value| value.get("request_id").and_then(|id| id.as_u64()))
+        .unwrap_or(0);
     let config: FrbLayoutConfig = match serde_json::from_str(&config_json) {
         Ok(c) => c,
         Err(e) => return vec![FrbLoadedSignal {
@@ -364,7 +409,19 @@ fn fetch_signals_inner(config_json: String, mode: i32, ssh_settings: Option<FrbS
         None
     };
 
-    let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let cancel = Arc::new(AtomicBool::new(false));
+    let cancel = if request_id > 0 {
+        let mut active = active_fetches()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        active
+            .entry(request_id)
+            .or_insert_with(|| cancel.clone())
+            .clone()
+    } else {
+        cancel
+    };
+    let _registration = (request_id > 0).then_some(FetchRegistration { request_id });
     let callback: mds_ip::pipeline::SignalCallback = Box::new(|_| {});
     let results: Vec<FrbLoadedSignal> = mds_ip::pipeline::fetch_all(&rust_config, read_mode, &callback, &cancel)
         .into_iter().map(FrbLoadedSignal::from).collect();
@@ -377,6 +434,18 @@ fn fetch_signals_inner(config_json: String, mode: i32, ssh_settings: Option<FrbS
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cancellation_is_remembered_before_worker_registration() {
+        let request_id = u64::MAX - 17;
+        assert!(!cancel_fetch(request_id));
+        let token = active_fetches()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(&request_id)
+            .expect("cancel token");
+        assert!(token.load(Ordering::Acquire));
+    }
 
     #[test]
     fn test_convert_roundtrip_signal_spec() {

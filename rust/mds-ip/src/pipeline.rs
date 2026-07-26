@@ -5,7 +5,7 @@
 //!
 //! Ported from `src/mds/mds_ip_client.cpp`.
 
-use crate::client::with_thread_local_pool;
+use crate::client::{with_reusable_connection, with_thread_local_pool};
 use crate::fetch::{self, effective_read_mode, FetchRequest, FetchResult};
 use crate::protocol;
 use mds_core::types::{DataReadMode, LayoutConfig, LoadedSignal, PlotSpec, SignalSpec};
@@ -117,27 +117,45 @@ fn fetch_chunk_serial(
     let tree = &first.sig.experiment;
     let shot = effective_shot(&first.plot, &first.sig);
 
-    with_thread_local_pool(|pool| {
-        let conn = match pool.get_or_connect(host, protocol::MDS_PORT, tree, &shot) {
-            Ok(c) => c,
+    let preserve_connection = requests.iter()
+        .all(|request| request.read_mode != DataReadMode::Full);
+    protocol::with_cancel_context(cancel.clone(), preserve_connection, || {
+        let fetched = with_reusable_connection(
+            host,
+            protocol::MDS_PORT,
+            tree,
+            &shot,
+            |connection| {
+                let mut results = Vec::with_capacity(requests.len());
+                for req in requests {
+                    if cancel.load(Ordering::Relaxed) { break; }
+                    results.push(fetch::fetch_signal(&mut connection.stream, req));
+                }
+                let canceled = cancel.load(Ordering::Acquire);
+                let transport_failed = results.iter().any(|result| {
+                    let error = result.series.error.to_ascii_lowercase();
+                    error.contains("read error")
+                        || error.contains("write error")
+                        || error.contains("connection closed")
+                        || error.contains("timed out")
+                });
+                let reusable = !transport_failed && (!canceled || preserve_connection);
+                (results, reusable)
+            },
+        );
+        match fetched {
+            Ok(results) => results,
             Err(e) => {
-                return requests.iter().map(|req| FetchResult {
+                requests.iter().map(|req| FetchResult {
                     loaded_index: req.loaded_index,
                     series: mds_core::types::SignalSeries {
                         name: fetch::normalized_name(&req.sig.y_expr),
                         error: e.clone(),
                         ..Default::default()
                     },
-                }).collect();
+                }).collect()
             }
-        };
-
-        let mut results = Vec::with_capacity(requests.len());
-        for req in requests {
-            if cancel.load(Ordering::Relaxed) { break; }
-            results.push(fetch::fetch_signal(&mut conn.stream, req));
         }
-        results
     })
 }
 
