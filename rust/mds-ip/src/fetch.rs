@@ -9,6 +9,8 @@ use crate::protocol::{self, Message};
 use mds_core::types::{DataReadMode, PlotSpec, SignalSeries, SignalSpec};
 use std::net::TcpStream;
 
+const FIXED_TIME_RESOLUTION_SECONDS: f64 = 0.0001;
+
 // ── Fetch request ─────────────────────────────────────────────────────────
 
 /// Internal fetch request with all context needed by the fetch pipeline.
@@ -110,74 +112,106 @@ fn fetch_thin(socket: &mut TcpStream, req: &FetchRequest, result: &mut FetchResu
 /// 3. Try SetTimeContext direct
 /// 4. Fallback: length-sampled `data(y)[1:*:step]`
 fn fetch_east_thin(socket: &mut TcpStream, req: &FetchRequest, result: &mut FetchResult) {
-    // First try to derive timebase + fetch data with proper X coords
-    if let Some(tb) = try_timebase(socket, req) {
-        let y_expr = format!("( _jscope_0 = ({}), fs_float(_jscope_0))", req.sig.y_expr.trim());
-        if let Ok(msg) = protocol::value(socket, &y_expr) {
-            result.series = series_from_msg_uniform(
-                normalized_name(&req.sig.y_expr), &msg, tb.start, tb.step, req.max_points,
-            );
-            if result.series.has_data() { return; }
-            // has_data returned false — the server returned empty data
-            result.series.error = format!("noData: freq={:.0} t0={:.3} step={:.6}", 1.0/tb.step, tb.start, tb.step);
-        }
-    }
-
-    // Tier 2: Try saved/compressed signal variant
+    // Saved EAST signals are prepared server-side specifically for responsive
+    // previews. Keep every saved sample so Point mode and zoom retain detail.
     if let Some(series) = try_saved_signal(socket, &req.sig.y_expr) {
         result.series = series;
         return;
     }
 
-    // Tier 2+3: Try SetTimeContext-based approaches
-    if let Some(plan) = try_east_thin_plan(socket, req) {
-        let start = plan.timebase.start;
-        let end = start + plan.sampling.source_count as f64 * plan.timebase.step;
-        let delta = plan.timebase.step * plan.sampling.step as f64;
-
-        if delta > 0.0 && end > start {
-            // SetTimeContext for server-side resampling
-            let ctx_expr = format!(
-                "SetTimeContext({},{},{})", start, end, delta
-            );
-            let _ = protocol::value(socket, &ctx_expr);
-
-            let y_expr = format!("( _jscope_0 = ({}), fs_float(_jscope_0))", req.sig.y_expr.trim());
-            match protocol::value(socket, &y_expr) {
-                Ok(msg) => {
-                    result.series = series_from_msg_uniform(
-                        normalized_name(&req.sig.y_expr), &msg, start, delta, req.max_points,
-                    );
-                    let _ = protocol::value(socket, "SetTimeContext()"); // reset
-                    if result.series.has_data() { return; }
-                }
-                Err(_) => {
-                    let _ = protocol::value(socket, "SetTimeContext()"); // reset
-                }
-            }
-        }
+    if let Some(series) = fetch_east_fixed_resolution(socket, req) {
+        result.series = series;
+        return;
     }
 
-    // Tier 4: Length-sampled fallback
+    // Legacy fallback when neither a saved signal nor server-side fixed
+    // resolution evaluation is available.
     fetch_east_length_sampled(socket, req, result);
 }
 
 /// Try to fetch the saved signal `{y}_s`.
 fn try_saved_signal(socket: &mut TcpStream, y_expr: &str) -> Option<SignalSeries> {
-    let saved_expr = format!("( _jscope_0 = ({}_s), fs_float(_jscope_0))", y_expr.trim());
-    match protocol::value(socket, &saved_expr) {
-        Ok(msg) => {
-            let values = protocol::numeric_from_message(&msg).ok()?;
-            if values.is_empty() { return None; }
-            // Saved signals come without timebase — make a raw series
-            Some(SignalSeries {
-                name: normalized_name(y_expr),
-                points: values.iter().enumerate().map(|(i, &v)| [i as f64, v]).collect(),
-                ..Default::default()
-            })
-        }
-        Err(_) => None,
+    let saved_node = format!("{}_s", y_expr.trim());
+    let y_msg = protocol::value(
+        socket,
+        &format!("( _jscope_0 = ({}), fs_float(_jscope_0))", saved_node),
+    ).ok()?;
+    let x_msg = protocol::value(
+        socket,
+        &format!("( _jscope_1 = (dim_of({})), ft_float(_jscope_1))", saved_node),
+    ).ok()?;
+    let y_values = protocol::numeric_from_message(&y_msg).ok()?;
+    let x_values = protocol::numeric_from_message(&x_msg).ok()?;
+    let count = y_values.len().min(x_values.len());
+    if count == 0 { return None; }
+    Some(SignalSeries {
+        name: normalized_name(y_expr),
+        points: (0..count).map(|index| [x_values[index], y_values[index]]).collect(),
+        ..Default::default()
+    })
+}
+
+fn fetch_east_fixed_resolution(socket: &mut TcpStream, req: &FetchRequest) -> Option<SignalSeries> {
+    let plan = try_east_thin_plan(socket, req)?;
+    if plan.sampling.source_count == 0
+        || !plan.timebase.start.is_finite()
+        || !plan.timebase.step.is_finite()
+        || plan.timebase.step <= 0.0
+    {
+        return None;
     }
+
+    let mut start = plan.timebase.start;
+    let mut end = start
+        + (plan.sampling.source_count.saturating_sub(1) as f64) * plan.timebase.step;
+    if req.plot.custom_x_range
+        && req.plot.xmin.is_finite()
+        && req.plot.xmax.is_finite()
+        && req.plot.xmax > req.plot.xmin
+    {
+        start = req.plot.xmin;
+        end = req.plot.xmax;
+    }
+    if !end.is_finite() || end <= start {
+        return None;
+    }
+
+    let y_expr = format!(
+        "( _jscope_0 = ({}), fs_float(_jscope_0))",
+        req.sig.y_expr.trim()
+    );
+    if !req.plot.custom_x_range && plan.timebase.step >= FIXED_TIME_RESOLUTION_SECONDS {
+        let message = protocol::value(socket, &y_expr).ok()?;
+        let series = series_from_msg_uniform(
+            normalized_name(&req.sig.y_expr),
+            &message,
+            plan.timebase.start,
+            plan.timebase.step,
+            usize::MAX,
+        );
+        return series.has_data().then_some(series);
+    }
+
+    let requested_step = fixed_resolution_step(plan.timebase.step);
+    protocol::value(
+        socket,
+        &format!("SetTimeContext({start:.12},{end:.12},{requested_step:.12})"),
+    ).ok()?;
+    let response = protocol::value(socket, &y_expr);
+    let _ = protocol::value_for_cleanup(socket, "SetTimeContext()");
+    let message = response.ok()?;
+    let series = series_from_msg_uniform(
+        normalized_name(&req.sig.y_expr),
+        &message,
+        start,
+        requested_step,
+        usize::MAX,
+    );
+    series.has_data().then_some(series)
+}
+
+fn fixed_resolution_step(native_step: f64) -> f64 {
+    FIXED_TIME_RESOLUTION_SECONDS.max(native_step)
 }
 
 /// Try to derive an EAST thin plan: freq + trigtime → timebase + sampling.
@@ -259,6 +293,10 @@ fn fetch_medium(socket: &mut TcpStream, req: &FetchRequest, result: &mut FetchRe
     // Medium uses stride sampling at finer resolution than Thin.
     // It preserves spike amplitude without final downsample.
     if is_east_signal(req) {
+        if let Some(series) = fetch_east_fixed_resolution(socket, req) {
+            result.series = series;
+            return;
+        }
         // Use length-sampled with higher point budget
         let budget = req.max_points * 4;
         fetch_east_length_sampled_with_budget(socket, req, result, budget);
@@ -522,6 +560,12 @@ mod metadata_tests {
         assert_eq!(scaled_si_unit("A", 0.001), "kA");
         assert_eq!(scaled_si_unit("kA", 1000.0), "A");
         assert_eq!(scaled_si_unit("V", 2.0), "V");
+    }
+
+    #[test]
+    fn fixed_resolution_never_upsamples_native_data() {
+        assert_eq!(fixed_resolution_step(0.00001), 0.0001);
+        assert_eq!(fixed_resolution_step(0.001), 0.001);
     }
 }
 

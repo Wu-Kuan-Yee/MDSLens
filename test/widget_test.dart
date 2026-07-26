@@ -103,6 +103,11 @@ void main() {
     series.points!.add([12.0, 0.0]);
     final extended = cache.render(series);
     expect(identical(replaced, extended), isFalse);
+
+    final zoomed = cache.render(series, minX: 4, maxX: 4.1);
+    expect(zoomed.spots.first.x, lessThanOrEqualTo(4));
+    expect(zoomed.spots.last.x, greaterThanOrEqualTo(4.1));
+    expect(zoomed.spots.length, lessThan(points.length ~/ 10));
   });
 
   test('Release versions are compared semantically', () {
@@ -923,6 +928,34 @@ void main() {
       [2.0, 4.0],
     ]);
     expect(app.status, isNot(contains("type 'Null'")));
+  });
+
+  test('Uniform high-resolution payloads preserve samples and axis metadata',
+      () async {
+    final app = AppState(
+      signalFetchWorker: (_, __, ___) async =>
+          '[{"column":0,"row":0,"signal":0,"series":{"error":"","points":[],'
+          '"uniform_y":[1.0,2.0,3.0],"uniform_start":-0.1,'
+          '"uniform_step":0.0001,"unit":"kA","x_name":"time",'
+          '"x_unit":"s"}}]',
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setLoggedIn(true, 'test-token');
+    app.shotText = '163870';
+
+    app.startRefresh();
+    await Future<void>.delayed(Duration.zero);
+
+    final series = app.plots.first.series.first;
+    expect(series?.points, [
+      [-0.1, 1.0],
+      [-0.0999, 2.0],
+      [-0.0998, 3.0],
+    ]);
+    expect(series?.unit, 'kA');
+    expect(series?.xName, 'time');
+    expect(series?.xUnit, 's');
   });
 
   test('A signal with no finite samples reports a meaningful data error',

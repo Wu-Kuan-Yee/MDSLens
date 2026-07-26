@@ -216,6 +216,20 @@ pub fn value(socket: &mut TcpStream, expr: &str) -> Result<Message, String> {
     Ok(response)
 }
 
+/// Perform a small protocol cleanup even after an interactive request was
+/// canceled. Callers use this only to restore server-side state after the
+/// current response has already reached a clean message boundary.
+pub fn value_for_cleanup(socket: &mut TcpStream, expr: &str) -> Result<Message, String> {
+    let body = expr.as_bytes();
+    write_message(socket, &message(14, 1, 0, next_message_id(), body))?;
+    let previous = CANCEL_CONTEXT.with(|context| context.replace(None));
+    let result = read_message(socket);
+    CANCEL_CONTEXT.with(|context| {
+        context.replace(previous);
+    });
+    result
+}
+
 /// Queue an expression for pipeline send (write without waiting for response).
 pub fn queue_value(socket: &mut TcpStream, expr: &str) -> Result<(), String> {
     let body = expr.as_bytes();

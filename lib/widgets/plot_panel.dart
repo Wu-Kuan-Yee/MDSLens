@@ -211,13 +211,21 @@ class _PlotPanelState extends State<PlotPanel> {
     final bars = <LineChartBarData>[];
     final activeSeries = <SeriesData>[];
     final sigSpecs = (panel['signal_specs'] as List?)?.cast<Map>() ?? [];
+    final customX = panel['custom_x_range'] == true;
+    final renderMinX = customX
+        ? (panel['xmin'] as num?)?.toDouble()
+        : (_viewMinX.isFinite ? _viewMinX : null);
+    final renderMaxX = customX
+        ? (panel['xmax'] as num?)?.toDouble()
+        : (_viewMaxX.isFinite ? _viewMaxX : null);
     double? viewMinX, viewMaxX, viewMinY, viewMaxY;
     for (var i = 0; i < plot.series.length; i++) {
       final s = plot.series[i];
       if (s?.points == null || s!.points!.isEmpty) continue;
       if (i < sigSpecs.length && signalIsHidden(sigSpecs[i])) continue;
       activeSeries.add(s);
-      final rendered = _renderCache.render(s);
+      final rendered =
+          _renderCache.render(s, minX: renderMinX, maxX: renderMaxX);
       final spots = rendered.spots;
       viewMinX =
           viewMinX == null ? rendered.minX : math.min(viewMinX, rendered.minX);
@@ -1098,7 +1106,13 @@ class _PlotPanelState extends State<PlotPanel> {
       }
       final series = plot.series[seriesIndex];
       if (series?.points?.isNotEmpty != true) continue;
-      final spots = _renderCache.render(series!).spots;
+      final spots = _renderCache
+          .render(
+            series!,
+            minX: _viewMinX.isFinite ? _viewMinX : null,
+            maxX: _viewMaxX.isFinite ? _viewMaxX : null,
+          )
+          .spots;
       if (spots.length == 1) {
         final distance = (toPixel(spots.first) - chartPosition).distance;
         if (distance < bestDistance) {

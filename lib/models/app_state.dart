@@ -1795,6 +1795,7 @@ class AppState extends ChangeNotifier {
     final xName = rawSeries['x_name']?.toString().trim() ?? '';
     final xUnit = rawSeries['x_unit']?.toString().trim() ?? '';
     final rawPoints = rawSeries['points'];
+    final rawUniform = rawSeries['uniform_y'];
     if (rawPoints == null) {
       return (
         points: null,
@@ -1827,10 +1828,27 @@ class AppState extends ChangeNotifier {
       if (!x.isFinite || !y.isFinite) continue;
       points.add([x, y]);
     }
+    if (points.isEmpty && rawUniform is List) {
+      final rawStart = rawSeries['uniform_start'];
+      final rawStep = rawSeries['uniform_step'];
+      if (rawStart is num && rawStep is num) {
+        final start = rawStart.toDouble();
+        final step = rawStep.toDouble();
+        if (start.isFinite && step.isFinite && step != 0) {
+          for (var index = 0; index < rawUniform.length; index++) {
+            final rawY = rawUniform[index];
+            if (rawY is! num) continue;
+            final x = start + index * step;
+            final y = rawY.toDouble();
+            if (x.isFinite && y.isFinite) points.add([x, y]);
+          }
+        }
+      }
+    }
 
     String? error = rawError.isEmpty ? null : rawError;
     if (points.isEmpty && error == null) {
-      error = rawPoints.isEmpty
+      error = rawPoints.isEmpty && (rawUniform is! List || rawUniform.isEmpty)
           ? 'The signal returned no samples for this tree and shot.'
           : 'The signal returned no finite numeric samples for this tree and shot.';
     }

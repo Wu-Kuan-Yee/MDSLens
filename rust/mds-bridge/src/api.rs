@@ -166,22 +166,11 @@ impl From<mds_core::types::SignalSeries> for FrbSignalSeries {
         let had_uniform_samples = s.has_uniform_data();
         let had_samples = !s.points.is_empty() || had_uniform_samples;
         let mut error = s.error;
-        let mut points: Vec<Vec<f64>> = s.points.iter()
+        let points: Vec<Vec<f64>> = s.points.iter()
             .filter(|p| p[0].is_finite() && p[1].is_finite())
             .map(|p| p.to_vec())
             .collect();
-        if points.is_empty() && had_uniform_samples {
-            let n = s.uniform_y.len();
-            points.reserve(n);
-            for i in 0..n {
-                let x = s.uniform_start + i as f64 * s.uniform_step;
-                let y = s.uniform_y[i] as f64;
-                if x.is_finite() && y.is_finite() {
-                    points.push(vec![x, y]);
-                }
-            }
-        }
-        if had_samples && points.is_empty() && error.is_empty() {
+        if had_samples && points.is_empty() && !had_uniform_samples && error.is_empty() {
             error = "signal contains no finite numeric samples".into();
         }
         Self { name: s.name, unit: s.unit, x_name: s.x_name, x_unit: s.x_unit, error, uniform_y: s.uniform_y, uniform_start: s.uniform_start, uniform_step: s.uniform_step, uniform_min_y: s.uniform_min_y, uniform_max_y: s.uniform_max_y, points }
@@ -477,6 +466,7 @@ mod tests {
         assert_eq!(frb.name, "test");
         assert_eq!(frb.error, "err");
         assert_eq!(frb.uniform_y, vec![1.0, 2.0]);
+        assert!(frb.points.is_empty());
     }
 
     #[test]
