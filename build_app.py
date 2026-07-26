@@ -504,6 +504,50 @@ def flutter_build(target: str, *arguments: str) -> None:
     run("flutter", "build", target, "--release", "--no-pub", *arguments)
 
 
+def prepare_macos_application(app: Path) -> None:
+    identity = os.environ.get("MDSSCOPE_MACOS_SIGN_IDENTITY", "").strip()
+    if identity:
+        run(
+            "codesign", "--force", "--deep", "--options", "runtime",
+            "--timestamp", "--sign", identity, str(app),
+        )
+    else:
+        # Keep portable bundles internally consistent without pretending that
+        # an ad-hoc signature replaces Developer ID distribution.
+        run("codesign", "--force", "--deep", "--sign", "-", str(app))
+    run("codesign", "--verify", "--deep", "--strict", str(app))
+
+    notary_profile = os.environ.get("MDSSCOPE_NOTARY_PROFILE", "").strip()
+    if identity and notary_profile:
+        with tempfile.TemporaryDirectory(prefix="mdsscope-notary-") as temporary:
+            submission = Path(temporary) / "MdsScope.zip"
+            run(
+                "ditto", "-c", "-k", "--sequesterRsrc", "--keepParent",
+                str(app), str(submission),
+            )
+            run(
+                "xcrun", "notarytool", "submit", str(submission),
+                "--keychain-profile", notary_profile, "--wait",
+            )
+        run("xcrun", "stapler", "staple", str(app))
+
+
+def sign_and_notarize_macos_artifact(path: Path) -> None:
+    identity = os.environ.get("MDSSCOPE_MACOS_SIGN_IDENTITY", "").strip()
+    notary_profile = os.environ.get("MDSSCOPE_NOTARY_PROFILE", "").strip()
+    if identity and path.suffix == ".dmg":
+        run(
+            "codesign", "--force", "--timestamp", "--sign", identity,
+            str(path),
+        )
+    if identity and notary_profile:
+        run(
+            "xcrun", "notarytool", "submit", str(path),
+            "--keychain-profile", notary_profile, "--wait",
+        )
+        run("xcrun", "stapler", "staple", str(path))
+
+
 def package_macos(formats: set[str], no_build: bool) -> None:
     if host_platform() != "macos":
         fail("macOS packages can only be built on macOS")
@@ -513,6 +557,7 @@ def package_macos(formats: set[str], no_build: bool) -> None:
     app = ROOT / "build/macos/Build/Products/Release/MdsScope.app"
     if not app.is_dir():
         fail(f"macOS application bundle not found: {app}")
+    prepare_macos_application(app)
     base = "mdsscope-macos-universal"
 
     if selected(formats, "app"):
@@ -527,15 +572,26 @@ def package_macos(formats: set[str], no_build: bool) -> None:
     if selected(formats, "tar.bz2"):
         make_tar(app, DIST / f"{base}.tar.bz2", app.name, "w:bz2")
     if selected(formats, "dmg"):
+        dmg = DIST / f"{base}.dmg"
         run(
             "hdiutil", "create", "-quiet", "-volname", "MdsScope",
-            "-srcfolder", str(app), "-ov", "-format", "UDZO", str(DIST / f"{base}.dmg"),
+            "-srcfolder", str(app), "-ov", "-format", "UDZO", str(dmg),
         )
+        sign_and_notarize_macos_artifact(dmg)
     if selected(formats, "pkg"):
-        run(
-            "pkgbuild", "--component", str(app), "--install-location", "/Applications",
-            str(DIST / f"{base}.pkg"),
-        )
+        package = DIST / f"{base}.pkg"
+        installer_identity = os.environ.get(
+            "MDSSCOPE_MACOS_INSTALLER_IDENTITY", ""
+        ).strip()
+        command = [
+            "pkgbuild", "--component", str(app),
+            "--install-location", "/Applications",
+        ]
+        if installer_identity:
+            command.extend(["--sign", installer_identity])
+        command.append(str(package))
+        run(*command)
+        sign_and_notarize_macos_artifact(package)
 
 
 def windows_bundle(arch: str) -> Path:

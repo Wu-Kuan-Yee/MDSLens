@@ -61,6 +61,26 @@ class BuildAppTests(unittest.TestCase):
             manager.touch()
             self.assertEqual(build_app.find_sdkmanager(Path(temporary)), manager)
 
+    def test_macos_application_is_ad_hoc_signed_without_credentials(self) -> None:
+        with (
+            mock.patch.dict(build_app.os.environ, {}, clear=True),
+            mock.patch.object(build_app, "run") as run,
+        ):
+            build_app.prepare_macos_application(Path("/tmp/MdsScope.app"))
+        self.assertEqual(
+            run.call_args_list,
+            [
+                mock.call(
+                    "codesign", "--force", "--deep", "--sign", "-",
+                    "/tmp/MdsScope.app",
+                ),
+                mock.call(
+                    "codesign", "--verify", "--deep", "--strict",
+                    "/tmp/MdsScope.app",
+                ),
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

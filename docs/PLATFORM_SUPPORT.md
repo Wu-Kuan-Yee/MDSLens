@@ -52,3 +52,17 @@ An Android APK cannot be renamed and used as a HarmonyOS NEXT package either. Su
 ## Package Format Trade-offs
 
 More compression extensions do not equal better platform support. The release matrix retains the install formats actually used by each ecosystem plus three common portable compression formats. Snap, Flatpak, Homebrew, Winget, Microsoft Store, Mac App Store, Google Play, and App Store are all independent distribution channels that require accounts, signing, manifests, and review and cannot be "perfectly automated" by a single credential-less script.
+
+## Apple distribution signing
+
+Local macOS packages always receive a consistent ad-hoc signature. Official
+Developer ID distribution is enabled through environment variables:
+
+- `MDSSCOPE_MACOS_SIGN_IDENTITY`: Developer ID Application identity.
+- `MDSSCOPE_MACOS_INSTALLER_IDENTITY`: Developer ID Installer identity.
+- `MDSSCOPE_NOTARY_PROFILE`: `notarytool` keychain profile.
+
+When configured, `build_app.py` enables the hardened runtime, submits the
+application and disk/package artifacts to Apple, waits for the notarization
+result, and staples the tickets. iOS/iPadOS IPA signing uses the provisioning
+team configured in Xcode because Apple requires account-specific profiles.
