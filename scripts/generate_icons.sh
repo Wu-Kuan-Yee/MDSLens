@@ -91,4 +91,12 @@ done
 magick "${ico_inputs[@]}" "$ROOT_DIR/windows/runner/resources/app_icon.ico"
 rm -rf "$temporary_dir"
 
+# Windows MSIX manifest resources use exact unqualified scale-100 dimensions.
+render "$SOURCE_ICON" 44 \
+  "$ROOT_DIR/windows/runner/resources/msix/Square44x44Logo.png"
+render "$SOURCE_ICON" 150 \
+  "$ROOT_DIR/windows/runner/resources/msix/Square150x150Logo.png"
+render "$SOURCE_ICON" 50 \
+  "$ROOT_DIR/windows/runner/resources/msix/StoreLogo.png"
+
 echo "MdsScope platform icons regenerated from assets/app_icon.svg"

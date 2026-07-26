@@ -723,9 +723,8 @@ def stage_windows_msix(bundle: Path, staging: Path, arch: str) -> None:
     replace_tree(bundle, staging)
     assets = staging / "Assets"
     assets.mkdir()
-    icon = ROOT / "assets/app_icon.png"
     for name in ("Square44x44Logo.png", "Square150x150Logo.png", "StoreLogo.png"):
-        shutil.copy2(icon, assets / name)
+        shutil.copy2(ROOT / "windows/runner/resources/msix" / name, assets / name)
     architecture = {"x64": "x64", "arm64": "arm64"}[arch]
     (staging / "AppxManifest.xml").write_text(
         textwrap.dedent(

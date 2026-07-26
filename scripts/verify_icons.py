@@ -86,7 +86,14 @@ def verify_windows() -> int:
     }
     required = {(size, size) for size in (16, 24, 32, 48, 64, 128, 256)}
     check(required <= sizes, f"Windows ICO is missing layers: {sorted(required - sizes)}")
-    return count
+    for name, size in (
+        ("Square44x44Logo.png", 44),
+        ("Square150x150Logo.png", 150),
+        ("StoreLogo.png", 50),
+    ):
+        logo = ROOT / "windows/runner/resources/msix" / name
+        check(png_info(logo)[:2] == (size, size), f"invalid MSIX logo: {logo}")
+    return count + 3
 
 
 def main() -> None:
