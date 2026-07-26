@@ -122,36 +122,58 @@ jobs:
             runner: ubuntu-24.04
             arch: x64
             image: ubuntu:24.04
+            family: debian
+            launch: true
           - name: Fedora 44
             runner: ubuntu-24.04
             arch: x64
             image: fedora:44
+            family: fedora
+            launch: true
           - name: Enterprise Linux 10
             runner: ubuntu-24.04
             arch: x64
             image: rockylinux/rockylinux:10
+            family: enterprise
+            launch: false
           - name: Enterprise Linux 10 ARM64
             runner: ubuntu-24.04-arm
             arch: arm64
             image: rockylinux/rockylinux:10
+            family: enterprise
+            launch: false
     name: Portable Linux / ${{ matrix.name }}
     steps:
-      - name: Install verifier runtime
+      - name: Install Ubuntu verifier runtime
+        if: matrix.family == 'debian'
         shell: bash
         run: |
-          if command -v apt-get >/dev/null; then
-            apt-get update
-            DEBIAN_FRONTEND=noninteractive apt-get install -y \
-              binutils git python3 unzip xvfb
-          else
-            dnf install -y binutils git python3 unzip xorg-x11-server-Xvfb
-          fi
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            binutils git libegl-mesa0 libegl1 libgl1-mesa-dri python3 unzip xvfb
+      - name: Install Fedora verifier runtime
+        if: matrix.family == 'fedora'
+        run: >-
+          dnf install -y binutils git libglvnd-egl mesa-dri-drivers
+          mesa-libEGL python3 unzip xorg-x11-server-Xvfb
+      - name: Install Enterprise Linux verifier runtime
+        if: matrix.family == 'enterprise'
+        run: dnf install -y binutils git python3 unzip
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: mdsscope-linux-${{ matrix.arch }}
           path: build/dist
-      - run: >-
+      - name: Verify portable dependency closure
+        run: >-
+          python3 scripts/verify_linux_portable.py
+          build/dist/mdsscope-linux-${{ matrix.arch }}.zip
+          --max-glibc 2.31
+      - name: Smoke-launch portable application
+        if: matrix.launch
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: >-
           python3 scripts/verify_linux_portable.py
           build/dist/mdsscope-linux-${{ matrix.arch }}.zip
           --max-glibc 2.31 --launch

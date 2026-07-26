@@ -125,6 +125,10 @@ runtime on the oldest supported glibc baseline and tests that same archive on
 newer Debian/Ubuntu, Fedora and Enterprise Linux environments. This gives one
 portable package per CPU architecture; it does not make a Linux GUI executable
 independent of the kernel, CPU architecture, display server or GPU driver.
+Ubuntu and Fedora CI containers perform a real GUI smoke launch with their
+native EGL/Mesa software-rendering stack. Enterprise Linux 10 no longer ships
+Xvfb in its standard repositories, so its x64 and ARM64 jobs verify the complete
+ELF dependency closure and glibc ABI without claiming a headless GUI launch.
 The same ABI/dependency/startup check can be run locally with:
 
 ```sh
