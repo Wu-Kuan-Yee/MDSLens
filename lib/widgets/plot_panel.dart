@@ -143,12 +143,14 @@ class PlotPanel extends StatefulWidget {
   final bool selected;
   final void Function()? onTap;
   final void Function(String action)? onContextAction;
+  final PlatformSaveDialog? exportSaveDialog;
 
   const PlotPanel(
       {super.key,
       required this.plotIdx,
       this.onTap,
       this.onContextAction,
+      this.exportSaveDialog,
       this.selected = false});
 
   @override
@@ -1884,7 +1886,7 @@ class _PlotPanelState extends State<PlotPanel> {
         app.applySharedYScale(r != null ? r[2] : 0, r != null ? r[3] : 1);
         break;
       case 'export':
-        _exportCsv(app);
+        await _exportCsv(app);
         break;
       case 'dataSource':
         _showDataSourceSetup(context, app);
@@ -2009,14 +2011,21 @@ class _PlotPanelState extends State<PlotPanel> {
     try {
       final fileName =
           '${plot.title.isNotEmpty ? plot.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_') : "export"}.csv';
+      app.setStatus('Choose where to export the waveform data...');
+      // A native save panel must not be presented while the popup route is
+      // still completing its dismissal on desktop window managers.
+      await WidgetsBinding.instance.endOfFrame;
       final path = await saveBytesWithFilePicker(
         dialogTitle: 'Export waveform data',
         fileName: fileName,
         allowedExtensions: const ['csv'],
         bytes: Uint8List.fromList(utf8.encode(buf.toString())),
+        saveDialog: widget.exportSaveDialog,
       );
       if (path != null) {
         app.setStatus('Exported to ${path.split('/').last}');
+      } else {
+        app.setStatus('Export cancelled');
       }
     } catch (e) {
       app.setStatus('Export error: $e');

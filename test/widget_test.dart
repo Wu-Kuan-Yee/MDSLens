@@ -3399,6 +3399,7 @@ void main() {
       (tester) async {
     final app = AppState();
     addTearDown(app.dispose);
+    var exportDialogCalls = 0;
     app.updatePlotSeriesByColRow(
         0,
         0,
@@ -3417,12 +3418,18 @@ void main() {
         value: app,
         child: MaterialApp(
           theme: MdsScopeTheme.light(),
-          home: const Scaffold(
+          home: Scaffold(
             body: Center(
               child: SizedBox(
                 width: 600,
                 height: 420,
-                child: PlotPanel(plotIdx: 0),
+                child: PlotPanel(
+                  plotIdx: 0,
+                  exportSaveDialog: (_) async {
+                    exportDialogCalls++;
+                    return null;
+                  },
+                ),
               ),
             ),
           ),
@@ -3456,6 +3463,18 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(app.maximizedPlot, 0);
+
+    await tester.tapAt(
+      tester.getCenter(find.byType(PlotPanel)),
+      buttons: kSecondaryMouseButton,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('plot-context-menu-export')),
+    );
+    await tester.pumpAndSettle();
+    expect(exportDialogCalls, 1);
+    expect(app.status, 'Export cancelled');
     expect(tester.takeException(), isNull);
   });
 
