@@ -514,6 +514,34 @@ void main() {
     expect(File(temporaryPath!).existsSync(), isFalse);
   });
 
+  test('Configuration open never imports the legacy shared config directory',
+      () async {
+    var parserWasCalled = false;
+    final state = AppState(
+      configOpenPicker: () async => const ConfigOpenSelection(
+        name: 'legacy.toml',
+        path: '/home/example/.config/mdsscope/environment/legacy.toml',
+      ),
+      configParser: (_) {
+        parserWasCalled = true;
+        return '{"columns":[]}';
+      },
+    );
+    await state.preferencesReady;
+    addTearDown(state.dispose);
+
+    await state.openFile();
+
+    expect(parserWasCalled, isFalse);
+    expect(state.status, contains('legacy application'));
+    expect(
+      isLegacyMdsScopeConfigurationPath(
+        r'C:\\Users\\example\\.config\\mdsscope\\old.toml',
+      ),
+      isTrue,
+    );
+  });
+
   test('Configuration save hands complete TOML bytes to the file dialog',
       () async {
     String? encodedJson;

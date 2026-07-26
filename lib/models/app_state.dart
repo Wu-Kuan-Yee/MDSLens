@@ -107,6 +107,18 @@ typedef ConfigEncoder = Future<Uint8List> Function(String configJson);
 typedef ImportedShotDecision = Future<bool> Function(String importedShot);
 typedef SshTestWorker = Future<String> Function(String settingsJson);
 
+/// The Qt-era application used this shared user directory.  Keeping imports
+/// out of it prevents an old installation from silently becoming a source of
+/// state for this application as well.
+bool isLegacyMdsScopeConfigurationPath(String path) {
+  final normalized = path
+      .replaceAll('\\', '/')
+      .replaceAll(RegExp(r'/+'), '/')
+      .toLowerCase();
+  return normalized.endsWith('/.config/mdsscope') ||
+      normalized.contains('/.config/mdsscope/');
+}
+
 typedef SignalFetchWorker = Future<String> Function(
   String configJson,
   String dataMode,
@@ -1549,6 +1561,11 @@ class AppState extends ChangeNotifier {
       }
       if (path == null || path.isEmpty) {
         throw 'The selected file did not provide a readable path or bytes.';
+      }
+      if (isLegacyMdsScopeConfigurationPath(path)) {
+        throw 'Configurations in ~/.config/mdsscope belong to the legacy '
+            'application and are intentionally not imported. Use a copy '
+            'outside that directory instead.';
       }
 
       _status = 'Opening ${selection.name}...';

@@ -102,7 +102,9 @@ Desktop builds keep their private state under `~/.mdsscope/`:
 Open and Save dialogs default to `configurations/`, but users may select any
 accessible location. Android, iOS, and iPadOS use the same `.mdsscope` layout
 inside the application-support sandbox. MdsScope does not read or overwrite the
-separate `~/.config/mdsscope/` data used by other installations.
+separate `~/.config/mdsscope/` data used by other installations. Files in that
+legacy directory are intentionally not imported, including when selected
+manually; copy a file elsewhere first if it must be inspected independently.
 
 When importing a configuration, its shot is ignored by default unless the user
 chooses to apply it. Imported values are initial state: later changes in the

@@ -218,7 +218,7 @@ Windows resolves `~` through `USERPROFILE`. Android, iOS, and iPadOS place the
 same `.mdsscope` structure in the application-support sandbox. Open/Save dialogs
 use `configurations/` as their desktop default. Existing settings from earlier
 builds are migrated once; the unrelated `~/.config/mdsscope/` tree is never
-used as a migration source.
+used as a migration source or an import location, even when selected manually.
 
 ## Verification
 
