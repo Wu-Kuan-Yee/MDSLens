@@ -151,6 +151,30 @@ class BuildAppTests(unittest.TestCase):
                 Path("/tmp/mdsscope"),
             )
 
+    def test_linux_module_query_finds_private_libexec_helper(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            libdir = Path(temporary) / "lib"
+            helper = (
+                libdir
+                / "gdk-pixbuf-2.0"
+                / "gdk-pixbuf-query-loaders"
+            )
+            helper.parent.mkdir(parents=True)
+            helper.touch()
+            with mock.patch.object(build_app.shutil, "which", return_value=None):
+                with mock.patch.object(
+                    build_app,
+                    "capture",
+                    return_value=(0, str(libdir)),
+                ):
+                    self.assertEqual(
+                        build_app.linux_module_query(
+                            "gdk-pixbuf-2.0",
+                            "gdk-pixbuf-query-loaders",
+                        ),
+                        helper,
+                    )
+
     def test_portable_zip_extraction_restores_unix_executable_mode(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

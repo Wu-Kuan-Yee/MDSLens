@@ -737,6 +737,24 @@ def linux_module_files(package: str, subdirectory: str) -> list[Path]:
     return sorted(Path(libdir).glob(f"{subdirectory}/*.so"))
 
 
+def linux_module_query(package: str, executable: str) -> Path | None:
+    """Find a GTK helper installed either on PATH or in a private libexec dir."""
+    path = shutil.which(executable)
+    if path is not None:
+        return Path(path)
+    code, libdir = capture("pkg-config", "--variable=libdir", package)
+    if code != 0 or not libdir:
+        return None
+    return next(
+        (
+            candidate
+            for candidate in sorted(Path(libdir).glob(f"**/{executable}"))
+            if candidate.is_file()
+        ),
+        None,
+    )
+
+
 def copy_linux_portable_dependencies(portable: Path) -> None:
     """Copy the non-glibc dependency closure and dynamically loaded GTK bits."""
     library_dir = portable / "lib"
@@ -760,10 +778,13 @@ def copy_linux_portable_dependencies(portable: Path) -> None:
 
     libexec = portable / "libexec"
     libexec.mkdir(parents=True, exist_ok=True)
-    for executable in ("gdk-pixbuf-query-loaders", "gtk-query-immodules-3.0"):
-        path = shutil.which(executable)
+    for package, executable in (
+        ("gdk-pixbuf-2.0", "gdk-pixbuf-query-loaders"),
+        ("gtk+-3.0", "gtk-query-immodules-3.0"),
+    ):
+        path = linux_module_query(package, executable)
         if path is not None:
-            shutil.copy2(Path(path).resolve(), libexec / executable)
+            shutil.copy2(path.resolve(), libexec / executable)
 
     queue = [path for path in portable.rglob("*") if is_elf(path)]
     known = {path.name: path for path in library_dir.iterdir() if is_elf(path)}
