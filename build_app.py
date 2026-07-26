@@ -43,7 +43,7 @@ PLATFORM_FORMATS = {
         "deb", "rpm", "pkg.tar.zst", "pkg.tar.xz", "AppImage",
         "flatpak", "snap", "zip", "7z", "tar.gz", "tar.xz", "tar.bz2",
     },
-    "android": {"apk", "aab"},
+    "android": {"apk", "aab", "apks"},
     "ios": {
         "unsigned-ipa", "unsigned-app", "xcarchive",
         "zip", "7z", "tar.gz", "tar.xz", "tar.bz2",
@@ -250,6 +250,15 @@ def find_android_sdk() -> Path | None:
     return None
 
 
+def find_bundletool() -> Path | None:
+    configured = os.environ.get("BUNDLETOOL_JAR", "").strip()
+    if configured:
+        path = Path(configured).expanduser().resolve()
+        return path if path.is_file() else None
+    candidates = sorted((ROOT / "tools").glob("bundletool-all-*.jar"), reverse=True)
+    return candidates[0] if candidates else None
+
+
 def find_sdkmanager(sdk: Path) -> Path | None:
     names = ["sdkmanager.bat", "sdkmanager"] if host_platform() == "windows" else ["sdkmanager"]
     for relative in (
@@ -355,6 +364,7 @@ def preflight(
         add("rustc", shutil.which("rustc"), "Install Rust or pass --cargo-home.")
 
     host = host_platform()
+    explicitly_required = formats != {"all"}
     if build_required and "windows" in platforms:
         vswhere = tool("vswhere")
         visual_studio = None
@@ -441,8 +451,16 @@ def preflight(
                 str(ndk_dir) if ndk_dir.is_dir() else "Use --install-android-sdk-components.",
                 True,
             ))
-
-    explicitly_required = formats != {"all"}
+        if selected(formats, "apks"):
+            bundletool = find_bundletool()
+            checks.append(
+                (
+                    "bundletool",
+                    bundletool is not None,
+                    str(bundletool) if bundletool else "Set BUNDLETOOL_JAR.",
+                    explicitly_required,
+                )
+            )
     if "windows" in platforms:
         if selected(formats, "exe"):
             add("Inno Setup 6", tool("ISCC"), "Install Inno Setup 6.", explicitly_required)
@@ -1217,7 +1235,7 @@ def package_android(formats: set[str], no_build: bool) -> None:
                 "flutter", "build", "apk", "--release", "--no-pub",
                 "--target-platform", "android-arm,android-arm64,android-x64",
             )
-        if selected(formats, "aab"):
+        if selected(formats, "aab") or selected(formats, "apks"):
             run(
                 "flutter", "build", "appbundle", "--release", "--no-pub",
                 "--target-platform", "android-arm,android-arm64,android-x64",
@@ -1235,11 +1253,35 @@ def package_android(formats: set[str], no_build: bool) -> None:
             if not path.is_file():
                 fail(f"Android APK not found: {path}")
             shutil.copy2(path, DIST / destination)
-    if selected(formats, "aab"):
+    if selected(formats, "aab") or selected(formats, "apks"):
         source = bundle_dir / "app-release.aab"
         if not source.is_file():
             fail(f"Android App Bundle not found: {source}")
-        shutil.copy2(source, DIST / "mdsscope-android-universal.aab")
+        if selected(formats, "aab"):
+            shutil.copy2(source, DIST / "mdsscope-android-universal.aab")
+        if selected(formats, "apks"):
+            bundletool = find_bundletool()
+            if bundletool is None:
+                if "all" in formats:
+                    log("Skipping apks: BUNDLETOOL_JAR is not configured")
+                    return
+                fail("Set BUNDLETOOL_JAR to bundletool-all-1.18.3.jar for apks")
+            command = [
+                "java", "-jar", str(bundletool), "build-apks",
+                f"--bundle={source}",
+                f"--output={DIST / 'mdsscope-android.apks'}",
+                "--overwrite",
+            ]
+            keystore = os.environ.get("MDSSCOPE_ANDROID_KEYSTORE", "").strip()
+            alias = os.environ.get("MDSSCOPE_ANDROID_KEY_ALIAS", "").strip()
+            if keystore and alias:
+                command.extend([
+                    f"--ks={keystore}",
+                    f"--ks-key-alias={alias}",
+                    "--ks-pass=env:MDSSCOPE_ANDROID_STORE_PASSWORD",
+                    "--key-pass=env:MDSSCOPE_ANDROID_KEY_PASSWORD",
+                ])
+            run(*command)
 
 
 def remove_apple_signing_material(bundle: Path) -> None:

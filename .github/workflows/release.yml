@@ -249,6 +249,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.92.0
       - name: Install the pinned Android NDK
         run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;28.2.13676358"'
+      - name: Install pinned bundletool
+        run: |
+          curl -fL https://github.com/google/bundletool/releases/download/1.18.3/bundletool-all-1.18.3.jar \
+            -o "$RUNNER_TEMP/bundletool-all-1.18.3.jar"
+          echo "BUNDLETOOL_JAR=$RUNNER_TEMP/bundletool-all-1.18.3.jar" >> "$GITHUB_ENV"
       - name: Install Android release key when configured
         shell: bash
         run: |
@@ -260,7 +265,7 @@ jobs:
             echo "::warning::Android signing secrets are absent; APKs will use the local test identity."
           fi
       - name: Build APKs and Android App Bundle
-        run: python3 build_app.py -p android -f apk aab
+        run: python3 build_app.py -p android -f apk aab apks
       - uses: actions/upload-artifact@v4
         with:
           name: mdsscope-android

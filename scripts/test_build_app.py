@@ -97,6 +97,30 @@ class BuildAppTests(unittest.TestCase):
             self.assertIn('Version="7.0.0.0"', manifest)
             self.assertIn('Executable="mdsscope.exe"', manifest)
 
+    def test_android_apks_are_generated_from_the_app_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = root / "build/app/outputs/bundle/release/app-release.aab"
+            bundle.parent.mkdir(parents=True)
+            bundle.write_bytes(b"bundle")
+            tool = root / "bundletool.jar"
+            tool.write_bytes(b"jar")
+            dist = root / "dist"
+            dist.mkdir()
+            with mock.patch.object(build_app, "ROOT", root):
+                with mock.patch.object(build_app, "DIST", dist):
+                    with mock.patch.dict(
+                        build_app.os.environ,
+                        {"BUNDLETOOL_JAR": str(tool)},
+                        clear=True,
+                    ):
+                        with mock.patch.object(build_app, "run") as run:
+                            build_app.package_android({"apks"}, no_build=True)
+            command = run.call_args.args
+            self.assertIn("build-apks", command)
+            self.assertIn(f"--bundle={bundle}", command)
+            self.assertIn(f"--output={dist / 'mdsscope-android.apks'}", command)
+
     def test_linux_portable_keeps_base_and_display_abis_on_target_system(
         self,
     ) -> None:
