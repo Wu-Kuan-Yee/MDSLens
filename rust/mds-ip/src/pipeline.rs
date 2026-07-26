@@ -131,7 +131,6 @@ fn fetch_chunk_serial(
                     if cancel.load(Ordering::Relaxed) { break; }
                     results.push(fetch::fetch_signal(&mut connection.stream, req));
                 }
-                let canceled = cancel.load(Ordering::Acquire);
                 let transport_failed = results.iter().any(|result| {
                     let error = result.series.error.to_ascii_lowercase();
                     error.contains("read error")
@@ -139,7 +138,8 @@ fn fetch_chunk_serial(
                         || error.contains("connection closed")
                         || error.contains("timed out")
                 });
-                let reusable = !transport_failed && (!canceled || preserve_connection);
+                let reusable =
+                    !transport_failed && protocol::current_connection_reusable();
                 (results, reusable)
             },
         );

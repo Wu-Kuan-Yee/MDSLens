@@ -10,7 +10,7 @@
 
 use std::io::{ErrorKind, Read, Write};
 use std::net::{Shutdown, TcpStream};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -24,6 +24,7 @@ pub const NETWORK_TIMEOUT_MS: u64 = 30000;
 struct CancelContext {
     token: Arc<AtomicBool>,
     preserve_connection: bool,
+    connection_reusable: Arc<AtomicBool>,
 }
 
 thread_local! {
@@ -36,8 +37,13 @@ pub fn with_cancel_context<T>(
     preserve_connection: bool,
     operation: impl FnOnce() -> T,
 ) -> T {
+    let connection_reusable = Arc::new(AtomicBool::new(true));
     let previous = CANCEL_CONTEXT.with(|context| {
-        context.replace(Some(CancelContext { token, preserve_connection }))
+        context.replace(Some(CancelContext {
+            token,
+            preserve_connection,
+            connection_reusable,
+        }))
     });
     struct Restore(Option<CancelContext>);
     impl Drop for Restore {
@@ -60,6 +66,79 @@ fn cancellation_state() -> Option<(bool, bool)> {
             )
         })
     })
+}
+
+pub(crate) fn current_connection_reusable() -> bool {
+    CANCEL_CONTEXT.with(|context| {
+        context
+            .borrow()
+            .as_ref()
+            .is_none_or(|state| state.connection_reusable.load(Ordering::Acquire))
+    })
+}
+
+pub(crate) fn mark_current_connection_unusable() {
+    CANCEL_CONTEXT.with(|context| {
+        if let Some(state) = context.borrow().as_ref() {
+            state.connection_reusable.store(false, Ordering::Release);
+        }
+    });
+}
+
+static RECONNECT_COST_MS: AtomicU64 = AtomicU64::new(500);
+
+pub(crate) fn observe_reconnect_cost(elapsed: Duration) {
+    let sample = elapsed.as_millis().clamp(100, 5_000) as u64;
+    let previous = RECONNECT_COST_MS.load(Ordering::Relaxed);
+    let estimate = (previous.saturating_mul(3) + sample) / 4;
+    RECONNECT_COST_MS.store(estimate.clamp(250, 1_500), Ordering::Relaxed);
+}
+
+fn reconnect_cost_ms() -> u64 {
+    RECONNECT_COST_MS.load(Ordering::Relaxed).clamp(250, 1_500)
+}
+
+fn should_drain_canceled_body(
+    offset: usize,
+    size: usize,
+    transfer_elapsed_ms: u128,
+    cancel_elapsed_ms: u128,
+    reconnect_ms: u128,
+) -> bool {
+    if offset == 0 || offset >= size || reconnect_ms == 0 {
+        return offset >= size;
+    }
+    let remaining = size - offset;
+    let predicted_remaining_ms =
+        (remaining as u128).saturating_mul(transfer_elapsed_ms.max(1))
+            / offset as u128;
+    predicted_remaining_ms <= reconnect_ms && cancel_elapsed_ms <= reconnect_ms
+}
+
+fn canceled() -> bool {
+    cancellation_state().is_some_and(|(canceled, _)| canceled)
+}
+
+fn reject_canceled_write() -> Result<(), String> {
+    if canceled() {
+        Err("operation canceled".to_string())
+    } else {
+        Ok(())
+    }
+}
+
+fn with_cancel_suppressed<T>(operation: impl FnOnce() -> T) -> T {
+    let previous = CANCEL_CONTEXT.with(|context| context.replace(None));
+    struct Restore(Option<CancelContext>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            CANCEL_CONTEXT.with(|context| {
+                context.replace(self.0.take());
+            });
+        }
+    }
+    let _restore = Restore(previous);
+    operation()
 }
 
 /// A decoded MDSIP message.
@@ -104,16 +183,25 @@ pub fn message(dtype: i8, nargs: i8, descr_idx: i8, message_id: u8, body: &[u8])
 
 /// Write a complete message to the socket.
 pub fn write_message(socket: &mut TcpStream, packet: &[u8]) -> Result<(), String> {
+    reject_canceled_write()?;
     socket
         .set_write_timeout(Some(Duration::from_millis(NETWORK_TIMEOUT_MS)))
         .map_err(|e| format!("set_write_timeout: {}", e))?;
-    socket.write_all(packet).map_err(|e| format!("write error: {}", e))
+    socket.write_all(packet).map_err(|e| {
+        mark_current_connection_unusable();
+        format!("write error: {}", e)
+    })
 }
 
 /// Write a message without blocking for flush (for pipelining).
 pub fn queue_message(socket: &mut TcpStream, packet: &[u8]) -> Result<(), String> {
-    let written = socket.write(packet).map_err(|e| format!("queue write: {}", e))?;
+    reject_canceled_write()?;
+    let written = socket.write(packet).map_err(|e| {
+        mark_current_connection_unusable();
+        format!("queue write: {}", e)
+    })?;
     if written != packet.len() {
+        mark_current_connection_unusable();
         return Err(format!("queue write short: {} of {}", written, packet.len()));
     }
     Ok(())
@@ -121,29 +209,67 @@ pub fn queue_message(socket: &mut TcpStream, packet: &[u8]) -> Result<(), String
 
 /// Flush all queued writes, blocking until the socket buffer is empty.
 pub fn flush_writes(socket: &mut TcpStream) -> Result<(), String> {
+    if cancellation_state().is_some_and(|(canceled, preserve)| canceled && !preserve) {
+        mark_current_connection_unusable();
+        let _ = socket.shutdown(Shutdown::Both);
+        return Err("operation canceled".to_string());
+    }
     socket
         .set_write_timeout(Some(Duration::from_millis(NETWORK_TIMEOUT_MS)))
         .map_err(|e| format!("set_write_timeout: {}", e))?;
-    socket.flush().map_err(|e| format!("flush: {}", e))
+    socket.flush().map_err(|e| {
+        mark_current_connection_unusable();
+        format!("flush: {}", e)
+    })
 }
 
 /// Read exactly `size` bytes from the socket.
-pub fn read_fully(socket: &mut TcpStream, size: usize) -> Result<Vec<u8>, String> {
+fn read_fully(
+    socket: &mut TcpStream,
+    size: usize,
+    known_response_body: bool,
+) -> Result<Vec<u8>, String> {
     socket
         .set_read_timeout(Some(Duration::from_millis(50)))
         .map_err(|e| format!("set_read_timeout: {}", e))?;
     let mut buf = vec![0u8; size];
     let mut offset = 0;
     let mut last_progress = Instant::now();
+    let transfer_start = Instant::now();
+    let mut cancel_start: Option<Instant> = None;
     while offset < size {
         if let Some((true, preserve_connection)) = cancellation_state() {
-            if !preserve_connection {
+            let can_drain_full_response = if !preserve_connection
+                && known_response_body
+                && offset > 0
+            {
+                let elapsed_ms = transfer_start.elapsed().as_millis().max(1);
+                let reconnect_ms = reconnect_cost_ms() as u128;
+                let since_cancel_ms = cancel_start
+                    .get_or_insert_with(Instant::now)
+                    .elapsed()
+                    .as_millis();
+                should_drain_canceled_body(
+                    offset,
+                    size,
+                    elapsed_ms,
+                    since_cancel_ms,
+                    reconnect_ms,
+                )
+            } else {
+                false
+            };
+            if !preserve_connection && !can_drain_full_response {
+                mark_current_connection_unusable();
                 let _ = socket.shutdown(Shutdown::Both);
                 return Err("operation canceled".to_string());
             }
         }
         match socket.read(&mut buf[offset..]) {
-            Ok(0) => return Err("read error: connection closed".to_string()),
+            Ok(0) => {
+                mark_current_connection_unusable();
+                return Err("read error: connection closed".to_string());
+            }
             Ok(read) => {
                 offset += read;
                 last_progress = Instant::now();
@@ -152,10 +278,14 @@ pub fn read_fully(socket: &mut TcpStream, size: usize) -> Result<Vec<u8>, String
                 if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
             {
                 if last_progress.elapsed() >= Duration::from_millis(NETWORK_TIMEOUT_MS) {
+                    mark_current_connection_unusable();
                     return Err("read error: response timed out".to_string());
                 }
             }
-            Err(error) => return Err(format!("read error: {}", error)),
+            Err(error) => {
+                mark_current_connection_unusable();
+                return Err(format!("read error: {}", error));
+            }
         }
     }
     Ok(buf)
@@ -163,18 +293,19 @@ pub fn read_fully(socket: &mut TcpStream, size: usize) -> Result<Vec<u8>, String
 
 /// Read a complete MDSIP message from the socket.
 pub fn read_message(socket: &mut TcpStream) -> Result<Message, String> {
-    let header = read_fully(socket, 48)?;
+    let header = read_fully(socket, 48, false)?;
     let msg_len = i32::from_be_bytes([header[0], header[1], header[2], header[3]]);
     let status = i32::from_be_bytes([header[4], header[5], header[6], header[7]]);
     let length = i16::from_be_bytes([header[8], header[9]]);
     let dtype = header[13] as i8;
 
     if msg_len < 48 || msg_len > 128 * 1024 * 1024 {
+        mark_current_connection_unusable();
         return Err("invalid MDSIP message length".to_string());
     }
 
     let body_size = (msg_len - 48) as usize;
-    let body = read_fully(socket, body_size)?;
+    let body = read_fully(socket, body_size, true)?;
 
     Ok(Message { status, length, dtype, body })
 }
@@ -204,13 +335,11 @@ pub fn next_message_id() -> u8 {
 
 /// Send an MDSplus expression and return the response.
 pub fn value(socket: &mut TcpStream, expr: &str) -> Result<Message, String> {
-    if cancellation_state().is_some_and(|(canceled, _)| canceled) {
-        return Err("operation canceled".to_string());
-    }
+    reject_canceled_write()?;
     let body = expr.as_bytes();
     write_message(socket, &message(14, 1, 0, next_message_id(), body))?;
     let response = read_message(socket)?;
-    if cancellation_state().is_some_and(|(canceled, _)| canceled) {
+    if canceled() {
         return Err("operation canceled".to_string());
     }
     Ok(response)
@@ -221,12 +350,13 @@ pub fn value(socket: &mut TcpStream, expr: &str) -> Result<Message, String> {
 /// current response has already reached a clean message boundary.
 pub fn value_for_cleanup(socket: &mut TcpStream, expr: &str) -> Result<Message, String> {
     let body = expr.as_bytes();
-    write_message(socket, &message(14, 1, 0, next_message_id(), body))?;
-    let previous = CANCEL_CONTEXT.with(|context| context.replace(None));
-    let result = read_message(socket);
-    CANCEL_CONTEXT.with(|context| {
-        context.replace(previous);
+    let result = with_cancel_suppressed(|| {
+        write_message(socket, &message(14, 1, 0, next_message_id(), body))
+            .and_then(|()| read_message(socket))
     });
+    if result.is_err() {
+        mark_current_connection_unusable();
+    }
     result
 }
 
@@ -398,5 +528,43 @@ mod tests {
         // read_message uses 48 ≤ msgLen ≤ 128*1024*1024
         // numeric_from_message with body.len() < 48 is fine, the check is on msgLen in read_message
         assert!(numeric_from_message(&msg).is_ok()); // non-numeric fallback, no error
+    }
+
+    #[test]
+    fn canceled_context_rejects_new_protocol_writes() {
+        let cancel = Arc::new(AtomicBool::new(true));
+
+        with_cancel_context(cancel, true, || {
+            assert_eq!(
+                reject_canceled_write().unwrap_err(),
+                "operation canceled"
+            );
+            // No bytes entered the protocol, so the clean idle socket can
+            // still be reused after the obsolete request is discarded.
+            assert!(current_connection_reusable());
+        });
+    }
+
+    #[test]
+    fn cleanup_exchange_is_the_only_write_allowed_after_cancel() {
+        let cancel = Arc::new(AtomicBool::new(true));
+
+        with_cancel_context(cancel, false, || {
+            assert!(canceled());
+            with_cancel_suppressed(|| assert!(!canceled()));
+            assert!(canceled());
+            assert_eq!(
+                reject_canceled_write().unwrap_err(),
+                "operation canceled"
+            );
+        });
+    }
+
+    #[test]
+    fn full_cancel_only_drains_when_finishing_beats_reconnect() {
+        assert!(should_drain_canceled_body(900, 1_000, 90, 10, 500));
+        assert!(!should_drain_canceled_body(10, 1_000, 500, 10, 250));
+        assert!(!should_drain_canceled_body(900, 1_000, 90, 600, 500));
+        assert!(!should_drain_canceled_body(0, 1_000, 1, 0, 500));
     }
 }

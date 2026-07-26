@@ -198,7 +198,11 @@ fn fetch_east_fixed_resolution(socket: &mut TcpStream, req: &FetchRequest) -> Op
         &format!("SetTimeContext({start:.12},{end:.12},{requested_step:.12})"),
     ).ok()?;
     let response = protocol::value(socket, &y_expr);
-    let _ = protocol::value_for_cleanup(socket, "SetTimeContext()");
+    let cleanup_ok = protocol::value_for_cleanup(socket, "SetTimeContext()")
+        .is_ok_and(|message| message.status & 1 != 0);
+    if !cleanup_ok {
+        protocol::mark_current_connection_unusable();
+    }
     let message = response.ok()?;
     let series = series_from_msg_uniform(
         normalized_name(&req.sig.y_expr),

@@ -9,7 +9,7 @@ use crate::protocol;
 use std::collections::HashMap;
 use std::net::TcpStream;
 use std::sync::{Mutex, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// A reusable MDSplus TCP connection with cached tree/shot state.
 pub struct MdsConnection {
@@ -23,6 +23,7 @@ pub struct MdsConnection {
 impl MdsConnection {
     /// Connect to an MDSplus server and perform the MDSIP handshake.
     pub fn connect(host: &str, port: u16) -> Result<Self, String> {
+        let started = Instant::now();
         // If host already contains a port (SSH tunnel rewrites IP to "127.0.0.1:PORT"),
         // use it as-is. Otherwise append the MDS port.
         let addr = if host.contains(':') { host.to_string() }
@@ -46,6 +47,7 @@ impl MdsConnection {
         };
 
         protocol::handshake(&mut conn.stream)?;
+        protocol::observe_reconnect_cost(started.elapsed());
         Ok(conn)
     }
 
