@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path_provider/path_provider.dart';
+import 'package:flutter/services.dart';
 
 /// Private persistence owned by this application.
 ///
@@ -13,6 +13,7 @@ class UserDataStore {
   UserDataStore({Directory? rootOverride}) : _rootOverride = rootOverride;
 
   static bool disableFileStorageForTests = false;
+  static const _directoryChannel = MethodChannel('mdsscope/user_data');
 
   final Directory? _rootOverride;
   Future<void> _writeTail = Future<void>.value();
@@ -28,8 +29,10 @@ class UserDataStore {
         if (home == null || home.trim().isEmpty) return null;
         return Directory(_join(home, '.mdsscope'));
       }
-      final support = await getApplicationSupportDirectory();
-      return Directory(_join(support.path, '.mdsscope'));
+      final support =
+          await _directoryChannel.invokeMethod<String>('supportDirectory');
+      if (support == null || support.trim().isEmpty) return null;
+      return Directory(_join(support, '.mdsscope'));
     } catch (_) {
       return null;
     }

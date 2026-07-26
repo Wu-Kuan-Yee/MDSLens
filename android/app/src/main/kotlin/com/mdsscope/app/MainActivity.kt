@@ -64,6 +64,16 @@ class MainActivity: FlutterActivity() {
             }
             result.success(systemFontFamilies())
         }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "mdsscope/user_data"
+        ).setMethodCallHandler { call, result ->
+            if (call.method != "supportDirectory") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            result.success(filesDir.absolutePath)
+        }
         openRequestsChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "mdsscope/open_requests"

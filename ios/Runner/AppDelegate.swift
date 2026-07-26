@@ -11,6 +11,7 @@ import CoreTelephony
   private var stylusChannel: FlutterMethodChannel?
   private var systemInfoChannel: FlutterMethodChannel?
   private var systemFontsChannel: FlutterMethodChannel?
+  private var userDataChannel: FlutterMethodChannel?
   private var openRequestsChannel: FlutterMethodChannel?
   private var pencilInteraction: UIPencilInteraction?
   private var pencilUsesEraser = false
@@ -105,6 +106,21 @@ import CoreTelephony
       result(UIFont.familyNames.sorted {
         $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
       })
+    }
+    userDataChannel = FlutterMethodChannel(
+      name: "mdsscope/user_data",
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
+    )
+    userDataChannel?.setMethodCallHandler { call, result in
+      guard call.method == "supportDirectory" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      let directory = FileManager.default.urls(
+        for: .applicationSupportDirectory,
+        in: .userDomainMask
+      ).first
+      result(directory?.path)
     }
     openRequestsChannel = FlutterMethodChannel(
       name: "mdsscope/open_requests",

@@ -37,10 +37,11 @@ These numbers are for regression comparison and are not fixed values across all 
 
 ## Dependency Strategy
 
-Dart direct runtime dependencies are kept to seven: FFI, fl_chart, provider,
-file_picker, path_provider, shared_preferences, and url_launcher. Each provides
-a concrete product capability; path_provider is used only where a sandboxed
-mobile operating system does not expose a normal desktop home directory.
+Dart direct runtime dependencies are kept to six: FFI, fl_chart, provider,
+file_picker, shared_preferences, and url_launcher. Each provides a concrete
+product capability. The small Android/iOS directory channels use platform APIs
+directly, avoiding a dependency and an additional Android NDK requirement for
+one path lookup.
 
 The Rust bridge depends only on internal crates, serde/JSON, and the cryptography libraries required for login and SSH. OpenSSL, libssh2, and zlib use vendored/static builds to reduce extra runtime installation requirements on target machines. The Flutter engine, GTK, and Apple/Windows/Android system runtimes are platform foundations that cannot be eliminated by removing Cargo packages.
 
