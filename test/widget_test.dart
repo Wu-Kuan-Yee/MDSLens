@@ -12,6 +12,7 @@ import 'package:mdsscope/pages/main_page.dart';
 import 'package:mdsscope/models/app_state.dart';
 import 'package:mdsscope/services/external_url_launcher.dart';
 import 'package:mdsscope/services/identity_file_access.dart';
+import 'package:mdsscope/services/incoming_configuration_service.dart';
 import 'package:mdsscope/services/platform_file_dialog.dart';
 import 'package:mdsscope/services/runtime_build_info.dart';
 import 'package:mdsscope/services/source_index.dart';
@@ -87,6 +88,20 @@ void main() {
       restored.signalsForTree('TEST_TREE_FOR_SOURCE_INDEX'),
       contains(r'\NEW_SIGNAL'),
     );
+  });
+
+  test('System open requests accept config files and MdsScope links', () {
+    expect(
+      configurationPathFromOpenRequest('/tmp/example.toml'),
+      '/tmp/example.toml',
+    );
+    expect(
+      configurationPathFromOpenRequest(
+        'mdsscope://open?path=%2Ftmp%2Fshared.webscp',
+      ),
+      '/tmp/shared.webscp',
+    );
+    expect(configurationPathFromOpenRequest('/tmp/notes.txt'), isNull);
   });
 
   test('Learned source index survives application restart', () async {

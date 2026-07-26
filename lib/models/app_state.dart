@@ -1428,12 +1428,13 @@ class AppState extends ChangeNotifier {
 
   Future<void> openFile({
     ImportedShotDecision? importedShotDecision,
+    ConfigOpenSelection? selectionOverride,
   }) async {
     Directory? temporaryDirectory;
     try {
       _status = 'Choose a .toml or .webscp configuration file...';
       notifyListeners();
-      final selection = await _configOpenPicker();
+      final selection = selectionOverride ?? await _configOpenPicker();
       if (selection == null) {
         _status = 'Open cancelled';
         notifyListeners();
@@ -1533,6 +1534,17 @@ class AppState extends ChangeNotifier {
         } catch (_) {}
       }
     }
+  }
+
+  Future<void> openConfigurationPath(String path) {
+    final normalizedPath = path.trim();
+    if (normalizedPath.isEmpty) return Future<void>.value();
+    return openFile(
+      selectionOverride: ConfigOpenSelection(
+        name: File(normalizedPath).uri.pathSegments.last,
+        path: normalizedPath,
+      ),
+    );
   }
 
   Future<void> saveFile() async {
