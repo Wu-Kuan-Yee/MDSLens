@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -12,6 +14,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import build_app  # noqa: E402
+from scripts import verify_linux_portable  # noqa: E402
 
 
 class BuildAppTests(unittest.TestCase):
@@ -115,6 +118,27 @@ class BuildAppTests(unittest.TestCase):
                 "libmissing.so => not found",
                 Path("/tmp/mdsscope"),
             )
+
+    def test_portable_zip_extraction_restores_unix_executable_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = root / "mdsscope-linux-x64"
+            bundle.mkdir()
+            launcher = bundle / "mdsscope"
+            launcher.write_text("#!/bin/sh\n", encoding="utf-8")
+            launcher.chmod(0o755)
+            archive = Path(
+                shutil.make_archive(
+                    str(root / "mdsscope-linux-x64"),
+                    "zip",
+                    root_dir=root,
+                    base_dir=bundle.name,
+                )
+            )
+
+            extracted = verify_linux_portable.extract(archive, root / "output")
+
+            self.assertTrue(os.access(extracted / "mdsscope", os.X_OK))
 
 
 if __name__ == "__main__":

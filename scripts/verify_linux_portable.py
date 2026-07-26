@@ -34,6 +34,17 @@ def extract(archive: Path, destination: Path) -> Path:
     if archive.suffix == ".zip":
         with zipfile.ZipFile(archive) as source:
             source.extractall(destination)
+            # zipfile deliberately does not restore Unix permissions during
+            # extraction, even though make_archive stores them in external_attr.
+            # Reapply the archived mode so launchability is verified rather
+            # than the extractor's default 0644 mode.
+            for member in source.infolist():
+                if member.create_system != 3:
+                    continue
+                mode = (member.external_attr >> 16) & 0o7777
+                extracted = destination / member.filename
+                if mode and extracted.exists():
+                    extracted.chmod(mode)
     else:
         shutil.unpack_archive(archive, destination)
     roots = [path for path in destination.iterdir() if path.is_dir()]
