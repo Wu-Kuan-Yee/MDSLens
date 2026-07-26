@@ -126,6 +126,10 @@ fn canceled() -> bool {
     cancellation_state().is_some_and(|(canceled, _)| canceled)
 }
 
+pub(crate) fn current_operation_canceled() -> bool {
+    canceled()
+}
+
 fn reject_canceled_write() -> Result<(), String> {
     if canceled() {
         Err("operation canceled".to_string())

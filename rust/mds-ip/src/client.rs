@@ -8,8 +8,60 @@
 use crate::protocol;
 use std::collections::HashMap;
 use std::net::TcpStream;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
+
+const MAX_CONCURRENT_SETUPS_PER_SERVER: usize = 8;
+
+struct ConnectionSetupPermit {
+    key: String,
+}
+
+static CONNECTION_SETUPS: OnceLock<(Mutex<HashMap<String, usize>>, Condvar)> =
+    OnceLock::new();
+
+fn connection_setups() -> &'static (Mutex<HashMap<String, usize>>, Condvar) {
+    CONNECTION_SETUPS.get_or_init(|| (Mutex::new(HashMap::new()), Condvar::new()))
+}
+
+impl ConnectionSetupPermit {
+    fn acquire(key: String) -> Result<Self, String> {
+        let (setups, changed) = connection_setups();
+        let mut active = setups
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        loop {
+            if protocol::current_operation_canceled() {
+                return Err("operation canceled".to_string());
+            }
+            let count = active.entry(key.clone()).or_default();
+            if *count < MAX_CONCURRENT_SETUPS_PER_SERVER {
+                *count += 1;
+                return Ok(Self { key });
+            }
+            active = changed
+                .wait_timeout(active, Duration::from_millis(50))
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .0;
+        }
+    }
+}
+
+impl Drop for ConnectionSetupPermit {
+    fn drop(&mut self) {
+        let (setups, changed) = connection_setups();
+        let mut active = setups
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(count) = active.get_mut(&self.key) {
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                active.remove(&self.key);
+            }
+        }
+        changed.notify_one();
+    }
+}
 
 /// A reusable MDSplus TCP connection with cached tree/shot state.
 pub struct MdsConnection {
@@ -28,6 +80,7 @@ impl MdsConnection {
         // use it as-is. Otherwise append the MDS port.
         let addr = if host.contains(':') { host.to_string() }
                    else { format!("{}:{}", host, port) };
+        let _setup_permit = ConnectionSetupPermit::acquire(addr.clone())?;
         let stream = TcpStream::connect_timeout(
             &addr.parse().map_err(|e| format!("invalid address {}: {}", addr, e))?,
             Duration::from_millis(protocol::CONNECTION_SETUP_TIMEOUT_MS),
@@ -189,4 +242,45 @@ where
         }
     }
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+
+    #[test]
+    fn connection_setup_limit_is_enforced_per_server() {
+        let key = "test-setup-limit:8000".to_string();
+        let mut permits = Vec::new();
+        for _ in 0..MAX_CONCURRENT_SETUPS_PER_SERVER {
+            permits.push(ConnectionSetupPermit::acquire(key.clone()).unwrap());
+        }
+
+        let (acquired_tx, acquired_rx) = mpsc::channel();
+        let waiter = std::thread::spawn(move || {
+            let permit = ConnectionSetupPermit::acquire(key).unwrap();
+            acquired_tx.send(()).unwrap();
+            permit
+        });
+
+        assert!(acquired_rx.recv_timeout(Duration::from_millis(75)).is_err());
+        permits.pop();
+        acquired_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        drop(permits);
+        drop(waiter.join().unwrap());
+    }
+
+    #[test]
+    fn canceled_setup_does_not_enter_the_queue() {
+        let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+        protocol::with_cancel_context(cancel, false, || {
+            assert_eq!(
+                ConnectionSetupPermit::acquire("test-canceled-setup:8000".to_string())
+                    .err()
+                    .as_deref(),
+                Some("operation canceled")
+            );
+        });
+    }
 }
