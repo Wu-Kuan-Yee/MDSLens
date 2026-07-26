@@ -125,6 +125,12 @@ runtime on the oldest supported glibc baseline and tests that same archive on
 newer Debian/Ubuntu, Fedora and Enterprise Linux environments. This gives one
 portable package per CPU architecture; it does not make a Linux GUI executable
 independent of the kernel, CPU architecture, display server or GPU driver.
+The same ABI/dependency/startup check can be run locally with:
+
+```sh
+python3 scripts/verify_linux_portable.py \
+  build/dist/mdsscope-linux-x64.zip --max-glibc 2.31 --launch
+```
 
 ## Android
 

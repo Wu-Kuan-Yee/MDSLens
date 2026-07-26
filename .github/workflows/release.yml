@@ -73,6 +73,7 @@ jobs:
   linux:
     name: Linux ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
+    container: ubuntu:20.04
     strategy:
       fail-fast: false
       matrix:
@@ -84,6 +85,12 @@ jobs:
             runner: ubuntu-24.04-arm
             channel: main
     steps:
+      - name: Install baseline build tools
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            build-essential ca-certificates clang cmake curl git libgtk-3-dev ninja-build \
+            nasm perl pkg-config python3 rpm unzip xz-utils zstd
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
@@ -91,10 +98,6 @@ jobs:
           channel: ${{ matrix.channel }}
           cache: true
       - uses: dtolnay/rust-toolchain@1.92.0
-      - name: Install Linux build and packaging tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev ninja-build pkg-config rpm zstd xz-utils
       - name: Build packages
         run: >-
           python3 build_app.py -p linux -a ${{ matrix.arch }}
@@ -104,6 +107,52 @@ jobs:
           name: mdsscope-linux-${{ matrix.arch }}
           path: build/dist/*
           if-no-files-found: error
+
+  linux-portable-runtime:
+    needs: [linux]
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu 24.04
+            runner: ubuntu-24.04
+            arch: x64
+            image: ubuntu:24.04
+          - name: Fedora 44
+            runner: ubuntu-24.04
+            arch: x64
+            image: fedora:44
+          - name: Enterprise Linux 10
+            runner: ubuntu-24.04
+            arch: x64
+            image: rockylinux/rockylinux:10
+          - name: Enterprise Linux 10 ARM64
+            runner: ubuntu-24.04-arm
+            arch: arm64
+            image: rockylinux/rockylinux:10
+    name: Portable Linux / ${{ matrix.name }}
+    steps:
+      - name: Install verifier runtime
+        shell: bash
+        run: |
+          if command -v apt-get >/dev/null; then
+            apt-get update
+            DEBIAN_FRONTEND=noninteractive apt-get install -y \
+              binutils git python3 unzip xvfb
+          else
+            dnf install -y binutils git python3 unzip xorg-x11-server-Xvfb
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: mdsscope-linux-${{ matrix.arch }}
+          path: build/dist
+      - run: >-
+          python3 scripts/verify_linux_portable.py
+          build/dist/mdsscope-linux-${{ matrix.arch }}.zip
+          --max-glibc 2.31 --launch
 
   android:
     name: Android
@@ -205,7 +254,7 @@ jobs:
   publish:
     name: Publish GitHub release
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [windows, macos, linux, android, apple-mobile]
+    needs: [windows, macos, linux, linux-portable-runtime, android, apple-mobile]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4

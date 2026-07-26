@@ -45,20 +45,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-24.04
-            target: linux
-            arch: x64
-            python: python3
-            channel: stable
-            artifact: linux-x64
-            bundle: build/dist/mdsscope-linux-x64.zip
-          - os: ubuntu-24.04-arm
-            target: linux
-            arch: arm64
-            python: python3
-            channel: main
-            artifact: linux-arm64
-            bundle: build/dist/mdsscope-linux-arm64.zip
           - os: macos-15
             target: macos
             arch: auto
@@ -91,11 +77,6 @@ jobs:
           channel: ${{ matrix.channel }}
           cache: true
       - uses: dtolnay/rust-toolchain@1.92.0
-      - name: Install Linux build dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev ninja-build pkg-config
       - run: >-
           ${{ matrix.python }} build_app.py -p ${{ matrix.target }}
           -a ${{ matrix.arch }} -f zip
@@ -104,6 +85,90 @@ jobs:
           name: ci-${{ matrix.artifact }}
           path: ${{ matrix.bundle }}
           if-no-files-found: error
+
+  linux-build:
+    needs: [flutter, rust]
+    runs-on: ${{ matrix.runner }}
+    container: ubuntu:20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+            channel: stable
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            channel: main
+    steps:
+      - name: Install baseline build tools
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            build-essential ca-certificates clang cmake curl git libgtk-3-dev ninja-build \
+            nasm perl pkg-config python3 unzip xz-utils
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: ${{ matrix.channel }}
+          cache: true
+      - uses: dtolnay/rust-toolchain@1.92.0
+      - run: python3 build_app.py -p linux -a ${{ matrix.arch }} -f zip
+      - run: >-
+          python3 scripts/verify_linux_portable.py
+          build/dist/mdsscope-linux-${{ matrix.arch }}.zip --max-glibc 2.31
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ci-linux-${{ matrix.arch }}
+          path: build/dist/mdsscope-linux-${{ matrix.arch }}.zip
+          if-no-files-found: error
+
+  linux-portable-runtime:
+    needs: [linux-build]
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu 24.04
+            runner: ubuntu-24.04
+            arch: x64
+            image: ubuntu:24.04
+          - name: Fedora 44
+            runner: ubuntu-24.04
+            arch: x64
+            image: fedora:44
+          - name: Enterprise Linux 10
+            runner: ubuntu-24.04
+            arch: x64
+            image: rockylinux/rockylinux:10
+          - name: Enterprise Linux 10 ARM64
+            runner: ubuntu-24.04-arm
+            arch: arm64
+            image: rockylinux/rockylinux:10
+    name: Portable Linux / ${{ matrix.name }}
+    steps:
+      - name: Install verifier runtime
+        shell: bash
+        run: |
+          if command -v apt-get >/dev/null; then
+            apt-get update
+            DEBIAN_FRONTEND=noninteractive apt-get install -y \
+              binutils git python3 unzip xvfb
+          else
+            dnf install -y binutils git python3 unzip xorg-x11-server-Xvfb
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ci-linux-${{ matrix.arch }}
+          path: build/dist
+      - run: >-
+          python3 scripts/verify_linux_portable.py
+          build/dist/mdsscope-linux-${{ matrix.arch }}.zip
+          --max-glibc 2.31 --launch
 
   android-build:
     needs: [flutter, rust]
