@@ -1,6 +1,24 @@
 # MdsScope
 
-MdsScope is an MDSplus experimental signal waveform viewer, comparison, and configuration tool rebuilt with Flutter and Rust. The interface targets desktop, tablet, and mobile; a native Rust bridge handles login, MDSplus network access, and SSH tunneling.
+MdsScope is an MDSplus experimental signal waveform viewer, comparison, and
+configuration tool for desktop, tablet, and mobile devices.
+
+## Features
+
+- Open, edit, save, and restore TOML or WebScope waveform layouts.
+- Log in directly or through an SSH tunnel, obtain the latest shot, and load
+  multiple panels without blocking the interface.
+- Thin, Medium, and Full data modes, including the 0.1 ms EAST Thin path and
+  full-resolution detail when zooming.
+- Zoom/Move and synchronized Point modes for mouse, touch, trackpad, and stylus.
+- Per-signal Tree, Signal, legend, server, color, visibility, and data controls.
+- Responsive layouts, configurable fonts and themes, internal web bookmarks,
+  shot history management, and native system file/link integration.
+
+Point readouts use the horizontal coordinate name reported by MDSplus. Many
+MDSplus dimensions are anonymous arrays rather than named nodes; in that case
+MdsScope displays the actual coordinate expression, such as `dim_of(\IP)`,
+instead of inventing a variable name.
 
 ## Quick Start
 
@@ -69,6 +87,28 @@ python3 scripts/verify_icons.py
 ```
 
 The icon check validates the Apple Asset Catalog, iOS opaque background, Android adaptive/round/monochrome icons, Windows multi-size ICO, and Linux desktop icon metadata.
+
+## Application Data and Configuration
+
+Desktop builds keep their private state under `~/.mdsscope/`:
+
+```text
+~/.mdsscope/
+├── settings.json
+├── configurations/
+└── cache/
+```
+
+Open and Save dialogs default to `configurations/`, but users may select any
+accessible location. Android, iOS, and iPadOS use the same `.mdsscope` layout
+inside the application-support sandbox. MdsScope does not read or overwrite the
+separate `~/.config/mdsscope/` data used by other installations.
+
+When importing a configuration, its shot is ignored by default unless the user
+chooses to apply it. Imported values are initial state: later changes in the
+interface, a new shot, or a new Rate take precedence. Passwords and session
+tokens are not written to `settings.json`; they remain in platform-private
+application preferences.
 
 ## Documentation
 

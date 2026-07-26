@@ -44,19 +44,19 @@ Install:
   build. A separate Perl and NASM installation is also valid;
 - optionally Inno Setup 6 for `exe`, and WiX Toolset 3 for `msi`.
 
-This exact form does not require activating the virtual environment or editing
-the permanent user `PATH`:
+This form does not require activating the virtual environment or editing the
+permanent user `PATH` (replace the example locations with local SDK paths):
 
 ```powershell
-& C:\Users\gywu\Git\Wu-Kuan-Yee\MdsScope\.venv\Scripts\python.exe `
+& C:\path\to\venv\Scripts\python.exe `
   .\build_app.py --doctor -p windows -a x64 -f zip `
-  --flutter-sdk C:\Users\gywu\Packages\flutter\3.44.7 `
-  --cargo-home C:\Users\gywu\.cargo
+  --flutter-sdk C:\path\to\flutter `
+  --cargo-home C:\path\to\.cargo
 
-& C:\Users\gywu\Git\Wu-Kuan-Yee\MdsScope\.venv\Scripts\python.exe `
+& C:\path\to\venv\Scripts\python.exe `
   .\build_app.py -p windows -a x64 -f zip `
-  --flutter-sdk C:\Users\gywu\Packages\flutter\3.44.7 `
-  --cargo-home C:\Users\gywu\.cargo
+  --flutter-sdk C:\path\to\flutter `
+  --cargo-home C:\path\to\.cargo
 ```
 
 After activating the environment and putting Flutter/Cargo on `PATH`, the
@@ -64,7 +64,7 @@ short form is:
 
 ```powershell
 python .\build_app.py -p windows -a x64 -f zip
-flutter run --release -d Windows
+flutter run --release -d windows
 ```
 
 The first cold build compiles vendored OpenSSL and can take several minutes.
@@ -98,8 +98,8 @@ For Ubuntu/Debian:
 
 ```sh
 sudo apt-get update
-sudo apt-get install -y python3 clang cmake ninja-build pkg-config \
-  libgtk-3-dev libstdc++-12-dev perl nasm
+sudo apt-get install -y python3 build-essential clang cmake ninja-build \
+  pkg-config libgtk-3-dev perl nasm
 python3 build_app.py --doctor -p linux
 python3 build_app.py -p linux -a x64 -f deb zip
 ```
@@ -202,6 +202,23 @@ failed command, exit code, and next diagnostic action.
 Generated Flutter registrants, plugin metadata, native build products, and
 package output are ignored by Git. A successful build must leave `git status`
 clean when it started clean.
+
+## Runtime Data Locations
+
+On Windows, macOS, and Linux, private application state is stored below the
+user's home directory:
+
+```text
+~/.mdsscope/settings.json
+~/.mdsscope/configurations/
+~/.mdsscope/cache/
+```
+
+Windows resolves `~` through `USERPROFILE`. Android, iOS, and iPadOS place the
+same `.mdsscope` structure in the application-support sandbox. Open/Save dialogs
+use `configurations/` as their desktop default. Existing settings from earlier
+builds are migrated once; the unrelated `~/.config/mdsscope/` tree is never
+used as a migration source.
 
 ## Verification
 

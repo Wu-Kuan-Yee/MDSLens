@@ -2,30 +2,45 @@
 
 ## Completed Optimizations
 
-- Waveform rendering caches up to 12,000 decimated geometry points; moving the crosshair or switching themes no longer re-decimates full signals.
-- Network and FFI data fetching runs in a background isolate so loading never blocks the UI; new user actions overwrite and discard stale results via a generation token.
-- The SSH manager is reused globally, with active tunnels torn down on settings changes, avoiding per-fetch manager, thread, and socket leaks.
+- Waveform rendering caches decimated geometry (2,000 points per visible series
+  by default) and re-decimates the current X range when zooming, so crosshair
+  movement does not rebuild unchanged geometry while zoom still reveals stored
+  high-resolution samples.
+- Network and FFI data fetching runs in a background isolate. New user actions
+  cancel the obsolete native request, invalidate its generation, and prevent a
+  stale result from replacing newer settings.
+- MDS connections are pooled and reused. Cancellation drains a response when it
+  is safe to preserve the protocol boundary and closes the socket when a Full
+  response cannot safely be retained.
+- The SSH manager is reused globally, with active tunnels torn down on settings
+  changes, avoiding per-fetch manager, thread, and socket leaks.
 - All Dart-side FFI input pointers are freed with the Dart allocator; Rust-returned strings are freed only by the Rust `mds_free_string`, preventing leaks and cross-allocator undefined behavior.
 - Rust release builds use `opt-level=3`, Thin LTO, a single codegen unit, `panic=abort`, and debug symbol stripping.
 - Removed unused `tokio`, `rayon`, `reqwest`, `bytemuck`, `thiserror`, and `flutter_rust_bridge` direct dependencies; the login path no longer creates a Tokio runtime per call.
 - Android cleans stale ABI staging before each build; single-ABI release APKs no longer accidentally carry Rust libraries from previous builds.
 - Material Icons shrink from ~1.6 MB to ~7 KB in release builds via Flutter tree shaking.
-- Toolbars, dialogs, waveform layouts, touch/trackpad gestures, theming, fonts, and settings persistence are covered by 44 Flutter tests; the Rust workspace has 52 tests.
+- Toolbars, dialogs, waveform layouts, touch/trackpad/stylus gestures, theming,
+  fonts, configuration persistence, metadata, cancellation, and networking are
+  covered by 100 Flutter tests and 67 Rust tests.
 
 ## Current Measurements
 
-On a local Flutter 3.44.3 / Rust 1.92.0 release build:
+On a local Flutter 3.44.7 / Rust 1.92.0 release build:
 
-- Android arm64 APK: ~23.9 MB;
-- macOS x64 + arm64 Universal APP: ~54 MB;
+- Android universal APK: ~68.6 MB;
+- macOS x64 + arm64 Universal APP: ~56.5 MB;
 - Rust macOS Universal dylib: ~11 MB (~5 MB per architecture);
-- iOS arm64 unsigned Runner.app: ~28 MB (varies with signing, bitcode/symbols, and Flutter version).
+- iOS arm64 unsigned Runner.app: ~28.8 MB (varies with signing, symbols, and
+  Flutter version).
 
 These numbers are for regression comparison and are not fixed values across all systems. Universal bundles inherently contain two sets of machine code and cannot be directly compared to single-architecture packages.
 
 ## Dependency Strategy
 
-Dart direct runtime dependencies are kept to six: FFI, fl_chart, provider, file_picker, shared_preferences, url_launcher. Each provides a concrete product capability; no direct dependency can be safely removed today without rewriting its platform integration.
+Dart direct runtime dependencies are kept to seven: FFI, fl_chart, provider,
+file_picker, path_provider, shared_preferences, and url_launcher. Each provides
+a concrete product capability; path_provider is used only where a sandboxed
+mobile operating system does not expose a normal desktop home directory.
 
 The Rust bridge depends only on internal crates, serde/JSON, and the cryptography libraries required for login and SSH. OpenSSL, libssh2, and zlib use vendored/static builds to reduce extra runtime installation requirements on target machines. The Flutter engine, GTK, and Apple/Windows/Android system runtimes are platform foundations that cannot be eliminated by removing Cargo packages.
 
