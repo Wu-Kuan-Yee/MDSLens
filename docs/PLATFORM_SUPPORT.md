@@ -1,5 +1,9 @@
 # Platforms, Architectures & Package Support
 
+Package support does not imply that an unsigned download can bypass platform
+security. See [INSTALLING.md](INSTALLING.md) for installation, first-launch,
+Gatekeeper/SmartScreen, Android sideloading, and Apple self-signing procedures.
+
 ## Official Flutter Target Scope
 
 With Flutter 3.44 as the baseline, the upstream Flutter deployment targets used by this project are:
@@ -77,3 +81,6 @@ When configured, `build_app.py` enables the hardened runtime, submits the
 application and disk/package artifacts to Apple, waits for the notarization
 result, and staples the tickets. iOS/iPadOS IPA signing uses the provisioning
 team configured in Xcode because Apple requires account-specific profiles.
+Unsigned iOS/iPadOS verification bundles cannot be installed on normal devices;
+the supported installation routes and Personal Team limits are documented in
+[INSTALLING.md](INSTALLING.md).

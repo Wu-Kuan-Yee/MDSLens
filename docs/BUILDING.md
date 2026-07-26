@@ -5,6 +5,10 @@ automatically builds the Rust bridge, checks the host toolchain, and packages
 the result in `build/dist/`. It uses only the Python standard library; a Python
 virtual environment is optional.
 
+For end-user installation, Gatekeeper/SmartScreen recovery, Android APK
+sideloading, and iOS/iPadOS self-signing with a personal Apple Account, see
+[INSTALLING.md](INSTALLING.md).
+
 ## Tested Baseline
 
 | Component | Version / requirement |
@@ -192,7 +196,9 @@ python3 build_app.py -p ios -p ipados -f ipa
 ```
 
 One universal Apple mobile binary supports both iPhone and iPad device
-families. The script publishes iOS and iPadOS filename aliases.
+families. The script publishes iOS and iPadOS filename aliases. A normal Apple
+mobile device cannot bypass code signing; follow the Xcode self-signing or
+signed-IPA installation workflow in [INSTALLING.md](INSTALLING.md).
 
 ## Build-Script Behavior
 

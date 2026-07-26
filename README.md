@@ -116,6 +116,7 @@ unavailable.
 
 ## Documentation
 
+- [Download, Installation & First Launch](docs/INSTALLING.md)
 - [Build & Signing Guide](docs/BUILDING.md)
 - [Platforms, Architectures & Static Linking Boundaries](docs/PLATFORM_SUPPORT.md)
 - [Performance, Dependencies & Size Audit](docs/PERFORMANCE_AUDIT.md)
