@@ -995,6 +995,53 @@ void main() {
     expect(series?.xUnit, 's');
   });
 
+  testWidgets('Point readout never fabricates a hard-coded x axis name',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setLoggedIn(true, 'test-token');
+    app.columns[0][0]['signal_specs'] = [
+      {
+        'y_expr': r'\IP',
+        'x_expr': '',
+        'legend': 'Ip',
+        'color_name': '#1976D2',
+      },
+    ];
+    app.updatePlotSeriesByColRow(
+      0,
+      0,
+      0,
+      const [
+        [0.0, 1.0],
+        [1.0, 2.0],
+      ],
+      null,
+    );
+    app.interactionMode = 1;
+    app.setCrosshair(0.5, sourcePlot: 0, sourceSeries: 0);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 500,
+              height: 400,
+              child: PlotPanel(plotIdx: 0),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.textContaining(r'dim_of(\IP):'), findsOneWidget);
+    expect(find.textContaining('x:'), findsNothing);
+  });
+
   test('A signal with no finite samples reports a meaningful data error',
       () async {
     final app = AppState(

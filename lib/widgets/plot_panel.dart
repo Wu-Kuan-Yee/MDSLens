@@ -979,13 +979,15 @@ class _PlotPanelState extends State<PlotPanel> {
     if (signals != null &&
         seriesIndex < signals.length &&
         signals[seriesIndex] is Map) {
-      final expression =
-          (signals[seriesIndex] as Map)['x_expr']?.toString().trim() ?? '';
+      final signal = signals[seriesIndex] as Map;
+      final expression = signal['x_expr']?.toString().trim() ?? '';
       if (expression.isNotEmpty) {
         return expression.replaceFirst(RegExp(r'^\\+'), '');
       }
+      final yExpression = signal['y_expr']?.toString().trim() ?? '';
+      if (yExpression.isNotEmpty) return 'dim_of($yExpression)';
     }
-    return 'x';
+    return 'Coordinate';
   }
 
   String _effectiveXLabel(PlotData plot, Map<String, dynamic> panel) {

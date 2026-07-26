@@ -454,13 +454,33 @@ fn populate_series_metadata(socket: &mut TcpStream, request: &FetchRequest, seri
         configured_x.to_string()
     };
     series.x_unit = query_text(socket, &format!("units_of({})", x_expr)).unwrap_or_default();
-    series.x_name = if configured_x.is_empty() {
-        query_text(socket, &format!("name_of({})", x_expr))
-            .filter(|name| !name.eq_ignore_ascii_case("none"))
-            .unwrap_or_default()
+    // A dimension is often an anonymous RANGE/ARRAY rather than a named tree
+    // node. Prefer the name returned by MDSplus, but retain the exact source
+    // expression when no name exists instead of presenting a fabricated "x".
+    series.x_name = query_text(socket, &format!("name_of({})", x_expr))
+        .and_then(valid_axis_name)
+        .unwrap_or_else(|| axis_expression_label(&x_expr));
+}
+
+fn valid_axis_name(value: String) -> Option<String> {
+    let name = value.trim().trim_matches('"').trim();
+    if name.is_empty()
+        || name == "*"
+        || name.eq_ignore_ascii_case("none")
+        || name.eq_ignore_ascii_case("missing")
+    {
+        None
     } else {
-        normalized_name(configured_x).trim_start_matches('\\').to_string()
-    };
+        Some(name.trim_start_matches('\\').to_string())
+    }
+}
+
+fn axis_expression_label(expression: &str) -> String {
+    expression
+        .split_whitespace()
+        .collect::<String>()
+        .trim_start_matches('\\')
+        .to_string()
 }
 
 fn query_text(socket: &mut TcpStream, expr: &str) -> Option<String> {
@@ -566,6 +586,14 @@ mod metadata_tests {
     fn fixed_resolution_never_upsamples_native_data() {
         assert_eq!(fixed_resolution_step(0.00001), 0.0001);
         assert_eq!(fixed_resolution_step(0.001), 0.001);
+    }
+
+    #[test]
+    fn anonymous_dimensions_keep_their_real_source_expression() {
+        assert_eq!(axis_expression_label(r"dim_of(\IP)"), r"dim_of(\IP)");
+        assert_eq!(axis_expression_label(r" \TIMEBASE "), "TIMEBASE");
+        assert_eq!(valid_axis_name("none".into()), None);
+        assert_eq!(valid_axis_name(r"\TIME".into()), Some("TIME".into()));
     }
 }
 
