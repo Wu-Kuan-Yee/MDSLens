@@ -11,6 +11,7 @@ import CoreTelephony
   private var stylusChannel: FlutterMethodChannel?
   private var systemInfoChannel: FlutterMethodChannel?
   private var systemFontsChannel: FlutterMethodChannel?
+  private var openRequestsChannel: FlutterMethodChannel?
   private var pencilInteraction: UIPencilInteraction?
   private var pencilUsesEraser = false
   private var cellularDataMonitor: CTCellularData?
@@ -19,6 +20,7 @@ import CoreTelephony
   private var networkProbeTimeout: DispatchWorkItem?
   private var cellularStateBeforeProbe: CTCellularDataRestrictedState =
     .restrictedStateUnknown
+  private var pendingOpenRequests: [String] = []
 
   override func application(
     _ application: UIApplication,
@@ -104,9 +106,60 @@ import CoreTelephony
         $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
       })
     }
+    openRequestsChannel = FlutterMethodChannel(
+      name: "mdsscope/open_requests",
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
+    )
+    openRequestsChannel?.setMethodCallHandler { [weak self] call, result in
+      guard call.method == "takePending" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      let pending = self?.pendingOpenRequests ?? []
+      self?.pendingOpenRequests.removeAll()
+      result(pending)
+    }
     DispatchQueue.main.async { [weak self] in
       self?.installPencilInteraction(on: self?.activeRootView)
     }
+  }
+
+  func queueOpenURL(_ url: URL) {
+    let request: String
+    if url.isFileURL {
+      let scoped = url.startAccessingSecurityScopedResource()
+      defer {
+        if scoped { url.stopAccessingSecurityScopedResource() }
+      }
+      let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("mdsscope-open", isDirectory: true)
+      try? FileManager.default.createDirectory(
+        at: directory,
+        withIntermediateDirectories: true
+      )
+      let destination = directory.appendingPathComponent(
+        "\(UUID().uuidString)-\(url.lastPathComponent)"
+      )
+      do {
+        try FileManager.default.copyItem(at: url, to: destination)
+        request = destination.path
+      } catch {
+        request = url.path
+      }
+    } else {
+      request = url.absoluteString
+    }
+    pendingOpenRequests.append(request)
+    openRequestsChannel?.invokeMethod("openRequest", arguments: request)
+  }
+
+  override func application(
+    _ app: UIApplication,
+    open url: URL,
+    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+  ) -> Bool {
+    queueOpenURL(url)
+    return true
   }
 
   private func prepareNetworkAccess(

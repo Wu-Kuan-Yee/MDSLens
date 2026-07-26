@@ -9,7 +9,9 @@ class AppDelegate: FlutterAppDelegate {
   var identityFileChannel: FlutterMethodChannel?
   var systemInfoChannel: FlutterMethodChannel?
   var systemFontsChannel: FlutterMethodChannel?
+  var openRequestsChannel: FlutterMethodChannel?
   var activeIdentityFileURLs: [URL] = []
+  private var pendingOpenRequests: [String] = []
 
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     return true
@@ -17,6 +19,28 @@ class AppDelegate: FlutterAppDelegate {
 
   override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
     return true
+  }
+
+  override func applicationShouldHandleReopen(
+    _ sender: NSApplication,
+    hasVisibleWindows flag: Bool
+  ) -> Bool {
+    if !flag {
+      mainFlutterWindow?.makeKeyAndOrderFront(nil)
+    }
+    return true
+  }
+
+  override func application(_ sender: NSApplication, openFiles filenames: [String]) {
+    filenames.forEach(queueOpenRequest)
+    sender.reply(toOpenOrPrint: .success)
+  }
+
+  override func application(
+    _ application: NSApplication,
+    open urls: [URL]
+  ) {
+    urls.forEach { queueOpenRequest($0.absoluteString) }
   }
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
@@ -69,6 +93,20 @@ class AppDelegate: FlutterAppDelegate {
       result(NSFontManager.shared.availableFontFamilies.sorted {
         $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
       })
+    }
+    let openChannel = FlutterMethodChannel(
+      name: "mdsscope/open_requests",
+      binaryMessenger: controller.engine.binaryMessenger
+    )
+    openRequestsChannel = openChannel
+    openChannel.setMethodCallHandler { [weak self] call, result in
+      guard call.method == "takePending" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      let pending = self?.pendingOpenRequests ?? []
+      self?.pendingOpenRequests.removeAll()
+      result(pending)
     }
     let identityChannel = FlutterMethodChannel(
       name: "mdsscope/identity_file_access",
@@ -129,6 +167,12 @@ class AppDelegate: FlutterAppDelegate {
       guard let self, let ch = self.themeChannel else { return }
       ch.invokeMethod("themeChanged", arguments: self.isDarkMode())
     }
+  }
+
+  private func queueOpenRequest(_ request: String) {
+    guard !request.isEmpty else { return }
+    pendingOpenRequests.append(request)
+    openRequestsChannel?.invokeMethod("openRequest", arguments: request)
   }
 
   // Apple TN3179 recommends connecting UDP sockets to selected link-local
