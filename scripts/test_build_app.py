@@ -89,12 +89,24 @@ class BuildAppTests(unittest.TestCase):
             "ld-linux-x86-64.so.2",
             "libc.so.6",
             "libm.so.6",
+            "libm-2.31.so",
+            "libc-2.31.so",
             "libpthread.so.0",
             "libnss_files.so.2",
+            "libnss_files-2.31.so",
+            "ld-2.31.so",
         ):
             self.assertTrue(build_app.is_linux_system_runtime(name), name)
+            self.assertIsNotNone(
+                verify_linux_portable.SYSTEM_RUNTIME.fullmatch(name),
+                name,
+            )
         for name in ("libgtk-3.so.0", "libstdc++.so.6", "libX11.so.6"):
             self.assertFalse(build_app.is_linux_system_runtime(name), name)
+            self.assertIsNone(
+                verify_linux_portable.SYSTEM_RUNTIME.fullmatch(name),
+                name,
+            )
 
     def test_linux_ldd_parser_finds_both_dependency_styles(self) -> None:
         self.assertEqual(

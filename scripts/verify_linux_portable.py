@@ -15,8 +15,12 @@ from pathlib import Path
 
 
 SYSTEM_RUNTIME = re.compile(
-    r"(?:ld-linux[^/]*|libc|libdl|libm|libpthread|libresolv|librt|"
-    r"libutil|libanl|libnss_[^.]+)\.so(?:\..*)?"
+    r"(?:"
+    r"ld-linux[^/]*\.so(?:\..*)?|"
+    r"ld-\d+(?:\.\d+)+\.so|"
+    r"(?:libc|libdl|libm|libpthread|libresolv|librt|libutil|libanl|"
+    r"libnss_[A-Za-z0-9_-]+)(?:\.so(?:\..*)?|-\d+(?:\.\d+)+\.so)"
+    r")"
 )
 
 
