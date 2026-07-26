@@ -36,15 +36,36 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.92.0
       - name: Install Windows packagers
         shell: powershell
-        run: choco install innosetup wixtoolset --no-progress -y
+        run: choco install 7zip innosetup wixtoolset --no-progress -y
       - name: Build packages
         run: >-
           python build_app.py -p windows -a ${{ matrix.arch }}
-          -f exe msi zip tar.gz tar.xz tar.bz2
+          -f exe msi msix zip 7z tar.gz tar.xz tar.bz2
       - uses: actions/upload-artifact@v4
         with:
           name: mdsscope-windows-${{ matrix.arch }}
           path: build/dist/*
+          if-no-files-found: error
+
+  windows-msixbundle:
+    name: Windows MSIX bundle
+    needs: [windows]
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mdsscope-windows-*
+          path: msix-input
+          merge-multiple: true
+      - name: Build the unsigned multi-architecture bundle
+        run: >-
+          python scripts/build_msixbundle.py msix-input
+          build/dist/mdsscope-windows.msixbundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mdsscope-windows-msixbundle
+          path: build/dist/mdsscope-windows.msixbundle
           if-no-files-found: error
 
   macos:
@@ -250,7 +271,7 @@ jobs:
   publish:
     name: Publish GitHub release
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [windows, macos, linux, linux-portable-runtime, android, apple-mobile]
+    needs: [windows, windows-msixbundle, macos, linux, linux-portable-runtime, android, apple-mobile]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4

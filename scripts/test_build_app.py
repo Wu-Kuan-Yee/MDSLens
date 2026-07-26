@@ -84,6 +84,19 @@ class BuildAppTests(unittest.TestCase):
             ],
         )
 
+    def test_windows_msix_manifest_matches_requested_architecture(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = root / "bundle"
+            bundle.mkdir()
+            (bundle / "mdsscope.exe").write_bytes(b"MZ")
+            with mock.patch.object(build_app, "project_version", return_value="7.0"):
+                build_app.stage_windows_msix(bundle, root / "stage", "arm64")
+            manifest = (root / "stage/AppxManifest.xml").read_text()
+            self.assertIn('ProcessorArchitecture="arm64"', manifest)
+            self.assertIn('Version="7.0.0.0"', manifest)
+            self.assertIn('Executable="mdsscope.exe"', manifest)
+
     def test_linux_portable_keeps_base_and_display_abis_on_target_system(
         self,
     ) -> None:

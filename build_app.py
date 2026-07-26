@@ -34,7 +34,7 @@ ANDROID_API = "36"
 ANDROID_NDK = "28.2.13676358"
 
 PLATFORM_FORMATS = {
-    "windows": {"exe", "msi", "zip", "tar.gz", "tar.xz", "tar.bz2"},
+    "windows": {"exe", "msi", "msix", "zip", "7z", "tar.gz", "tar.xz", "tar.bz2"},
     "macos": {
         "app", "dmg", "pkg", "xcarchive",
         "zip", "tar.gz", "tar.xz", "tar.bz2",
@@ -147,6 +147,11 @@ def windows_tool_candidates() -> dict[str, list[Path]]:
             program_files / "Git/usr/bin/bash.exe",
         ],
         "vswhere": [program_files_x86 / "Microsoft Visual Studio/Installer/vswhere.exe"],
+        "7z": [program_files / "7-Zip/7z.exe"],
+        "makeappx": sorted(
+            (program_files_x86 / "Windows Kits/10/bin").glob("*/x64/makeappx.exe"),
+            reverse=True,
+        ),
     }
 
 
@@ -434,6 +439,15 @@ def preflight(
         if selected(formats, "msi"):
             for name in ("heat", "candle", "light"):
                 add(f"WiX {name}", tool(name), "Install WiX Toolset 3.14.", explicitly_required)
+        if selected(formats, "msix"):
+            add(
+                "MakeAppx",
+                tool("makeappx"),
+                "Install the Windows 10/11 SDK.",
+                explicitly_required,
+            )
+        if selected(formats, "7z"):
+            add("7-Zip", tool("7z"), "Install 7-Zip.", explicitly_required)
     if "linux" in platforms:
         optional_tools = {
             "deb": "dpkg-deb",
@@ -515,6 +529,22 @@ def make_zip(source: Path, output: Path, arcname: str) -> None:
             made = Path(shutil.make_archive(str(archive_base), "zip", temporary))
             if made != output:
                 made.replace(output)
+    log(f"Created {output.name}")
+
+
+def make_7z(source: Path, output: Path, arcname: str, formats: set[str]) -> None:
+    seven_zip = format_tool("7z", formats, "7z")
+    if seven_zip is None:
+        return
+    staged_source = source
+    with tempfile.TemporaryDirectory(prefix="mdsscope-7z-") as temporary:
+        if source.name != arcname:
+            staged_source = Path(temporary) / arcname
+            replace_tree(source, staged_source)
+        run(
+            seven_zip, "a", "-t7z", "-mx=9", "-snl", str(output),
+            staged_source.name, cwd=staged_source.parent,
+        )
     log(f"Created {output.name}")
 
 
@@ -647,6 +677,63 @@ def windows_bundle(arch: str) -> Path:
     return ROOT / f"build/windows/{arch}/runner/Release"
 
 
+def windows_msix_version() -> str:
+    parts = [int(value) for value in re.findall(r"\d+", project_version())[:4]]
+    return ".".join(str(value) for value in (parts + [0, 0, 0, 0])[:4])
+
+
+def stage_windows_msix(bundle: Path, staging: Path, arch: str) -> None:
+    replace_tree(bundle, staging)
+    assets = staging / "Assets"
+    assets.mkdir()
+    icon = ROOT / "assets/app_icon.png"
+    for name in ("Square44x44Logo.png", "Square150x150Logo.png", "StoreLogo.png"):
+        shutil.copy2(icon, assets / name)
+    architecture = {"x64": "x64", "arm64": "arm64"}[arch]
+    (staging / "AppxManifest.xml").write_text(
+        textwrap.dedent(
+            f"""\
+            <?xml version="1.0" encoding="utf-8"?>
+            <Package
+              xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+              xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+              xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+              IgnorableNamespaces="uap rescap">
+              <Identity Name="MdsScope" Publisher="CN=MdsScope"
+                Version="{windows_msix_version()}" ProcessorArchitecture="{architecture}" />
+              <Properties>
+                <DisplayName>MdsScope</DisplayName>
+                <PublisherDisplayName>MdsScope Contributors</PublisherDisplayName>
+                <Description>MDSplus signal waveform viewer</Description>
+                <Logo>Assets\\StoreLogo.png</Logo>
+              </Properties>
+              <Resources><Resource Language="en-us" /></Resources>
+              <Dependencies>
+                <TargetDeviceFamily Name="Windows.Desktop"
+                  MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
+              </Dependencies>
+              <Applications>
+                <Application Id="MdsScope" Executable="mdsscope.exe"
+                  EntryPoint="Windows.FullTrustApplication">
+                  <uap:VisualElements DisplayName="MdsScope"
+                    Description="MDSplus signal waveform viewer"
+                    BackgroundColor="transparent"
+                    Square150x150Logo="Assets\\Square150x150Logo.png"
+                    Square44x44Logo="Assets\\Square44x44Logo.png" />
+                </Application>
+              </Applications>
+              <Capabilities>
+                <rescap:Capability Name="runFullTrust" />
+                <Capability Name="internetClient" />
+                <Capability Name="privateNetworkClientServer" />
+              </Capabilities>
+            </Package>
+            """
+        ),
+        encoding="utf-8",
+    )
+
+
 def package_windows(formats: set[str], no_build: bool, arch: str) -> None:
     if host_platform() != "windows":
         fail("Windows packages can only be built on Windows")
@@ -667,6 +754,8 @@ def package_windows(formats: set[str], no_build: bool, arch: str) -> None:
 
     if selected(formats, "zip"):
         make_zip(bundle, DIST / f"{base}.zip", base)
+    if selected(formats, "7z"):
+        make_7z(bundle, DIST / f"{base}.7z", base, formats)
     if selected(formats, "tar.gz"):
         make_tar(bundle, DIST / f"{base}.tar.gz", base, "w:gz")
     if selected(formats, "tar.xz"):
@@ -680,7 +769,7 @@ def package_windows(formats: set[str], no_build: bool, arch: str) -> None:
                 iscc,
                 f"/DBundleDir={bundle}",
                 f"/DOutputDir={DIST}",
-                f"/DOutputBase={base}",
+                f"/DOutputBase={base}-setup",
                 f"/DAppVersion={project_version()}",
                 str(ROOT / "packaging/windows/mdsscope.iss"),
             )
@@ -709,6 +798,16 @@ def package_windows(formats: set[str], no_build: bool, arch: str) -> None:
                     light, "-nologo", "-ext", "WixUIExtension",
                     "-out", str(DIST / f"{base}.msi"),
                     str(wix / "mdsscope.wixobj"), str(wix / "bundle.wixobj"),
+                )
+    if selected(formats, "msix"):
+        makeappx = format_tool("makeappx", formats, "msix")
+        if makeappx is not None:
+            with tempfile.TemporaryDirectory(prefix="mdsscope-msix-") as temporary:
+                staging = Path(temporary) / base
+                stage_windows_msix(bundle, staging, arch)
+                run(
+                    makeappx, "pack", "/o", "/d", str(staging),
+                    "/p", str(DIST / f"{base}.msix"),
                 )
 
 
