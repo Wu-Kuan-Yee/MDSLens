@@ -18,6 +18,7 @@ cp -a %{_sourcedir}/root/. %{buildroot}/
 /usr/lib/mdsscope
 /usr/share/applications/com.mdsscope.app.desktop
 /usr/share/icons/hicolor/scalable/apps/com.mdsscope.app.svg
+/usr/share/mime/packages/com.mdsscope.configuration.xml
 
 %changelog
 * Thu Jul 23 2026 MdsScope Contributors - %{mdsscope_version}-1

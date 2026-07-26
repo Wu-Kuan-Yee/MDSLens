@@ -623,6 +623,12 @@ def stage_linux_root(bundle: Path, root: Path) -> None:
     icons = root / "usr/share/icons/hicolor/scalable/apps"
     icons.mkdir(parents=True, exist_ok=True)
     shutil.copy2(ROOT / "assets/app_icon.svg", icons / "com.mdsscope.app.svg")
+    mime_packages = root / "usr/share/mime/packages"
+    mime_packages.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(
+        ROOT / "packaging/linux/com.mdsscope.configuration.xml",
+        mime_packages,
+    )
 
 
 def package_linux(formats: set[str], no_build: bool, arch: str, version: str) -> None:

@@ -100,7 +100,13 @@ def main() -> None:
     linux = ROOT / "linux/runner/app_icon.png"
     check(png_info(linux)[:2] == (512, 512), "Linux icon must be 512x512")
     desktop = (ROOT / "packaging/linux/com.mdsscope.app.desktop").read_text(encoding="utf-8")
-    check("Icon=com.mdsscope.app" in desktop and "StartupWMClass=com.mdsscope.app" in desktop, "invalid Linux desktop icon metadata")
+    check(
+        "Icon=com.mdsscope.app" in desktop
+        and "StartupWMClass=com.mdsscope.app" in desktop
+        and "Exec=mdsscope %U" in desktop
+        and "x-scheme-handler/mdsscope" in desktop,
+        "invalid Linux desktop integration metadata",
+    )
     print(f"Verified native icons: iOS {ios}, macOS {macos}, Android {android}, Windows {windows}, Linux 1")
 
 

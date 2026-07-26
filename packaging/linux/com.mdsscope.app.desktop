@@ -2,9 +2,10 @@
 Type=Application
 Name=MdsScope
 Comment=View and compare MDSplus signal waveforms
-Exec=mdsscope
+Exec=mdsscope %U
 Icon=com.mdsscope.app
 Terminal=false
 Categories=Science;DataVisualization;
 StartupNotify=true
 StartupWMClass=com.mdsscope.app
+MimeType=application/x-mdsscope-configuration;application/toml;text/x-toml;x-scheme-handler/mdsscope;
