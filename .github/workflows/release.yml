@@ -151,7 +151,7 @@ jobs:
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
             binutils git libegl-mesa0 libegl1 libgl1-mesa-dri \
-            libgtk-3-0t64 libstdc++6 python3 unzip xvfb
+            libgles2 libgtk-3-0t64 libstdc++6 python3 unzip xvfb
       - name: Install Fedora verifier runtime
         if: matrix.family == 'fedora'
         run: >-
