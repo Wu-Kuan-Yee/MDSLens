@@ -18,6 +18,26 @@ operating system's security protections globally just to run MdsScope.
 | Android | Universal APK, or a matching armv7/arm64/x64 APK | AAB files are for stores and cannot be installed directly |
 | iOS/iPadOS | IPA signed for the device, or source installed by Xcode | An unsigned ZIP is verification-only |
 
+## Runtime Dependency Summary
+
+The packaged application includes the Flutter engine, MdsScope assets and
+plugins, and the Rust bridge. OpenSSL, libssh2, and zlib are linked into the
+bridge, so users must not install MDSplus, OpenSSL, libssh2, Rust, Flutter, or a
+JDK merely to run MdsScope.
+
+The remaining system or optional installation dependencies are:
+
+| Platform | Normally required | May need to be installed manually |
+|---|---|---|
+| Windows | Supported Windows 10/11 system libraries and graphics driver | Microsoft Visual C++ v14 Redistributable if `VCRUNTIME`/`MSVCP` DLLs are reported missing |
+| macOS | A supported macOS release and Apple system frameworks | Nothing for a signed/notarized package; Xcode command-line tools only for local re-signing or source installation |
+| Linux | glibc, GTK 3, GLib/GIO, libsecret, C++ runtime, X11/Wayland and EGL/OpenGL/Mesa stack | One of `zenity`, `kdialog`, or `qarma` for Open/Save/Export dialogs; a Secret Service provider for persistent credentials |
+| Android | A supported Android system | Nothing for direct APK installation; Android SDK Platform Tools only for `adb` installation |
+| iOS/iPadOS | A supported iOS/iPadOS system and valid application signature | Xcode for self-signing; Apple Configurator is optional for installing an already signed IPA |
+
+These are runtime requirements. Developers compiling packages need the
+additional toolchains listed in [BUILDING.md](BUILDING.md).
+
 ## macOS
 
 ### Normal installation
@@ -91,6 +111,9 @@ Use one of these supported routes:
   distribution profile that includes or authorizes the device;
 - install from source with Xcode using your own Apple Account.
 
+No Flutter, Rust, OpenSSL, MDSplus, or other third-party runtime needs to be
+installed on the iPhone or iPad.
+
 ### Self-sign and install from source with Xcode
 
 This is the simplest route for a developer or tester who does not have a
@@ -156,6 +179,10 @@ distribution should use the organization's documented MDM and trust workflow.
 
 ## Android
 
+No Flutter, Rust, JDK, Android SDK, OpenSSL, MDSplus, or other third-party
+runtime needs to be installed on the Android device. The SDK Platform Tools are
+needed on the computer only when using ADB.
+
 ### Install directly on the device
 
 1. Download the universal APK, or the APK matching the device CPU.
@@ -191,6 +218,19 @@ application data.
 Use the installer EXE/MSI, or extract the complete portable ZIP before running
 `mdsscope.exe`. Do not copy the EXE away from its DLL and `data` directories.
 
+Windows normally already provides the required operating-system components. If
+startup reports a missing `VCRUNTIME140*.dll` or `MSVCP140*.dll`, install the
+latest Microsoft Visual C++ v14 Redistributable matching the package
+architecture:
+
+- [x64 Visual C++ Redistributable](https://aka.ms/vc14/vc_redist.x64.exe)
+- [ARM64 Visual C++ Redistributable](https://aka.ms/vc14/vc_redist.arm64.exe)
+
+Microsoft requires a Redistributable at least as recent as the MSVC toolset
+used to compile an application; see
+[Latest supported Visual C++ Redistributable](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist).
+Do not download individual runtime DLLs from third-party DLL sites.
+
 An unsigned or newly signed download may show **Windows protected your PC**:
 
 1. Confirm that the file came from the expected release.
@@ -205,6 +245,60 @@ Microsoft explains the reputation behavior in
 [SmartScreen reputation for Windows apps](https://learn.microsoft.com/windows/apps/package-and-deploy/smartscreen-reputation).
 
 ## Linux
+
+Linux has the largest manual dependency surface because desktop libraries are
+supplied by each distribution rather than embedded as a second, potentially
+incompatible desktop stack.
+
+The application itself requires:
+
+- glibc and the standard C/C++ runtime;
+- GTK 3, GLib/GIO and their settings schemas, themes, image loaders and input
+  modules;
+- `libsecret`;
+- X11 or Wayland plus a functioning EGL/OpenGL/Mesa or vendor graphics stack.
+
+Open configuration, Save configuration, Export Data, and identity-file Browse
+use the Linux implementation of `file_picker`. It searches `PATH`, in order,
+for `qarma`, `kdialog`, and `zenity`. At least one must be installed; `zenity`
+is the recommended desktop-neutral default. If none is present, these actions
+fail with `Couldn't find the executable zenity in the path`.
+
+Persistent passwords and tokens additionally need a running Secret Service
+provider, commonly GNOME Keyring, KWallet with Secret Service support, or
+KeePassXC with Secret Service integration. Without one, MdsScope keeps
+credentials only for the current process and asks for them again after restart.
+
+Typical runtime installations are:
+
+```sh
+# Debian and Ubuntu releases that provide libgtk-3-0
+sudo apt-get update
+sudo apt-get install libgtk-3-0 libsecret-1-0 libegl1 libgl1 \
+  gsettings-desktop-schemas zenity gnome-keyring
+
+# Ubuntu releases that provide the time64 GTK package instead
+sudo apt-get install libgtk-3-0t64 libsecret-1-0 libegl1 libgl1 \
+  gsettings-desktop-schemas zenity gnome-keyring
+
+# Fedora
+sudo dnf install gtk3 libsecret libglvnd-egl mesa-dri-drivers \
+  gsettings-desktop-schemas zenity gnome-keyring
+
+# CentOS Stream 10 / Enterprise Linux 10, including ARM64
+sudo dnf install gtk3 libsecret libepoxy libglvnd-egl \
+  gsettings-desktop-schemas zenity gnome-keyring
+
+# Arch Linux
+sudo pacman -S gtk3 libsecret libglvnd mesa zenity gnome-keyring
+```
+
+Package names can change between distribution releases. A KDE user may install
+`kdialog` instead of `zenity`; installing all three dialog tools is unnecessary.
+CentOS Stream supplies additional desktop applications such as `zenity`
+through AppStream, so that repository must be enabled. A headless server also
+needs a real graphical session; installing `zenity` alone does not create a
+display server.
 
 For a portable archive:
 

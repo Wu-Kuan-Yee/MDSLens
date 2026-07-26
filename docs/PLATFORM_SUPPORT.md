@@ -51,12 +51,14 @@ For Linux, the portable archives close the practical gap by bundling every
 application-owned dependency while leaving GTK/GLib/GIO, libsecret, settings
 schemas, image/input modules, the glibc family/ELF loader, compiler ABI,
 X11/Wayland clients, EGL/OpenGL dispatch, and graphics drivers aligned with the
-target system. The archives are built against glibc 2.31 and are intended to
-run unchanged on newer mainstream distributions of the same architecture with
-GTK 3 and libsecret installed. A package cannot promise literally every Linux
-system: older glibc, non-glibc systems (such as Alpine/musl), obsolete kernels
-and missing/incompatible desktop or graphics runtimes require a different
-runtime baseline.
+target system. Linux Open/Save/Export dialogs additionally need one of
+`zenity`, `kdialog`, or `qarma`, and persistent credential storage needs a
+running Secret Service provider. The archives are built against glibc 2.31 and
+are intended to run unchanged on newer mainstream distributions of the same
+architecture with GTK 3 and libsecret installed. A package cannot promise
+literally every Linux system: older glibc, non-glibc systems (such as
+Alpine/musl), obsolete kernels and missing/incompatible desktop or graphics
+runtimes require a different runtime baseline.
 
 ## HarmonyOS NEXT
 

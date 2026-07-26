@@ -25,6 +25,20 @@ sideloading, and iOS/iPadOS self-signing with a personal Apple Account, see
 versions above. A local Flutter SDK is not downloaded by this repository, so
 pass its path to the script or put it on `PATH`.
 
+The table below distinguishes tools required to compile the application from
+tools needed only for particular package formats:
+
+| Target | Required build dependencies | Optional packaging/signing dependencies |
+|---|---|---|
+| Windows | Python, Flutter, rustup, Visual Studio C++/ATL and Windows SDK, Perl, NASM | Inno Setup 6 for installer EXE; WiX Toolset 3 for MSI; code-signing certificate for trusted publication |
+| macOS | Python, Flutter, rustup, Xcode and command-line tools | Developer ID Application/Installer identities and `notarytool` profile for public distribution |
+| Linux | Python, Flutter, rustup, compiler/build tools, GTK 3 and libsecret development files, `patchelf`, Perl, NASM | `dpkg-deb`, `rpmbuild`, `zstd`, `xz`, or `appimagetool` according to requested formats |
+| Android | Python, Flutter, rustup, JDK 17+, Android SDK Platform 36 and NDK 28.2.13676358, Bash, Perl | Android release keystore; Platform Tools/ADB for device installation |
+| iOS/iPadOS | Python, Flutter, rustup, Xcode and command-line tools | Apple Account/team, signing certificate and provisioning profile for device installation or IPA |
+
+Git and network access are normally needed for the first dependency download.
+They are not application runtime dependencies.
+
 Before building, run the platform-aware diagnostic:
 
 ```sh
@@ -108,6 +122,23 @@ python3 build_app.py --doctor -p linux
 python3 build_app.py -p linux -a x64 -f deb zip
 ```
 
+Equivalent common development package sets are:
+
+```sh
+# Fedora / CentOS Stream / Enterprise Linux
+sudo dnf install gcc-c++ clang cmake ninja-build pkgconf-pkg-config \
+  gtk3-devel libsecret-devel patchelf perl nasm
+
+# Arch Linux
+sudo pacman -S base-devel clang cmake ninja pkgconf gtk3 libsecret \
+  patchelf perl nasm
+```
+
+These commands install build dependencies, not the separate runtime dialog
+helper used by `file_picker`. Install one of `zenity`, `kdialog`, or `qarma`
+when Open/Save/Export must work on the build or target machine; see
+[INSTALLING.md](INSTALLING.md#linux).
+
 Additional formats need their native tools: `rpm` needs `rpmbuild`,
 `pkg.tar.zst` needs `zstd`, `pkg.tar.xz` needs `xz`, and `AppImage` needs
 `appimagetool`. When `-f all` is used, unavailable optional formats are skipped;
@@ -130,7 +161,9 @@ kernel and graphics drivers deliberately remain provided by the target system.
 Keeping the entire desktop stack together prevents an older bundled GTK from
 crashing against newer GNOME settings schemas and prevents older X11/EGL
 libraries from being mixed with newer Mesa drivers. Install the normal GTK 3,
-libsecret and graphics-runtime packages for the distribution. Release
+libsecret and graphics-runtime packages for the distribution. The file dialog
+helper (`zenity`, `kdialog`, or `qarma`) is also intentionally system-provided.
+Release
 automation tests the same archive on newer Debian/Ubuntu, Fedora and Enterprise
 Linux environments. This gives one application bundle per CPU architecture; it
 does not make a Linux GUI executable independent of the operating-system
