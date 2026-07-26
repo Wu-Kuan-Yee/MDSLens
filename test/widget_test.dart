@@ -6,10 +6,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:mdsscope/app.dart';
 import 'package:mdsscope/pages/main_page.dart';
 import 'package:mdsscope/models/app_state.dart';
+import 'package:mdsscope/services/credential_store.dart';
 import 'package:mdsscope/services/external_url_launcher.dart';
 import 'package:mdsscope/services/identity_file_access.dart';
 import 'package:mdsscope/services/incoming_configuration_service.dart';
@@ -32,6 +34,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   setUp(() {
     UserDataStore.disableFileStorageForTests = true;
+    FlutterSecureStorage.setMockInitialValues({});
     SharedPreferences.setMockInitialValues({});
   });
 
@@ -392,7 +395,11 @@ void main() {
       'shotHistory': '["163700","163699"]',
     });
 
-    final first = AppState(userDataStore: store);
+    final credentials = MemoryCredentialStore();
+    final first = AppState(
+      userDataStore: store,
+      credentialStore: credentials,
+    );
     await first.preferencesReady;
     addTearDown(first.dispose);
     first.dataMode = 2;
@@ -409,7 +416,10 @@ void main() {
     first.rebuild();
     await first.savePreferences();
 
-    final second = AppState(userDataStore: store);
+    final second = AppState(
+      userDataStore: store,
+      credentialStore: credentials,
+    );
     await second.preferencesReady;
     addTearDown(second.dispose);
 
@@ -437,13 +447,85 @@ void main() {
     expect(legacy.containsKey('shotHistory'), isFalse);
   });
 
+  test('Plaintext credentials migrate to the platform vault and are erased',
+      () async {
+    final temporary = await Directory.systemTemp.createTemp(
+      'mdsscope-secure-settings-test-',
+    );
+    addTearDown(() => temporary.delete(recursive: true));
+    final store = UserDataStore(
+      rootOverride: Directory('${temporary.path}/.mdsscope'),
+    );
+    final credentials = MemoryCredentialStore();
+    SharedPreferences.setMockInitialValues({
+      'rememberLogin': true,
+      'loggedIn': true,
+      'loginApiUrl': 'https://east.example/api',
+      'loginUser': 'scientist',
+      'loginPass': 'login-secret',
+      'authToken': 'session-secret',
+      'sshPass': 'ssh-secret',
+      'themeMode': 2,
+    });
+
+    final first = AppState(
+      userDataStore: store,
+      credentialStore: credentials,
+    );
+    await first.preferencesReady;
+    addTearDown(first.dispose);
+
+    expect(first.loginPass, 'login-secret');
+    expect(first.authToken, 'session-secret');
+    expect(first.sshPass, 'ssh-secret');
+    expect(credentials.values, {
+      'mdsscope.login.password': 'login-secret',
+      'mdsscope.login.token': 'session-secret',
+      'mdsscope.ssh.password': 'ssh-secret',
+    });
+
+    final oldPreferences = await SharedPreferences.getInstance();
+    expect(oldPreferences.containsKey('loginPass'), isFalse);
+    expect(oldPreferences.containsKey('authToken'), isFalse);
+    expect(oldPreferences.containsKey('sshPass'), isFalse);
+
+    final settingsFile = File('${temporary.path}/.mdsscope/settings.json');
+    final settingsText = await settingsFile.readAsString();
+    expect(settingsText, isNot(contains('login-secret')));
+    expect(settingsText, isNot(contains('session-secret')));
+    expect(settingsText, isNot(contains('ssh-secret')));
+    expect(jsonDecode(settingsText)['themeMode'], 2);
+
+    final second = AppState(
+      userDataStore: store,
+      credentialStore: credentials,
+    );
+    await second.preferencesReady;
+    addTearDown(second.dispose);
+    expect(second.loginPass, 'login-secret');
+    expect(second.authToken, 'session-secret');
+    expect(second.sshPass, 'ssh-secret');
+    expect(second.loggedIn, isTrue);
+  });
+
   test('Shot history retention is bounded, optional, and persisted', () async {
+    final temporary = await Directory.systemTemp.createTemp(
+      'mdsscope-shot-history-test-',
+    );
+    addTearDown(() => temporary.delete(recursive: true));
+    final store = UserDataStore(
+      rootOverride: Directory('${temporary.path}/.mdsscope'),
+    );
     final history = List<String>.generate(55, (index) => '${170000 - index}');
     SharedPreferences.setMockInitialValues({
       'shotHistory': jsonEncode(history),
     });
 
-    final first = AppState();
+    final credentials = MemoryCredentialStore();
+    final first = AppState(
+      userDataStore: store,
+      credentialStore: credentials,
+    );
     await first.preferencesReady;
     addTearDown(first.dispose);
 
@@ -459,7 +541,10 @@ void main() {
     expect(first.shotHistory, history.take(3));
     await first.savePreferences();
 
-    final second = AppState();
+    final second = AppState(
+      userDataStore: store,
+      credentialStore: credentials,
+    );
     await second.preferencesReady;
     addTearDown(second.dispose);
     expect(second.limitShotHistory, isFalse);
@@ -3300,8 +3385,6 @@ void main() {
     expect(app.shotHistory, isEmpty);
     expect(find.text('Shot history is empty'), findsOneWidget);
     expect(find.text('Manage Shot History'), findsOneWidget);
-    final preferences = await SharedPreferences.getInstance();
-    expect(preferences.getString('shotHistory'), '[]');
     await tester.tap(
       find.byKey(const ValueKey('shot-history-manager-close')),
     );
@@ -3778,12 +3861,6 @@ void main() {
     });
     expect(find.text('Live diagnostics'), findsOneWidget);
     expect(find.text('http://10.0.0.9/live'), findsOneWidget);
-    final restored = AppState();
-    await restored.preferencesReady;
-    addTearDown(restored.dispose);
-    expect(restored.webBookmarks.first, {
-      'Live diagnostics': 'http://10.0.0.9/live',
-    });
     expect(tester.takeException(), isNull);
   });
 

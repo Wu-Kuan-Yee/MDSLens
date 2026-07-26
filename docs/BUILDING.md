@@ -12,8 +12,8 @@ virtual environment is optional.
 | Python | 3.10 or newer |
 | Flutter | 3.44.7 stable |
 | Rust | rustup; `rust-toolchain.toml` selects 1.92.0 |
-| Android | JDK 17+, SDK Platform 36, NDK 27.0.12077973 |
-| Windows | Visual Studio 2022 or newer with Desktop development with C++ |
+| Android | JDK 17+, SDK Platform 36, NDK 28.2.13676358 |
+| Windows | Visual Studio 2022+ with Desktop development with C++ and ATL |
 | Apple | A current Xcode supported by Flutter 3.44.7 |
 | Linux | Clang, CMake, Ninja, pkg-config, GTK 3 development files |
 
@@ -99,7 +99,7 @@ For Ubuntu/Debian:
 ```sh
 sudo apt-get update
 sudo apt-get install -y python3 build-essential clang cmake ninja-build \
-  pkg-config libgtk-3-dev perl nasm
+  pkg-config libgtk-3-dev libsecret-1-dev perl nasm
 python3 build_app.py --doctor -p linux
 python3 build_app.py -p linux -a x64 -f deb zip
 ```
@@ -135,7 +135,7 @@ python3 scripts/verify_linux_portable.py \
 ## Android
 
 Install Flutter, rustup, Python, JDK 17 or newer, Android SDK command-line
-tools, SDK Platform 36, and NDK 27.0.12077973. The vendored OpenSSL build also
+tools, SDK Platform 36, and NDK 28.2.13676358. The vendored OpenSSL build also
 needs Bash and Perl; on Windows, Git for Windows supplies Bash and Strawberry
 Perl supplies Perl/NASM.
 
@@ -219,6 +219,15 @@ same `.mdsscope` structure in the application-support sandbox. Open/Save dialogs
 use `configurations/` as their desktop default. Existing settings from earlier
 builds are migrated once; the unrelated `~/.config/mdsscope/` tree is never
 used as a migration source or an import location, even when selected manually.
+
+Passwords and session tokens are stored only in the operating system's secure
+credential vault: Apple Keychain, Android Keystore-backed encrypted storage,
+Windows protected credential storage, or Linux Secret Service. Plaintext
+values left by an earlier build are migrated once and erased. macOS
+security-scoped bookmarks that authorize an SSH private key are also kept in
+Keychain. If a Linux desktop has no usable Secret Service provider, credentials
+are kept only for the current process and must be entered again; they are never
+written to a plaintext fallback.
 
 ## Verification
 

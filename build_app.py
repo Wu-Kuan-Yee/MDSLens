@@ -30,7 +30,7 @@ APP = "mdsscope"
 FLUTTER_BASELINE = "3.44.7"
 RUST_BASELINE = "1.92.0"
 ANDROID_API = "36"
-ANDROID_NDK = "27.0.12077973"
+ANDROID_NDK = "28.2.13676358"
 
 PLATFORM_FORMATS = {
     "windows": {"exe", "msi", "zip", "tar.gz", "tar.xz", "tar.bz2"},
@@ -337,7 +337,10 @@ def preflight(
             required_components = [
                 "Microsoft.VisualStudio.Component.VC.Tools.ARM64"
                 if arch == "arm64"
-                else "Microsoft.VisualStudio.Component.VC.Tools.x86.x64"
+                else "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+                "Microsoft.VisualStudio.Component.VC.ATL.ARM64"
+                if arch == "arm64"
+                else "Microsoft.VisualStudio.Component.VC.ATL",
             ]
             code, output = capture(
                 vswhere,
@@ -353,7 +356,7 @@ def preflight(
         add(
             "Visual Studio C++",
             visual_studio,
-            "Install Visual Studio 2022+ with the 'Desktop development with C++' workload.",
+            "Install Visual Studio 2022+ with Desktop development with C++ and ATL.",
         )
         add("PowerShell", shutil.which("pwsh") or shutil.which("powershell"), "Install Windows PowerShell.")
         add("Perl", tool("perl"), "Install Strawberry Perl or Git for Windows with Perl.")
@@ -376,6 +379,15 @@ def preflight(
             add(name, shutil.which(name), hint)
         gtk_ok = capture("pkg-config", "--exists", "gtk+-3.0")[0] == 0
         checks.append(("GTK 3 development files", gtk_ok, "Install libgtk-3-dev.", True))
+        secret_ok = capture("pkg-config", "--exists", "libsecret-1")[0] == 0
+        checks.append(
+            (
+                "Secret Service development files",
+                secret_ok,
+                "Install libsecret-1-dev (Debian/Ubuntu) or libsecret-devel.",
+                True,
+            )
+        )
     if build_required and "android" in platforms:
         java = shutil.which("java")
         java_ok = False
@@ -849,7 +861,7 @@ def package_linux(formats: set[str], no_build: bool, arch: str, version: str) ->
                     "\n".join([
                         "Package: mdsscope", f"Version: {version}", f"Architecture: {deb_arch}",
                         "Maintainer: MdsScope Contributors",
-                        "Depends: libc6, libgtk-3-0, libstdc++6",
+                        "Depends: libc6, libgtk-3-0, libsecret-1-0, libstdc++6",
                         "Section: science", "Priority: optional",
                         "Description: MDSplus signal waveform viewer", "",
                     ]),
@@ -864,7 +876,8 @@ def package_linux(formats: set[str], no_build: bool, arch: str, version: str) ->
                 installed_size = sum(path.stat().st_size for path in staging.rglob("*") if path.is_file())
                 package_info.write_text(
                     f"pkgname = mdsscope\npkgver = {version}-1\npkgdesc = MDSplus signal waveform viewer\n"
-                    f"arch = {rpm_arch}\nsize = {installed_size}\ndepend = gtk3\n",
+                    f"arch = {rpm_arch}\nsize = {installed_size}\n"
+                    "depend = gtk3\ndepend = libsecret\n",
                     encoding="utf-8",
                 )
                 run("tar", "-C", str(staging), compression, "-cf", str(DIST / f"{base}.{package_format}"), ".")

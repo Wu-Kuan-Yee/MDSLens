@@ -105,7 +105,7 @@ jobs:
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            build-essential ca-certificates clang cmake curl git libgtk-3-dev ninja-build \
+            build-essential ca-certificates clang cmake curl git libgtk-3-dev libsecret-1-dev ninja-build \
             nasm perl pkg-config python3 unzip xz-utils
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -185,7 +185,7 @@ jobs:
           channel: stable
           cache: true
       - uses: dtolnay/rust-toolchain@1.92.0
-      - run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.0.12077973"'
+      - run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;28.2.13676358"'
       - run: python3 build_app.py -p android -f apk
       - uses: actions/upload-artifact@v4
         with:

@@ -4,7 +4,7 @@ Release:        1%{?dist}
 Summary:        MDSplus signal waveform viewer
 License:        GPL-3.0-or-later
 BuildArch:      %{mdsscope_arch}
-Requires:       gtk3, glibc, libstdc++
+Requires:       gtk3, glibc, libsecret, libstdc++
 
 %description
 MdsScope loads, plots, and compares MDSplus experiment signal waveforms.

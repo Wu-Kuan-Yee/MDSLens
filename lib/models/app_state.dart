@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/credential_store.dart';
 import '../services/platform_file_dialog.dart';
 import '../services/network_permission_service.dart';
 import '../services/rust_bridge.dart';
@@ -56,6 +57,16 @@ const _filePreferenceKeys = <String>[
   'shotHistory',
   'sourceIndexMemory',
   'lastConfigJson',
+  'loggedIn',
+];
+
+const _loginPasswordCredential = 'mdsscope.login.password';
+const _authTokenCredential = 'mdsscope.login.token';
+const _sshPasswordCredential = 'mdsscope.ssh.password';
+const _plaintextCredentialKeys = <String>[
+  'loginPass',
+  'authToken',
+  'sshPass',
 ];
 
 int signalHideModeOf(Map<dynamic, dynamic> signal) {
@@ -111,10 +122,8 @@ typedef SshTestWorker = Future<String> Function(String settingsJson);
 /// out of it prevents an old installation from silently becoming a source of
 /// state for this application as well.
 bool isLegacyMdsScopeConfigurationPath(String path) {
-  final normalized = path
-      .replaceAll('\\', '/')
-      .replaceAll(RegExp(r'/+'), '/')
-      .toLowerCase();
+  final normalized =
+      path.replaceAll('\\', '/').replaceAll(RegExp(r'/+'), '/').toLowerCase();
   return normalized.endsWith('/.config/mdsscope') ||
       normalized.contains('/.config/mdsscope/');
 }
@@ -434,6 +443,7 @@ class AppState extends ChangeNotifier {
 
   late final Future<void> preferencesReady;
   final UserDataStore _userDataStore;
+  final CredentialStore _credentialStore;
 
   AppState({
     SignalFetchWorker? signalFetchWorker,
@@ -446,6 +456,7 @@ class AppState extends ChangeNotifier {
     ConfigEncoder? configEncoder,
     SshTestWorker? sshTestWorker,
     UserDataStore? userDataStore,
+    CredentialStore? credentialStore,
   })  : _signalFetchWorker = signalFetchWorker ?? _fetchSignalsInBackground,
         _shotInfoFetchWorker =
             shotInfoFetchWorker ?? _fetchShotInfoInBackground,
@@ -456,7 +467,8 @@ class AppState extends ChangeNotifier {
         _configParser = configParser ?? _parseConfiguration,
         _configEncoder = configEncoder ?? _encodeConfiguration,
         _sshTestWorker = sshTestWorker ?? _testSshInBackground,
-        _userDataStore = userDataStore ?? UserDataStore() {
+        _userDataStore = userDataStore ?? UserDataStore(),
+        _credentialStore = credentialStore ?? PlatformCredentialStore() {
     _shotCtrl.addListener(() {
       if (_shotCtrl.text != _shotText) {
         _invalidateFetchForSettingsChange();
@@ -1143,16 +1155,33 @@ class AppState extends ChangeNotifier {
       _loginApiUrl = setting('loginApiUrl')?.toString() ?? _loginApiUrl;
       _loginUser = setting('loginUser')?.toString() ?? _loginUser;
       if (_rememberLogin) {
-        _loginPass = prefs.getString('loginPass') ?? _loginPass;
-        _authToken = prefs.getString('authToken') ?? _authToken;
-        _loggedIn = prefs.getBool('loggedIn') ?? _loggedIn;
+        _loginPass = await _readCredentialWithPlaintextMigration(
+              prefs,
+              secureKey: _loginPasswordCredential,
+              plaintextKey: 'loginPass',
+            ) ??
+            _loginPass;
+        _authToken = await _readCredentialWithPlaintextMigration(
+              prefs,
+              secureKey: _authTokenCredential,
+              plaintextKey: 'authToken',
+            ) ??
+            _authToken;
       }
+      _loggedIn =
+          setting('loggedIn') is bool ? setting('loggedIn') as bool : _loggedIn;
+      if (_authToken.isEmpty) _loggedIn = false;
       _sshHost = setting('sshHost')?.toString() ?? _sshHost;
       _sshPort = setting('sshPort') is num
           ? (setting('sshPort') as num).toInt()
           : _sshPort;
       _sshUser = setting('sshUser')?.toString() ?? _sshUser;
-      _sshPass = prefs.getString('sshPass') ?? _sshPass;
+      _sshPass = await _readCredentialWithPlaintextMigration(
+            prefs,
+            secureKey: _sshPasswordCredential,
+            plaintextKey: 'sshPass',
+          ) ??
+          _sshPass;
       _sshIdentity = setting('sshIdentity')?.toString() ?? _sshIdentity;
       _sshMode = setting('sshMode') is num
           ? (setting('sshMode') as num).toInt()
@@ -1230,6 +1259,7 @@ class AppState extends ChangeNotifier {
       if (migrateLegacySettings && _filePreferenceKeys.any(prefs.containsKey)) {
         await savePreferences();
       }
+      await _removePlaintextCredentials(prefs);
     } catch (_) {}
   }
 
@@ -1237,15 +1267,17 @@ class AppState extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       if (_rememberLogin) {
-        await prefs.setString('loginPass', _loginPass);
-        await prefs.setString('authToken', _authToken);
-        await prefs.setBool('loggedIn', _loggedIn);
+        await _writeOrDeleteCredential(
+          _loginPasswordCredential,
+          _loginPass,
+        );
+        await _writeOrDeleteCredential(_authTokenCredential, _authToken);
       } else {
-        await prefs.remove('loginPass');
-        await prefs.remove('authToken');
-        await prefs.setBool('loggedIn', false);
+        await _writeOrDeleteCredential(_loginPasswordCredential, '');
+        await _writeOrDeleteCredential(_authTokenCredential, '');
       }
-      await prefs.setString('sshPass', _sshPass);
+      await _writeOrDeleteCredential(_sshPasswordCredential, _sshPass);
+      await _removePlaintextCredentials(prefs);
 
       final configJson = jsonEncode({
         'columns': _jsonSafeValue(_columns),
@@ -1254,6 +1286,7 @@ class AppState extends ChangeNotifier {
       final fileSettings = <String, dynamic>{
         'rememberLogin': _rememberLogin,
         'explicitlyLoggedOut': _explicitlyLoggedOut,
+        'loggedIn': _rememberLogin && _loggedIn,
         'loginApiUrl': _loginApiUrl,
         'loginUser': _loginUser,
         'sshHost': _sshHost,
@@ -1283,19 +1316,48 @@ class AppState extends ChangeNotifier {
         for (final key in _filePreferenceKeys) {
           await prefs.remove(key);
         }
-      } else {
-        for (final entry in fileSettings.entries) {
-          final value = entry.value;
-          if (value is bool) {
-            await prefs.setBool(entry.key, value);
-          } else if (value is int) {
-            await prefs.setInt(entry.key, value);
-          } else {
-            await prefs.setString(entry.key, value.toString());
-          }
-        }
       }
     } catch (_) {}
+  }
+
+  Future<String?> _readCredentialWithPlaintextMigration(
+    SharedPreferences prefs, {
+    required String secureKey,
+    required String plaintextKey,
+  }) async {
+    String? secureValue;
+    try {
+      secureValue = await _credentialStore.read(secureKey);
+    } catch (_) {}
+    final plaintextValue = prefs.getString(plaintextKey);
+    if (secureValue != null) return secureValue;
+    if (plaintextValue == null) return null;
+    try {
+      await _credentialStore.write(secureKey, plaintextValue);
+    } catch (_) {
+      // Keep the value only for this process. It must not remain persisted in
+      // an insecure store when the platform vault is unavailable.
+    }
+    return plaintextValue;
+  }
+
+  Future<void> _writeOrDeleteCredential(String key, String value) async {
+    try {
+      if (value.isEmpty) {
+        await _credentialStore.delete(key);
+      } else {
+        await _credentialStore.write(key, value);
+      }
+    } catch (_) {
+      // Platforms without an available secure vault deliberately do not fall
+      // back to plaintext persistence.
+    }
+  }
+
+  Future<void> _removePlaintextCredentials(SharedPreferences prefs) async {
+    for (final key in _plaintextCredentialKeys) {
+      await prefs.remove(key);
+    }
   }
 
   dynamic _jsonSafeValue(dynamic value) {

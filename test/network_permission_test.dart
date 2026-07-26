@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:mdsscope/models/app_state.dart';
 import 'package:mdsscope/services/network_permission_service.dart';
 import 'package:mdsscope/widgets/network_permission_gate.dart';
@@ -11,6 +12,7 @@ import 'package:mdsscope/services/user_data_store.dart';
 void main() {
   setUp(() {
     UserDataStore.disableFileStorageForTests = true;
+    FlutterSecureStorage.setMockInitialValues({});
     SharedPreferences.setMockInitialValues({});
   });
 

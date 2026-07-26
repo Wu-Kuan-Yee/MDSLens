@@ -1,6 +1,7 @@
 import Cocoa
 import FlutterMacOS
 import Darwin
+import Security
 
 @main
 class AppDelegate: FlutterAppDelegate {
@@ -217,11 +218,60 @@ class AppDelegate: FlutterAppDelegate {
 
   private var identityFileBookmarks: [String: Data] {
     get {
-      UserDefaults.standard.dictionary(forKey: "MdsScopeIdentityFileBookmarks")
-        as? [String: Data] ?? [:]
+      let query: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: "com.mdsscope.app.identity-bookmarks",
+        kSecAttrAccount as String: "bookmarks",
+        kSecReturnData as String: true,
+        kSecMatchLimit as String: kSecMatchLimitOne,
+      ]
+      var result: CFTypeRef?
+      if SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+         let data = result as? Data,
+         let propertyList = try? PropertyListSerialization.propertyList(
+           from: data,
+           options: [],
+           format: nil
+         ),
+         let decoded = propertyList as? [String: Data]
+      {
+        return decoded
+      }
+
+      // One-time migration from the former plaintext UserDefaults entry.
+      let legacy = UserDefaults.standard.dictionary(
+        forKey: "MdsScopeIdentityFileBookmarks"
+      ) as? [String: Data] ?? [:]
+      if !legacy.isEmpty {
+        identityFileBookmarks = legacy
+      }
+      UserDefaults.standard.removeObject(
+        forKey: "MdsScopeIdentityFileBookmarks"
+      )
+      return legacy
     }
     set {
-      UserDefaults.standard.set(newValue, forKey: "MdsScopeIdentityFileBookmarks")
+      guard let data = try? PropertyListSerialization.data(
+        fromPropertyList: newValue,
+        format: .binary,
+        options: 0
+      ) else {
+        return
+      }
+      let identity: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: "com.mdsscope.app.identity-bookmarks",
+        kSecAttrAccount as String: "bookmarks",
+      ]
+      SecItemDelete(identity as CFDictionary)
+      var item = identity
+      item[kSecValueData as String] = data
+      item[kSecAttrAccessible as String] =
+        kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+      SecItemAdd(item as CFDictionary, nil)
+      UserDefaults.standard.removeObject(
+        forKey: "MdsScopeIdentityFileBookmarks"
+      )
     }
   }
 

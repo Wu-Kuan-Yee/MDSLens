@@ -109,8 +109,10 @@ manually; copy a file elsewhere first if it must be inspected independently.
 When importing a configuration, its shot is ignored by default unless the user
 chooses to apply it. Imported values are initial state: later changes in the
 interface, a new shot, or a new Rate take precedence. Passwords and session
-tokens are not written to `settings.json`; they remain in platform-private
-application preferences.
+tokens are not written to `settings.json`; they use Apple Keychain, Android
+Keystore-backed encryption, Windows protected credential storage, or Linux
+Secret Service. No plaintext fallback is used when a secure vault is
+unavailable.
 
 ## Documentation
 
