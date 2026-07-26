@@ -66,8 +66,8 @@ pub extern "C" fn mds_encode_environment(config_json: *const c_char) -> *mut c_c
 #[no_mangle]
 pub extern "C" fn mds_request_login(api_url: *const c_char, user: *const c_char, pass: *const c_char) -> *mut c_char {
     match a::request_login(to_rust(api_url), to_rust(user), to_rust(pass)) {
-        Ok(token) => ffi_string!(format!("{{\"ok\":true,\"token\":\"{}\"}}", token)),
-        Err(e) => ffi_string!(format!("{{\"error\":\"{}\"}}", e)),
+        Ok(token) => ffi_string!(serde_json::json!({"ok": true, "token": token}).to_string()),
+        Err(e) => ffi_string!(serde_json::json!({"error": e}).to_string()),
     }
 }
 
@@ -75,7 +75,7 @@ pub extern "C" fn mds_request_login(api_url: *const c_char, user: *const c_char,
 pub extern "C" fn mds_fetch_shot(api_url: *const c_char, token: *const c_char) -> *mut c_char {
     match a::fetch_shot(to_rust(api_url), to_rust(token)) {
         Ok(info) => ffi_string!(serde_json::to_string(&info).unwrap_or_default()),
-        Err(e) => ffi_string!(format!("{{\"error\":\"{}\"}}", e)),
+        Err(e) => ffi_string!(serde_json::json!({"error": e}).to_string()),
     }
 }
 

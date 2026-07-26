@@ -261,22 +261,93 @@ Future<({String token, bool usedSsh})> _loginToApi(
   final base = prepared.url.replaceAll(RegExp(r'/$'), '');
   final client = HttpClient();
   try {
+    client.connectionTimeout = const Duration(seconds: 10);
     final request = await client.postUrl(Uri.parse('$base/login'));
-    request.headers.set('Content-Type', 'application/json');
-    request.write(jsonEncode({'userName': user, 'password': password}));
+    final payload = utf8.encode(
+      jsonEncode({'userName': user, 'password': password}),
+    );
+    request.headers
+      ..set('Content-Type', 'application/json; charset=utf-8')
+      ..set('User-Agent', 'MdsScope/7.0');
+    request.contentLength = payload.length;
+    request.add(payload);
     final response = await request.close();
     final body = await response.transform(utf8.decoder).join();
-    final decoded = jsonDecode(body);
-    if (decoded is! Map) throw 'Unexpected login response';
-    if (decoded['code'] != '20000' && decoded['code'] != 20000) {
-      throw decoded['msg']?.toString() ?? 'Login failed';
+    try {
+      final token = decodeLoginToken(body, httpStatus: response.statusCode);
+      return (token: token, usedSsh: prepared.usedSsh);
+    } on EmptyApiResponseException {
+      // The EAST nginx/API combination has occasionally closed a successful
+      // Dart HttpClient response without delivering its chunked body on
+      // desktop. Retry through the bundled native transport, which uses an
+      // explicit HTTP/1.1 connection and Content-Length.
+      final nativeBody = await Isolate.run(
+        () => RustBridge.instance.reqLogin(base, user, password),
+      );
+      final token = decodeLoginToken(nativeBody, nativeResponse: true);
+      return (token: token, usedSsh: prepared.usedSsh);
     }
-    final token = decoded['data']?['token']?.toString();
-    if (token == null || token.isEmpty) throw 'Login returned no token';
-    return (token: token, usedSsh: prepared.usedSsh);
   } finally {
     client.close();
   }
+}
+
+class EmptyApiResponseException implements Exception {
+  const EmptyApiResponseException(this.operation, this.httpStatus);
+
+  final String operation;
+  final int? httpStatus;
+
+  @override
+  String toString() {
+    final status = httpStatus == null ? '' : ' (HTTP $httpStatus)';
+    return '$operation returned an empty response$status.';
+  }
+}
+
+String decodeLoginToken(
+  String body, {
+  int? httpStatus,
+  bool nativeResponse = false,
+}) {
+  final trimmed = body.trim();
+  if (trimmed.isEmpty) {
+    throw EmptyApiResponseException('Login server', httpStatus);
+  }
+
+  dynamic decoded;
+  try {
+    decoded = jsonDecode(trimmed);
+  } on FormatException {
+    final preview =
+        trimmed.length > 160 ? '${trimmed.substring(0, 160)}...' : trimmed;
+    final status = httpStatus == null ? '' : ' (HTTP $httpStatus)';
+    throw 'Login server returned invalid JSON$status: $preview';
+  }
+  if (decoded is! Map) {
+    throw 'Login server returned an unexpected response.';
+  }
+
+  if (nativeResponse) {
+    final error = decoded['error']?.toString().trim() ?? '';
+    if (error.isNotEmpty) throw error;
+    final token = decoded['token']?.toString().trim() ?? '';
+    if (decoded['ok'] == true && token.isNotEmpty) return token;
+    throw 'Native login returned no token.';
+  }
+
+  if (httpStatus != null && (httpStatus < 200 || httpStatus >= 300)) {
+    throw 'Login request failed with HTTP $httpStatus.';
+  }
+  if (decoded['code'] != '20000' && decoded['code'] != 20000) {
+    throw decoded['msg']?.toString() ??
+        decoded['message']?.toString() ??
+        'Login failed.';
+  }
+  final data = decoded['data'];
+  final token = data is Map ? data['token']?.toString().trim() ?? '' : '';
+  if (token.isEmpty) throw 'Login returned no token.';
+  return token;
 }
 
 Future<dynamic> _fetchLatestShotFromApi(
@@ -288,21 +359,71 @@ Future<dynamic> _fetchLatestShotFromApi(
   final base = prepared.url.replaceAll(RegExp(r'/$'), '');
   final client = HttpClient();
   try {
+    client.connectionTimeout = const Duration(seconds: 10);
     final request = await client.postUrl(Uri.parse('$base/treeShot'));
-    request.headers.set('Content-Type', 'application/json');
-    request.headers.set('Authorization', 'Bearer $token');
-    request.write('{}');
+    final payload = utf8.encode('{}');
+    request.headers
+      ..set('Content-Type', 'application/json; charset=utf-8')
+      ..set('Authorization', 'Bearer $token')
+      ..set('User-Agent', 'MdsScope/7.0');
+    request.contentLength = payload.length;
+    request.add(payload);
     final response = await request.close();
     final body = await response.transform(utf8.decoder).join();
-    final decoded = jsonDecode(body);
-    if (decoded is! Map) throw 'Unexpected latest-shot response';
-    if (decoded['code'] != '20000' && decoded['code'] != 20000) {
-      throw decoded['msg']?.toString() ?? 'Latest-shot request failed';
+    try {
+      return decodeLatestShotResponse(body, httpStatus: response.statusCode);
+    } on EmptyApiResponseException {
+      final nativeBody = await Isolate.run(
+        () => RustBridge.instance.fetchS(base, token),
+      );
+      return decodeLatestShotResponse(nativeBody, nativeResponse: true);
     }
-    return decoded['data'];
   } finally {
     client.close();
   }
+}
+
+dynamic decodeLatestShotResponse(
+  String body, {
+  int? httpStatus,
+  bool nativeResponse = false,
+}) {
+  final trimmed = body.trim();
+  if (trimmed.isEmpty) {
+    throw EmptyApiResponseException('Latest-shot server', httpStatus);
+  }
+
+  dynamic decoded;
+  try {
+    decoded = jsonDecode(trimmed);
+  } on FormatException {
+    final preview =
+        trimmed.length > 160 ? '${trimmed.substring(0, 160)}...' : trimmed;
+    final status = httpStatus == null ? '' : ' (HTTP $httpStatus)';
+    throw 'Latest-shot server returned invalid JSON$status: $preview';
+  }
+  if (decoded is! Map) {
+    throw 'Latest-shot server returned an unexpected response.';
+  }
+
+  if (nativeResponse) {
+    final error = decoded['error']?.toString().trim() ?? '';
+    if (error.isNotEmpty) throw error;
+    if (decoded['shot'] == null) {
+      throw 'Native latest-shot response has no shot.';
+    }
+    return decoded;
+  }
+
+  if (httpStatus != null && (httpStatus < 200 || httpStatus >= 300)) {
+    throw 'Latest-shot request failed with HTTP $httpStatus.';
+  }
+  if (decoded['code'] != '20000' && decoded['code'] != 20000) {
+    throw decoded['msg']?.toString() ??
+        decoded['message']?.toString() ??
+        'Latest-shot request failed.';
+  }
+  return decoded['data'];
 }
 
 class AppState extends ChangeNotifier {
@@ -2357,10 +2478,17 @@ class AppState extends ChangeNotifier {
         setShotFromApi(shot.toString());
         if (data is Map) {
           _shotInfoIp = data['ip']?.toString() ?? '';
-          _shotInfoPulse =
-              data['pulseLength'] != null ? '${data['pulseLength']}s' : '';
-          _shotInfoIt = data['it'] != null ? '${data['it']}kA' : '';
-          _shotInfoTime = data['currentTime']?.toString() ?? '';
+          _shotInfoPulse = data['pulseLength'] != null
+              ? '${data['pulseLength']}s'
+              : data['pulse']?.toString() ?? '';
+          if (data['it'] != null) {
+            final it = data['it'].toString();
+            _shotInfoIt = RegExp(r'[A-Za-z]').hasMatch(it) ? it : '${it}kA';
+          } else {
+            _shotInfoIt = '';
+          }
+          _shotInfoTime =
+              data['currentTime']?.toString() ?? data['time']?.toString() ?? '';
         }
         _status = 'Shot $shot';
         notifyListeners();

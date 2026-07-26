@@ -71,6 +71,83 @@ void main() {
     );
   });
 
+  test(
+      'Login responses reject empty bodies without exposing JSON parser errors',
+      () {
+    expect(
+      () => decodeLoginToken('', httpStatus: 200),
+      throwsA(
+        isA<EmptyApiResponseException>().having(
+          (error) => error.toString(),
+          'message',
+          'Login server returned an empty response (HTTP 200).',
+        ),
+      ),
+    );
+    expect(
+      () => decodeLoginToken('<html>gateway error</html>', httpStatus: 502),
+      throwsA(
+        predicate(
+          (error) =>
+              error.toString().contains('invalid JSON') &&
+              !error.toString().contains('FormatException'),
+        ),
+      ),
+    );
+  });
+
+  test('Login responses support API and native transport formats', () {
+    expect(
+      decodeLoginToken(
+        '{"code":"20000","data":{"token":"api-token"}}',
+        httpStatus: 200,
+      ),
+      'api-token',
+    );
+    expect(
+      decodeLoginToken(
+        '{"ok":true,"token":"native-token"}',
+        nativeResponse: true,
+      ),
+      'native-token',
+    );
+    expect(
+      () => decodeLoginToken(
+        '{"code":"20003","message":"Invalid username or password"}',
+        httpStatus: 200,
+      ),
+      throwsA('Invalid username or password'),
+    );
+  });
+
+  test('Latest-shot responses support API and native fallback formats', () {
+    expect(
+      decodeLatestShotResponse(
+        '{"code":20000,"data":{"shot":170123,"ip":"502.1"}}',
+        httpStatus: 200,
+      ),
+      {'shot': 170123, 'ip': '502.1'},
+    );
+    expect(
+      decodeLatestShotResponse(
+        '{"shot":170124,"ip":"502.2","pulse":"5.6s",'
+        '"it":"10kA","time":"2026-07-26"}',
+        nativeResponse: true,
+      ),
+      {
+        'shot': 170124,
+        'ip': '502.2',
+        'pulse': '5.6s',
+        'it': '10kA',
+        'time': '2026-07-26',
+      },
+    );
+    expect(
+      () => decodeLatestShotResponse('', httpStatus: 200),
+      throwsA(isA<EmptyApiResponseException>()),
+    );
+  });
+
   test('Source index extracts MDS nodes from expressions and remembers them',
       () {
     expect(
