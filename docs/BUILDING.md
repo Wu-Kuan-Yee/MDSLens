@@ -30,11 +30,11 @@ tools needed only for particular package formats:
 
 | Target | Required build dependencies | Optional packaging/signing dependencies |
 |---|---|---|
-| Windows | Python, Flutter, rustup, Visual Studio C++/ATL and Windows SDK, Perl, NASM | Inno Setup 6 for installer EXE; WiX Toolset 3 for MSI; code-signing certificate for trusted publication |
-| macOS | Python, Flutter, rustup, Xcode and command-line tools | Developer ID Application/Installer identities and `notarytool` profile for public distribution |
-| Linux | Python, Flutter, rustup, compiler/build tools, GTK 3 and libsecret development files, `patchelf`, Perl, NASM | `dpkg-deb`, `rpmbuild`, `zstd`, `xz`, or `appimagetool` according to requested formats |
-| Android | Python, Flutter, rustup, JDK 17+, Android SDK Platform 36 and NDK 28.2.13676358, Bash, Perl | Android release keystore; Platform Tools/ADB for device installation |
-| iOS/iPadOS | Python, Flutter, rustup, Xcode and command-line tools | Apple Account/team, signing certificate and provisioning profile for device installation or IPA |
+| Windows | Python, Flutter, rustup, Visual Studio C++/ATL and Windows SDK, Perl, NASM | Inno Setup 6 for installer EXE; WiX Toolset 3 for MSI; MakeAppx for MSIX/MSIXBundle; 7-Zip |
+| macOS | Python, Flutter, rustup, Xcode and command-line tools | 7-Zip; users provide their own identity if they want to re-sign the unsigned output |
+| Linux | Python, Flutter, rustup, compiler/build tools, GTK 3 and libsecret development files, `patchelf`, Perl, NASM | `dpkg-deb`, `rpmbuild`, `zstd`, `xz`, `appimagetool`, Flatpak, `mksquashfs`, or 7-Zip according to requested formats |
+| Android | Python, Flutter, rustup, JDK 17+, Android SDK Platform 36 and NDK 28.2.13676358, Bash, Perl | Android release keystore; bundletool 1.18.3 for APKS; Platform Tools/ADB for device installation |
+| iOS/iPadOS | Python, Flutter, rustup, Xcode and command-line tools | 7-Zip; Apple Account/team, certificate and provisioning profile are needed by the user who re-signs for installation |
 
 Git and network access are normally needed for the first dependency download.
 They are not application runtime dependencies.
@@ -60,7 +60,8 @@ Install:
   Windows 10/11 SDK;
 - Strawberry Perl, which supplies Perl and NASM needed by the vendored OpenSSL
   build. A separate Perl and NASM installation is also valid;
-- optionally Inno Setup 6 for `exe`, and WiX Toolset 3 for `msi`.
+- optionally Inno Setup 6 for `exe`, WiX Toolset 3 for `msi`, the Windows SDK
+  MakeAppx tool for `msix`, and 7-Zip for `7z`.
 
 This form does not require activating the virtual environment or editing the
 permanent user `PATH` (replace the example locations with local SDK paths):
@@ -103,12 +104,21 @@ Flutter's Swift Package Manager integration and has no CocoaPods `Podfile`.
 
 ```sh
 python3 build_app.py --doctor -p macos
-python3 build_app.py -p macos -f app dmg pkg zip
+python3 build_app.py -p macos -a universal \
+  -f app dmg pkg xcarchive zip 7z tar.gz tar.xz tar.bz2
 ```
 
-The Rust bridge and Flutter application are built as x64 + arm64 Universal
-binaries. Public distribution requires Developer ID signing and notarization;
-creating an unsigned local `.app`, ZIP, DMG, or PKG does not provide that trust.
+The universal build is verified to contain x64 and arm64 slices in every
+Mach-O component. The packager then produces arm64-only, x64-only, and
+Universal variants. Release files use the `-unsigned` suffix. Each application
+has only an ad-hoc integrity signature, not a Developer ID identity or Apple
+notarization. Users may use **Open Anyway**, remove quarantine for that one
+trusted application, or re-sign it with their own identity as described in
+[INSTALLING.md](INSTALLING.md).
+
+`.app` and `.xcarchive` are directory bundles. Local builds retain those
+directories; the corresponding `.zip`/`.xcarchive.zip` files are what GitHub
+Releases can upload.
 
 ## Linux
 
@@ -140,8 +150,9 @@ when Open/Save/Export must work on the build or target machine; see
 [INSTALLING.md](INSTALLING.md#linux).
 
 Additional formats need their native tools: `rpm` needs `rpmbuild`,
-`pkg.tar.zst` needs `zstd`, `pkg.tar.xz` needs `xz`, and `AppImage` needs
-`appimagetool`. When `-f all` is used, unavailable optional formats are skipped;
+`pkg.tar.zst` needs `zstd`, `pkg.tar.xz` needs `xz`, AppImage needs
+`appimagetool`, Flatpak needs `flatpak` plus GNOME Platform/SDK 48, Snap needs
+`mksquashfs`, and `7z` needs 7-Zip. When `-f all` is used, unavailable optional formats are skipped;
 when a format is named explicitly, its missing tool is an error.
 
 Build Linux x64 and ARM64 on matching native hosts. Flutter desktop builds are
@@ -191,10 +202,14 @@ Point the script at an SDK and let it install the exact platform and NDK:
 ```sh
 python build_app.py -p android --android-sdk /path/to/Android/Sdk \
   --install-android-sdk-components --doctor
-python build_app.py -p android -f apk aab --android-sdk /path/to/Android/Sdk
+python build_app.py -p android -f apk aab apks --android-sdk /path/to/Android/Sdk
 ```
 
-The output includes armv7, arm64, x64, and universal APKs plus an AAB. Without
+Set `BUNDLETOOL_JAR` to the pinned `bundletool-all-1.18.3.jar` when requesting
+APKS. The output includes armv7, arm64, x64, and universal APKs, one
+multi-architecture AAB, and an APKS archive containing the device-specific
+split APK set. AAB is deliberately not duplicated under per-ABI filenames.
+Without
 release signing variables, local packaging uses the local Android debug
 keystore and is suitable for testing, not store publication.
 
@@ -205,7 +220,7 @@ export MDSSCOPE_ANDROID_KEYSTORE=/absolute/path/release.jks
 export MDSSCOPE_ANDROID_STORE_PASSWORD='...'
 export MDSSCOPE_ANDROID_KEY_ALIAS='...'
 export MDSSCOPE_ANDROID_KEY_PASSWORD='...'
-python build_app.py -p android -f apk aab
+python build_app.py -p android -f apk aab apks
 ```
 
 CI uses corresponding encrypted GitHub secrets; private keys are not stored in
@@ -213,25 +228,20 @@ the repository.
 
 ## iOS and iPadOS
 
-These targets require macOS and Xcode. An unsigned verification bundle can be
-built in one command without an Apple signing identity:
+These targets require macOS and Xcode. All repository release outputs are
+unsigned and can be built without an Apple signing identity:
 
 ```sh
-python3 build_app.py -p ios -p ipados -f unsigned-zip
-```
-
-The ZIP cannot be installed on a normal device or submitted to the App Store.
-For a signed IPA, select a Team and signing identity for the Runner target in
-Xcode, then run:
-
-```sh
-python3 build_app.py -p ios -p ipados -f ipa
+python3 build_app.py -p ios -p ipados \
+  -f unsigned-ipa unsigned-app xcarchive zip 7z tar.gz tar.xz tar.bz2
 ```
 
 One universal Apple mobile binary supports both iPhone and iPad device
-families. The script publishes iOS and iPadOS filename aliases. A normal Apple
-mobile device cannot bypass code signing; follow the Xcode self-signing or
-signed-IPA installation workflow in [INSTALLING.md](INSTALLING.md).
+families. The script publishes iOS and iPadOS filename aliases. The unsigned
+IPA has the standard `Payload/MdsScope.app` structure, but a normal Apple
+mobile device still requires the user to re-sign it with a certificate,
+provisioning profile, matching bundle identifier and entitlements. Follow the
+self-signing workflow in [INSTALLING.md](INSTALLING.md).
 
 ## Build-Script Behavior
 

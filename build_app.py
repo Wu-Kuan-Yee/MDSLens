@@ -306,7 +306,7 @@ def validate_platforms(platforms: list[str], arch: str) -> None:
         if target in {"windows", "macos", "linux"} and target != host:
             fail(f"{target} desktop packages must be built on a {target} host, not {host}.")
         if target in {"ios", "ipados"} and host != "macos":
-            fail("iOS/iPadOS packages require macOS, Xcode, and Apple signing tools.")
+            fail("iOS/iPadOS packages require macOS and Xcode command-line tools.")
         if target in {"windows", "linux"} and arch != host_arch():
             fail(
                 f"{target} {arch} must be built on a native {arch} host; "

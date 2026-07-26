@@ -54,26 +54,28 @@ dependency, signing requirement, and troubleshooting step.
 Platform and format can be specified:
 
 ```sh
-# macOS
-./build_app.py -p macos -f app dmg pkg zip tar.gz tar.xz tar.bz2
+# macOS arm64, x64, and Universal unsigned distributions
+./build_app.py -p macos -a universal \
+  -f app dmg pkg xcarchive zip 7z tar.gz tar.xz tar.bz2
 
 # Android
-./build_app.py -p android -f apk aab
+./build_app.py -p android -f apk aab apks
 
 # Windows (run on Windows)
-python build_app.py -p windows -a x64 -f exe msi zip
+python build_app.py -p windows -a x64 -f exe msi msix zip 7z
 
 # Linux (run on the matching architecture)
-./build_app.py -p linux -a x64 -f deb rpm pkg.tar.zst zip
+./build_app.py -p linux -a x64 \
+  -f deb rpm pkg.tar.zst AppImage flatpak snap zip 7z
 
-# iOS/iPadOS unsigned verification bundle
-./build_app.py -p ios -p ipados -f unsigned-zip
-
-# Signed IPA with Xcode signing configured
-./build_app.py -p ios -p ipados -f ipa
+# iOS/iPadOS unsigned packages for user re-signing
+./build_app.py -p ios -p ipados \
+  -f unsigned-ipa unsigned-app xcarchive zip 7z
 ```
 
 Output lands in `build/dist/` with filenames following `mdsscope-<platform>-<arch>.<format>`. Pushing a `v*` tag triggers GitHub Actions to build the release matrix on each native system in parallel.
+The complete output list and unsupported-target boundary are documented in
+[Release Artifact Matrix](docs/RELEASE_ARTIFACTS.md).
 
 On Windows, the portable distribution must be a complete ZIP/tar archive containing the EXE, Flutter DLLs, plugins, and data directory; copying `mdsscope.exe` alone is not sufficient. On macOS, `.app` is likewise a directory-based application bundle.
 

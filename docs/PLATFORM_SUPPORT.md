@@ -10,11 +10,11 @@ With Flutter 3.44 as the baseline, the upstream Flutter deployment targets used 
 
 | Platform | Architecture | Project Formats | Build Host |
 |---|---|---|---|
-| Windows | x64, arm64 | Installer EXE, MSI, ZIP, tar.gz/xz/bz2 | Same-arch Windows |
-| macOS | x64 + arm64 Universal | APP, DMG, PKG, ZIP, tar.gz/xz/bz2 | macOS |
-| Linux | x64, arm64 | One portable runtime per architecture (AppImage, ZIP, tar.gz/xz/bz2); optional native DEB/RPM/pkg.tar packages | Same-arch Linux |
-| Android | armv7, arm64, x64 | APK, AAB | Windows/macOS/Linux |
-| iOS / iPadOS | arm64 device | IPA | macOS |
+| Windows | x64, arm64 | Installer EXE, MSI, unsigned MSIX/MSIXBundle, ZIP/7z/tar.gz/xz/bz2 | Same-arch Windows |
+| macOS | arm64, x64, Universal | Unsigned-distribution APP, DMG, PKG, XCArchive, ZIP/7z/tar.gz/xz/bz2 | macOS |
+| Linux | x64, arm64 | DEB, RPM, pkg.tar, AppImage, Flatpak, Snap, ZIP/7z/tar.gz/xz/bz2 | Same-arch Linux |
+| Android | armv7, arm64, x64 | Per-ABI/universal APK, multi-architecture AAB, APKS | Windows/macOS/Linux |
+| iOS / iPadOS | arm64 device | Unsigned IPA, APP, XCArchive and compressed bundles | macOS |
 
 Sources: [Flutter supported platforms](https://docs.flutter.dev/reference/supported-platforms) and [multi-platform build host restrictions](https://docs.flutter.dev/platform-integration).
 
@@ -68,21 +68,25 @@ An Android APK cannot be renamed and used as a HarmonyOS NEXT package either. Su
 
 ## Package Format Trade-offs
 
-More compression extensions do not equal better platform support. The release matrix retains the install formats actually used by each ecosystem plus three common portable compression formats. Snap, Flatpak, Homebrew, Winget, Microsoft Store, Mac App Store, Google Play, and App Store are all independent distribution channels that require accounts, signing, manifests, and review and cannot be "perfectly automated" by a single credential-less script.
+More compression extensions do not equal better platform support. The release
+matrix produces the formats listed above, but store publication remains a
+separate operation. Microsoft Store, Flathub, Snap Store, Google Play and
+Apple stores require their own accounts, signing identities, listing metadata
+and review. Locally generated `.flatpak`, `.snap`, `.msix` and `.apks` files
+are useful for testing or sideloading but do not constitute a completed store
+submission.
 
 ## Apple distribution signing
 
-Local macOS packages always receive a consistent ad-hoc signature. Official
-Developer ID distribution is enabled through environment variables:
+The project deliberately publishes unsigned Apple distributions:
 
-- `MDSSCOPE_MACOS_SIGN_IDENTITY`: Developer ID Application identity.
-- `MDSSCOPE_MACOS_INSTALLER_IDENTITY`: Developer ID Installer identity.
-- `MDSSCOPE_NOTARY_PROFILE`: `notarytool` keychain profile.
+- macOS applications receive only the ad-hoc integrity signature required to
+  keep arm64 bundles internally consistent; they have no Developer ID trust or
+  notarization ticket;
+- iOS/iPadOS application binaries have existing signatures and embedded
+  profiles removed before being placed in a standard unsigned IPA;
+- users choose whether to bypass Gatekeeper for one trusted macOS application
+  or re-sign it, while iOS/iPadOS users must re-sign before installation.
 
-When configured, `build_app.py` enables the hardened runtime, submits the
-application and disk/package artifacts to Apple, waits for the notarization
-result, and staples the tickets. iOS/iPadOS IPA signing uses the provisioning
-team configured in Xcode because Apple requires account-specific profiles.
-Unsigned iOS/iPadOS verification bundles cannot be installed on normal devices;
-the supported installation routes and Personal Team limits are documented in
+The supported local installation and self-signing routes are documented in
 [INSTALLING.md](INSTALLING.md).

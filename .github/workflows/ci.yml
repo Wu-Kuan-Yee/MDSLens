@@ -47,11 +47,11 @@ jobs:
         include:
           - os: macos-15
             target: macos
-            arch: auto
+            arch: universal
             python: python3
             channel: stable
             artifact: macos-universal
-            bundle: build/dist/mdsscope-macos-universal.zip
+            bundle: build/dist/mdsscope-macos-universal-unsigned.zip
           - os: windows-2025
             target: windows
             arch: x64

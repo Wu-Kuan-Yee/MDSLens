@@ -12,11 +12,11 @@ operating system's security protections globally just to run MdsScope.
 
 | Platform | Recommended artifact | Notes |
 |---|---|---|
-| Windows | Installer EXE/MSI or ZIP | Match x64 or ARM64 to Windows |
-| macOS | DMG or ZIP containing the Universal APP | The same bundle supports Intel and Apple silicon |
-| Linux | ZIP/AppImage for the CPU architecture | Requires a normal GTK 3 desktop runtime |
+| Windows | Installer EXE/MSI, unsigned MSIX, or ZIP | Match x64 or ARM64 to Windows |
+| macOS | Unsigned DMG/ZIP for arm64, x64, or Universal | Universal supports both Intel and Apple silicon |
+| Linux | Native package, AppImage, Flatpak, Snap, or ZIP | Match x64 or ARM64 |
 | Android | Universal APK, or a matching armv7/arm64/x64 APK | AAB files are for stores and cannot be installed directly |
-| iOS/iPadOS | IPA signed for the device, or source installed by Xcode | An unsigned ZIP is verification-only |
+| iOS/iPadOS | Download the unsigned IPA and re-sign it, or install from source with Xcode | Unsigned IPA cannot be installed directly |
 
 ## Runtime Dependency Summary
 
@@ -30,7 +30,7 @@ The remaining system or optional installation dependencies are:
 | Platform | Normally required | May need to be installed manually |
 |---|---|---|
 | Windows | Supported Windows 10/11 system libraries and graphics driver | Microsoft Visual C++ v14 Redistributable if `VCRUNTIME`/`MSVCP` DLLs are reported missing |
-| macOS | A supported macOS release and Apple system frameworks | Nothing for a signed/notarized package; Xcode command-line tools only for local re-signing or source installation |
+| macOS | A supported macOS release and Apple system frameworks | No runtime package; unsigned releases require a per-app Gatekeeper override or user re-signing |
 | Linux | glibc, GTK 3, GLib/GIO, libsecret, C++ runtime, X11/Wayland and EGL/OpenGL/Mesa stack | One of `zenity`, `kdialog`, or `qarma` for Open/Save/Export dialogs; a Secret Service provider for persistent credentials |
 | Android | A supported Android system | Nothing for direct APK installation; Android SDK Platform Tools only for `adb` installation |
 | iOS/iPadOS | A supported iOS/iPadOS system and valid application signature | Xcode for self-signing; Apple Configurator is optional for installing an already signed IPA |
@@ -45,8 +45,8 @@ additional toolchains listed in [BUILDING.md](BUILDING.md).
 1. Open the DMG and drag `MdsScope.app` to `/Applications`. For a ZIP, extract
    the complete app bundle first and then move it to `/Applications`.
 2. Open MdsScope from Applications.
-3. A Developer ID-signed and Apple-notarized release should open after the
-   normal downloaded-application confirmation.
+3. Repository releases are not Developer ID signed or notarized, so continue
+   with the per-application Gatekeeper procedure below.
 
 An `.app` is a directory bundle. Do not copy only the executable inside
 `MdsScope.app/Contents/MacOS/`.
@@ -100,9 +100,11 @@ artifact.
 ### Important signing boundary
 
 A normal, non-jailbroken iPhone or iPad does not run an unsigned application.
-There is no supported "bypass signing" switch. The repository's
-`mdsscope-ios-arm64-unsigned.zip` and `mdsscope-ipados-arm64-unsigned.zip` are
-build-verification artifacts; they cannot be installed on a normal device.
+There is no supported "bypass signing" switch. The repository publishes
+standard `mdsscope-ios-arm64-unsigned.ipa` and
+`mdsscope-ipados-arm64-unsigned.ipa` archives with
+`Payload/MdsScope.app`; they are intended for user re-signing but cannot be
+installed before that step.
 
 Use one of these supported routes:
 
@@ -113,6 +115,51 @@ Use one of these supported routes:
 
 No Flutter, Rust, OpenSSL, MDSplus, or other third-party runtime needs to be
 installed on the iPhone or iPad.
+
+### Re-sign a downloaded unsigned IPA
+
+The simplest supported route remains the Xcode source workflow below because
+Xcode creates a matching certificate, App ID, provisioning profile and
+entitlements together. Users who already have those four items can instead
+re-sign the downloaded IPA on macOS:
+
+1. Extract the IPA and confirm that it contains `Payload/MdsScope.app`.
+2. Change `CFBundleIdentifier` in the application `Info.plist` if the
+   provisioning profile uses a different App ID.
+3. Copy the profile to `Payload/MdsScope.app/embedded.mobileprovision`.
+4. Decode the profile's `Entitlements` dictionary.
+5. Sign every nested framework/dylib first, then sign `MdsScope.app` with the
+   decoded entitlements.
+6. Recreate the IPA with `Payload` as its top-level directory.
+
+For example, after replacing the profile path and identity with values
+belonging to the same Apple team:
+
+```sh
+work=$(mktemp -d)
+ditto -x -k mdsscope-ios-arm64-unsigned.ipa "$work"
+cp /absolute/path/profile.mobileprovision \
+  "$work/Payload/MdsScope.app/embedded.mobileprovision"
+security cms -D -i /absolute/path/profile.mobileprovision > "$work/profile.plist"
+/usr/libexec/PlistBuddy -x -c 'Print :Entitlements' \
+  "$work/profile.plist" > "$work/entitlements.plist"
+
+find "$work/Payload/MdsScope.app/Frameworks" \
+  \( -name '*.framework' -o -name '*.dylib' \) -print0 |
+  while IFS= read -r -d '' item; do
+    codesign --force --sign 'Apple Development: Your Name (TEAMID)' "$item"
+  done
+
+codesign --force --sign 'Apple Development: Your Name (TEAMID)' \
+  --entitlements "$work/entitlements.plist" "$work/Payload/MdsScope.app"
+ditto -c -k --keepParent "$work/Payload" mdsscope-ios-arm64-resigned.ipa
+```
+
+The profile's App ID, certificate/team, device UDID and entitlements must
+match. Apple Configurator installs an already validly signed IPA; it does not
+repair or create the signature. Third-party sideloading utilities may automate
+re-signing, but they are independent tools and are not required or endorsed by
+this project.
 
 ### Self-sign and install from source with Xcode
 
@@ -205,6 +252,14 @@ adb devices
 adb install -r /absolute/path/mdsscope-android-universal.apk
 ```
 
+An APKS archive contains split APKs for all supported device configurations.
+Install it with the same pinned bundletool used to create it:
+
+```sh
+java -jar bundletool-all-1.18.3.jar install-apks \
+  --apks=/absolute/path/mdsscope-android.apks
+```
+
 When several devices are connected, add `-s <device-id>`. See the official
 [ADB installation documentation](https://developer.android.com/tools/adb).
 
@@ -217,6 +272,13 @@ application data.
 
 Use the installer EXE/MSI, or extract the complete portable ZIP before running
 `mdsscope.exe`. Do not copy the EXE away from its DLL and `data` directories.
+
+The release MSIX and MSIXBundle are unsigned store/sideloading source
+packages. Windows will not install them until they are signed with a
+certificate whose subject matches the manifest publisher (`CN=MdsScope`) and
+that certificate is trusted on the device. Organizations can sign with
+SignTool and deploy through their normal certificate/MDM policy. Ordinary
+users should prefer the installer EXE, MSI, or portable archive.
 
 Windows normally already provides the required operating-system components. If
 startup reports a missing `VCRUNTIME140*.dll` or `MSVCP140*.dll`, install the
@@ -318,6 +380,19 @@ For AppImage:
 chmod +x mdsscope-linux-x64.AppImage
 ./mdsscope-linux-x64.AppImage
 ```
+
+For Flatpak or Snap sideloading:
+
+```sh
+flatpak install --user ./mdsscope-linux-x64.flatpak
+flatpak run com.mdsscope.app
+
+sudo snap install ./mdsscope-linux-x64.snap --dangerous --classic
+mdsscope
+```
+
+`--dangerous` means the locally downloaded Snap has no Snap Store assertion;
+it does not disable the rest of the operating system's security policy.
 
 DEB, RPM, and Arch packages should be installed with the distribution's package
 manager so dependencies and desktop-menu integration are handled normally.

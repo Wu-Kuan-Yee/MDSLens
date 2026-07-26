@@ -69,7 +69,7 @@ jobs:
           if-no-files-found: error
 
   macos:
-    name: macOS universal
+    name: macOS arm64, x64, and universal
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -92,7 +92,7 @@ jobs:
           codesign --verify --deep --strict build/dist/mdsscope-macos-universal-unsigned.app
       - uses: actions/upload-artifact@v4
         with:
-          name: mdsscope-macos-universal
+          name: mdsscope-macos-all
           path: build/dist/*
           if-no-files-found: error
 
@@ -305,6 +305,9 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+      - name: Generate release checksums
+        working-directory: artifacts
+        run: find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' | sort | xargs sha256sum > SHA256SUMS
       - name: Upload packages to the tag release
         env:
           GH_TOKEN: ${{ github.token }}
