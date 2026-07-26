@@ -91,17 +91,35 @@ double? interpolateWaveformY(List<List<double>> points, double x) {
 
 Future<bool> showPanelSetupEditor(
   BuildContext context,
-  Map<String, dynamic> panel,
-) async {
+  Map<String, dynamic> panel, {
+  PanelSetupValues Function()? actualValues,
+  Listenable? actualChanges,
+}) async {
   var saved = false;
   await showDialog<void>(
     context: context,
     builder: (context) => _PanelSetupDialog(
       panel: panel,
+      actualValues: actualValues,
+      actualChanges: actualChanges,
       onSave: () => saved = true,
     ),
   );
   return saved;
+}
+
+class PanelSetupValues {
+  const PanelSetupValues({
+    required this.title,
+    required this.xLabel,
+    required this.yLabel,
+    required this.extractionPoints,
+  });
+
+  final String title;
+  final String xLabel;
+  final String yLabel;
+  final int extractionPoints;
 }
 
 Future<bool> showDataSourceSetupEditor(
@@ -1950,7 +1968,25 @@ class _PlotPanelState extends State<PlotPanel> {
 
   Future<void> _showPanelSetup(BuildContext ctx, AppState app) async {
     final panel = _findPanel(app);
-    final confirmed = await showPanelSetupEditor(ctx, panel);
+    final confirmed = await showPanelSetupEditor(
+      ctx,
+      panel,
+      actualChanges: app,
+      actualValues: () {
+        final plot = app.plots[widget.plotIdx];
+        final rawPoints = panel['extraction_points'];
+        final parsedPoints = rawPoints is num
+            ? rawPoints.toInt()
+            : int.tryParse(rawPoints?.toString() ?? '');
+        return PanelSetupValues(
+          title: plot.title,
+          xLabel: _effectiveXLabel(plot, panel),
+          yLabel: _effectiveYLabel(plot, panel),
+          extractionPoints:
+              parsedPoints != null && parsedPoints >= 2 ? parsedPoints : 2000,
+        );
+      },
+    );
     if (confirmed && mounted) _rebuildPlots(app);
   }
 
@@ -2036,22 +2072,30 @@ class _PlotPanelState extends State<PlotPanel> {
 
 class _PanelSetupDialog extends StatefulWidget {
   final Map<String, dynamic> panel;
+  final PanelSetupValues Function()? actualValues;
+  final Listenable? actualChanges;
   final VoidCallback onSave;
-  const _PanelSetupDialog({required this.panel, required this.onSave});
+  const _PanelSetupDialog({
+    required this.panel,
+    required this.onSave,
+    this.actualValues,
+    this.actualChanges,
+  });
 
   @override
   State<_PanelSetupDialog> createState() => _PanelSetupDialogState();
 }
 
 class _PanelSetupDialogState extends State<_PanelSetupDialog> {
-  late final _titleCtrl =
-      TextEditingController(text: widget.panel['title']?.toString() ?? '');
-  late final _xLabelCtrl =
-      TextEditingController(text: widget.panel['x_label']?.toString() ?? 's');
-  late final _yLabelCtrl = TextEditingController(
-      text: widget.panel['y_label']?.toString() ?? 'a.u.');
-  late final _pointsCtrl = TextEditingController(
-      text: (widget.panel['extraction_points'] ?? 2000).toString());
+  late final TextEditingController _titleCtrl;
+  late final TextEditingController _xLabelCtrl;
+  late final TextEditingController _yLabelCtrl;
+  late final TextEditingController _pointsCtrl;
+  bool _titleEdited = false;
+  bool _xLabelEdited = false;
+  bool _yLabelEdited = false;
+  bool _pointsEdited = false;
+  bool _syncingActualValues = false;
   late bool _grid = widget.panel['grid'] ?? true;
   late bool _customX = widget.panel['custom_x_range'] ?? false;
   late bool _customY = widget.panel['custom_y_range'] ?? false;
@@ -2065,7 +2109,62 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
       TextEditingController(text: (widget.panel['ymax'] ?? '').toString());
 
   @override
+  void initState() {
+    super.initState();
+    final actual = widget.actualValues?.call();
+    _titleCtrl = TextEditingController(
+      text: actual?.title ?? widget.panel['title']?.toString() ?? '',
+    );
+    _xLabelCtrl = TextEditingController(
+      text: actual?.xLabel ?? widget.panel['x_label']?.toString() ?? 's',
+    );
+    _yLabelCtrl = TextEditingController(
+      text: actual?.yLabel ?? widget.panel['y_label']?.toString() ?? 'a.u.',
+    );
+    _pointsCtrl = TextEditingController(
+      text: (actual?.extractionPoints ??
+              widget.panel['extraction_points'] ??
+              2000)
+          .toString(),
+    );
+    _titleCtrl.addListener(() {
+      if (!_syncingActualValues) _titleEdited = true;
+    });
+    _xLabelCtrl.addListener(() {
+      if (!_syncingActualValues) _xLabelEdited = true;
+    });
+    _yLabelCtrl.addListener(() {
+      if (!_syncingActualValues) _yLabelEdited = true;
+    });
+    _pointsCtrl.addListener(() {
+      if (!_syncingActualValues) _pointsEdited = true;
+    });
+    widget.actualChanges?.addListener(_synchronizeActualValues);
+  }
+
+  void _synchronizeActualValues() {
+    final actual = widget.actualValues?.call();
+    if (actual == null || !mounted) return;
+    _syncingActualValues = true;
+    if (!_titleEdited && _titleCtrl.text != actual.title) {
+      _titleCtrl.text = actual.title;
+    }
+    if (!_xLabelEdited && _xLabelCtrl.text != actual.xLabel) {
+      _xLabelCtrl.text = actual.xLabel;
+    }
+    if (!_yLabelEdited && _yLabelCtrl.text != actual.yLabel) {
+      _yLabelCtrl.text = actual.yLabel;
+    }
+    final extractionPoints = actual.extractionPoints.toString();
+    if (!_pointsEdited && _pointsCtrl.text != extractionPoints) {
+      _pointsCtrl.text = extractionPoints;
+    }
+    _syncingActualValues = false;
+  }
+
+  @override
   void dispose() {
+    widget.actualChanges?.removeListener(_synchronizeActualValues);
     _titleCtrl.dispose();
     _xLabelCtrl.dispose();
     _yLabelCtrl.dispose();
@@ -2084,21 +2183,25 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
       content: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(
+              key: const ValueKey('panel-setup-title'),
               controller: _titleCtrl,
               decoration:
                   const InputDecoration(labelText: 'Title', isDense: true)),
           const SizedBox(height: 8),
           TextField(
+              key: const ValueKey('panel-setup-x-label'),
               controller: _xLabelCtrl,
               decoration:
                   const InputDecoration(labelText: 'X Label', isDense: true)),
           const SizedBox(height: 8),
           TextField(
+              key: const ValueKey('panel-setup-y-label'),
               controller: _yLabelCtrl,
               decoration:
                   const InputDecoration(labelText: 'Y Label', isDense: true)),
           const SizedBox(height: 8),
           TextField(
+              key: const ValueKey('panel-setup-extraction-points'),
               controller: _pointsCtrl,
               decoration: const InputDecoration(
                   labelText: 'Extraction Points', isDense: true),
@@ -2171,14 +2274,22 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
   }
 
   void _save() {
-    widget.panel['title'] = _titleCtrl.text;
-    widget.panel['x_label'] = _xLabelCtrl.text;
-    widget.panel['y_label'] = _yLabelCtrl.text;
-    final extractionPoints = int.tryParse(_pointsCtrl.text);
-    widget.panel['extraction_points'] =
-        extractionPoints != null && extractionPoints >= 2
-            ? extractionPoints
-            : 2000;
+    if (_titleEdited || widget.actualValues == null) {
+      widget.panel['title'] = _titleCtrl.text;
+    }
+    if (_xLabelEdited || widget.actualValues == null) {
+      widget.panel['x_label'] = _xLabelCtrl.text;
+    }
+    if (_yLabelEdited || widget.actualValues == null) {
+      widget.panel['y_label'] = _yLabelCtrl.text;
+    }
+    if (_pointsEdited || widget.actualValues == null) {
+      final extractionPoints = int.tryParse(_pointsCtrl.text);
+      widget.panel['extraction_points'] =
+          extractionPoints != null && extractionPoints >= 2
+              ? extractionPoints
+              : 2000;
+    }
     widget.panel['grid'] = _grid;
     widget.panel['custom_x_range'] = _customX;
     widget.panel['custom_y_range'] = _customY;

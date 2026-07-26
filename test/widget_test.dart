@@ -4594,6 +4594,115 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+      'Panel Setup follows actual plot metadata until the user overrides it',
+      (tester) async {
+    final panel = <String, dynamic>{
+      'title': 'Configured title',
+      'x_label': 's',
+      'y_label': 'a.u.',
+      'extraction_points': 2000,
+      'grid': true,
+    };
+    final actual = ValueNotifier<PanelSetupValues>(
+      const PanelSetupValues(
+        title: 'Loaded title',
+        xLabel: 'ms',
+        yLabel: 'kA',
+        extractionPoints: 4096,
+      ),
+    );
+    addTearDown(actual.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showPanelSetupEditor(
+              context,
+              panel,
+              actualValues: () => actual.value,
+              actualChanges: actual,
+            ),
+            child: const Text('Edit'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Edit'));
+    await tester.pumpAndSettle();
+
+    TextField field(Key key) => tester.widget<TextField>(find.byKey(key));
+    expect(
+      field(const ValueKey('panel-setup-title')).controller!.text,
+      'Loaded title',
+    );
+    expect(
+      field(const ValueKey('panel-setup-x-label')).controller!.text,
+      'ms',
+    );
+    expect(
+      field(const ValueKey('panel-setup-y-label')).controller!.text,
+      'kA',
+    );
+    expect(
+      field(const ValueKey('panel-setup-extraction-points')).controller!.text,
+      '4096',
+    );
+
+    actual.value = const PanelSetupValues(
+      title: 'New loaded title',
+      xLabel: 'µs',
+      yLabel: 'V',
+      extractionPoints: 8192,
+    );
+    await tester.pump();
+    expect(
+      field(const ValueKey('panel-setup-title')).controller!.text,
+      'New loaded title',
+    );
+    expect(
+      field(const ValueKey('panel-setup-x-label')).controller!.text,
+      'µs',
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('panel-setup-title')),
+      'User title',
+    );
+    actual.value = const PanelSetupValues(
+      title: 'Later server title',
+      xLabel: 'ns',
+      yLabel: 'mV',
+      extractionPoints: 16384,
+    );
+    await tester.pump();
+    expect(
+      field(const ValueKey('panel-setup-title')).controller!.text,
+      'User title',
+    );
+    expect(
+      field(const ValueKey('panel-setup-x-label')).controller!.text,
+      'ns',
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('panel-setup-y-label')),
+      'tesla',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('panel-setup-extraction-points')),
+      '12000',
+    );
+    await tester.tap(find.widgetWithText(TextButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(panel['title'], 'User title');
+    expect(panel['x_label'], 's');
+    expect(panel['y_label'], 'tesla');
+    expect(panel['extraction_points'], 12000);
+  });
+
   testWidgets('About dialog reflows and opens links on a phone',
       (tester) async {
     addTearDown(tester.view.resetPhysicalSize);
