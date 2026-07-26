@@ -1970,6 +1970,8 @@ class _PlotPanelState extends State<PlotPanel> {
 
   Future<void> _showPanelSetup(BuildContext ctx, AppState app) async {
     final panel = _findPanel(app);
+    final previousExtractionPoints =
+        int.tryParse(panel['extraction_points']?.toString() ?? '') ?? 2000;
     final confirmed = await showPanelSetupEditor(
       ctx,
       panel,
@@ -1989,7 +1991,13 @@ class _PlotPanelState extends State<PlotPanel> {
         );
       },
     );
-    if (confirmed && mounted) _rebuildPlots(app);
+    if (!confirmed || !mounted) return;
+    _rebuildPlots(app);
+    final extractionPoints =
+        int.tryParse(panel['extraction_points']?.toString() ?? '') ?? 2000;
+    if (extractionPoints != previousExtractionPoints && app.hasActiveSession) {
+      await app.fetchSinglePanel(widget.plotIdx);
+    }
   }
 
   Future<void> _exportCsv(AppState app) async {
