@@ -33,14 +33,27 @@ String sourceIndexSignalKey(String expression) {
 }
 
 class SourceIndexMemory {
+  static const int maximumTrees = 256;
+  static const int maximumSignalsPerTree = 2048;
   final Map<String, Set<String>> _signalsByTree = {};
 
-  void remember(String tree, String expression) {
+  bool remember(String tree, String expression) {
     final normalizedTree = tree.trim().toLowerCase();
-    if (normalizedTree.isEmpty) return;
+    if (normalizedTree.isEmpty) return false;
     final nodes = sourceIndexSignalNames(expression);
-    if (nodes.isEmpty) return;
-    _signalsByTree.putIfAbsent(normalizedTree, () => <String>{}).addAll(nodes);
+    if (nodes.isEmpty) return false;
+    if (!_signalsByTree.containsKey(normalizedTree) &&
+        _signalsByTree.length >= maximumTrees) {
+      return false;
+    }
+    final signals =
+        _signalsByTree.putIfAbsent(normalizedTree, () => <String>{});
+    var changed = false;
+    for (final node in nodes) {
+      if (signals.length >= maximumSignalsPerTree) break;
+      changed = signals.add(node) || changed;
+    }
+    return changed;
   }
 
   List<String> signalsForTree(String tree) => List<String>.unmodifiable(
@@ -48,4 +61,28 @@ class SourceIndexMemory {
       );
 
   Set<String> get trees => Set<String>.unmodifiable(_signalsByTree.keys);
+
+  Map<String, List<String>> toJson() {
+    final result = <String, List<String>>{};
+    final treeNames = _signalsByTree.keys.toList()..sort();
+    for (final tree in treeNames) {
+      final signals = _signalsByTree[tree]!.toList()
+        ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      result[tree] = signals;
+    }
+    return result;
+  }
+
+  void restore(Object? encoded) {
+    if (encoded is! Map) return;
+    _signalsByTree.clear();
+    for (final entry in encoded.entries) {
+      if (_signalsByTree.length >= maximumTrees) break;
+      final tree = entry.key.toString().trim().toLowerCase();
+      if (tree.isEmpty || entry.value is! List) continue;
+      for (final signal in entry.value as List) {
+        remember(tree, signal.toString());
+      }
+    }
+  }
 }

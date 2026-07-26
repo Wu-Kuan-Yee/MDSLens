@@ -81,6 +81,28 @@ void main() {
       memory.signalsForTree('TEST_TREE_FOR_SOURCE_INDEX'),
       contains(r'\NEW_SIGNAL'),
     );
+    final restored = SourceIndexMemory()
+      ..restore(jsonDecode(jsonEncode(memory.toJson())));
+    expect(
+      restored.signalsForTree('TEST_TREE_FOR_SOURCE_INDEX'),
+      contains(r'\NEW_SIGNAL'),
+    );
+  });
+
+  test('Learned source index survives application restart', () async {
+    SharedPreferences.setMockInitialValues({
+      'sourceIndexMemory': jsonEncode({
+        'diagnostic_tree': [r'\LEARNED_SIGNAL'],
+      }),
+    });
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+
+    expect(
+      app.sourceIndexMemory.signalsForTree('DIAGNOSTIC_TREE'),
+      contains(r'\LEARNED_SIGNAL'),
+    );
   });
 
   test('Waveform render geometry is reused until series data changes', () {

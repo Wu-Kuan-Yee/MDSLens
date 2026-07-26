@@ -1131,6 +1131,11 @@ class AppState extends ChangeNotifier {
         }
       }
 
+      final sourceIndexJson = prefs.getString('sourceIndexMemory');
+      if (sourceIndexJson != null && sourceIndexJson.isNotEmpty) {
+        sourceIndexMemory.restore(jsonDecode(sourceIndexJson));
+      }
+
       final lastConfig = prefs.getString('lastConfigJson');
       if (lastConfig != null && lastConfig.isNotEmpty) {
         _applyConfigJsonString(lastConfig);
@@ -1174,6 +1179,10 @@ class AppState extends ChangeNotifier {
       await prefs.setInt('shotHistoryLimit', _shotHistoryLimit);
       await prefs.setString('webBookmarks', jsonEncode(_webBookmarks));
       await prefs.setString('shotHistory', jsonEncode(_shotHistory));
+      await prefs.setString(
+        'sourceIndexMemory',
+        jsonEncode(sourceIndexMemory.toJson()),
+      );
 
       final configJson = jsonEncode({
         'columns': _jsonSafeValue(_columns),
@@ -2116,10 +2125,11 @@ class AppState extends ChangeNotifier {
       return;
     }
     final configured = configuredSignals[signal] as Map;
-    sourceIndexMemory.remember(
+    final changed = sourceIndexMemory.remember(
       configured['experiment']?.toString() ?? '',
       configured['y_expr']?.toString() ?? '',
     );
+    if (changed) unawaited(savePreferences());
   }
 
   Future<void> _fetchTopInfo(String shot, int generation) async {
