@@ -37,20 +37,20 @@ PLATFORM_FORMATS = {
     "windows": {"exe", "msi", "msix", "zip", "7z", "tar.gz", "tar.xz", "tar.bz2"},
     "macos": {
         "app", "dmg", "pkg", "xcarchive",
-        "zip", "tar.gz", "tar.xz", "tar.bz2",
+        "zip", "7z", "tar.gz", "tar.xz", "tar.bz2",
     },
     "linux": {
         "deb", "rpm", "pkg.tar.zst", "pkg.tar.xz", "AppImage",
-        "zip", "tar.gz", "tar.xz", "tar.bz2",
+        "flatpak", "snap", "zip", "7z", "tar.gz", "tar.xz", "tar.bz2",
     },
     "android": {"apk", "aab"},
     "ios": {
         "unsigned-ipa", "unsigned-app", "xcarchive",
-        "zip", "tar.gz", "tar.xz", "tar.bz2",
+        "zip", "7z", "tar.gz", "tar.xz", "tar.bz2",
     },
     "ipados": {
         "unsigned-ipa", "unsigned-app", "xcarchive",
-        "zip", "tar.gz", "tar.xz", "tar.bz2",
+        "zip", "7z", "tar.gz", "tar.xz", "tar.bz2",
     },
 }
 
@@ -173,6 +173,16 @@ def format_tool(name: str, formats: set[str], package_format: str) -> str | None
         log(f"Skipping {package_format}: optional tool '{name}' is not installed")
         return None
     fail(f"'{name}' is required for {package_format}")
+
+
+def seven_zip_tool(formats: set[str]) -> str | None:
+    found = tool("7z") or tool("7zz") or tool("7za")
+    if found is not None:
+        return found
+    if "all" in formats:
+        log("Skipping 7z: optional tool '7z/7zz/7za' is not installed")
+        return None
+    fail("'7z', '7zz', or '7za' is required for 7z")
 
 
 def host_platform() -> str:
@@ -446,8 +456,6 @@ def preflight(
                 "Install the Windows 10/11 SDK.",
                 explicitly_required,
             )
-        if selected(formats, "7z"):
-            add("7-Zip", tool("7z"), "Install 7-Zip.", explicitly_required)
     if "linux" in platforms:
         optional_tools = {
             "deb": "dpkg-deb",
@@ -455,10 +463,19 @@ def preflight(
             "pkg.tar.zst": "zstd",
             "pkg.tar.xz": "xz",
             "AppImage": "appimagetool",
+            "flatpak": "flatpak",
+            "snap": "mksquashfs",
         }
         for package_format, name in optional_tools.items():
             if selected(formats, package_format):
                 add(name, shutil.which(name), f"Install {name}.", explicitly_required)
+    if selected(formats, "7z"):
+        add(
+            "7-Zip",
+            tool("7z") or tool("7zz") or tool("7za"),
+            "Install 7-Zip.",
+            explicitly_required,
+        )
 
     failures = 0
     log(f"Preflight for {', '.join(platforms)} on {host}/{host_arch()}")
@@ -533,7 +550,7 @@ def make_zip(source: Path, output: Path, arcname: str) -> None:
 
 
 def make_7z(source: Path, output: Path, arcname: str, formats: set[str]) -> None:
-    seven_zip = format_tool("7z", formats, "7z")
+    seven_zip = seven_zip_tool(formats)
     if seven_zip is None:
         return
     staged_source = source
@@ -649,6 +666,8 @@ def package_macos(formats: set[str], no_build: bool, requested_arch: str) -> Non
                 log(f"Created {base}.app")
             if selected(formats, "zip"):
                 make_zip(app, DIST / f"{base}.zip", app.name)
+            if selected(formats, "7z"):
+                make_7z(app, DIST / f"{base}.7z", app.name, formats)
             if selected(formats, "tar.gz"):
                 make_tar(app, DIST / f"{base}.tar.gz", app.name, "w:gz")
             if selected(formats, "tar.xz"):
@@ -985,6 +1004,99 @@ def stage_linux_root(bundle: Path, root: Path) -> None:
     )
 
 
+def package_linux_flatpak(
+    portable: Path, output: Path, arch: str, formats: set[str]
+) -> None:
+    flatpak = format_tool("flatpak", formats, "flatpak")
+    if flatpak is None:
+        return
+    flatpak_arch = {"x64": "x86_64", "arm64": "aarch64"}[arch]
+    with tempfile.TemporaryDirectory(prefix="mdsscope-flatpak-") as temporary:
+        root = Path(temporary)
+        build_dir = root / "build"
+        repo = root / "repo"
+        run(
+            flatpak, "build-init", f"--arch={flatpak_arch}", str(build_dir),
+            "com.mdsscope.app", "org.gnome.Sdk", "org.gnome.Platform", "48",
+        )
+        app_dir = build_dir / "files/lib/mdsscope"
+        replace_tree(portable, app_dir)
+        bin_dir = build_dir / "files/bin"
+        bin_dir.mkdir(parents=True)
+        os.symlink("../lib/mdsscope/mdsscope", bin_dir / "mdsscope")
+        applications = build_dir / "files/share/applications"
+        applications.mkdir(parents=True)
+        shutil.copy2(
+            ROOT / "packaging/linux/com.mdsscope.app.desktop", applications
+        )
+        icons = build_dir / "files/share/icons/hicolor/scalable/apps"
+        icons.mkdir(parents=True)
+        shutil.copy2(ROOT / "assets/app_icon.svg", icons / "com.mdsscope.app.svg")
+        run(
+            flatpak, "build-finish",
+            "--command=mdsscope",
+            "--share=network",
+            "--share=ipc",
+            "--socket=x11",
+            "--socket=wayland",
+            "--device=dri",
+            "--filesystem=home",
+            "--talk-name=org.freedesktop.secrets",
+            str(build_dir),
+        )
+        run(flatpak, "build-export", str(repo), str(build_dir), "stable")
+        run(
+            flatpak, "build-bundle", f"--arch={flatpak_arch}",
+            str(repo), str(output), "com.mdsscope.app", "stable",
+        )
+    log(f"Created {output.name}")
+
+
+def package_linux_snap(
+    portable: Path, output: Path, arch: str, version: str, formats: set[str]
+) -> None:
+    mksquashfs = format_tool("mksquashfs", formats, "snap")
+    if mksquashfs is None:
+        return
+    snap_arch = {"x64": "amd64", "arm64": "arm64"}[arch]
+    with tempfile.TemporaryDirectory(prefix="mdsscope-snap-") as temporary:
+        root = Path(temporary)
+        app_dir = root / "lib/mdsscope"
+        replace_tree(portable, app_dir)
+        meta = root / "meta"
+        (meta / "gui").mkdir(parents=True)
+        shutil.copy2(
+            ROOT / "packaging/linux/com.mdsscope.app.desktop",
+            meta / "gui/com.mdsscope.app.desktop",
+        )
+        shutil.copy2(ROOT / "assets/app_icon.png", meta / "gui/icon.png")
+        (meta / "snap.yaml").write_text(
+            textwrap.dedent(
+                f"""\
+                name: mdsscope
+                version: '{version}'
+                summary: MDSplus signal waveform viewer
+                description: View and compare signal waveforms from MDSplus experiments.
+                architectures:
+                  - build-on: [{snap_arch}]
+                    run-on: [{snap_arch}]
+                grade: stable
+                confinement: classic
+                apps:
+                  mdsscope:
+                    command: lib/mdsscope/mdsscope
+                    desktop: meta/gui/com.mdsscope.app.desktop
+                """
+            ),
+            encoding="utf-8",
+        )
+        run(
+            mksquashfs, str(root), str(output),
+            "-noappend", "-comp", "xz", "-all-root",
+        )
+    log(f"Created {output.name}")
+
+
 def package_linux(formats: set[str], no_build: bool, arch: str, version: str) -> None:
     if host_platform() != "linux":
         fail("Linux packages can only be built on Linux")
@@ -1005,6 +1117,8 @@ def package_linux(formats: set[str], no_build: bool, arch: str, version: str) ->
         stage_linux_portable(bundle, portable)
         if selected(formats, "zip"):
             make_zip(portable, DIST / f"{base}.zip", base)
+        if selected(formats, "7z"):
+            make_7z(portable, DIST / f"{base}.7z", base, formats)
         if selected(formats, "tar.gz"):
             make_tar(portable, DIST / f"{base}.tar.gz", base, "w:gz")
         if selected(formats, "tar.xz"):
@@ -1079,6 +1193,14 @@ def package_linux(formats: set[str], no_build: bool, arch: str, version: str) ->
                 environment["ARCH"] = rpm_arch
                 log(f"Running: {appimagetool} {app_dir} {DIST / (base + '.AppImage')}")
                 subprocess.run([appimagetool, str(app_dir), str(DIST / f"{base}.AppImage")], check=True, env=environment)
+        if selected(formats, "flatpak"):
+            package_linux_flatpak(
+                portable, DIST / f"{base}.flatpak", arch, formats
+            )
+        if selected(formats, "snap"):
+            package_linux_snap(
+                portable, DIST / f"{base}.snap", arch, version, formats
+            )
 
 
 def package_android(formats: set[str], no_build: bool) -> None:
@@ -1164,6 +1286,8 @@ def package_ios(formats: set[str], no_build: bool) -> None:
                 log(f"Created {base}.ipa")
             if selected(formats, "zip"):
                 make_zip(app, DIST / f"{base}.zip", app.name)
+            if selected(formats, "7z"):
+                make_7z(app, DIST / f"{base}.7z", app.name, formats)
             if selected(formats, "tar.gz"):
                 make_tar(app, DIST / f"{base}.tar.gz", app.name, "w:gz")
             if selected(formats, "tar.xz"):

@@ -79,10 +79,12 @@ jobs:
           channel: stable
           cache: true
       - uses: dtolnay/rust-toolchain@1.92.0
+      - name: Install 7-Zip
+        run: brew install sevenzip
       - name: Build packages
         run: >-
           python3 build_app.py -p macos -a universal
-          -f app dmg pkg xcarchive zip tar.gz tar.xz tar.bz2
+          -f app dmg pkg xcarchive zip 7z tar.gz tar.xz tar.bz2
       - name: Verify the application bundle
         run: |
           codesign --verify --deep --strict build/dist/mdsscope-macos-arm64-unsigned.app
@@ -113,8 +115,25 @@ jobs:
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            build-essential ca-certificates clang cmake curl git jq libgtk-3-dev libsecret-1-dev ninja-build \
-            nasm patchelf perl pkg-config python3 rpm unzip xz-utils zstd
+            build-essential ca-certificates clang cmake curl flatpak git jq libgtk-3-dev \
+            libsecret-1-dev ninja-build nasm patchelf p7zip-full perl pkg-config python3 \
+            rpm squashfs-tools unzip xz-utils zstd
+      - name: Install Flatpak runtime and AppImage tooling
+        shell: bash
+        run: |
+          flatpak remote-add --system --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak install --system --noninteractive flathub org.gnome.Platform//48 org.gnome.Sdk//48
+          case "${{ matrix.arch }}" in
+            x64) appimage_arch=x86_64 ;;
+            arm64) appimage_arch=aarch64 ;;
+          esac
+          mkdir -p /opt/appimagetool
+          curl -fL "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-${appimage_arch}.AppImage" \
+            -o /opt/appimagetool.AppImage
+          chmod +x /opt/appimagetool.AppImage
+          cd /opt/appimagetool
+          /opt/appimagetool.AppImage --appimage-extract
+          ln -s /opt/appimagetool/squashfs-root/AppRun /usr/local/bin/appimagetool
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
@@ -127,7 +146,8 @@ jobs:
       - name: Build packages
         run: >-
           python3 build_app.py -p linux -a ${{ matrix.arch }}
-          -f deb rpm pkg.tar.zst pkg.tar.xz zip tar.gz tar.xz tar.bz2
+          -f deb rpm pkg.tar.zst pkg.tar.xz AppImage flatpak snap
+          zip 7z tar.gz tar.xz tar.bz2
       - uses: actions/upload-artifact@v4
         with:
           name: mdsscope-linux-${{ matrix.arch }}
@@ -258,10 +278,12 @@ jobs:
           channel: stable
           cache: true
       - uses: dtolnay/rust-toolchain@1.92.0
+      - name: Install 7-Zip
+        run: brew install sevenzip
       - name: Build unsigned Apple mobile packages
         run: >-
           python3 build_app.py -p ios -p ipados
-          -f unsigned-ipa unsigned-app xcarchive zip tar.gz tar.xz tar.bz2
+          -f unsigned-ipa unsigned-app xcarchive zip 7z tar.gz tar.xz tar.bz2
       - uses: actions/upload-artifact@v4
         with:
           name: mdsscope-apple-mobile
