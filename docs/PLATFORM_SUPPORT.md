@@ -8,7 +8,7 @@ With Flutter 3.44 as the baseline, the upstream Flutter deployment targets used 
 |---|---|---|---|
 | Windows | x64, arm64 | Installer EXE, MSI, ZIP, tar.gz/xz/bz2 | Same-arch Windows |
 | macOS | x64 + arm64 Universal | APP, DMG, PKG, ZIP, tar.gz/xz/bz2 | macOS |
-| Linux | x64, arm64 | DEB, RPM, pkg.tar.zst/xz, AppImage, ZIP, tar.gz/xz/bz2 | Same-arch Linux |
+| Linux | x64, arm64 | One portable runtime per architecture (AppImage, ZIP, tar.gz/xz/bz2); optional native DEB/RPM/pkg.tar packages | Same-arch Linux |
 | Android | armv7, arm64, x64 | APK, AAB | Windows/macOS/Linux |
 | iOS / iPadOS | arm64 device | IPA | macOS |
 
@@ -42,6 +42,14 @@ The entire Flutter application cannot become a single "fully static, zero-runtim
 - Android/iOS apps are inherently package formats containing multi-architecture native libraries and resources.
 
 This project statically links OpenSSL, libssh2, and zlib into the Rust bridge where practical; the macOS bridge has no external references beyond Apple system libraries. The desktop Flutter engine and operating system base libraries remain dynamically linked per platform conventions. Claiming they are "fully static" is both inaccurate and often breaks plugins, signing, or system compatibility.
+
+For Linux, the portable archives close the practical gap by bundling every
+linked user-space dependency except the glibc family/ELF loader and by isolating
+GTK/GIO lookup paths. They are built against glibc 2.31 and are intended to run
+unchanged on newer mainstream distributions of the same architecture. A package
+cannot promise literally every Linux system: older glibc, non-glibc systems
+(such as Alpine/musl), obsolete kernels and missing/incompatible graphics
+drivers require a different runtime baseline.
 
 ## HarmonyOS NEXT
 

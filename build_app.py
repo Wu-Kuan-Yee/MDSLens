@@ -667,6 +667,127 @@ def linux_bundle(arch: str) -> Path:
     return ROOT / f"build/linux/{arch}/release/bundle"
 
 
+def is_linux_system_runtime(name: str) -> bool:
+    """Return libraries that must come from the target Linux base system.
+
+    Bundling glibc or its loader makes a package less portable and can break
+    NSS, DNS and thread-local runtime behavior. Everything above this small
+    ABI floor is carried in the portable archives.
+    """
+    return bool(re.fullmatch(
+        r"(?:ld-linux[^/]*|libc|libdl|libm|libpthread|libresolv|librt|"
+        r"libutil|libanl|libnss_[^.]+)\.so(?:\..*)?",
+        name,
+    ))
+
+
+def parse_linux_ldd(output: str, binary: Path) -> list[Path]:
+    dependencies: list[Path] = []
+    for line in output.splitlines():
+        if "=> not found" in line:
+            fail(f"Unresolved Linux dependency for {binary}: {line.strip()}")
+        match = re.search(r"=>\s+(/[^\s]+)", line)
+        if match is None:
+            match = re.match(r"\s*(/[^\s]+)\s+\(", line)
+        if match is not None:
+            dependencies.append(Path(match.group(1)))
+    return dependencies
+
+
+def is_elf(path: Path) -> bool:
+    if not path.is_file() or path.is_symlink():
+        return False
+    try:
+        with path.open("rb") as stream:
+            return stream.read(4) == b"\x7fELF"
+    except OSError:
+        return False
+
+
+def linux_module_files(package: str, subdirectory: str) -> list[Path]:
+    code, libdir = capture("pkg-config", "--variable=libdir", package)
+    if code != 0 or not libdir:
+        return []
+    return sorted(Path(libdir).glob(f"{subdirectory}/*.so"))
+
+
+def copy_linux_portable_dependencies(portable: Path) -> None:
+    """Copy the non-glibc dependency closure and dynamically loaded GTK bits."""
+    library_dir = portable / "lib"
+    library_dir.mkdir(parents=True, exist_ok=True)
+    module_groups = {
+        "gdk-pixbuf-loaders": linux_module_files(
+            "gdk-pixbuf-2.0", "gdk-pixbuf-2.0/*/loaders"
+        ),
+        "gtk-immodules": linux_module_files(
+            "gtk+-3.0", "gtk-3.0/*/immodules"
+        ),
+        # Keep the directory present and isolated even when no optional GIO
+        # modules are required. The launcher forces the local VFS.
+        "gio-modules": [],
+    }
+    for group, modules in module_groups.items():
+        destination = library_dir / group
+        destination.mkdir(parents=True, exist_ok=True)
+        for module in modules:
+            shutil.copy2(module.resolve(), destination / module.name)
+
+    libexec = portable / "libexec"
+    libexec.mkdir(parents=True, exist_ok=True)
+    for executable in ("gdk-pixbuf-query-loaders", "gtk-query-immodules-3.0"):
+        path = shutil.which(executable)
+        if path is not None:
+            shutil.copy2(Path(path).resolve(), libexec / executable)
+
+    queue = [path for path in portable.rglob("*") if is_elf(path)]
+    known = {path.name: path for path in library_dir.iterdir() if is_elf(path)}
+    index = 0
+    environment = dict(os.environ)
+    environment["LD_LIBRARY_PATH"] = str(library_dir)
+    while index < len(queue):
+        binary = queue[index]
+        index += 1
+        result = subprocess.run(
+            ["ldd", str(binary)],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=environment,
+        )
+        if result.returncode != 0:
+            fail(f"Could not inspect Linux dependencies for {binary}:\n{result.stdout}")
+        for dependency in parse_linux_ldd(result.stdout, binary):
+            name = dependency.name
+            if is_linux_system_runtime(name) or name in known:
+                continue
+            destination = library_dir / name
+            shutil.copy2(dependency.resolve(), destination)
+            known[name] = destination
+            queue.append(destination)
+
+
+def stage_linux_portable(bundle: Path, portable: Path) -> None:
+    replace_tree(bundle, portable)
+    executable = portable / "mdsscope"
+    executable.rename(portable / "mdsscope.bin")
+    shutil.copy2(ROOT / "packaging/linux/mdsscope-portable", executable)
+    executable.chmod(0o755)
+    applications = portable / "share/applications"
+    applications.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(ROOT / "packaging/linux/com.mdsscope.app.desktop", applications)
+    icons = portable / "share/icons/hicolor/scalable/apps"
+    icons.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(ROOT / "assets/app_icon.svg", icons / "com.mdsscope.app.svg")
+    mime_packages = portable / "share/mime/packages"
+    mime_packages.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(
+        ROOT / "packaging/linux/com.mdsscope.configuration.xml",
+        mime_packages,
+    )
+    copy_linux_portable_dependencies(portable)
+
+
 def stage_linux_root(bundle: Path, root: Path) -> None:
     app_dir = root / "usr/lib/mdsscope"
     replace_tree(bundle, app_dir)
@@ -701,16 +822,19 @@ def package_linux(formats: set[str], no_build: bool, arch: str, version: str) ->
     if not (bundle / "mdsscope").is_file():
         fail(f"Linux application bundle not found: {bundle}")
     base = f"mdsscope-linux-{arch}"
-    if selected(formats, "zip"):
-        make_zip(bundle, DIST / f"{base}.zip", base)
-    if selected(formats, "tar.gz"):
-        make_tar(bundle, DIST / f"{base}.tar.gz", base, "w:gz")
-    if selected(formats, "tar.xz"):
-        make_tar(bundle, DIST / f"{base}.tar.xz", base, "w:xz")
-    if selected(formats, "tar.bz2"):
-        make_tar(bundle, DIST / f"{base}.tar.bz2", base, "w:bz2")
 
     with tempfile.TemporaryDirectory(prefix="mdsscope-linux-") as temporary:
+        portable = Path(temporary) / base
+        stage_linux_portable(bundle, portable)
+        if selected(formats, "zip"):
+            make_zip(portable, DIST / f"{base}.zip", base)
+        if selected(formats, "tar.gz"):
+            make_tar(portable, DIST / f"{base}.tar.gz", base, "w:gz")
+        if selected(formats, "tar.xz"):
+            make_tar(portable, DIST / f"{base}.tar.xz", base, "w:xz")
+        if selected(formats, "tar.bz2"):
+            make_tar(portable, DIST / f"{base}.tar.bz2", base, "w:bz2")
+
         staging = Path(temporary) / "root"
         stage_linux_root(bundle, staging)
         deb_arch = {"x64": "amd64", "arm64": "arm64"}[arch]
@@ -767,7 +891,8 @@ def package_linux(formats: set[str], no_build: bool, arch: str, version: str) ->
             appimagetool = format_tool("appimagetool", formats, "AppImage")
             if appimagetool is not None:
                 app_dir = Path(temporary) / "MdsScope.AppDir"
-                stage_linux_root(bundle, app_dir)
+                app_bundle = app_dir / "usr/lib/mdsscope"
+                replace_tree(portable, app_bundle)
                 os.symlink("usr/lib/mdsscope/mdsscope", app_dir / "AppRun")
                 shutil.copy2(ROOT / "packaging/linux/com.mdsscope.app.desktop", app_dir)
                 shutil.copy2(ROOT / "assets/app_icon.svg", app_dir / "com.mdsscope.app.svg")

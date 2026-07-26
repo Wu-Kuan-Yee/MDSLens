@@ -81,6 +81,41 @@ class BuildAppTests(unittest.TestCase):
             ],
         )
 
+    def test_linux_portable_keeps_glibc_on_target_system(self) -> None:
+        for name in (
+            "ld-linux-x86-64.so.2",
+            "libc.so.6",
+            "libm.so.6",
+            "libpthread.so.0",
+            "libnss_files.so.2",
+        ):
+            self.assertTrue(build_app.is_linux_system_runtime(name), name)
+        for name in ("libgtk-3.so.0", "libstdc++.so.6", "libX11.so.6"):
+            self.assertFalse(build_app.is_linux_system_runtime(name), name)
+
+    def test_linux_ldd_parser_finds_both_dependency_styles(self) -> None:
+        self.assertEqual(
+            build_app.parse_linux_ldd(
+                """
+                libgtk-3.so.0 => /usr/lib/libgtk-3.so.0 (0x1234)
+                /lib64/ld-linux-x86-64.so.2 (0x5678)
+                linux-vdso.so.1 (0x9999)
+                """,
+                Path("/tmp/mdsscope"),
+            ),
+            [
+                Path("/usr/lib/libgtk-3.so.0"),
+                Path("/lib64/ld-linux-x86-64.so.2"),
+            ],
+        )
+
+    def test_linux_ldd_parser_rejects_missing_dependencies(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "Unresolved Linux dependency"):
+            build_app.parse_linux_ldd(
+                "libmissing.so => not found",
+                Path("/tmp/mdsscope"),
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,39 @@
+#!/bin/sh
+
+# Keep the portable runtime isolated from incompatible GTK/GIO modules that
+# happen to be installed by the host distribution.
+app_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+export LD_LIBRARY_PATH="${app_dir}/lib"
+export XDG_DATA_DIRS="${app_dir}/share${XDG_DATA_DIRS:+:${XDG_DATA_DIRS}}"
+export GIO_MODULE_DIR="${app_dir}/lib/gio-modules"
+export GIO_USE_VFS=local
+unset GIO_EXTRA_MODULES
+
+cache_root="${XDG_CACHE_HOME:-${HOME}/.cache}/mdsscope/portable"
+mkdir -p "${cache_root}" 2>/dev/null || true
+
+pixbuf_modules="${app_dir}/lib/gdk-pixbuf-loaders"
+pixbuf_query="${app_dir}/libexec/gdk-pixbuf-query-loaders"
+if [ -x "${pixbuf_query}" ] && [ -d "${pixbuf_modules}" ]; then
+    pixbuf_cache="${cache_root}/gdk-pixbuf-loaders.cache"
+    if "${pixbuf_query}" "${pixbuf_modules}"/*.so >"${pixbuf_cache}.new" 2>/dev/null; then
+        mv -f "${pixbuf_cache}.new" "${pixbuf_cache}"
+        export GDK_PIXBUF_MODULE_FILE="${pixbuf_cache}"
+    else
+        rm -f "${pixbuf_cache}.new"
+    fi
+fi
+
+im_modules="${app_dir}/lib/gtk-immodules"
+im_query="${app_dir}/libexec/gtk-query-immodules-3.0"
+if [ -x "${im_query}" ] && [ -d "${im_modules}" ]; then
+    im_cache="${cache_root}/gtk-immodules.cache"
+    if "${im_query}" "${im_modules}"/*.so >"${im_cache}.new" 2>/dev/null; then
+        mv -f "${im_cache}.new" "${im_cache}"
+        export GTK_IM_MODULE_FILE="${im_cache}"
+    else
+        rm -f "${im_cache}.new"
+    fi
+fi
+
+exec "${app_dir}/mdsscope.bin" "$@"

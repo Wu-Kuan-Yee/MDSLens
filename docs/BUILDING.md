@@ -112,6 +112,20 @@ when a format is named explicitly, its missing tool is an error.
 Build Linux x64 and ARM64 on matching native hosts. Flutter desktop builds are
 not general cross-compilation targets.
 
+ZIP and TAR outputs are portable runtime bundles, not copies of the raw Flutter
+build directory. They recursively carry GTK, C++, X11/Wayland and other
+non-glibc libraries from the build baseline, carry GTK image/input modules, and
+start through an isolated launcher so incompatible host modules cannot leak
+into the process. Extract the archive and run `./mdsscope-linux-<arch>/mdsscope`.
+The AppImage is assembled from the same portable runtime.
+
+glibc, the ELF loader, the Linux kernel and graphics drivers deliberately remain
+provided by the target system. Release automation therefore builds the portable
+runtime on the oldest supported glibc baseline and tests that same archive on
+newer Debian/Ubuntu, Fedora and Enterprise Linux environments. This gives one
+portable package per CPU architecture; it does not make a Linux GUI executable
+independent of the kernel, CPU architecture, display server or GPU driver.
+
 ## Android
 
 Install Flutter, rustup, Python, JDK 17 or newer, Android SDK command-line
