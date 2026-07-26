@@ -113,6 +113,8 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: ${{ matrix.channel }}
           cache: true
+      - name: Trust the cached Flutter SDK checkout
+        run: git config --global --add safe.directory "$FLUTTER_ROOT"
       - uses: dtolnay/rust-toolchain@1.92.0
       - run: python3 build_app.py -p linux -a ${{ matrix.arch }} -f zip
       - run: >-
