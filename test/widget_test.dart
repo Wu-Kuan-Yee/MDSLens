@@ -17,6 +17,7 @@ import 'package:mdsscope/services/platform_file_dialog.dart';
 import 'package:mdsscope/services/runtime_build_info.dart';
 import 'package:mdsscope/services/source_index.dart';
 import 'package:mdsscope/services/update_service.dart';
+import 'package:mdsscope/services/user_data_store.dart';
 import 'package:mdsscope/theme/mdsscope_theme.dart';
 import 'package:mdsscope/widgets/dialogs/about.dart';
 import 'package:mdsscope/widgets/dialogs/login.dart';
@@ -29,7 +30,10 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(() {
+    UserDataStore.disableFileStorageForTests = true;
+    SharedPreferences.setMockInitialValues({});
+  });
 
   test('Point readout interpolates ascending and descending waveforms', () {
     expect(
@@ -377,12 +381,20 @@ void main() {
   });
 
   test('Manual application settings survive an application restart', () async {
+    final temporary = await Directory.systemTemp.createTemp(
+      'mdsscope-user-data-test-',
+    );
+    addTearDown(() => temporary.delete(recursive: true));
+    final store = UserDataStore(
+      rootOverride: Directory('${temporary.path}/.mdsscope'),
+    );
     SharedPreferences.setMockInitialValues({
       'shotHistory': '["163700","163699"]',
     });
 
-    final first = AppState();
+    final first = AppState(userDataStore: store);
     await first.preferencesReady;
+    addTearDown(first.dispose);
     first.dataMode = 2;
     first.interactionMode = 1;
     first.themeMode = 0;
@@ -397,8 +409,9 @@ void main() {
     first.rebuild();
     await first.savePreferences();
 
-    final second = AppState();
+    final second = AppState(userDataStore: store);
     await second.preferencesReady;
+    addTearDown(second.dispose);
 
     expect(second.dataMode, 2);
     expect(second.interactionMode, 1);
@@ -414,6 +427,14 @@ void main() {
     expect(second.columns.map((column) => column.length), [1, 2]);
     expect(second.columns[0][0]['title'], 'Saved panel');
     expect(second.columns[0][0]['xmin'], isNull);
+    final settingsFile = File('${temporary.path}/.mdsscope/settings.json');
+    expect(await settingsFile.exists(), isTrue);
+    expect(
+      jsonDecode(await settingsFile.readAsString())['fontFamily'],
+      'Courier New',
+    );
+    final legacy = await SharedPreferences.getInstance();
+    expect(legacy.containsKey('shotHistory'), isFalse);
   });
 
   test('Shot history retention is bounded, optional, and persisted', () async {

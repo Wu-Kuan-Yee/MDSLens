@@ -10,6 +10,7 @@ import '../services/platform_file_dialog.dart';
 import '../services/network_permission_service.dart';
 import '../services/rust_bridge.dart';
 import '../services/source_index.dart';
+import '../services/user_data_store.dart';
 
 const _configurationSignalColors = [
   '#2364aa',
@@ -29,6 +30,33 @@ const _configurationSignalColors = [
 const signalHideModeVisible = 0;
 const signalHideModeTemporary = 1;
 const signalHideModePersistent = 2;
+
+const _filePreferenceKeys = <String>[
+  'rememberLogin',
+  'explicitlyLoggedOut',
+  'loginApiUrl',
+  'loginUser',
+  'sshHost',
+  'sshPort',
+  'sshUser',
+  'sshIdentity',
+  'sshMode',
+  'dataMode',
+  'interactionMode',
+  'themeMode',
+  'toolbarCollapsed',
+  'fontFamily',
+  'fontLegendSize',
+  'fontAxisSize',
+  'fontUnitSize',
+  'fontUiSize',
+  'limitShotHistory',
+  'shotHistoryLimit',
+  'webBookmarks',
+  'shotHistory',
+  'sourceIndexMemory',
+  'lastConfigJson',
+];
 
 int signalHideModeOf(Map<dynamic, dynamic> signal) {
   final raw = signal['hide_mode'];
@@ -386,6 +414,7 @@ class AppState extends ChangeNotifier {
   }
 
   late final Future<void> preferencesReady;
+  final UserDataStore _userDataStore;
 
   AppState({
     SignalFetchWorker? signalFetchWorker,
@@ -397,6 +426,7 @@ class AppState extends ChangeNotifier {
     ConfigParser? configParser,
     ConfigEncoder? configEncoder,
     SshTestWorker? sshTestWorker,
+    UserDataStore? userDataStore,
   })  : _signalFetchWorker = signalFetchWorker ?? _fetchSignalsInBackground,
         _shotInfoFetchWorker =
             shotInfoFetchWorker ?? _fetchShotInfoInBackground,
@@ -406,7 +436,8 @@ class AppState extends ChangeNotifier {
         _configSavePicker = configSavePicker ?? _saveConfigurationFile,
         _configParser = configParser ?? _parseConfiguration,
         _configEncoder = configEncoder ?? _encodeConfiguration,
-        _sshTestWorker = sshTestWorker ?? _testSshInBackground {
+        _sshTestWorker = sshTestWorker ?? _testSshInBackground,
+        _userDataStore = userDataStore ?? UserDataStore() {
     _shotCtrl.addListener(() {
       if (_shotCtrl.text != _shotText) {
         _invalidateFetchForSettingsChange();
@@ -1073,41 +1104,77 @@ class AppState extends ChangeNotifier {
   Future<void> initPreferences() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final fileSettings = await _userDataStore.readSettings();
+      final migrateLegacySettings =
+          fileSettings != null && fileSettings.isEmpty;
+      dynamic setting(String key) {
+        if (fileSettings != null && fileSettings.containsKey(key)) {
+          return fileSettings[key];
+        }
+        return prefs.get(key);
+      }
+
       _invalidateFetchForSettingsChange();
-      _rememberLogin = prefs.getBool('rememberLogin') ?? true;
-      _explicitlyLoggedOut =
-          prefs.getBool('explicitlyLoggedOut') ?? _explicitlyLoggedOut;
-      _loginApiUrl = prefs.getString('loginApiUrl') ?? _loginApiUrl;
-      _loginUser = prefs.getString('loginUser') ?? _loginUser;
+      _rememberLogin = setting('rememberLogin') is bool
+          ? setting('rememberLogin') as bool
+          : true;
+      _explicitlyLoggedOut = setting('explicitlyLoggedOut') is bool
+          ? setting('explicitlyLoggedOut') as bool
+          : _explicitlyLoggedOut;
+      _loginApiUrl = setting('loginApiUrl')?.toString() ?? _loginApiUrl;
+      _loginUser = setting('loginUser')?.toString() ?? _loginUser;
       if (_rememberLogin) {
         _loginPass = prefs.getString('loginPass') ?? _loginPass;
         _authToken = prefs.getString('authToken') ?? _authToken;
         _loggedIn = prefs.getBool('loggedIn') ?? _loggedIn;
       }
-      _sshHost = prefs.getString('sshHost') ?? _sshHost;
-      _sshPort = prefs.getInt('sshPort') ?? _sshPort;
-      _sshUser = prefs.getString('sshUser') ?? _sshUser;
+      _sshHost = setting('sshHost')?.toString() ?? _sshHost;
+      _sshPort = setting('sshPort') is num
+          ? (setting('sshPort') as num).toInt()
+          : _sshPort;
+      _sshUser = setting('sshUser')?.toString() ?? _sshUser;
       _sshPass = prefs.getString('sshPass') ?? _sshPass;
-      _sshIdentity = prefs.getString('sshIdentity') ?? _sshIdentity;
-      _sshMode = prefs.getInt('sshMode') ?? _sshMode;
-      _dataMode = (prefs.getInt('dataMode') ?? _dataMode).clamp(0, 2);
-      _interactionMode =
-          (prefs.getInt('interactionMode') ?? _interactionMode).clamp(0, 1);
-      _themeMode = (prefs.getInt('themeMode') ?? _themeMode).clamp(0, 2);
-      _toolbarCollapsed =
-          prefs.getBool('toolbarCollapsed') ?? _toolbarCollapsed;
-      _fontFamily = prefs.getString('fontFamily') ?? _fontFamily;
-      _fontLegendSize = prefs.getInt('fontLegendSize') ?? _fontLegendSize;
-      _fontAxisSize = prefs.getInt('fontAxisSize') ?? _fontAxisSize;
-      _fontUnitSize = prefs.getInt('fontUnitSize') ?? _fontUnitSize;
-      _fontUiSize = prefs.getInt('fontUiSize') ?? _fontUiSize;
-      _limitShotHistory =
-          prefs.getBool('limitShotHistory') ?? _limitShotHistory;
-      _shotHistoryLimit =
-          (prefs.getInt('shotHistoryLimit') ?? defaultShotHistoryLimit)
-              .clamp(1, maximumShotHistoryLimit);
+      _sshIdentity = setting('sshIdentity')?.toString() ?? _sshIdentity;
+      _sshMode = setting('sshMode') is num
+          ? (setting('sshMode') as num).toInt()
+          : _sshMode;
+      _dataMode = (setting('dataMode') is num
+              ? (setting('dataMode') as num).toInt()
+              : _dataMode)
+          .clamp(0, 2);
+      _interactionMode = (setting('interactionMode') is num
+              ? (setting('interactionMode') as num).toInt()
+              : _interactionMode)
+          .clamp(0, 1);
+      _themeMode = (setting('themeMode') is num
+              ? (setting('themeMode') as num).toInt()
+              : _themeMode)
+          .clamp(0, 2);
+      _toolbarCollapsed = setting('toolbarCollapsed') is bool
+          ? setting('toolbarCollapsed') as bool
+          : _toolbarCollapsed;
+      _fontFamily = setting('fontFamily')?.toString() ?? _fontFamily;
+      _fontLegendSize = setting('fontLegendSize') is num
+          ? (setting('fontLegendSize') as num).toInt()
+          : _fontLegendSize;
+      _fontAxisSize = setting('fontAxisSize') is num
+          ? (setting('fontAxisSize') as num).toInt()
+          : _fontAxisSize;
+      _fontUnitSize = setting('fontUnitSize') is num
+          ? (setting('fontUnitSize') as num).toInt()
+          : _fontUnitSize;
+      _fontUiSize = setting('fontUiSize') is num
+          ? (setting('fontUiSize') as num).toInt()
+          : _fontUiSize;
+      _limitShotHistory = setting('limitShotHistory') is bool
+          ? setting('limitShotHistory') as bool
+          : _limitShotHistory;
+      _shotHistoryLimit = (setting('shotHistoryLimit') is num
+              ? (setting('shotHistoryLimit') as num).toInt()
+              : defaultShotHistoryLimit)
+          .clamp(1, maximumShotHistoryLimit);
 
-      final bookmarksJson = prefs.getString('webBookmarks');
+      final bookmarksJson = setting('webBookmarks')?.toString();
       if (bookmarksJson != null) {
         final list = jsonDecode(bookmarksJson);
         if (list is List) {
@@ -1118,7 +1185,7 @@ class AppState extends ChangeNotifier {
         }
       }
 
-      final shotHistoryJson = prefs.getString('shotHistory');
+      final shotHistoryJson = setting('shotHistory')?.toString();
       if (shotHistoryJson != null) {
         final list = jsonDecode(shotHistoryJson);
         if (list is List) {
@@ -1131,26 +1198,25 @@ class AppState extends ChangeNotifier {
         }
       }
 
-      final sourceIndexJson = prefs.getString('sourceIndexMemory');
+      final sourceIndexJson = setting('sourceIndexMemory')?.toString();
       if (sourceIndexJson != null && sourceIndexJson.isNotEmpty) {
         sourceIndexMemory.restore(jsonDecode(sourceIndexJson));
       }
 
-      final lastConfig = prefs.getString('lastConfigJson');
+      final lastConfig = setting('lastConfigJson')?.toString();
       if (lastConfig != null && lastConfig.isNotEmpty) {
         _applyConfigJsonString(lastConfig);
       }
       notifyListeners();
+      if (migrateLegacySettings && _filePreferenceKeys.any(prefs.containsKey)) {
+        await savePreferences();
+      }
     } catch (_) {}
   }
 
   Future<void> savePreferences() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('rememberLogin', _rememberLogin);
-      await prefs.setBool('explicitlyLoggedOut', _explicitlyLoggedOut);
-      await prefs.setString('loginApiUrl', _loginApiUrl);
-      await prefs.setString('loginUser', _loginUser);
       if (_rememberLogin) {
         await prefs.setString('loginPass', _loginPass);
         await prefs.setString('authToken', _authToken);
@@ -1160,35 +1226,56 @@ class AppState extends ChangeNotifier {
         await prefs.remove('authToken');
         await prefs.setBool('loggedIn', false);
       }
-      await prefs.setString('sshHost', _sshHost);
-      await prefs.setInt('sshPort', _sshPort);
-      await prefs.setString('sshUser', _sshUser);
       await prefs.setString('sshPass', _sshPass);
-      await prefs.setString('sshIdentity', _sshIdentity);
-      await prefs.setInt('sshMode', _sshMode);
-      await prefs.setInt('dataMode', _dataMode);
-      await prefs.setInt('interactionMode', _interactionMode);
-      await prefs.setInt('themeMode', _themeMode);
-      await prefs.setBool('toolbarCollapsed', _toolbarCollapsed);
-      await prefs.setString('fontFamily', _fontFamily);
-      await prefs.setInt('fontLegendSize', _fontLegendSize);
-      await prefs.setInt('fontAxisSize', _fontAxisSize);
-      await prefs.setInt('fontUnitSize', _fontUnitSize);
-      await prefs.setInt('fontUiSize', _fontUiSize);
-      await prefs.setBool('limitShotHistory', _limitShotHistory);
-      await prefs.setInt('shotHistoryLimit', _shotHistoryLimit);
-      await prefs.setString('webBookmarks', jsonEncode(_webBookmarks));
-      await prefs.setString('shotHistory', jsonEncode(_shotHistory));
-      await prefs.setString(
-        'sourceIndexMemory',
-        jsonEncode(sourceIndexMemory.toJson()),
-      );
 
       final configJson = jsonEncode({
         'columns': _jsonSafeValue(_columns),
         'shot': _shotText,
       });
-      await prefs.setString('lastConfigJson', configJson);
+      final fileSettings = <String, dynamic>{
+        'rememberLogin': _rememberLogin,
+        'explicitlyLoggedOut': _explicitlyLoggedOut,
+        'loginApiUrl': _loginApiUrl,
+        'loginUser': _loginUser,
+        'sshHost': _sshHost,
+        'sshPort': _sshPort,
+        'sshUser': _sshUser,
+        'sshIdentity': _sshIdentity,
+        'sshMode': _sshMode,
+        'dataMode': _dataMode,
+        'interactionMode': _interactionMode,
+        'themeMode': _themeMode,
+        'toolbarCollapsed': _toolbarCollapsed,
+        'fontFamily': _fontFamily,
+        'fontLegendSize': _fontLegendSize,
+        'fontAxisSize': _fontAxisSize,
+        'fontUnitSize': _fontUnitSize,
+        'fontUiSize': _fontUiSize,
+        'limitShotHistory': _limitShotHistory,
+        'shotHistoryLimit': _shotHistoryLimit,
+        'webBookmarks': jsonEncode(_webBookmarks),
+        'shotHistory': jsonEncode(_shotHistory),
+        'sourceIndexMemory': jsonEncode(sourceIndexMemory.toJson()),
+        'lastConfigJson': configJson,
+      };
+      final storedInPrivateDirectory =
+          await _userDataStore.writeSettings(fileSettings);
+      if (storedInPrivateDirectory) {
+        for (final key in _filePreferenceKeys) {
+          await prefs.remove(key);
+        }
+      } else {
+        for (final entry in fileSettings.entries) {
+          final value = entry.value;
+          if (value is bool) {
+            await prefs.setBool(entry.key, value);
+          } else if (value is int) {
+            await prefs.setInt(entry.key, value);
+          } else {
+            await prefs.setString(entry.key, value.toString());
+          }
+        }
+      }
     } catch (_) {}
   }
 

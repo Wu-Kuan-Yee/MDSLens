@@ -6,9 +6,13 @@ import 'package:mdsscope/models/app_state.dart';
 import 'package:mdsscope/services/network_permission_service.dart';
 import 'package:mdsscope/widgets/network_permission_gate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:mdsscope/services/user_data_store.dart';
 
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(() {
+    UserDataStore.disableFileStorageForTests = true;
+    SharedPreferences.setMockInitialValues({});
+  });
 
   test('Only permission-shaped network failures request permission recovery',
       () {
