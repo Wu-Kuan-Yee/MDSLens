@@ -2035,6 +2035,36 @@ void main() {
     expect(find.byTooltip('SSH tunnel'), findsOneWidget);
   });
 
+  test('Disabling SSH cancels loading and actively disconnects tunnels',
+      () async {
+    final fetch = Completer<String>();
+    var disconnects = 0;
+    final app = AppState(
+      signalFetchWorker: (_, __, ___) => fetch.future,
+      sshDisconnect: () => disconnects++,
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    if (app.sshMode == 0) app.sshMode = 1;
+    disconnects = 0;
+    app.setLoggedIn(true, 'test-token');
+    app.shotText = '170001';
+
+    app.startRefresh();
+    expect(app.fetching, isTrue);
+
+    app.sshMode = 0;
+
+    expect(disconnects, 1);
+    expect(app.fetching, isFalse);
+    expect(app.sshConnected, isFalse);
+    expect(app.status, contains('Settings changed'));
+
+    fetch.complete('[]');
+    await Future<void>.delayed(Duration.zero);
+    expect(app.fetching, isFalse);
+  });
+
   testWidgets('SSH Test runs in the background and keeps the dialog responsive',
       (tester) async {
     final result = Completer<String>();

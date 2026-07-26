@@ -117,6 +117,7 @@ typedef ConfigParser = String Function(String path);
 typedef ConfigEncoder = Future<Uint8List> Function(String configJson);
 typedef ImportedShotDecision = Future<bool> Function(String importedShot);
 typedef SshTestWorker = Future<String> Function(String settingsJson);
+typedef SshDisconnect = void Function();
 
 /// The Qt-era application used this shared user directory.  Keeping imports
 /// out of it prevents an old installation from silently becoming a source of
@@ -431,6 +432,7 @@ class AppState extends ChangeNotifier {
   static const int maximumShotHistoryLimit = 10000;
 
   final SignalFetchWorker _signalFetchWorker;
+  final SshDisconnect _sshDisconnect;
   final ShotInfoFetchWorker _shotInfoFetchWorker;
   final LoginWorker _loginWorker;
   final LatestShotWorker _latestShotWorker;
@@ -568,6 +570,7 @@ class AppState extends ChangeNotifier {
 
   AppState({
     SignalFetchWorker? signalFetchWorker,
+    SshDisconnect? sshDisconnect,
     ShotInfoFetchWorker? shotInfoFetchWorker,
     LoginWorker? loginWorker,
     LatestShotWorker? latestShotWorker,
@@ -579,6 +582,8 @@ class AppState extends ChangeNotifier {
     UserDataStore? userDataStore,
     CredentialStore? credentialStore,
   })  : _signalFetchWorker = signalFetchWorker ?? _fetchSignalsInBackground,
+        _sshDisconnect =
+            sshDisconnect ?? (() => RustBridge.instance.disconnectSsh()),
         _shotInfoFetchWorker =
             shotInfoFetchWorker ?? _fetchShotInfoInBackground,
         _loginWorker = loginWorker ?? _loginToApi,
@@ -847,6 +852,7 @@ class AppState extends ChangeNotifier {
     _sessionGeneration++;
     _invalidateFetchForSettingsChange();
     _sshMode = v;
+    _disconnectSshTunnels();
     _resetSshConnectionState();
     savePreferences();
     notifyListeners();
@@ -1022,6 +1028,7 @@ class AppState extends ChangeNotifier {
     _sessionGeneration++;
     _invalidateFetchForSettingsChange();
     _sshHost = v;
+    _disconnectSshTunnels();
     _resetSshConnectionState();
     savePreferences();
     notifyListeners();
@@ -1032,6 +1039,7 @@ class AppState extends ChangeNotifier {
     _sessionGeneration++;
     _invalidateFetchForSettingsChange();
     _sshPort = v;
+    _disconnectSshTunnels();
     _resetSshConnectionState();
     savePreferences();
     notifyListeners();
@@ -1042,6 +1050,7 @@ class AppState extends ChangeNotifier {
     _sessionGeneration++;
     _invalidateFetchForSettingsChange();
     _sshUser = v;
+    _disconnectSshTunnels();
     _resetSshConnectionState();
     savePreferences();
     notifyListeners();
@@ -1052,6 +1061,7 @@ class AppState extends ChangeNotifier {
     _sessionGeneration++;
     _invalidateFetchForSettingsChange();
     _sshPass = v;
+    _disconnectSshTunnels();
     _resetSshConnectionState();
     savePreferences();
     notifyListeners();
@@ -1062,6 +1072,7 @@ class AppState extends ChangeNotifier {
     _sessionGeneration++;
     _invalidateFetchForSettingsChange();
     _sshIdentity = v;
+    _disconnectSshTunnels();
     _resetSshConnectionState();
     savePreferences();
     notifyListeners();
@@ -1094,6 +1105,8 @@ class AppState extends ChangeNotifier {
     _loggedIn = false;
     _authToken = '';
     _explicitlyLoggedOut = true;
+    _disconnectSshTunnels();
+    _resetSshConnectionState();
     savePreferences();
     setStatus('Logged out');
   }
@@ -1106,6 +1119,15 @@ class AppState extends ChangeNotifier {
   void _resetSshConnectionState() {
     _sshTunnelReachable = false;
     _sshInUse = false;
+  }
+
+  void _disconnectSshTunnels() {
+    try {
+      _sshDisconnect();
+    } catch (_) {
+      // Fetch cancellation and the next settings snapshot still prevent an
+      // obsolete tunnel from being selected by the application.
+    }
   }
 
   void setSshTestResult(bool reachable) {
@@ -2564,6 +2586,7 @@ class AppState extends ChangeNotifier {
     _disposed = true;
     _sessionGeneration++;
     _cancelActiveNativeFetch();
+    _disconnectSshTunnels();
     _fetchGeneration++;
     _shotCtrl.dispose();
     super.dispose();

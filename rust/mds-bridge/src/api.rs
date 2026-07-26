@@ -4,7 +4,7 @@
 // API types and functions for Flutter bridge. Use JSON serialization for FFI.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -294,9 +294,26 @@ pub fn fetch_signals(config_json: String, mode: i32) -> Vec<FrbLoadedSignal> {
 }
 
 static ACTIVE_FETCHES: OnceLock<Mutex<HashMap<u64, Arc<AtomicBool>>>> = OnceLock::new();
+static DATA_TUNNEL_MANAGER: OnceLock<Mutex<mds_ssh::tunnel::SshTunnelManager>> =
+    OnceLock::new();
+static DATA_TUNNEL_EPOCH: AtomicU64 = AtomicU64::new(0);
 
 fn active_fetches() -> &'static Mutex<HashMap<u64, Arc<AtomicBool>>> {
     ACTIVE_FETCHES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn data_tunnel_manager() -> &'static Mutex<mds_ssh::tunnel::SshTunnelManager> {
+    DATA_TUNNEL_MANAGER
+        .get_or_init(|| Mutex::new(mds_ssh::tunnel::SshTunnelManager::new()))
+}
+
+pub fn disconnect_data_tunnels() {
+    DATA_TUNNEL_EPOCH.fetch_add(1, Ordering::AcqRel);
+    if let Some(manager) = DATA_TUNNEL_MANAGER.get() {
+        if let Ok(mut manager) = manager.try_lock() {
+            manager.reload_settings(mds_ssh::settings::SshSettings::default());
+        }
+    }
 }
 
 pub fn cancel_fetch(request_id: u64) -> bool {
@@ -331,8 +348,8 @@ impl Drop for FetchRegistration {
     }
 }
 
-/// Fetch signals with SSH tunneling. The manager stays alive for the duration
-/// of the blocking fetch and is then dropped, stopping its relay listeners.
+/// Fetch signals with SSH tunneling. Forwarding listeners are retained across
+/// requests and are discarded only when settings change or SSH is disabled.
 pub fn fetch_signals_ssh(config_json: String, mode: i32, ssh_settings_json: String) -> Vec<FrbLoadedSignal> {
     let ssh_settings: Option<FrbSshSettings> = if ssh_settings_json.is_empty() {
         None
@@ -375,28 +392,37 @@ fn fetch_signals_inner(config_json: String, mode: i32, ssh_settings: Option<FrbS
         }];
     }
 
-    // Set up SSH tunnels if configured
-    let _tunnel_manager: Option<mds_ssh::tunnel::SshTunnelManager> = if let Some(ssh) = ssh_settings {
+    // Set up or reuse persistent SSH tunnels if configured.
+    if let Some(ssh) = ssh_settings {
         if !ssh.host.is_empty() && ssh.mode > 0 {
-            let mut mgr = mds_ssh::tunnel::SshTunnelManager::new();
-            mgr.reload_settings(ssh.into_rust());
-            match mgr.prepare_layout(&mut rust_config) {
-                Ok(rewrote) => {
-                    if rewrote { eprintln!("[mds-bridge] SSH tunnels created for data fetch"); }
-                    Some(mgr)
-                }
-                Err(e) => {
-                    // Tunnel setup failed, log but continue with direct connection
-                    eprintln!("[mds-bridge] SSH tunnel setup failed (will try direct): {}", e);
-                    Some(mgr) // Keep mgr alive to avoid dropping active tunnels
+            let tunnel_epoch = DATA_TUNNEL_EPOCH.load(Ordering::Acquire);
+            let manager = data_tunnel_manager();
+            let mut manager = manager
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if tunnel_epoch == DATA_TUNNEL_EPOCH.load(Ordering::Acquire) {
+                manager.reload_settings(ssh.into_rust());
+                match manager.prepare_layout(&mut rust_config) {
+                    Ok(rewrote) => {
+                        if rewrote {
+                            eprintln!("[mds-bridge] SSH tunnels active for data fetch");
+                        }
+                    }
+                    Err(e) => {
+                        // Tunnel setup failed, log but continue with direct connection
+                        eprintln!("[mds-bridge] SSH tunnel setup failed (will try direct): {}", e);
+                    }
                 }
             }
+            if tunnel_epoch != DATA_TUNNEL_EPOCH.load(Ordering::Acquire) {
+                manager.reload_settings(mds_ssh::settings::SshSettings::default());
+            }
         } else {
-            None
+            disconnect_data_tunnels();
         }
     } else {
-        None
-    };
+        disconnect_data_tunnels();
+    }
 
     let cancel = Arc::new(AtomicBool::new(false));
     let cancel = if request_id > 0 {
@@ -434,6 +460,34 @@ mod tests {
             .remove(&request_id)
             .expect("cancel token");
         assert!(token.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn data_tunnel_disconnect_is_nonblocking_and_resets_manager() {
+        let manager = data_tunnel_manager();
+        let mut manager_guard = manager
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        manager_guard.reload_settings(mds_ssh::settings::SshSettings {
+            mode: mds_core::types::SshMode::Auto,
+            host: "ssh.example".into(),
+            ..Default::default()
+        });
+        let before = DATA_TUNNEL_EPOCH.load(Ordering::Acquire);
+        disconnect_data_tunnels();
+        assert_eq!(DATA_TUNNEL_EPOCH.load(Ordering::Acquire), before + 1);
+        // The held lock proves disconnect_data_tunnels returned without
+        // waiting for an in-progress preparation operation.
+        drop(manager_guard);
+
+        disconnect_data_tunnels();
+        let manager_guard = manager
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        assert_eq!(
+            manager_guard.state(),
+            mds_ssh::tunnel::TunnelState::Unconfigured
+        );
     }
 
     #[test]

@@ -5,12 +5,14 @@
 
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use crate::api as a;
 
 static API_TUNNEL_MANAGER: OnceLock<Mutex<mds_ssh::tunnel::SshTunnelManager>> = OnceLock::new();
-const MDS_BRIDGE_ABI_VERSION: u32 = 2;
+static API_TUNNEL_EPOCH: AtomicU64 = AtomicU64::new(0);
+const MDS_BRIDGE_ABI_VERSION: u32 = 3;
 
 macro_rules! ffi_string {
     ($s:expr) => { CString::new($s).unwrap_or_default().into_raw() };
@@ -119,6 +121,17 @@ pub extern "C" fn mds_cancel_fetch(request_id: u64) -> u8 {
 }
 
 #[no_mangle]
+pub extern "C" fn mds_disconnect_ssh() {
+    a::disconnect_data_tunnels();
+    API_TUNNEL_EPOCH.fetch_add(1, Ordering::AcqRel);
+    if let Some(manager) = API_TUNNEL_MANAGER.get() {
+        if let Ok(mut manager) = manager.try_lock() {
+            manager.reload_settings(mds_ssh::settings::SshSettings::default());
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn mds_prepare_url(url: *const c_char, settings_json: *const c_char) -> *mut c_char {
     let settings_json = to_rust(settings_json);
     let settings: a::FrbSshSettings = match serde_json::from_str(&settings_json) {
@@ -131,12 +144,21 @@ pub extern "C" fn mds_prepare_url(url: *const c_char, settings_json: *const c_ch
     let manager = API_TUNNEL_MANAGER.get_or_init(|| {
         Mutex::new(mds_ssh::tunnel::SshTunnelManager::new())
     });
+    let tunnel_epoch = API_TUNNEL_EPOCH.load(Ordering::Acquire);
     let mut manager = manager.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if tunnel_epoch != API_TUNNEL_EPOCH.load(Ordering::Acquire) {
+        manager.reload_settings(mds_ssh::settings::SshSettings::default());
+        return ffi_string!("{\"error\":\"SSH settings changed\"}");
+    }
     manager.reload_settings(settings.into_rust());
     let result = match manager.prepare_url(&to_rust(url)) {
         Ok(tunneled) => tunneled,
         Err(e) => format!("{{\"error\":\"{}\"}}", e),
     };
+    if tunnel_epoch != API_TUNNEL_EPOCH.load(Ordering::Acquire) {
+        manager.reload_settings(mds_ssh::settings::SshSettings::default());
+        return ffi_string!("{\"error\":\"SSH disabled while connecting\"}");
+    }
     ffi_string!(result)
 }
 
