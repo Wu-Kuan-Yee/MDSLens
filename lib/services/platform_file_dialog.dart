@@ -10,6 +10,7 @@ Future<String?> saveBytesWithFilePicker({
   required String fileName,
   required List<String> allowedExtensions,
   required Uint8List bytes,
+  String? initialDirectory,
   bool? mobileOverride,
   PlatformSaveDialog? saveDialog,
 }) async {
@@ -21,6 +22,7 @@ Future<String?> saveBytesWithFilePicker({
             type: Platform.isAndroid ? FileType.any : FileType.custom,
             allowedExtensions: Platform.isAndroid ? null : allowedExtensions,
             bytes: payload,
+            initialDirectory: initialDirectory,
             lockParentWindow: !mobile,
           );
   var path = await dialog(mobile ? bytes : null);

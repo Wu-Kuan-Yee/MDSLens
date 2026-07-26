@@ -51,6 +51,17 @@ class UserDataStore {
     }
   }
 
+  Future<Directory?> configurationDirectory() async {
+    final root = await rootDirectory();
+    if (root == null) return null;
+    try {
+      await _prepareDirectories(root);
+      return Directory(_join(root.path, 'configurations'));
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<bool> writeSettings(Map<String, dynamic> settings) {
     final completer = Completer<bool>();
     _writeTail = _writeTail.then((_) async {

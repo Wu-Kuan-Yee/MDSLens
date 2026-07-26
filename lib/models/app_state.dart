@@ -134,6 +134,8 @@ typedef LatestShotWorker = Future<dynamic> Function(
 
 Future<ConfigOpenSelection?> _pickConfigurationFile() async {
   final mobile = Platform.isAndroid || Platform.isIOS;
+  final privateDirectory =
+      mobile ? null : await UserDataStore().configurationDirectory();
   final result = await FilePicker.platform.pickFiles(
     dialogTitle: 'Open MdsScope configuration',
     // iOS/iPadOS document providers do not consistently map the non-standard
@@ -142,6 +144,7 @@ Future<ConfigOpenSelection?> _pickConfigurationFile() async {
     type: mobile ? FileType.any : FileType.custom,
     allowedExtensions: mobile ? null : const ['toml', 'webscp'],
     withData: mobile,
+    initialDirectory: privateDirectory?.path,
     lockParentWindow: !mobile,
   );
   if (result == null || result.files.isEmpty) return null;
@@ -164,12 +167,16 @@ Future<ConfigOpenSelection?> _pickConfigurationFile() async {
 Future<String?> _saveConfigurationFile(
   String suggestedName,
   Uint8List bytes,
-) {
+) async {
+  final mobile = Platform.isAndroid || Platform.isIOS;
+  final privateDirectory =
+      mobile ? null : await UserDataStore().configurationDirectory();
   return saveBytesWithFilePicker(
     dialogTitle: 'Save MdsScope configuration',
     fileName: suggestedName,
     allowedExtensions: const ['toml'],
     bytes: bytes,
+    initialDirectory: privateDirectory?.path,
   );
 }
 
