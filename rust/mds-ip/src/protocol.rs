@@ -17,8 +17,15 @@ use std::time::{Duration, Instant};
 /// MDSplus server default port.
 pub const MDS_PORT: u16 = 8000;
 
-/// Network timeout for MDSIP operations (milliseconds).
+/// Timeout for bounded socket writes (milliseconds).
 pub const NETWORK_TIMEOUT_MS: u64 = 30000;
+
+/// Timeout for establishing an MDSIP session and opening its initial tree.
+///
+/// Signal evaluation is deliberately not covered by this deadline: MDSplus can
+/// legitimately spend much longer evaluating or resampling a signal before it
+/// sends the first response byte.
+pub const CONNECTION_SETUP_TIMEOUT_MS: u64 = 8_000;
 
 #[derive(Clone)]
 struct CancelContext {
@@ -228,6 +235,7 @@ fn read_fully(
     socket: &mut TcpStream,
     size: usize,
     known_response_body: bool,
+    idle_timeout: Option<Duration>,
 ) -> Result<Vec<u8>, String> {
     socket
         .set_read_timeout(Some(Duration::from_millis(50)))
@@ -277,7 +285,7 @@ fn read_fully(
             Err(error)
                 if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
             {
-                if last_progress.elapsed() >= Duration::from_millis(NETWORK_TIMEOUT_MS) {
+                if idle_deadline_expired(last_progress.elapsed(), idle_timeout) {
                     mark_current_connection_unusable();
                     return Err("read error: response timed out".to_string());
                 }
@@ -291,9 +299,20 @@ fn read_fully(
     Ok(buf)
 }
 
+fn idle_deadline_expired(elapsed: Duration, idle_timeout: Option<Duration>) -> bool {
+    idle_timeout.is_some_and(|timeout| elapsed >= timeout)
+}
+
 /// Read a complete MDSIP message from the socket.
 pub fn read_message(socket: &mut TcpStream) -> Result<Message, String> {
-    let header = read_fully(socket, 48, false)?;
+    read_message_with_idle_timeout(socket, None)
+}
+
+fn read_message_with_idle_timeout(
+    socket: &mut TcpStream,
+    idle_timeout: Option<Duration>,
+) -> Result<Message, String> {
+    let header = read_fully(socket, 48, false, idle_timeout)?;
     let msg_len = i32::from_be_bytes([header[0], header[1], header[2], header[3]]);
     let status = i32::from_be_bytes([header[4], header[5], header[6], header[7]]);
     let length = i16::from_be_bytes([header[8], header[9]]);
@@ -305,7 +324,7 @@ pub fn read_message(socket: &mut TcpStream) -> Result<Message, String> {
     }
 
     let body_size = (msg_len - 48) as usize;
-    let body = read_fully(socket, body_size, true)?;
+    let body = read_fully(socket, body_size, true, idle_timeout)?;
 
     Ok(Message { status, length, dtype, body })
 }
@@ -315,7 +334,10 @@ pub fn read_message(socket: &mut TcpStream) -> Result<Message, String> {
 /// Perform MDSIP handshake: send "JAVA_USER" identifier.
 pub fn handshake(socket: &mut TcpStream) -> Result<(), String> {
     write_message(socket, &message(14, 1, 0, 1, b"JAVA_USER"))?;
-    read_message(socket)?;
+    read_message_with_idle_timeout(
+        socket,
+        Some(Duration::from_millis(CONNECTION_SETUP_TIMEOUT_MS)),
+    )?;
     Ok(())
 }
 
@@ -345,6 +367,25 @@ pub fn value(socket: &mut TcpStream, expr: &str) -> Result<Message, String> {
     Ok(response)
 }
 
+/// Evaluate a connection-setup expression with a bounded response deadline.
+///
+/// This is reserved for operations such as opening a tree. Normal signal
+/// evaluation must use [`value`] so a slow server remains cancellable without
+/// being mistaken for a dead connection.
+pub fn value_for_setup(socket: &mut TcpStream, expr: &str) -> Result<Message, String> {
+    reject_canceled_write()?;
+    let body = expr.as_bytes();
+    write_message(socket, &message(14, 1, 0, next_message_id(), body))?;
+    let response = read_message_with_idle_timeout(
+        socket,
+        Some(Duration::from_millis(CONNECTION_SETUP_TIMEOUT_MS)),
+    )?;
+    if canceled() {
+        return Err("operation canceled".to_string());
+    }
+    Ok(response)
+}
+
 /// Perform a small protocol cleanup even after an interactive request was
 /// canceled. Callers use this only to restore server-side state after the
 /// current response has already reached a clean message boundary.
@@ -352,7 +393,12 @@ pub fn value_for_cleanup(socket: &mut TcpStream, expr: &str) -> Result<Message, 
     let body = expr.as_bytes();
     let result = with_cancel_suppressed(|| {
         write_message(socket, &message(14, 1, 0, next_message_id(), body))
-            .and_then(|()| read_message(socket))
+            .and_then(|()| {
+                read_message_with_idle_timeout(
+                    socket,
+                    Some(Duration::from_millis(CONNECTION_SETUP_TIMEOUT_MS)),
+                )
+            })
     });
     if result.is_err() {
         mark_current_connection_unusable();
@@ -451,6 +497,18 @@ pub fn int_from_message(msg: &Message) -> Result<i32, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn signal_reads_allow_slow_server_evaluation() {
+        assert!(!idle_deadline_expired(Duration::from_secs(600), None));
+    }
+
+    #[test]
+    fn setup_reads_keep_a_bounded_idle_deadline() {
+        let timeout = Some(Duration::from_secs(8));
+        assert!(!idle_deadline_expired(Duration::from_millis(7_999), timeout));
+        assert!(idle_deadline_expired(Duration::from_secs(8), timeout));
+    }
 
     #[test]
     fn test_message_roundtrip() {

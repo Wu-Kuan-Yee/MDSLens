@@ -30,12 +30,14 @@ impl MdsConnection {
                    else { format!("{}:{}", host, port) };
         let stream = TcpStream::connect_timeout(
             &addr.parse().map_err(|e| format!("invalid address {}: {}", addr, e))?,
-            Duration::from_millis(protocol::NETWORK_TIMEOUT_MS),
+            Duration::from_millis(protocol::CONNECTION_SETUP_TIMEOUT_MS),
         )
         .map_err(|e| format!("connect to {}: {}", addr, e))?;
 
         stream
-            .set_read_timeout(Some(Duration::from_millis(protocol::NETWORK_TIMEOUT_MS)))
+            .set_read_timeout(Some(Duration::from_millis(
+                protocol::CONNECTION_SETUP_TIMEOUT_MS,
+            )))
             .map_err(|e| format!("set_read_timeout: {}", e))?;
 
         let mut conn = Self {
@@ -61,12 +63,12 @@ impl MdsConnection {
         }
 
         let expr = format!("TreeOpen(\"{}\", {})", tree, shot);
-        match protocol::value(&mut self.stream, &expr) {
+        match protocol::value_for_setup(&mut self.stream, &expr) {
             Ok(_) => {}
             Err(_e) => {
                 // Fallback: try JavaOpen for EAST servers
                 let fallback = format!("JavaOpen(\"{}\", {})", tree, shot);
-                protocol::value(&mut self.stream, &fallback)?;
+                protocol::value_for_setup(&mut self.stream, &fallback)?;
             }
         }
         self.current_tree = tree.to_string();
