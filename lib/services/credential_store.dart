@@ -23,7 +23,13 @@ class PlatformCredentialStore implements CredentialStore {
                 accessibility: KeychainAccessibility.first_unlock_this_device,
                 synchronizable: false,
                 label: 'MdsScope credentials',
-                usesDataProtectionKeychain: true,
+                // Direct-distribution macOS builds are intentionally
+                // unsandboxed so ~/.mdsscope remains available. The Data
+                // Protection Keychain requires an application-group
+                // entitlement and rejects these builds with errSecMissingEntitlement.
+                // The standard login Keychain remains encrypted and scoped to
+                // this signed application without that entitlement.
+                usesDataProtectionKeychain: false,
               ),
               aOptions: AndroidOptions(
                 storageNamespace: 'com.mdsscope.app.credentials',
