@@ -36,8 +36,8 @@ void ConfigureTaskbarProperties(HWND window) {
     return;
   }
   std::vector<wchar_t> executable(MAX_PATH);
-  const DWORD length =
-      GetModuleFileNameW(nullptr, executable.data(), executable.size());
+  const DWORD length = GetModuleFileNameW(
+      nullptr, executable.data(), static_cast<DWORD>(executable.size()));
   if (length > 0 && static_cast<size_t>(length) < executable.size()) {
     const std::wstring path(executable.data(), length);
     const std::wstring command = L"\"" + path + L"\"";
