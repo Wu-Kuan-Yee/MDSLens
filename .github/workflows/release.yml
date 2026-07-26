@@ -151,15 +151,19 @@ jobs:
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
             binutils git libegl-mesa0 libegl1 libgl1-mesa-dri \
-            libgles2 libgtk-3-0t64 libstdc++6 python3 unzip xvfb
+            libgles2 libgtk-3-0t64 libsecret-1-0 libstdc++6 python3 unzip xvfb
       - name: Install Fedora verifier runtime
         if: matrix.family == 'fedora'
         run: >-
-          dnf install -y binutils git gtk3 libepoxy libglvnd-egl libstdc++
-          mesa-dri-drivers mesa-libEGL python3 unzip xorg-x11-server-Xvfb
+          dnf install -y binutils git gnome-settings-daemon gtk3 libepoxy
+          libglvnd-egl libsecret libstdc++ mesa-dri-drivers mesa-libEGL
+          python3 unzip
+          xorg-x11-server-Xvfb
       - name: Install Enterprise Linux verifier runtime
         if: matrix.family == 'enterprise'
-        run: dnf install -y binutils git gtk3 libepoxy libstdc++ python3 unzip
+        run: >-
+          dnf install -y binutils git gtk3 libepoxy libsecret libstdc++
+          python3 unzip
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:

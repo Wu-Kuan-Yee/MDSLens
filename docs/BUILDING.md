@@ -112,23 +112,24 @@ when a format is named explicitly, its missing tool is an error.
 Build Linux x64 and ARM64 on matching native hosts. Flutter desktop builds are
 not general cross-compilation targets.
 
-ZIP and TAR outputs are portable runtime bundles, not copies of the raw Flutter
-build directory. They recursively carry GTK and other application-level
-libraries from the build baseline, carry GTK image/input modules, and start
-through an isolated launcher so incompatible host modules cannot leak into the
-process. Extract the archive and run `./mdsscope-linux-<arch>/mdsscope`. The
-AppImage is assembled from the same portable runtime.
+ZIP and TAR outputs are portable application bundles, not copies of the raw
+Flutter build directory. They carry the Flutter engine, plugins, Rust bridge,
+application data and other application-owned libraries. Extract the archive
+and run `./mdsscope-linux-<arch>/mdsscope`; the hidden `.mdsscope.bin` is an
+internal launcher target, not a second user entry point. The AppImage is
+assembled from the same runtime.
 
-glibc, the ELF loader, compiler ABI libraries, the X11/Wayland client stack,
-EGL/OpenGL dispatch libraries, the Linux kernel and graphics drivers
-deliberately remain provided by the target system. Keeping this connected
-display stack together prevents an older bundled Xlib or libepoxy from being
-mixed with a newer Mesa driver. Release automation therefore builds the
-portable runtime on the oldest supported glibc baseline and tests that same
-archive on newer Debian/Ubuntu, Fedora and Enterprise Linux environments. This
-gives one portable package per CPU architecture; it does not make a Linux GUI
-executable independent of the kernel, CPU architecture, display server or GPU
-driver.
+GTK 3, GLib/GIO, libsecret, their settings schemas and image/input modules,
+glibc, compiler ABI libraries, the X11/Wayland and EGL/OpenGL stacks, the Linux
+kernel and graphics drivers deliberately remain provided by the target system.
+Keeping the entire desktop stack together prevents an older bundled GTK from
+crashing against newer GNOME settings schemas and prevents older X11/EGL
+libraries from being mixed with newer Mesa drivers. Install the normal GTK 3,
+libsecret and graphics-runtime packages for the distribution. Release
+automation tests the same archive on newer Debian/Ubuntu, Fedora and Enterprise
+Linux environments. This gives one application bundle per CPU architecture; it
+does not make a Linux GUI executable independent of the operating-system
+desktop runtime.
 Ubuntu and Fedora CI containers perform a real GUI smoke launch with their
 native EGL/Mesa software-rendering stack. Enterprise Linux 10 no longer ships
 Xvfb in its standard repositories, so its x64 and ARM64 jobs verify the complete

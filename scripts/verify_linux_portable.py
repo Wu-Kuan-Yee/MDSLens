@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify that a Linux portable archive is self-contained above glibc."""
+"""Verify a Linux application bundle and its declared host desktop ABI."""
 
 from __future__ import annotations
 
@@ -22,10 +22,11 @@ SYSTEM_RUNTIME = re.compile(
     r"libnss_[A-Za-z0-9_-]+)(?:\.so(?:\..*)?|-\d+(?:\.\d+)+\.so)|"
     r"(?:libstdc\+\+\.so(?:\..*)?|"
     r"libgcc_s(?:-\d[\d.-]*)?\.so(?:\..*)?)|"
-    # A newer target display stack can use a newer libffi SONAME than the
-    # bundled GTK baseline. ldd reports that transitive system dependency for
-    # every binary, while the older libffi needed by bundled GLib stays local.
-    r"libffi\.so(?:\..*)?|"
+    r"(?:libgtk-3|libgdk-3|libpangocairo-1\.0|libpango-1\.0|"
+    r"libpangoft2-1\.0|libharfbuzz|libatk-1\.0|libatk-bridge-2\.0|"
+    r"libatspi|libcairo-gobject|libcairo|libgdk_pixbuf-2\.0|"
+    r"libgio-2\.0|libgmodule-2\.0|libgobject-2\.0|libglib-2\.0|"
+    r"libepoxy|libfontconfig|libsecret-1)\.so(?:\..*)?|"
     r"(?:libX11|libXau|libXdmcp|libXext|libXi|libXcursor|libXfixes|"
     r"libXinerama|libXrandr|libXrender|libXcomposite|libXdamage|"
     r"libxcb(?:-[A-Za-z0-9_-]+)?|libwayland-(?:client|cursor|egl)|"
@@ -106,9 +107,22 @@ def glibc_versions(binary: Path) -> set[tuple[int, int]]:
     }
 
 
+def needed_libraries(binary: Path) -> set[str]:
+    result = subprocess.run(
+        ["readelf", "-d", str(binary)],
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    return set(
+        re.findall(r"\(NEEDED\).*Shared library: \[([^\]]+)\]", result.stdout)
+    )
+
+
 def verify(root: Path, maximum_glibc: tuple[int, int], launch: bool) -> None:
     launcher = root / "mdsscope"
-    executable = root / "mdsscope.bin"
+    executable = root / ".mdsscope.bin"
     library_dir = root / "lib"
     for required in (launcher, executable, library_dir):
         if not required.exists():
@@ -119,17 +133,26 @@ def verify(root: Path, maximum_glibc: tuple[int, int], launch: bool) -> None:
     binaries = [path for path in root.rglob("*") if is_elf(path)]
     if not binaries:
         raise RuntimeError("Portable bundle contains no ELF binaries")
-    root_resolved = root.resolve()
+    bundled_system_runtime = sorted(
+        path.name
+        for path in library_dir.iterdir()
+        if is_elf(path) and SYSTEM_RUNTIME.fullmatch(path.name)
+    )
+    if bundled_system_runtime:
+        raise RuntimeError(
+            "Portable bundle shadows the host desktop runtime: "
+            + ", ".join(bundled_system_runtime)
+        )
+    bundled_names = {path.name for path in binaries}
     required_versions: set[tuple[int, int]] = set()
     for binary in binaries:
         required_versions.update(glibc_versions(binary))
-        for dependency in dependencies(binary, library_dir):
-            try:
-                dependency.relative_to(root_resolved)
-                continue
-            except ValueError:
-                pass
-            if not SYSTEM_RUNTIME.fullmatch(dependency.name):
+        dependencies(binary, library_dir)
+        for dependency in needed_libraries(binary):
+            if (
+                dependency not in bundled_names
+                and not SYSTEM_RUNTIME.fullmatch(dependency)
+            ):
                 raise RuntimeError(
                     f"{binary.relative_to(root)} uses unbundled {dependency}"
                 )

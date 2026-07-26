@@ -108,23 +108,25 @@ class BuildAppTests(unittest.TestCase):
             "libEGL.so.1",
             "libGLX.so.0",
             "libdrm_amdgpu.so.1",
+            "libgtk-3.so.0",
+            "libgdk-3.so.0",
+            "libglib-2.0.so.0",
+            "libgdk_pixbuf-2.0.so.0",
+            "libsecret-1.so.0",
         ):
             self.assertTrue(build_app.is_linux_system_runtime(name), name)
             self.assertIsNotNone(
                 verify_linux_portable.SYSTEM_RUNTIME.fullmatch(name),
                 name,
             )
-        for name in ("libgtk-3.so.0", "libglib-2.0.so.0", "libsecret-1.so.0"):
+        for name in ("libapp.so", "libmds_bridge.so", "libicuuc.so.66"):
             self.assertFalse(build_app.is_linux_system_runtime(name), name)
             self.assertIsNone(
                 verify_linux_portable.SYSTEM_RUNTIME.fullmatch(name),
                 name,
             )
-        # The verifier accepts a newer target display stack's transitive
-        # libffi, but the packager must still carry the baseline SONAME used by
-        # its bundled GLib.
         self.assertFalse(build_app.is_linux_system_runtime("libffi.so.7"))
-        self.assertIsNotNone(
+        self.assertIsNone(
             verify_linux_portable.SYSTEM_RUNTIME.fullmatch("libffi.so.8")
         )
 
@@ -151,29 +153,17 @@ class BuildAppTests(unittest.TestCase):
                 Path("/tmp/mdsscope"),
             )
 
-    def test_linux_module_query_finds_private_libexec_helper(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            libdir = Path(temporary) / "lib"
-            helper = (
-                libdir
-                / "gdk-pixbuf-2.0"
-                / "gdk-pixbuf-query-loaders"
-            )
-            helper.parent.mkdir(parents=True)
-            helper.touch()
-            with mock.patch.object(build_app.shutil, "which", return_value=None):
-                with mock.patch.object(
-                    build_app,
-                    "capture",
-                    return_value=(0, str(libdir)),
-                ):
-                    self.assertEqual(
-                        build_app.linux_module_query(
-                            "gdk-pixbuf-2.0",
-                            "gdk-pixbuf-query-loaders",
-                        ),
-                        helper,
-                    )
+    def test_linux_needed_parser_only_returns_direct_dependencies(self) -> None:
+        self.assertEqual(
+            build_app.parse_linux_needed(
+                """
+                 0x0000000000000001 (NEEDED) Shared library: [libgtk-3.so.0]
+                 0x000000000000001d (RUNPATH) Library runpath: [$ORIGIN/lib]
+                 0x0000000000000001 (NEEDED) Shared library: [libapp.so]
+                """
+            ),
+            ["libgtk-3.so.0", "libapp.so"],
+        )
 
     def test_portable_zip_extraction_restores_unix_executable_mode(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

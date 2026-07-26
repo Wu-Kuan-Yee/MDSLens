@@ -683,10 +683,10 @@ def is_linux_system_runtime(name: str) -> bool:
     """Return libraries that must come from the target Linux base system.
 
     Bundling glibc or its loader makes a package less portable and can break
-    NSS, DNS and thread-local runtime behavior. The compiler and display
-    runtimes must also stay aligned with the target system's graphics drivers;
-    mixing an older bundled X11/EGL stack with newer Mesa drivers can abort
-    Flutter before its first frame.
+    NSS, DNS and thread-local runtime behavior. GTK/GLib, settings schemas,
+    compiler and display runtimes must also stay aligned with the target
+    desktop; mixing an older bundled stack with newer GNOME or Mesa components
+    can abort Flutter before its first frame.
     """
     return bool(re.fullmatch(
         r"(?:"
@@ -696,6 +696,11 @@ def is_linux_system_runtime(name: str) -> bool:
         r"libnss_[A-Za-z0-9_-]+)(?:\.so(?:\..*)?|-\d+(?:\.\d+)+\.so)|"
         r"(?:libstdc\+\+\.so(?:\..*)?|"
         r"libgcc_s(?:-\d[\d.-]*)?\.so(?:\..*)?)|"
+        r"(?:libgtk-3|libgdk-3|libpangocairo-1\.0|libpango-1\.0|"
+        r"libpangoft2-1\.0|libharfbuzz|libatk-1\.0|libatk-bridge-2\.0|"
+        r"libatspi|libcairo-gobject|libcairo|libgdk_pixbuf-2\.0|"
+        r"libgio-2\.0|libgmodule-2\.0|libgobject-2\.0|libglib-2\.0|"
+        r"libepoxy|libfontconfig|libsecret-1)\.so(?:\..*)?|"
         r"(?:libX11|libXau|libXdmcp|libXext|libXi|libXcursor|libXfixes|"
         r"libXinerama|libXrandr|libXrender|libXcomposite|libXdamage|"
         r"libxcb(?:-[A-Za-z0-9_-]+)?|libwayland-(?:client|cursor|egl)|"
@@ -720,6 +725,24 @@ def parse_linux_ldd(output: str, binary: Path) -> list[Path]:
     return dependencies
 
 
+def parse_linux_needed(output: str) -> list[str]:
+    return re.findall(r"\(NEEDED\).*Shared library: \[([^\]]+)\]", output)
+
+
+def linux_needed_libraries(binary: Path) -> list[str]:
+    result = subprocess.run(
+        ["readelf", "-d", str(binary)],
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    if result.returncode != 0:
+        fail(f"Could not inspect direct Linux dependencies for {binary}:\n"
+             f"{result.stdout}")
+    return parse_linux_needed(result.stdout)
+
+
 def is_elf(path: Path) -> bool:
     if not path.is_file() or path.is_symlink():
         return False
@@ -730,61 +753,10 @@ def is_elf(path: Path) -> bool:
         return False
 
 
-def linux_module_files(package: str, subdirectory: str) -> list[Path]:
-    code, libdir = capture("pkg-config", "--variable=libdir", package)
-    if code != 0 or not libdir:
-        return []
-    return sorted(Path(libdir).glob(f"{subdirectory}/*.so"))
-
-
-def linux_module_query(package: str, executable: str) -> Path | None:
-    """Find a GTK helper installed either on PATH or in a private libexec dir."""
-    path = shutil.which(executable)
-    if path is not None:
-        return Path(path)
-    code, libdir = capture("pkg-config", "--variable=libdir", package)
-    if code != 0 or not libdir:
-        return None
-    return next(
-        (
-            candidate
-            for candidate in sorted(Path(libdir).glob(f"**/{executable}"))
-            if candidate.is_file()
-        ),
-        None,
-    )
-
-
 def copy_linux_portable_dependencies(portable: Path) -> None:
-    """Copy the non-glibc dependency closure and dynamically loaded GTK bits."""
+    """Copy application dependencies while retaining the host desktop ABI."""
     library_dir = portable / "lib"
     library_dir.mkdir(parents=True, exist_ok=True)
-    module_groups = {
-        "gdk-pixbuf-loaders": linux_module_files(
-            "gdk-pixbuf-2.0", "gdk-pixbuf-2.0/*/loaders"
-        ),
-        "gtk-immodules": linux_module_files(
-            "gtk+-3.0", "gtk-3.0/*/immodules"
-        ),
-        # Keep the directory present and isolated even when no optional GIO
-        # modules are required. The launcher forces the local VFS.
-        "gio-modules": [],
-    }
-    for group, modules in module_groups.items():
-        destination = library_dir / group
-        destination.mkdir(parents=True, exist_ok=True)
-        for module in modules:
-            shutil.copy2(module.resolve(), destination / module.name)
-
-    libexec = portable / "libexec"
-    libexec.mkdir(parents=True, exist_ok=True)
-    for package, executable in (
-        ("gdk-pixbuf-2.0", "gdk-pixbuf-query-loaders"),
-        ("gtk+-3.0", "gtk-query-immodules-3.0"),
-    ):
-        path = linux_module_query(package, executable)
-        if path is not None:
-            shutil.copy2(path.resolve(), libexec / executable)
 
     queue = [path for path in portable.rglob("*") if is_elf(path)]
     known = {path.name: path for path in library_dir.iterdir() if is_elf(path)}
@@ -804,10 +776,16 @@ def copy_linux_portable_dependencies(portable: Path) -> None:
         )
         if result.returncode != 0:
             fail(f"Could not inspect Linux dependencies for {binary}:\n{result.stdout}")
-        for dependency in parse_linux_ldd(result.stdout, binary):
-            name = dependency.name
+        resolved = {
+            dependency.name: dependency
+            for dependency in parse_linux_ldd(result.stdout, binary)
+        }
+        for name in linux_needed_libraries(binary):
             if is_linux_system_runtime(name) or name in known:
                 continue
+            dependency = resolved.get(name)
+            if dependency is None:
+                fail(f"Could not resolve {name} required by {binary}")
             destination = library_dir / name
             shutil.copy2(dependency.resolve(), destination)
             known[name] = destination
@@ -817,7 +795,7 @@ def copy_linux_portable_dependencies(portable: Path) -> None:
 def stage_linux_portable(bundle: Path, portable: Path) -> None:
     replace_tree(bundle, portable)
     executable = portable / "mdsscope"
-    executable.rename(portable / "mdsscope.bin")
+    executable.rename(portable / ".mdsscope.bin")
     shutil.copy2(ROOT / "packaging/linux/mdsscope-portable", executable)
     executable.chmod(0o755)
     applications = portable / "share/applications"
@@ -896,7 +874,8 @@ def package_linux(formats: set[str], no_build: bool, arch: str, version: str) ->
                     "\n".join([
                         "Package: mdsscope", f"Version: {version}", f"Architecture: {deb_arch}",
                         "Maintainer: MdsScope Contributors",
-                        "Depends: libc6, libgtk-3-0, libsecret-1-0, libstdc++6",
+                        "Depends: libc6, libegl1, libgles2, libgtk-3-0, "
+                        "libsecret-1-0, libstdc++6",
                         "Section: science", "Priority: optional",
                         "Description: MDSplus signal waveform viewer", "",
                     ]),
@@ -912,7 +891,7 @@ def package_linux(formats: set[str], no_build: bool, arch: str, version: str) ->
                 package_info.write_text(
                     f"pkgname = mdsscope\npkgver = {version}-1\npkgdesc = MDSplus signal waveform viewer\n"
                     f"arch = {rpm_arch}\nsize = {installed_size}\n"
-                    "depend = gtk3\ndepend = libsecret\n",
+                    "depend = gtk3\ndepend = libglvnd\ndepend = libsecret\n",
                     encoding="utf-8",
                 )
                 run("tar", "-C", str(staging), compression, "-cf", str(DIST / f"{base}.{package_format}"), ".")
