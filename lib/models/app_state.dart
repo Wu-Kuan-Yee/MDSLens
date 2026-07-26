@@ -919,6 +919,9 @@ class AppState extends ChangeNotifier {
   String get status => _status;
   int _fetchGeneration = 0;
   int? _activeNativeFetchId;
+  Timer? _fullShotDebounceTimer;
+  DateTime? _lastFullShotScheduleAt;
+  int _rapidFullShotChanges = 0;
   int _networkPermissionFailureRevision = 0;
   int get networkPermissionFailureRevision => _networkPermissionFailureRevision;
   String _networkPermissionFailureDetails = '';
@@ -949,6 +952,7 @@ class AppState extends ChangeNotifier {
   }
 
   void _invalidateFetchForSettingsChange() {
+    _cancelPendingFullShotRefresh();
     _cancelActiveNativeFetch();
     _fetchGeneration++;
     _fetchingPlotIndex = null;
@@ -968,6 +972,46 @@ class AppState extends ChangeNotifier {
       // The result-generation guard below still prevents stale data from
       // reaching the UI when a development build has an older native bridge.
     }
+  }
+
+  void _cancelPendingFullShotRefresh({bool resetCadence = false}) {
+    _fullShotDebounceTimer?.cancel();
+    _fullShotDebounceTimer = null;
+    if (resetCadence) {
+      _lastFullShotScheduleAt = null;
+      _rapidFullShotChanges = 0;
+    }
+  }
+
+  Duration _nextFullShotDebounceDelay() {
+    final now = DateTime.now();
+    final previous = _lastFullShotScheduleAt;
+    final isRapid = previous != null &&
+        now.difference(previous) <= const Duration(milliseconds: 450);
+    _lastFullShotScheduleAt = now;
+    if (!isRapid) {
+      _rapidFullShotChanges = 0;
+      return const Duration(milliseconds: 120);
+    }
+    if (_rapidFullShotChanges < 4) _rapidFullShotChanges++;
+    final milliseconds = 220 + (_rapidFullShotChanges * 40);
+    return Duration(milliseconds: milliseconds > 380 ? 380 : milliseconds);
+  }
+
+  void _scheduleFullShotFetch(String shot) {
+    _cancelPendingFullShotRefresh();
+    _cancelActiveNativeFetch();
+    _fetchGeneration++;
+    final delay = _nextFullShotDebounceDelay();
+    _fetchingPlotIndex = null;
+    _fetching = true;
+    _status = 'Shot selected; loading in ${delay.inMilliseconds} ms...';
+    notifyListeners();
+    _fullShotDebounceTimer = Timer(delay, () {
+      _fullShotDebounceTimer = null;
+      if (_disposed) return;
+      unawaited(_doFetch(shot: shot));
+    });
   }
 
   // Max panel (null = show all)
@@ -1967,7 +2011,11 @@ class AppState extends ChangeNotifier {
     _addToHistory(_shotText);
     savePreferences();
     _viewResetId++;
-    _doFetch(shot: _shotText);
+    if (_dataMode == 2) {
+      _scheduleFullShotFetch(_shotText);
+    } else {
+      _doFetch(shot: _shotText);
+    }
   }
 
   Future<void> _loadPendingImportedConfiguration() async {
@@ -2331,6 +2379,7 @@ class AppState extends ChangeNotifier {
   }
 
   void stopFetch() {
+    _cancelPendingFullShotRefresh(resetCadence: true);
     _cancelActiveNativeFetch();
     _fetchGeneration++;
     _fetching = false;
@@ -2585,6 +2634,7 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _sessionGeneration++;
+    _cancelPendingFullShotRefresh(resetCadence: true);
     _cancelActiveNativeFetch();
     _disconnectSshTunnels();
     _fetchGeneration++;

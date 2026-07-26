@@ -1044,6 +1044,62 @@ void main() {
     expect(app.plots.first.viewMaxY, isNull);
   });
 
+  testWidgets('Rapid Full shot changes coalesce into the latest request',
+      (tester) async {
+    final requestedShots = <String>[];
+    final app = AppState(
+      signalFetchWorker: (configJson, _, __) async {
+        final config = jsonDecode(configJson) as Map<String, dynamic>;
+        final panel = ((config['columns'] as List).first as List).first as Map;
+        requestedShots.add(panel['shot'].toString());
+        return '[]';
+      },
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setLoggedIn(true, 'test-token');
+    app.dataMode = 2;
+
+    app.shotText = '170001';
+    app.startRefresh();
+    expect(app.fetching, isTrue);
+    expect(requestedShots, isEmpty);
+
+    await tester.pump(const Duration(milliseconds: 80));
+    app.shotText = '170002';
+    app.startRefresh();
+    await tester.pump(const Duration(milliseconds: 259));
+    expect(requestedShots, isEmpty);
+
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(requestedShots, ['170002']);
+    expect(app.viewResetId, greaterThan(0));
+  });
+
+  testWidgets('Stop cancels a pending Full shot request', (tester) async {
+    var requestCount = 0;
+    final app = AppState(
+      signalFetchWorker: (_, __, ___) async {
+        requestCount++;
+        return '[]';
+      },
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setLoggedIn(true, 'test-token');
+    app.dataMode = 2;
+    app.shotText = '170003';
+
+    app.startRefresh();
+    expect(app.fetching, isTrue);
+    app.stopFetch();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(requestCount, 0);
+    expect(app.fetching, isFalse);
+    expect(app.status, 'Stopped');
+  });
+
   test(
       'A configuration imported before login keeps its shot and loads after login',
       () async {
