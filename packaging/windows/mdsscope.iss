@@ -34,8 +34,19 @@ PrivilegesRequired=admin
 Source: "{#BundleDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\MdsScope"; Filename: "{app}\mdsscope.exe"
+Name: "{autoprograms}\MdsScope"; Filename: "{app}\mdsscope.exe"; AppUserModelID: "MdsScope.MdsScope"
 Name: "{autodesktop}\MdsScope"; Filename: "{app}\mdsscope.exe"; Tasks: desktopicon
+
+[Registry]
+Root: HKCR; Subkey: "MdsScope.Configuration"; ValueType: string; ValueName: ""; ValueData: "MdsScope configuration"; Flags: uninsdeletekey
+Root: HKCR; Subkey: "MdsScope.Configuration\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\mdsscope.exe"",0"
+Root: HKCR; Subkey: "MdsScope.Configuration\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\mdsscope.exe"" ""%1"""
+Root: HKCR; Subkey: ".toml\OpenWithProgids"; ValueType: string; ValueName: "MdsScope.Configuration"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCR; Subkey: ".webscp"; ValueType: string; ValueName: ""; ValueData: "MdsScope.Configuration"; Flags: uninsdeletevalue
+Root: HKCR; Subkey: "mdsscope"; ValueType: string; ValueName: ""; ValueData: "URL:MdsScope protocol"; Flags: uninsdeletekey
+Root: HKCR; Subkey: "mdsscope"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCR; Subkey: "mdsscope\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\mdsscope.exe"",0"
+Root: HKCR; Subkey: "mdsscope\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\mdsscope.exe"" ""%1"""
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"

@@ -1,6 +1,9 @@
 #include "flutter_window.h"
 
 #include <flutter/standard_method_codec.h>
+#include <propkey.h>
+#include <propsys.h>
+#include <shellapi.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -16,6 +19,41 @@ namespace {
 
 constexpr wchar_t kWindowsVersionRegistryPath[] =
     L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion";
+constexpr wchar_t kAppUserModelId[] = L"MdsScope.MdsScope";
+
+HRESULT SetStringProperty(IPropertyStore* store,
+                          REFPROPERTYKEY key,
+                          const std::wstring& text) {
+  PROPVARIANT value = {};
+  value.vt = VT_LPWSTR;
+  value.pwszVal = const_cast<wchar_t*>(text.c_str());
+  return store->SetValue(key, value);
+}
+
+void ConfigureTaskbarProperties(HWND window) {
+  IPropertyStore* store = nullptr;
+  if (FAILED(SHGetPropertyStoreForWindow(window, IID_PPV_ARGS(&store)))) {
+    return;
+  }
+  std::vector<wchar_t> executable(MAX_PATH);
+  const DWORD length =
+      GetModuleFileNameW(nullptr, executable.data(), executable.size());
+  if (length > 0 && static_cast<size_t>(length) < executable.size()) {
+    const std::wstring path(executable.data(), length);
+    const std::wstring command = L"\"" + path + L"\"";
+    const HRESULT command_result = SetStringProperty(
+        store, PKEY_AppUserModel_RelaunchCommand, command);
+    const HRESULT name_result = SetStringProperty(
+        store, PKEY_AppUserModel_RelaunchDisplayNameResource, L"MdsScope");
+    if (SUCCEEDED(command_result) && SUCCEEDED(name_result)) {
+      SetStringProperty(
+          store, PKEY_AppUserModel_RelaunchIconResource, path + L",0");
+      SetStringProperty(store, PKEY_AppUserModel_ID, kAppUserModelId);
+      store->Commit();
+    }
+  }
+  store->Release();
+}
 
 std::wstring ReadRegistryString(const wchar_t* name) {
   DWORD bytes = 0;
@@ -161,6 +199,7 @@ bool FlutterWindow::OnCreate() {
   if (!Win32Window::OnCreate()) {
     return false;
   }
+  ConfigureTaskbarProperties(GetHandle());
 
   RECT frame = GetClientArea();
 

@@ -16,6 +16,7 @@
     <Feature Id="Complete" Title="MdsScope" Level="1">
       <ComponentGroupRef Id="AppFiles" />
       <ComponentRef Id="ApplicationShortcut" />
+      <ComponentRef Id="ApplicationAssociations" />
     </Feature>
   </Product>
 
@@ -47,6 +48,31 @@
           Type="integer"
           Value="1"
           KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+  </Fragment>
+
+  <Fragment>
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="ApplicationAssociations" Guid="FA8D6F17-B6A7-4C30-B15D-4CA91C66281D">
+        <RegistryValue Root="HKCR" Key="MdsScope.Configuration" Type="string"
+          Value="MdsScope configuration" KeyPath="yes" />
+        <RegistryValue Root="HKCR" Key="MdsScope.Configuration\DefaultIcon"
+          Type="string" Value="&quot;[INSTALLFOLDER]mdsscope.exe&quot;,0" />
+        <RegistryValue Root="HKCR" Key="MdsScope.Configuration\shell\open\command"
+          Type="string" Value="&quot;[INSTALLFOLDER]mdsscope.exe&quot; &quot;%1&quot;" />
+        <RegistryValue Root="HKCR" Key=".toml\OpenWithProgids"
+          Name="MdsScope.Configuration" Type="string" Value="" />
+        <RegistryValue Root="HKCR" Key=".webscp"
+          Type="string" Value="MdsScope.Configuration" />
+        <RegistryValue Root="HKCR" Key="mdsscope"
+          Type="string" Value="URL:MdsScope protocol" />
+        <RegistryValue Root="HKCR" Key="mdsscope"
+          Name="URL Protocol" Type="string" Value="" />
+        <RegistryValue Root="HKCR" Key="mdsscope\DefaultIcon"
+          Type="string" Value="&quot;[INSTALLFOLDER]mdsscope.exe&quot;,0" />
+        <RegistryValue Root="HKCR" Key="mdsscope\shell\open\command"
+          Type="string" Value="&quot;[INSTALLFOLDER]mdsscope.exe&quot; &quot;%1&quot;" />
       </Component>
     </DirectoryRef>
   </Fragment>
