@@ -319,9 +319,9 @@ def preflight(
         checks.append((name, path is not None, path or hint, required))
 
     add(
-        "Python >= 3.10",
-        sys.executable if sys.version_info >= (3, 10) else None,
-        "Install Python 3.10 or newer.",
+        "Python >= 3.8",
+        sys.executable if sys.version_info >= (3, 8) else None,
+        "Install Python 3.8 or newer.",
     )
     if build_required:
         add("Flutter", shutil.which("flutter"), f"Install Flutter {FLUTTER_BASELINE} or pass --flutter-sdk.")

@@ -9,7 +9,7 @@ virtual environment is optional.
 
 | Component | Version / requirement |
 |---|---|
-| Python | 3.10 or newer |
+| Python | 3.8 or newer |
 | Flutter | 3.44.7 stable |
 | Rust | rustup; `rust-toolchain.toml` selects 1.92.0 |
 | Android | JDK 17+, SDK Platform 36, NDK 28.2.13676358 |
@@ -34,7 +34,7 @@ Run `python build_app.py --help` for every target, format, option, and example.
 
 Install:
 
-- Python 3.10 or newer (CPython, UV-managed Python, and a UV virtual
+- Python 3.8 or newer (CPython, UV-managed Python, and a UV virtual
   environment are all valid);
 - Flutter 3.44.7 with Windows desktop support enabled;
 - rustup;

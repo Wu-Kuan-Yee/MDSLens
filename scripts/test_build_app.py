@@ -47,11 +47,13 @@ class BuildAppTests(unittest.TestCase):
                 build_app.validate_platforms(["windows"], "x64")
 
     def test_matching_native_target_is_accepted(self) -> None:
-        with (
-            mock.patch.object(build_app, "host_platform", return_value="linux"),
-            mock.patch.object(build_app, "host_arch", return_value="arm64"),
+        with mock.patch.object(
+            build_app, "host_platform", return_value="linux"
         ):
-            build_app.validate_platforms(["linux", "android"], "arm64")
+            with mock.patch.object(
+                build_app, "host_arch", return_value="arm64"
+            ):
+                build_app.validate_platforms(["linux", "android"], "arm64")
 
     def test_sdkmanager_is_found_in_modern_android_sdk_layout(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -62,11 +64,9 @@ class BuildAppTests(unittest.TestCase):
             self.assertEqual(build_app.find_sdkmanager(Path(temporary)), manager)
 
     def test_macos_application_is_ad_hoc_signed_without_credentials(self) -> None:
-        with (
-            mock.patch.dict(build_app.os.environ, {}, clear=True),
-            mock.patch.object(build_app, "run") as run,
-        ):
-            build_app.prepare_macos_application(Path("/tmp/MdsScope.app"))
+        with mock.patch.dict(build_app.os.environ, {}, clear=True):
+            with mock.patch.object(build_app, "run") as run:
+                build_app.prepare_macos_application(Path("/tmp/MdsScope.app"))
         self.assertEqual(
             run.call_args_list,
             [

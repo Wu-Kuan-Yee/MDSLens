@@ -24,7 +24,7 @@ instead of inventing a variable name.
 
 Prerequisites:
 
-- Python 3.10 or newer (the build script uses only the standard library);
+- Python 3.8 or newer (the build script uses only the standard library);
 - Flutter 3.44.7;
 - rustup (the repository auto-selects Rust 1.92.0);
 - Platform SDKs: Xcode, Android SDK/NDK, Visual Studio, or Linux GTK development packages.

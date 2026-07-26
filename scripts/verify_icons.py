@@ -35,7 +35,9 @@ def verify_asset_catalog(relative: str, allow_alpha: bool) -> int:
         path = directory / filename
         check(path.is_file(), f"missing catalog icon: {path}")
         points = float(image["size"].split("x", 1)[0])
-        scale = float(image["scale"].removesuffix("x"))
+        scale_text = image["scale"]
+        check(scale_text.endswith("x"), f"invalid icon scale: {scale_text}")
+        scale = float(scale_text[:-1])
         expected = round(points * scale)
         width, height, color_type = png_info(path)
         check((width, height) == (expected, expected), f"wrong icon size: {path} is {width}x{height}, expected {expected}")
