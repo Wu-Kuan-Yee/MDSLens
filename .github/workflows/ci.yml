@@ -233,9 +233,11 @@ jobs:
           channel: stable
           cache: true
       - uses: dtolnay/rust-toolchain@1.92.0
-      - run: python3 build_app.py -p ios -p ipados -f unsigned-zip
+      - run: python3 build_app.py -p ios -p ipados -f unsigned-ipa zip
       - uses: actions/upload-artifact@v4
         with:
           name: ci-apple-mobile
-          path: build/dist/*-unsigned.zip
+          path: |
+            build/dist/*-unsigned.ipa
+            build/dist/*-unsigned.zip
           if-no-files-found: error

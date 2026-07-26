@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import platform
+import plistlib
 import re
 import shlex
 import shutil
@@ -34,14 +35,23 @@ ANDROID_NDK = "28.2.13676358"
 
 PLATFORM_FORMATS = {
     "windows": {"exe", "msi", "zip", "tar.gz", "tar.xz", "tar.bz2"},
-    "macos": {"app", "dmg", "pkg", "zip", "tar.gz", "tar.xz", "tar.bz2"},
+    "macos": {
+        "app", "dmg", "pkg", "xcarchive",
+        "zip", "tar.gz", "tar.xz", "tar.bz2",
+    },
     "linux": {
         "deb", "rpm", "pkg.tar.zst", "pkg.tar.xz", "AppImage",
         "zip", "tar.gz", "tar.xz", "tar.bz2",
     },
     "android": {"apk", "aab"},
-    "ios": {"ipa", "unsigned-zip"},
-    "ipados": {"ipa", "unsigned-zip"},
+    "ios": {
+        "unsigned-ipa", "unsigned-app", "xcarchive",
+        "zip", "tar.gz", "tar.xz", "tar.bz2",
+    },
+    "ipados": {
+        "unsigned-ipa", "unsigned-app", "xcarchive",
+        "zip", "tar.gz", "tar.xz", "tar.bz2",
+    },
 }
 
 
@@ -518,93 +528,119 @@ def flutter_build(target: str, *arguments: str) -> None:
 
 
 def prepare_macos_application(app: Path) -> None:
-    identity = os.environ.get("MDSSCOPE_MACOS_SIGN_IDENTITY", "").strip()
-    if identity:
-        run(
-            "codesign", "--force", "--deep", "--options", "runtime",
-            "--timestamp", "--sign", identity, str(app),
-        )
-    else:
-        # Keep portable bundles internally consistent without pretending that
-        # an ad-hoc signature replaces Developer ID distribution.
-        run("codesign", "--force", "--deep", "--sign", "-", str(app))
+    # Apple Silicon requires code-signature integrity even when an application
+    # is distributed without a Developer ID identity.  An ad-hoc signature
+    # keeps the bundle launchable after thinning while remaining unsigned for
+    # trust/Gatekeeper purposes and suitable for user re-signing.
+    run("codesign", "--force", "--deep", "--sign", "-", str(app))
     run("codesign", "--verify", "--deep", "--strict", str(app))
 
-    notary_profile = os.environ.get("MDSSCOPE_NOTARY_PROFILE", "").strip()
-    if identity and notary_profile:
-        with tempfile.TemporaryDirectory(prefix="mdsscope-notary-") as temporary:
-            submission = Path(temporary) / "MdsScope.zip"
-            run(
-                "ditto", "-c", "-k", "--sequesterRsrc", "--keepParent",
-                str(app), str(submission),
+def macos_binary_architectures(path: Path) -> set[str]:
+    if not path.is_file() or path.is_symlink():
+        return set()
+    code, output = capture("lipo", "-archs", str(path))
+    if code != 0:
+        return set()
+    return set(output.split())
+
+
+def prepare_macos_architecture(source: Path, destination: Path, arch: str) -> None:
+    replace_tree(source, destination)
+    expected = {"arm64", "x86_64"} if arch == "universal" else {
+        "arm64" if arch == "arm64" else "x86_64"
+    }
+    inspected = 0
+    for path in sorted(destination.rglob("*")):
+        architectures = macos_binary_architectures(path)
+        if not architectures:
+            continue
+        inspected += 1
+        if not expected.issubset(architectures):
+            fail(
+                f"{path.relative_to(destination)} lacks the required {arch} "
+                f"architecture (contains: {', '.join(sorted(architectures))})"
             )
-            run(
-                "xcrun", "notarytool", "submit", str(submission),
-                "--keychain-profile", notary_profile, "--wait",
-            )
-        run("xcrun", "stapler", "staple", str(app))
+        if arch != "universal" and len(architectures) > 1:
+            run("lipo", str(path), "-thin", next(iter(expected)), "-output", str(path))
+    if inspected == 0:
+        fail(f"No Mach-O binaries were found in {source}")
+    prepare_macos_application(destination)
 
 
-def sign_and_notarize_macos_artifact(path: Path) -> None:
-    identity = os.environ.get("MDSSCOPE_MACOS_SIGN_IDENTITY", "").strip()
-    notary_profile = os.environ.get("MDSSCOPE_NOTARY_PROFILE", "").strip()
-    if identity and path.suffix == ".dmg":
-        run(
-            "codesign", "--force", "--timestamp", "--sign", identity,
-            str(path),
+def create_xcarchive(app: Path, output: Path, *, name: str) -> None:
+    if output.exists():
+        shutil.rmtree(output)
+    archived_app = output / "Products/Applications" / app.name
+    archived_app.parent.mkdir(parents=True)
+    replace_tree(app, archived_app)
+    version = project_version()
+    with (output / "Info.plist").open("wb") as stream:
+        plistlib.dump(
+            {
+                "ArchiveVersion": 2,
+                "Name": name,
+                "SchemeName": "Runner",
+                "ApplicationProperties": {
+                    "ApplicationPath": f"Applications/{app.name}",
+                    "CFBundleIdentifier": "com.mdsscope.app",
+                    "CFBundleShortVersionString": version,
+                },
+            },
+            stream,
         )
-    if identity and notary_profile:
-        run(
-            "xcrun", "notarytool", "submit", str(path),
-            "--keychain-profile", notary_profile, "--wait",
-        )
-        run("xcrun", "stapler", "staple", str(path))
+    log(f"Created {output.name}")
+    # GitHub Releases accepts files, while .xcarchive is a directory bundle.
+    # Publish a lossless ZIP alongside the local directory representation.
+    make_zip(output, output.with_name(output.name + ".zip"), output.name)
 
 
-def package_macos(formats: set[str], no_build: bool) -> None:
+def package_macos(formats: set[str], no_build: bool, requested_arch: str) -> None:
     if host_platform() != "macos":
         fail("macOS packages can only be built on macOS")
     if not no_build:
         flutter_build("macos")
 
-    app = ROOT / "build/macos/Build/Products/Release/MdsScope.app"
-    if not app.is_dir():
-        fail(f"macOS application bundle not found: {app}")
-    prepare_macos_application(app)
-    base = "mdsscope-macos-universal"
+    source = ROOT / "build/macos/Build/Products/Release/MdsScope.app"
+    if not source.is_dir():
+        fail(f"macOS application bundle not found: {source}")
+    architectures = (
+        ["arm64", "x64", "universal"]
+        if requested_arch == "universal"
+        else [requested_arch]
+    )
+    with tempfile.TemporaryDirectory(prefix="mdsscope-macos-") as temporary:
+        for arch in architectures:
+            app = Path(temporary) / arch / "MdsScope.app"
+            prepare_macos_architecture(source, app, arch)
+            base = f"mdsscope-macos-{arch}-unsigned"
 
-    if selected(formats, "app"):
-        replace_tree(app, DIST / f"{base}.app")
-        log(f"Created {base}.app")
-    if selected(formats, "zip"):
-        make_zip(app, DIST / f"{base}.zip", app.name)
-    if selected(formats, "tar.gz"):
-        make_tar(app, DIST / f"{base}.tar.gz", app.name, "w:gz")
-    if selected(formats, "tar.xz"):
-        make_tar(app, DIST / f"{base}.tar.xz", app.name, "w:xz")
-    if selected(formats, "tar.bz2"):
-        make_tar(app, DIST / f"{base}.tar.bz2", app.name, "w:bz2")
-    if selected(formats, "dmg"):
-        dmg = DIST / f"{base}.dmg"
-        run(
-            "hdiutil", "create", "-quiet", "-volname", "MdsScope",
-            "-srcfolder", str(app), "-ov", "-format", "UDZO", str(dmg),
-        )
-        sign_and_notarize_macos_artifact(dmg)
-    if selected(formats, "pkg"):
-        package = DIST / f"{base}.pkg"
-        installer_identity = os.environ.get(
-            "MDSSCOPE_MACOS_INSTALLER_IDENTITY", ""
-        ).strip()
-        command = [
-            "pkgbuild", "--component", str(app),
-            "--install-location", "/Applications",
-        ]
-        if installer_identity:
-            command.extend(["--sign", installer_identity])
-        command.append(str(package))
-        run(*command)
-        sign_and_notarize_macos_artifact(package)
+            if selected(formats, "app"):
+                replace_tree(app, DIST / f"{base}.app")
+                log(f"Created {base}.app")
+            if selected(formats, "zip"):
+                make_zip(app, DIST / f"{base}.zip", app.name)
+            if selected(formats, "tar.gz"):
+                make_tar(app, DIST / f"{base}.tar.gz", app.name, "w:gz")
+            if selected(formats, "tar.xz"):
+                make_tar(app, DIST / f"{base}.tar.xz", app.name, "w:xz")
+            if selected(formats, "tar.bz2"):
+                make_tar(app, DIST / f"{base}.tar.bz2", app.name, "w:bz2")
+            if selected(formats, "dmg"):
+                run(
+                    "hdiutil", "create", "-quiet", "-volname", "MdsScope",
+                    "-srcfolder", str(app), "-ov", "-format", "UDZO",
+                    str(DIST / f"{base}.dmg"),
+                )
+            if selected(formats, "pkg"):
+                run(
+                    "pkgbuild", "--component", str(app),
+                    "--install-location", "/Applications",
+                    str(DIST / f"{base}.pkg"),
+                )
+            if selected(formats, "xcarchive"):
+                create_xcarchive(
+                    app, DIST / f"{base}.xcarchive", name="MdsScope"
+                )
 
 
 def windows_bundle(arch: str) -> Path:
@@ -985,30 +1021,60 @@ def package_android(formats: set[str], no_build: bool) -> None:
         shutil.copy2(source, DIST / "mdsscope-android-universal.aab")
 
 
+def remove_apple_signing_material(bundle: Path) -> None:
+    for path in sorted(bundle.rglob("_CodeSignature"), reverse=True):
+        if path.is_dir():
+            shutil.rmtree(path)
+    for path in bundle.rglob("embedded.mobileprovision"):
+        path.unlink()
+    for path in sorted(bundle.rglob("*")):
+        if macos_binary_architectures(path):
+            run("codesign", "--remove-signature", str(path), check=False)
+
+
 def package_ios(formats: set[str], no_build: bool) -> None:
     if host_platform() != "macos":
         fail("iOS/iPadOS packages can only be built on macOS")
-    # One universal Apple mobile binary supports both iPhone and iPad. Both
-    # names are published as aliases so platform-filtered release clients find it.
-    if selected(formats, "unsigned-zip"):
-        if not no_build:
-            flutter_build("ios", "--no-codesign")
-        app = ROOT / "build/ios/iphoneos/Runner.app"
-        if not app.is_dir():
-            fail(f"Unsigned iOS application bundle not found: {app}")
-        make_zip(app, DIST / "mdsscope-ios-arm64-unsigned.zip", app.name)
-        shutil.copy2(
-            DIST / "mdsscope-ios-arm64-unsigned.zip",
-            DIST / "mdsscope-ipados-arm64-unsigned.zip",
-        )
-    if selected(formats, "ipa"):
-        if not no_build:
-            flutter_build("ipa")
-        ipas = sorted((ROOT / "build/ios/ipa").glob("*.ipa"))
-        if len(ipas) != 1:
-            fail("A signed IPA was not produced. Configure Apple signing in Xcode first.")
-        shutil.copy2(ipas[0], DIST / "mdsscope-ios-arm64.ipa")
-        shutil.copy2(ipas[0], DIST / "mdsscope-ipados-arm64.ipa")
+    if not no_build:
+        flutter_build("ios", "--no-codesign")
+    source = ROOT / "build/ios/iphoneos/Runner.app"
+    if not source.is_dir():
+        fail(f"Unsigned iOS application bundle not found: {source}")
+
+    with tempfile.TemporaryDirectory(prefix="mdsscope-ios-") as temporary:
+        temporary_root = Path(temporary)
+        app = temporary_root / "MdsScope.app"
+        replace_tree(source, app)
+        remove_apple_signing_material(app)
+
+        # One application supports both iPhone and iPad. Publish aliases so
+        # platform-filtered release clients can discover the same binary.
+        for platform_name in ("ios", "ipados"):
+            base = f"mdsscope-{platform_name}-arm64-unsigned"
+            if selected(formats, "unsigned-app"):
+                replace_tree(app, DIST / f"{base}.app")
+                log(f"Created {base}.app")
+            if selected(formats, "unsigned-ipa"):
+                payload = temporary_root / platform_name / "Payload"
+                payload.mkdir(parents=True)
+                replace_tree(app, payload / app.name)
+                run(
+                    "ditto", "-c", "-k", "--keepParent", str(payload),
+                    str(DIST / f"{base}.ipa"),
+                )
+                log(f"Created {base}.ipa")
+            if selected(formats, "zip"):
+                make_zip(app, DIST / f"{base}.zip", app.name)
+            if selected(formats, "tar.gz"):
+                make_tar(app, DIST / f"{base}.tar.gz", app.name, "w:gz")
+            if selected(formats, "tar.xz"):
+                make_tar(app, DIST / f"{base}.tar.xz", app.name, "w:xz")
+            if selected(formats, "tar.bz2"):
+                make_tar(app, DIST / f"{base}.tar.bz2", app.name, "w:bz2")
+            if selected(formats, "xcarchive"):
+                create_xcarchive(
+                    app, DIST / f"{base}.xcarchive", name="MdsScope"
+                )
 
 
 class HelpFormatter(argparse.RawDescriptionHelpFormatter):
@@ -1032,8 +1098,7 @@ def create_parser() -> argparse.ArgumentParser:
           python build_app.py -p windows -a x64 -f zip
           python build_app.py -p android -f apk aab --install-android-sdk-components
           ./build_app.py -p macos -f app dmg zip
-          ./build_app.py -p ios -f unsigned-zip
-          ./build_app.py -p ios -p ipados -f ipa
+          ./build_app.py -p ios -p ipados -f unsigned-ipa zip xcarchive
           ./build_app.py -p linux -a arm64 -f deb zip
 
         SDK paths may be passed explicitly, so modifying the parent shell's
@@ -1043,7 +1108,9 @@ def create_parser() -> argparse.ArgumentParser:
             --cargo-home C:\\Users\\me\\.cargo
 
         A first native build compiles vendored OpenSSL and may take several
-        minutes. IPA output requires Xcode signing; unsigned-zip does not.
+        minutes. Apple outputs are unsigned distributions. macOS applications
+        carry only the ad-hoc integrity signature required for local launching;
+        iOS/iPadOS IPAs must be re-signed by the user before installation.
         HarmonyOS NEXT is reported as unsupported because upstream Flutter
         cannot produce a HAP and this repository has no ArkUI project.
         See docs/BUILDING.md for complete host prerequisites and signing.
@@ -1070,8 +1137,11 @@ def main() -> None:
         help="target platform; repeat for several targets (default: native desktop)",
     )
     parser.add_argument(
-        "-a", "--arch", choices=["auto", "x64", "arm64"], default="auto",
-        help="desktop output architecture; Windows/Linux require a matching native host (default: auto)",
+        "-a", "--arch", choices=["auto", "x64", "arm64", "universal"], default="auto",
+        help=(
+            "desktop output architecture; universal is macOS-only and emits "
+            "arm64, x64, and universal packages (default: auto)"
+        ),
     )
     parser.add_argument(
         "-f", "--format", nargs="+", default=["all"],
@@ -1168,7 +1238,7 @@ def main() -> None:
     for target in platforms:
         log(f"Building {target} ({arch}), version {version}")
         if target == "macos":
-            package_macos(formats, args.no_build)
+            package_macos(formats, args.no_build, arch)
         elif target == "windows":
             package_windows(formats, args.no_build, arch)
         elif target == "linux":

@@ -60,10 +60,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.92.0
       - name: Build packages
         run: >-
-          python3 build_app.py -p macos
-          -f app dmg pkg zip tar.gz tar.xz tar.bz2
+          python3 build_app.py -p macos -a universal
+          -f app dmg pkg xcarchive zip tar.gz tar.xz tar.bz2
       - name: Verify the application bundle
-        run: codesign --verify --deep --strict build/dist/mdsscope-macos-universal.app
+        run: |
+          codesign --verify --deep --strict build/dist/mdsscope-macos-arm64-unsigned.app
+          codesign --verify --deep --strict build/dist/mdsscope-macos-x64-unsigned.app
+          codesign --verify --deep --strict build/dist/mdsscope-macos-universal-unsigned.app
       - uses: actions/upload-artifact@v4
         with:
           name: mdsscope-macos-universal
@@ -226,11 +229,6 @@ jobs:
   apple-mobile:
     name: iOS and iPadOS
     runs-on: macos-15
-    env:
-      APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
-      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
-      APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -239,41 +237,10 @@ jobs:
           channel: stable
           cache: true
       - uses: dtolnay/rust-toolchain@1.92.0
-      - name: Detect signing credentials
-        id: signing
-        shell: bash
-        run: |
-          if [[ -n "$APPLE_CERTIFICATE_BASE64" && -n "$APPLE_PROVISIONING_PROFILE_BASE64" && -n "$APPLE_KEYCHAIN_PASSWORD" ]]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Install Apple signing credentials
-        if: steps.signing.outputs.available == 'true'
-        shell: bash
-        run: |
-          certificate="$RUNNER_TEMP/mdsscope-release.p12"
-          profile="$RUNNER_TEMP/mdsscope.mobileprovision"
-          profile_plist="$RUNNER_TEMP/mdsscope-profile.plist"
-          keychain="$RUNNER_TEMP/mdsscope-signing.keychain-db"
-          printf '%s' "$APPLE_CERTIFICATE_BASE64" | base64 -D > "$certificate"
-          printf '%s' "$APPLE_PROVISIONING_PROFILE_BASE64" | base64 -D > "$profile"
-          security create-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$keychain"
-          security set-keychain-settings -lut 21600 "$keychain"
-          security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$keychain"
-          security import "$certificate" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
-          security set-key-partition-list -S apple-tool:,apple: -k "$APPLE_KEYCHAIN_PASSWORD" "$keychain"
-          security list-keychains -d user -s "$keychain" login.keychain-db
-          security cms -D -i "$profile" > "$profile_plist"
-          profile_uuid=$(/usr/libexec/PlistBuddy -c 'Print UUID' "$profile_plist")
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          cp "$profile" "$HOME/Library/MobileDevice/Provisioning Profiles/$profile_uuid.mobileprovision"
-      - name: Build signed IPA
-        if: steps.signing.outputs.available == 'true'
-        run: python3 build_app.py -p ios -p ipados -f ipa
-      - name: Build unsigned verification bundle
-        if: steps.signing.outputs.available != 'true'
-        run: python3 build_app.py -p ios -p ipados -f unsigned-zip
+      - name: Build unsigned Apple mobile packages
+        run: >-
+          python3 build_app.py -p ios -p ipados
+          -f unsigned-ipa unsigned-app xcarchive zip tar.gz tar.xz tar.bz2
       - uses: actions/upload-artifact@v4
         with:
           name: mdsscope-apple-mobile
