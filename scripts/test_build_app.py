@@ -14,7 +14,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import build_app  # noqa: E402
-from scripts import verify_linux_portable  # noqa: E402
+from scripts import build_msixbundle, verify_linux_portable  # noqa: E402
 
 
 class BuildAppTests(unittest.TestCase):
@@ -96,6 +96,31 @@ class BuildAppTests(unittest.TestCase):
             self.assertIn('ProcessorArchitecture="arm64"', manifest)
             self.assertIn('Version="7.0.0.0"', manifest)
             self.assertIn('Executable="mdsscope.exe"', manifest)
+
+    def test_msixbundle_finds_versioned_windows_sdk_makeappx(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            program_files = Path(temporary) / "Program Files (x86)"
+            older = program_files / "Windows Kits/10/bin/10.0.22000.0/x64/makeappx.exe"
+            newest = program_files / "Windows Kits/10/bin/10.0.26100.0/x64/makeappx.exe"
+            older.parent.mkdir(parents=True)
+            newest.parent.mkdir(parents=True)
+            older.touch()
+            newest.touch()
+            with mock.patch.dict(
+                build_msixbundle.os.environ,
+                {
+                    "ProgramFiles(x86)": str(program_files),
+                    "ProgramFiles": str(Path(temporary) / "Program Files"),
+                },
+                clear=True,
+            ):
+                with mock.patch.object(
+                    build_msixbundle.shutil, "which", return_value=None
+                ):
+                    self.assertEqual(
+                        build_msixbundle.find_makeappx("makeappx"),
+                        str(newest),
+                    )
 
     def test_android_apks_are_generated_from_the_app_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
