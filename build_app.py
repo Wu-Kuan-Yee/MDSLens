@@ -373,6 +373,7 @@ def preflight(
             ("clang", "Install clang."),
             ("cmake", "Install cmake."),
             ("ninja", "Install ninja-build."),
+            ("patchelf", "Install patchelf."),
             ("pkg-config", "Install pkg-config."),
             ("perl", "Install perl for vendored OpenSSL."),
         ):
@@ -792,11 +793,25 @@ def copy_linux_portable_dependencies(portable: Path) -> None:
             queue.append(destination)
 
 
+def patch_linux_runtime_paths(root: Path) -> None:
+    """Make every packaged ELF locate application libraries without a wrapper."""
+    patchelf = shutil.which("patchelf")
+    if patchelf is None:
+        fail("patchelf is required to package Linux applications")
+    library_dir = root / "lib"
+    for binary in (path for path in root.rglob("*") if is_elf(path)):
+        relative_library_dir = os.path.relpath(library_dir, binary.parent)
+        runpath = "$ORIGIN"
+        if relative_library_dir != ".":
+            runpath += "/" + relative_library_dir
+        run(patchelf, "--set-rpath", runpath, str(binary))
+
+
 def stage_linux_portable(bundle: Path, portable: Path) -> None:
     replace_tree(bundle, portable)
     executable = portable / "mdsscope"
-    executable.rename(portable / ".mdsscope.bin")
-    shutil.copy2(ROOT / "packaging/linux/mdsscope-portable", executable)
+    if not is_elf(executable):
+        fail(f"Linux application executable is not ELF: {executable}")
     executable.chmod(0o755)
     applications = portable / "share/applications"
     applications.mkdir(parents=True, exist_ok=True)
@@ -811,11 +826,13 @@ def stage_linux_portable(bundle: Path, portable: Path) -> None:
         mime_packages,
     )
     copy_linux_portable_dependencies(portable)
+    patch_linux_runtime_paths(portable)
 
 
 def stage_linux_root(bundle: Path, root: Path) -> None:
     app_dir = root / "usr/lib/mdsscope"
     replace_tree(bundle, app_dir)
+    patch_linux_runtime_paths(app_dir)
     bin_dir = root / "usr/bin"
     bin_dir.mkdir(parents=True, exist_ok=True)
     os.symlink("../lib/mdsscope/mdsscope", bin_dir / "mdsscope")

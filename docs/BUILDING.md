@@ -99,7 +99,7 @@ For Ubuntu/Debian:
 ```sh
 sudo apt-get update
 sudo apt-get install -y python3 build-essential clang cmake ninja-build \
-  pkg-config libgtk-3-dev libsecret-1-dev perl nasm
+  pkg-config libgtk-3-dev libsecret-1-dev patchelf perl nasm
 python3 build_app.py --doctor -p linux
 python3 build_app.py -p linux -a x64 -f deb zip
 ```
@@ -115,9 +115,10 @@ not general cross-compilation targets.
 ZIP and TAR outputs are portable application bundles, not copies of the raw
 Flutter build directory. They carry the Flutter engine, plugins, Rust bridge,
 application data and other application-owned libraries. Extract the archive
-and run `./mdsscope-linux-<arch>/mdsscope`; the hidden `.mdsscope.bin` is an
-internal launcher target, not a second user entry point. The AppImage is
-assembled from the same runtime.
+and run `./mdsscope-linux-<arch>/mdsscope`. This file is the native ELF
+executable itself; packaging writes relocatable `$ORIGIN` runpaths into it and
+the bundled libraries, so no launcher script or fixed extraction path is
+needed. The AppImage is assembled from the same runtime.
 
 GTK 3, GLib/GIO, libsecret, their settings schemas and image/input modules,
 glibc, compiler ABI libraries, the X11/Wayland and EGL/OpenGL stacks, the Linux

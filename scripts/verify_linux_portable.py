@@ -70,16 +70,13 @@ def extract(archive: Path, destination: Path) -> Path:
     return roots[0]
 
 
-def dependencies(binary: Path, library_dir: Path) -> list[Path]:
-    environment = dict(os.environ)
-    environment["LD_LIBRARY_PATH"] = str(library_dir)
+def dependencies(binary: Path) -> list[Path]:
     result = subprocess.run(
         ["ldd", str(binary)],
         check=True,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        env=environment,
     )
     if "=> not found" in result.stdout:
         raise RuntimeError(f"Unresolved dependency for {binary}:\n{result.stdout}")
@@ -121,14 +118,15 @@ def needed_libraries(binary: Path) -> set[str]:
 
 
 def verify(root: Path, maximum_glibc: tuple[int, int], launch: bool) -> None:
-    launcher = root / "mdsscope"
-    executable = root / ".mdsscope.bin"
+    executable = root / "mdsscope"
     library_dir = root / "lib"
-    for required in (launcher, executable, library_dir):
+    for required in (executable, library_dir):
         if not required.exists():
             raise RuntimeError(f"Portable bundle is missing {required.relative_to(root)}")
-    if not os.access(launcher, os.X_OK):
-        raise RuntimeError("Portable launcher is not executable")
+    if not is_elf(executable):
+        raise RuntimeError("Portable mdsscope is not an ELF executable")
+    if not os.access(executable, os.X_OK):
+        raise RuntimeError("Portable executable is not executable")
 
     binaries = [path for path in root.rglob("*") if is_elf(path)]
     if not binaries:
@@ -147,7 +145,7 @@ def verify(root: Path, maximum_glibc: tuple[int, int], launch: bool) -> None:
     required_versions: set[tuple[int, int]] = set()
     for binary in binaries:
         required_versions.update(glibc_versions(binary))
-        dependencies(binary, library_dir)
+        dependencies(binary)
         for dependency in needed_libraries(binary):
             if (
                 dependency not in bundled_names
@@ -166,7 +164,7 @@ def verify(root: Path, maximum_glibc: tuple[int, int], launch: bool) -> None:
         virtual_display: subprocess.Popen[str] | None = None
         environment = dict(os.environ)
         if xvfb is not None:
-            command = [xvfb, "-a", str(launcher)]
+            command = [xvfb, "-a", str(executable)]
         else:
             xvfb_server = shutil.which("Xvfb")
             if xvfb_server is None:
@@ -181,7 +179,7 @@ def verify(root: Path, maximum_glibc: tuple[int, int], launch: bool) -> None:
             time.sleep(1)
             if virtual_display.poll() is not None:
                 raise RuntimeError("Xvfb exited before the launch test")
-            command = [str(launcher)]
+            command = [str(executable)]
         process = subprocess.Popen(
             command,
             cwd=root,

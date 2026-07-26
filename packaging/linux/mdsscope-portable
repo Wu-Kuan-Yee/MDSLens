@@ -1,9 +1,0 @@
-#!/bin/sh
-
-# Keep application-owned libraries discoverable while using one coherent GTK,
-# GLib, settings-schema and graphics stack from the host desktop.
-app_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-export LD_LIBRARY_PATH="${app_dir}/lib"
-export XDG_DATA_DIRS="${app_dir}/share${XDG_DATA_DIRS:+:${XDG_DATA_DIRS}}"
-
-exec "${app_dir}/.mdsscope.bin" "$@"

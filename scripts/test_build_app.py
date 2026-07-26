@@ -165,14 +165,43 @@ class BuildAppTests(unittest.TestCase):
             ["libgtk-3.so.0", "libapp.so"],
         )
 
+    def test_linux_runtime_paths_are_relative_to_each_elf(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            executable = root / "mdsscope"
+            plugin = root / "lib/plugins/plugin.so"
+            plugin.parent.mkdir(parents=True)
+            executable.write_bytes(b"\x7fELF")
+            plugin.write_bytes(b"\x7fELF")
+            with mock.patch.object(build_app.shutil, "which", return_value="/usr/bin/patchelf"):
+                with mock.patch.object(build_app, "run") as run:
+                    build_app.patch_linux_runtime_paths(root)
+            self.assertEqual(
+                run.call_args_list,
+                [
+                    mock.call(
+                        "/usr/bin/patchelf",
+                        "--set-rpath",
+                        "$ORIGIN/lib",
+                        str(executable),
+                    ),
+                    mock.call(
+                        "/usr/bin/patchelf",
+                        "--set-rpath",
+                        "$ORIGIN/..",
+                        str(plugin),
+                    ),
+                ],
+            )
+
     def test_portable_zip_extraction_restores_unix_executable_mode(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             bundle = root / "mdsscope-linux-x64"
             bundle.mkdir()
-            launcher = bundle / "mdsscope"
-            launcher.write_text("#!/bin/sh\n", encoding="utf-8")
-            launcher.chmod(0o755)
+            executable = bundle / "mdsscope"
+            executable.write_bytes(b"\x7fELF")
+            executable.chmod(0o755)
             archive = Path(
                 shutil.make_archive(
                     str(root / "mdsscope-linux-x64"),
