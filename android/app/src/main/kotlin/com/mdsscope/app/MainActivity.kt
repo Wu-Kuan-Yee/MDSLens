@@ -3,6 +3,7 @@ package com.mdsscope.app
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.provider.OpenableColumns
 import android.provider.Settings
 import java.io.File
 import java.io.FileInputStream
@@ -13,6 +14,9 @@ import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 
 class MainActivity: FlutterActivity() {
+    private var openRequestsChannel: MethodChannel? = null
+    private val pendingOpenRequests = mutableListOf<String>()
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(
@@ -59,6 +63,82 @@ class MainActivity: FlutterActivity() {
                 return@setMethodCallHandler
             }
             result.success(systemFontFamilies())
+        }
+        openRequestsChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "mdsscope/open_requests"
+        )
+        openRequestsChannel?.setMethodCallHandler { call, result ->
+            if (call.method != "takePending") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            val pending = pendingOpenRequests.toList()
+            pendingOpenRequests.clear()
+            result.success(pending)
+        }
+        stageIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        stageIntent(intent)
+    }
+
+    private fun stageIntent(intent: Intent?) {
+        if (intent == null) return
+        val uri = when (intent.action) {
+            Intent.ACTION_SEND -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+                }
+            }
+            Intent.ACTION_VIEW -> intent.data
+            else -> null
+        } ?: return
+
+        val request = if (uri.scheme.equals("mdsscope", ignoreCase = true)) {
+            uri.toString()
+        } else {
+            copyIncomingConfiguration(uri) ?: return
+        }
+        pendingOpenRequests.add(request)
+        openRequestsChannel?.invokeMethod("openRequest", request)
+    }
+
+    private fun copyIncomingConfiguration(uri: Uri): String? {
+        if (uri.scheme == "file") return uri.path
+        val displayName = try {
+            contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        } catch (_: Exception) {
+            null
+        } ?: "shared-config.toml"
+        val safeName = displayName.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val destination = File(
+            cacheDir,
+            "${System.currentTimeMillis()}-${safeName.ifEmpty { "config.toml" }}"
+        )
+        return try {
+            contentResolver.openInputStream(uri)?.use { input ->
+                destination.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            } ?: return null
+            destination.absolutePath
+        } catch (_: Exception) {
+            null
         }
     }
 
