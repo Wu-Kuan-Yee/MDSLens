@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 MdsScope Contributors
+// SPDX-FileCopyrightText: 2026 MDSLens Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! MDSIP TCP connection management with thread-local connection caching.

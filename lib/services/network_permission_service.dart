@@ -11,7 +11,7 @@ enum NetworkAccessPreparation {
 class NetworkPermissionService {
   NetworkPermissionService._();
 
-  static const MethodChannel _channel = MethodChannel('mdsscope/permissions');
+  static const MethodChannel _channel = MethodChannel('mdslens/permissions');
 
   static bool get needsLocalNetworkPrivacyHandling =>
       defaultTargetPlatform == TargetPlatform.iOS ||

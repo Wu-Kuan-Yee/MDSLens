@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 MdsScope Contributors
+// SPDX-FileCopyrightText: 2026 MDSLens Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Encrypted authentication cache.
@@ -17,7 +17,7 @@ use sha2::{Digest, Sha256};
 /// - Windows: COMPUTERNAME | USERNAME
 /// - macOS: machineUniqueId | hostname | USER
 /// - Linux: /etc/machine-id | USER
-/// All platforms append: | <homeDir> | "MdsScope EAST auth cache"
+/// All platforms append: | <homeDir> | "MDSLens EAST auth cache"
 fn machine_id() -> String {
     #[cfg(target_os = "windows")]
     {
@@ -106,7 +106,7 @@ struct SshPayload {
 /// Matches the C++ `localAuthKey()` derivation.
 fn local_auth_key() -> Vec<u8> {
     let entropy = format!(
-        "{}|{}|MdsScope EAST auth cache",
+        "{}|{}|MDSLens EAST auth cache",
         machine_id(),
         home_dir(),
     );
@@ -302,7 +302,7 @@ mod tests {
 
     #[test]
     fn test_save_load_roundtrip() {
-        let tmp = std::env::temp_dir().join("mdsscope_test_auth.cache");
+        let tmp = std::env::temp_dir().join("mdslens_test_auth.cache");
 
         let auth = CachedAuth {
             user_name: "testuser".into(),
@@ -339,7 +339,7 @@ mod tests {
 
     #[test]
     fn test_load_nonexistent() {
-        assert!(load_cached_auth("/tmp/mdsscope_nonexistent_cache.json").is_none());
+        assert!(load_cached_auth("/tmp/mdslens_nonexistent_cache.json").is_none());
     }
 
     #[test]

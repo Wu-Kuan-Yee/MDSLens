@@ -1,10 +1,6 @@
 import 'dart:math' as math;
 
-typedef ResponsivePlotCell = ({
-  int sourceColumn,
-  int sourceRow,
-  int plotIndex,
-});
+typedef ResponsivePlotCell = ({int sourceColumn, int sourceRow, int plotIndex});
 
 List<List<ResponsivePlotCell>> buildResponsivePlotColumns(
   List<int> sourceColumnSizes,

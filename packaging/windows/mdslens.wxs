@@ -2,18 +2,18 @@
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Product
     Id="*"
-    Name="MdsScope"
+    Name="MDSLens"
     Language="1033"
     Version="$(var.AppVersion)"
-    Manufacturer="MdsScope Contributors"
+    Manufacturer="MDSLens Contributors"
     UpgradeCode="B9EA2350-BC49-4C8A-B91C-DB57C721A999">
     <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />
-    <MajorUpgrade DowngradeErrorMessage="A newer version of MdsScope is already installed." />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of MDSLens is already installed." />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
-    <Icon Id="MdsScopeIcon" SourceFile="$(var.IconPath)" />
-    <Property Id="ARPPRODUCTICON" Value="MdsScopeIcon" />
+    <Icon Id="MDSLensIcon" SourceFile="$(var.IconPath)" />
+    <Property Id="ARPPRODUCTICON" Value="MDSLensIcon" />
 
-    <Feature Id="Complete" Title="MdsScope" Level="1">
+    <Feature Id="Complete" Title="MDSLens" Level="1">
       <ComponentGroupRef Id="AppFiles" />
       <ComponentRef Id="ApplicationShortcut" />
       <ComponentRef Id="ApplicationAssociations" />
@@ -23,10 +23,10 @@
   <Fragment>
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLFOLDER" Name="MdsScope" />
+        <Directory Id="INSTALLFOLDER" Name="MDSLens" />
       </Directory>
       <Directory Id="ProgramMenuFolder">
-        <Directory Id="ApplicationProgramsFolder" Name="MdsScope" />
+        <Directory Id="ApplicationProgramsFolder" Name="MDSLens" />
       </Directory>
     </Directory>
   </Fragment>
@@ -35,15 +35,15 @@
     <DirectoryRef Id="ApplicationProgramsFolder">
       <Component Id="ApplicationShortcut" Guid="45B87F77-9171-41E0-8F60-1FD76B4B4852">
         <Shortcut
-          Id="MdsScopeStartMenuShortcut"
-          Name="MdsScope"
+          Id="MDSLensStartMenuShortcut"
+          Name="MDSLens"
           Description="MDSplus signal waveform viewer"
-          Target="[INSTALLFOLDER]mdsscope.exe"
+          Target="[INSTALLFOLDER]mdslens.exe"
           WorkingDirectory="INSTALLFOLDER" />
         <RemoveFolder Id="RemoveApplicationProgramsFolder" On="uninstall" />
         <RegistryValue
           Root="HKCU"
-          Key="Software\MdsScope"
+          Key="Software\MDSLens"
           Name="StartMenuShortcut"
           Type="integer"
           Value="1"
@@ -55,24 +55,24 @@
   <Fragment>
     <DirectoryRef Id="INSTALLFOLDER">
       <Component Id="ApplicationAssociations" Guid="FA8D6F17-B6A7-4C30-B15D-4CA91C66281D">
-        <RegistryValue Root="HKCR" Key="MdsScope.Configuration" Type="string"
-          Value="MdsScope configuration" KeyPath="yes" />
-        <RegistryValue Root="HKCR" Key="MdsScope.Configuration\DefaultIcon"
-          Type="string" Value="&quot;[INSTALLFOLDER]mdsscope.exe&quot;,0" />
-        <RegistryValue Root="HKCR" Key="MdsScope.Configuration\shell\open\command"
-          Type="string" Value="&quot;[INSTALLFOLDER]mdsscope.exe&quot; &quot;%1&quot;" />
+        <RegistryValue Root="HKCR" Key="MDSLens.Configuration" Type="string"
+          Value="MDSLens configuration" KeyPath="yes" />
+        <RegistryValue Root="HKCR" Key="MDSLens.Configuration\DefaultIcon"
+          Type="string" Value="&quot;[INSTALLFOLDER]mdslens.exe&quot;,0" />
+        <RegistryValue Root="HKCR" Key="MDSLens.Configuration\shell\open\command"
+          Type="string" Value="&quot;[INSTALLFOLDER]mdslens.exe&quot; &quot;%1&quot;" />
         <RegistryValue Root="HKCR" Key=".toml\OpenWithProgids"
-          Name="MdsScope.Configuration" Type="string" Value="" />
+          Name="MDSLens.Configuration" Type="string" Value="" />
         <RegistryValue Root="HKCR" Key=".webscp"
-          Type="string" Value="MdsScope.Configuration" />
-        <RegistryValue Root="HKCR" Key="mdsscope"
-          Type="string" Value="URL:MdsScope protocol" />
-        <RegistryValue Root="HKCR" Key="mdsscope"
+          Type="string" Value="MDSLens.Configuration" />
+        <RegistryValue Root="HKCR" Key="mdslens"
+          Type="string" Value="URL:MDSLens protocol" />
+        <RegistryValue Root="HKCR" Key="mdslens"
           Name="URL Protocol" Type="string" Value="" />
-        <RegistryValue Root="HKCR" Key="mdsscope\DefaultIcon"
-          Type="string" Value="&quot;[INSTALLFOLDER]mdsscope.exe&quot;,0" />
-        <RegistryValue Root="HKCR" Key="mdsscope\shell\open\command"
-          Type="string" Value="&quot;[INSTALLFOLDER]mdsscope.exe&quot; &quot;%1&quot;" />
+        <RegistryValue Root="HKCR" Key="mdslens\DefaultIcon"
+          Type="string" Value="&quot;[INSTALLFOLDER]mdslens.exe&quot;,0" />
+        <RegistryValue Root="HKCR" Key="mdslens\shell\open\command"
+          Type="string" Value="&quot;[INSTALLFOLDER]mdslens.exe&quot; &quot;%1&quot;" />
       </Component>
     </DirectoryRef>
   </Fragment>

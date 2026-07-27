@@ -8,7 +8,7 @@ typedef IncomingConfigurationHandler = Future<void> Function(String path);
 class IncomingConfigurationService {
   IncomingConfigurationService._();
 
-  static const MethodChannel _channel = MethodChannel('mdsscope/open_requests');
+  static const MethodChannel _channel = MethodChannel('mdslens/open_requests');
   static IncomingConfigurationHandler? _handler;
 
   static Future<void> start(
@@ -48,7 +48,7 @@ String? configurationPathFromOpenRequest(String request) {
   final value = request.trim();
   if (value.isEmpty) return null;
   final uri = Uri.tryParse(value);
-  if (uri != null && uri.scheme.toLowerCase() == 'mdsscope') {
+  if (uri != null && uri.scheme.toLowerCase() == 'mdslens') {
     final path = uri.queryParameters['path'];
     if (path == null || path.trim().isEmpty) return null;
     return path;

@@ -108,12 +108,12 @@ def main() -> None:
     windows = verify_windows()
     linux = ROOT / "linux/runner/app_icon.png"
     check(png_info(linux)[:2] == (512, 512), "Linux icon must be 512x512")
-    desktop = (ROOT / "packaging/linux/com.mdsscope.app.desktop").read_text(encoding="utf-8")
+    desktop = (ROOT / "packaging/linux/com.mdslens.app.desktop").read_text(encoding="utf-8")
     check(
-        "Icon=com.mdsscope.app" in desktop
-        and "StartupWMClass=com.mdsscope.app" in desktop
-        and "Exec=mdsscope %U" in desktop
-        and "x-scheme-handler/mdsscope" in desktop,
+        "Icon=com.mdslens.app" in desktop
+        and "StartupWMClass=com.mdslens.app" in desktop
+        and "Exec=mdslens %U" in desktop
+        and "x-scheme-handler/mdslens" in desktop,
         "invalid Linux desktop integration metadata",
     )
     print(f"Verified native icons: iOS {ios}, macOS {macos}, Android {android}, Windows {windows}, Linux 1")

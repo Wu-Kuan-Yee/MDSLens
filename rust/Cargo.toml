@@ -6,7 +6,7 @@ members = ["mds-bridge", "mds-core", "mds-ip", "mds-ssh", "mds-auth"]
 version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
-authors = ["MdsScope Contributors"]
+authors = ["MDSLens Contributors"]
 rust-version = "1.92"
 
 [workspace.dependencies]

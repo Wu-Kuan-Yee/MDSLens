@@ -19,21 +19,14 @@ Future<void> _initializeApplication(
   await WidgetsBinding.instance.endOfFrame;
   final networkAccess =
       await NetworkPermissionService.requestAllStartupPermissions(
-    app.loginApiUrl,
-  );
-  await app.initializeStartupSession(
-    preparedNetworkAccess: networkAccess,
-  );
+        app.loginApiUrl,
+      );
+  await app.initializeStartupSession(preparedNetworkAccess: networkAccess);
 }
 
 void main(List<String> arguments) {
   WidgetsFlutterBinding.ensureInitialized();
   final app = AppState();
-  runApp(
-    ChangeNotifierProvider.value(
-      value: app,
-      child: const MdsScopeApp(),
-    ),
-  );
+  runApp(ChangeNotifierProvider.value(value: app, child: const MDSLensApp()));
   unawaited(_initializeApplication(app, arguments));
 }

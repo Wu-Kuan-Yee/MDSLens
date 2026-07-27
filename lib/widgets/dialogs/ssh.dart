@@ -45,9 +45,7 @@ class SshDialog extends StatelessWidget {
           });
           return;
         }
-        final identityFile = await IdentityFileAccess.authorize(
-          keyCtrl.text,
-        );
+        final identityFile = await IdentityFileAccess.authorize(keyCtrl.text);
         if (!ctx.mounted) return;
         if (identityFile != keyCtrl.text.trim()) {
           keyCtrl.text = identityFile;
@@ -58,7 +56,7 @@ class SshDialog extends StatelessWidget {
           'user': userCtrl.text,
           'password': passCtrl.text,
           'identity_file': identityFile,
-          'mode': mode
+          'mode': mode,
         });
         final resp = await app.testSshConnection(settingsJson);
         final json = _tryJson(resp);
@@ -108,169 +106,199 @@ class SshDialog extends StatelessWidget {
           passFocus.dispose();
           keyFocus.dispose();
         },
-        child: StatefulBuilder(builder: (ctx, setState) {
-          return KeyboardSafeDialog(
-            maxWidth: 420,
-            title: const Text('SSH Tunnel'),
-            content: Column(mainAxisSize: MainAxisSize.min, children: [
-              if (testing)
-                Semantics(
-                  liveRegion: true,
-                  label: 'Connecting to SSH server',
-                  child: Row(children: [
-                    Icon(
-                      Icons.vpn_lock_rounded,
-                      size: 20,
-                      color: Theme.of(ctx).colorScheme.primary,
+        child: StatefulBuilder(
+          builder: (ctx, setState) {
+            return KeyboardSafeDialog(
+              maxWidth: 420,
+              title: const Text('SSH Tunnel'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (testing)
+                    Semantics(
+                      liveRegion: true,
+                      label: 'Connecting to SSH server',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.vpn_lock_rounded,
+                            size: 20,
+                            color: Theme.of(ctx).colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text('Connecting...'),
+                        ],
+                      ),
                     ),
-                    const SizedBox(width: 8),
-                    const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2)),
-                    const SizedBox(width: 8),
-                    const Text('Connecting...')
-                  ]),
-                ),
-              if (!testing && result == 'ok')
-                const Text('Connection OK',
-                    style: TextStyle(color: Colors.green)),
-              if (!testing && result.isNotEmpty && result != 'ok')
-                SelectableText('Error: $result',
-                    style: const TextStyle(fontSize: 13, color: Colors.red)),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Mode',
-                  style: Theme.of(ctx).textTheme.labelMedium?.copyWith(
+                  if (!testing && result == 'ok')
+                    const Text(
+                      'Connection OK',
+                      style: TextStyle(color: Colors.green),
+                    ),
+                  if (!testing && result.isNotEmpty && result != 'ok')
+                    SelectableText(
+                      'Error: $result',
+                      style: const TextStyle(fontSize: 13, color: Colors.red),
+                    ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Mode',
+                      style: Theme.of(ctx).textTheme.labelMedium?.copyWith(
                         color: Theme.of(ctx).colorScheme.onSurfaceVariant,
                         fontWeight: FontWeight.w600,
                       ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              PolishedDropdown<int>(
-                key: const ValueKey('ssh-mode-dropdown'),
-                id: 'ssh-mode',
-                value: mode,
-                leadingIcon: Icons.route_rounded,
-                minimumMenuWidth: 260,
-                options: const [
-                  PolishedDropdownOption(
-                    value: 0,
-                    label: 'Disabled',
-                    icon: Icons.block_rounded,
+                    ),
                   ),
-                  PolishedDropdownOption(
-                    value: 1,
-                    label: 'Auto (direct first)',
-                    icon: Icons.alt_route_rounded,
+                  const SizedBox(height: 6),
+                  PolishedDropdown<int>(
+                    key: const ValueKey('ssh-mode-dropdown'),
+                    id: 'ssh-mode',
+                    value: mode,
+                    leadingIcon: Icons.route_rounded,
+                    minimumMenuWidth: 260,
+                    options: const [
+                      PolishedDropdownOption(
+                        value: 0,
+                        label: 'Disabled',
+                        icon: Icons.block_rounded,
+                      ),
+                      PolishedDropdownOption(
+                        value: 1,
+                        label: 'Auto (direct first)',
+                        icon: Icons.alt_route_rounded,
+                      ),
+                      PolishedDropdownOption(
+                        value: 2,
+                        label: 'Always SSH',
+                        icon: Icons.vpn_lock_rounded,
+                      ),
+                    ],
+                    onChanged: (value) => setState(() => mode = value),
                   ),
-                  PolishedDropdownOption(
-                    value: 2,
-                    label: 'Always SSH',
-                    icon: Icons.vpn_lock_rounded,
+                  const SizedBox(
+                    key: ValueKey('ssh-mode-host-gap'),
+                    height: 12,
+                  ),
+                  TextField(
+                    key: const ValueKey('ssh-host'),
+                    controller: hostCtrl,
+                    focusNode: hostFocus,
+                    decoration: const InputDecoration(
+                      labelText: 'Host',
+                      hintText: 'ssh.example.com',
+                    ),
+                    textInputAction: TextInputAction.next,
+                    onSubmitted: (_) => focusAndShowKeyboard(ctx, userFocus),
+                  ),
+                  const SizedBox(
+                    key: ValueKey('ssh-host-user-gap'),
+                    height: 12,
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: TextField(
+                          key: const ValueKey('ssh-user'),
+                          controller: userCtrl,
+                          focusNode: userFocus,
+                          decoration: const InputDecoration(labelText: 'User'),
+                          textInputAction: TextInputAction.next,
+                          autofillHints: const [AutofillHints.username],
+                          onSubmitted: (_) =>
+                              focusAndShowKeyboard(ctx, passFocus),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 1,
+                        child: TextField(
+                          key: const ValueKey('ssh-port'),
+                          controller: portCtrl,
+                          focusNode: portFocus,
+                          decoration: const InputDecoration(labelText: 'Port'),
+                          keyboardType: TextInputType.number,
+                          textInputAction: TextInputAction.next,
+                          onSubmitted: (_) =>
+                              focusAndShowKeyboard(ctx, passFocus),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(
+                    key: ValueKey('ssh-user-password-gap'),
+                    height: 12,
+                  ),
+                  TextField(
+                    key: const ValueKey('ssh-password'),
+                    controller: passCtrl,
+                    focusNode: passFocus,
+                    decoration: const InputDecoration(labelText: 'Password'),
+                    obscureText: true,
+                    enableSuggestions: false,
+                    autocorrect: false,
+                    keyboardType: TextInputType.visiblePassword,
+                    textInputAction: TextInputAction.done,
+                    autofillHints: const [AutofillHints.password],
+                    onTap: () => focusAndShowKeyboard(ctx, passFocus),
+                    onSubmitted: (_) => testConnection(setState, ctx),
+                  ),
+                  const SizedBox(
+                    key: ValueKey('ssh-password-identity-gap'),
+                    height: 12,
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          key: const ValueKey('ssh-identity'),
+                          controller: keyCtrl,
+                          focusNode: keyFocus,
+                          decoration: const InputDecoration(
+                            labelText: 'Identity File',
+                            hintText: '~/.ssh/id_ed25519',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      OutlinedButton(
+                        onPressed: () async {
+                          final r = await FilePicker.platform.pickFiles();
+                          if (r != null && r.files.single.path != null) {
+                            final path = r.files.single.path!;
+                            keyCtrl.text = await IdentityFileAccess.authorize(
+                              path,
+                              promptIfNeeded: false,
+                            );
+                          }
+                        },
+                        child: const Text('Browse'),
+                      ),
+                    ],
                   ),
                 ],
-                onChanged: (value) => setState(() => mode = value),
               ),
-              const SizedBox(
-                key: ValueKey('ssh-mode-host-gap'),
-                height: 12,
-              ),
-              TextField(
-                  key: const ValueKey('ssh-host'),
-                  controller: hostCtrl,
-                  focusNode: hostFocus,
-                  decoration: const InputDecoration(
-                      labelText: 'Host', hintText: 'ssh.example.com'),
-                  textInputAction: TextInputAction.next,
-                  onSubmitted: (_) => focusAndShowKeyboard(ctx, userFocus)),
-              const SizedBox(
-                key: ValueKey('ssh-host-user-gap'),
-                height: 12,
-              ),
-              Row(children: [
-                Expanded(
-                    flex: 3,
-                    child: TextField(
-                        key: const ValueKey('ssh-user'),
-                        controller: userCtrl,
-                        focusNode: userFocus,
-                        decoration: const InputDecoration(labelText: 'User'),
-                        textInputAction: TextInputAction.next,
-                        autofillHints: const [AutofillHints.username],
-                        onSubmitted: (_) =>
-                            focusAndShowKeyboard(ctx, passFocus))),
-                const SizedBox(width: 8),
-                Expanded(
-                    flex: 1,
-                    child: TextField(
-                        key: const ValueKey('ssh-port'),
-                        controller: portCtrl,
-                        focusNode: portFocus,
-                        decoration: const InputDecoration(labelText: 'Port'),
-                        keyboardType: TextInputType.number,
-                        textInputAction: TextInputAction.next,
-                        onSubmitted: (_) =>
-                            focusAndShowKeyboard(ctx, passFocus))),
-              ]),
-              const SizedBox(
-                key: ValueKey('ssh-user-password-gap'),
-                height: 12,
-              ),
-              TextField(
-                  key: const ValueKey('ssh-password'),
-                  controller: passCtrl,
-                  focusNode: passFocus,
-                  decoration: const InputDecoration(labelText: 'Password'),
-                  obscureText: true,
-                  enableSuggestions: false,
-                  autocorrect: false,
-                  keyboardType: TextInputType.visiblePassword,
-                  textInputAction: TextInputAction.done,
-                  autofillHints: const [AutofillHints.password],
-                  onTap: () => focusAndShowKeyboard(ctx, passFocus),
-                  onSubmitted: (_) => testConnection(setState, ctx)),
-              const SizedBox(
-                key: ValueKey('ssh-password-identity-gap'),
-                height: 12,
-              ),
-              Row(children: [
-                Expanded(
-                    child: TextField(
-                        key: const ValueKey('ssh-identity'),
-                        controller: keyCtrl,
-                        focusNode: keyFocus,
-                        decoration: const InputDecoration(
-                            labelText: 'Identity File',
-                            hintText: '~/.ssh/id_ed25519'))),
-                const SizedBox(width: 4),
-                OutlinedButton(
-                    onPressed: () async {
-                      final r = await FilePicker.platform.pickFiles();
-                      if (r != null && r.files.single.path != null) {
-                        final path = r.files.single.path!;
-                        keyCtrl.text = await IdentityFileAccess.authorize(
-                          path,
-                          promptIfNeeded: false,
-                        );
-                      }
-                    },
-                    child: const Text('Browse')),
-              ]),
-            ]),
-            actions: [
-              TextButton(
+              actions: [
+                TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancel')),
-              OutlinedButton(
+                  child: const Text('Cancel'),
+                ),
+                OutlinedButton(
                   key: const ValueKey('ssh-dialog-test'),
-                  onPressed:
-                      testing ? null : () => testConnection(setState, ctx),
-                  child: Text(testing ? 'Connecting...' : 'Test')),
-              FilledButton(
+                  onPressed: testing
+                      ? null
+                      : () => testConnection(setState, ctx),
+                  child: Text(testing ? 'Connecting...' : 'Test'),
+                ),
+                FilledButton(
                   onPressed: () {
                     app.setSshHost(hostCtrl.text);
                     app.setSshPort(int.tryParse(portCtrl.text) ?? 22);
@@ -279,15 +307,19 @@ class SshDialog extends StatelessWidget {
                     app.setSshIdentity(keyCtrl.text.trim());
                     app.sshMode = mode;
                     app.setSshTestResult(result == 'ok' && mode > 0);
-                    app.setStatus(result == 'ok'
-                        ? 'SSH test passed; tunnel will light up when used'
-                        : 'SSH settings saved');
+                    app.setStatus(
+                      result == 'ok'
+                          ? 'SSH test passed; tunnel will light up when used'
+                          : 'SSH settings saved',
+                    );
                     Navigator.pop(ctx);
                   },
-                  child: const Text('Save')),
-            ],
-          );
-        }),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }

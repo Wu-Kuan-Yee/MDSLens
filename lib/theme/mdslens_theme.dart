@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-class MdsScopeTheme {
+class MDSLensTheme {
   static ThemeData light({String? fontFamily, double uiFontSize = 12}) {
     return _build(
       brightness: Brightness.light,
@@ -39,10 +39,8 @@ class MdsScopeTheme {
       cardColor: card,
       appBarTheme: AppBarTheme(backgroundColor: scaffold),
     );
-    TextStyle? style(TextStyle? source, double size) => source?.copyWith(
-          fontFamily: fontFamily,
-          fontSize: size.clamp(6, 48),
-        );
+    TextStyle? style(TextStyle? source, double size) =>
+        source?.copyWith(fontFamily: fontFamily, fontSize: size.clamp(6, 48));
     final source = base.textTheme;
     final colors = base.colorScheme;
     final textTheme = source.copyWith(
@@ -68,8 +66,10 @@ class MdsScopeTheme {
       inputDecorationTheme: InputDecorationThemeData(
         filled: true,
         fillColor: colors.surfaceContainerLow,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 11,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(color: colors.outlineVariant),

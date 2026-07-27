@@ -167,8 +167,10 @@ class PlotRenderCache {
     final spots = <FlSpot>[];
     for (var bucket = 0; bucket < buckets; bucket++) {
       final start = rangeStart + bucket * count ~/ buckets;
-      final end = (rangeStart + (bucket + 1) * count ~/ buckets)
-          .clamp(rangeStart, rangeEnd);
+      final end = (rangeStart + (bucket + 1) * count ~/ buckets).clamp(
+        rangeStart,
+        rangeEnd,
+      );
       if (start >= end) continue;
 
       var minY = double.infinity;
@@ -180,8 +182,8 @@ class PlotRenderCache {
       final x = bucket == 0
           ? points[rangeStart][0]
           : bucket == buckets - 1
-              ? points[rangeEnd - 1][0]
-              : (points[start][0] + points[end - 1][0]) / 2;
+          ? points[rangeEnd - 1][0]
+          : (points[start][0] + points[end - 1][0]) / 2;
       spots.add(FlSpot(x, minY));
       if (minY != maxY) spots.add(FlSpot(x, maxY));
     }

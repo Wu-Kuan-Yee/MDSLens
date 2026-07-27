@@ -19,7 +19,7 @@ namespace {
 
 constexpr wchar_t kWindowsVersionRegistryPath[] =
     L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion";
-constexpr wchar_t kAppUserModelId[] = L"MdsScope.MdsScope";
+constexpr wchar_t kAppUserModelId[] = L"MDSLens.MDSLens";
 
 HRESULT SetStringProperty(IPropertyStore* store,
                           REFPROPERTYKEY key,
@@ -44,7 +44,7 @@ void ConfigureTaskbarProperties(HWND window) {
     const HRESULT command_result = SetStringProperty(
         store, PKEY_AppUserModel_RelaunchCommand, command);
     const HRESULT name_result = SetStringProperty(
-        store, PKEY_AppUserModel_RelaunchDisplayNameResource, L"MdsScope");
+        store, PKEY_AppUserModel_RelaunchDisplayNameResource, L"MDSLens");
     if (SUCCEEDED(command_result) && SUCCEEDED(name_result)) {
       SetStringProperty(
           store, PKEY_AppUserModel_RelaunchIconResource, path + L",0");
@@ -214,7 +214,7 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   system_info_channel_ =
       std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
-          flutter_controller_->engine()->messenger(), "mdsscope/system_info",
+          flutter_controller_->engine()->messenger(), "mdslens/system_info",
           &flutter::StandardMethodCodec::GetInstance());
   system_info_channel_->SetMethodCallHandler(
       [](const flutter::MethodCall<flutter::EncodableValue>& call,
@@ -228,7 +228,7 @@ bool FlutterWindow::OnCreate() {
       });
   system_fonts_channel_ =
       std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
-          flutter_controller_->engine()->messenger(), "mdsscope/system_fonts",
+          flutter_controller_->engine()->messenger(), "mdslens/system_fonts",
           &flutter::StandardMethodCodec::GetInstance());
   system_fonts_channel_->SetMethodCallHandler(
       [](const flutter::MethodCall<flutter::EncodableValue>& call,

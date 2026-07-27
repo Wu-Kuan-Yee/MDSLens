@@ -19,31 +19,37 @@ class PlotGrid extends StatelessWidget {
       return PlotPanel(plotIdx: idx, selected: true);
     }
 
-    return LayoutBuilder(builder: (ctx, constraints) {
-      final displayColumns = buildResponsivePlotColumns(
-        app.columns.map((column) => column.length).toList(),
-        constraints.maxWidth,
-      );
-      if (displayColumns.isEmpty) return const SizedBox();
+    return LayoutBuilder(
+      builder: (ctx, constraints) {
+        final displayColumns = buildResponsivePlotColumns(
+          app.columns.map((column) => column.length).toList(),
+          constraints.maxWidth,
+        );
+        if (displayColumns.isEmpty) return const SizedBox();
 
-      return Row(
-        children: displayColumns
-            .map((column) => Expanded(
+        return Row(
+          children: displayColumns
+              .map(
+                (column) => Expanded(
                   child: Column(
                     children: column
                         .map(
-                            (cell) => Expanded(child: _panelForCell(app, cell)))
+                          (cell) => Expanded(child: _panelForCell(app, cell)),
+                        )
                         .toList(),
                   ),
-                ))
-            .toList(),
-      );
-    });
+                ),
+              )
+              .toList(),
+        );
+      },
+    );
   }
 
   Widget _panelForCell(AppState app, ResponsivePlotCell cell) {
     if (cell.plotIndex >= app.plots.length) return const SizedBox();
-    final selected = app.selectedCol == cell.sourceColumn &&
+    final selected =
+        app.selectedCol == cell.sourceColumn &&
         app.selectedRow == cell.sourceRow;
     return PlotPanel(
       key: ValueKey('plot-panel-${cell.plotIndex}'),

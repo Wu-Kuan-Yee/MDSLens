@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build and package MdsScope on the current native build host.
+"""Build and package MDSLens on the current native build host.
 
 Flutter desktop targets must be built on their native operating system. Android
 can be built on every Flutter host; Apple targets require macOS and Xcode. The
@@ -27,7 +27,7 @@ from typing import NoReturn
 
 ROOT = Path(__file__).resolve().parent
 DIST = ROOT / "build" / "dist"
-APP = "mdsscope"
+APP = "mdslens"
 FLUTTER_BASELINE = "3.44.7"
 RUST_BASELINE = "1.92.0"
 ANDROID_API = "36"
@@ -56,11 +56,11 @@ PLATFORM_FORMATS = {
 
 
 def log(message: str) -> None:
-    print(f"[MdsScope] {message}", flush=True)
+    print(f"[MDSLens] {message}", flush=True)
 
 
 def fail(message: str) -> NoReturn:
-    raise SystemExit(f"[MdsScope] ERROR: {message}")
+    raise SystemExit(f"[MDSLens] ERROR: {message}")
 
 
 def display_command(command: tuple[str, ...] | list[str]) -> str:
@@ -557,7 +557,7 @@ def make_zip(source: Path, output: Path, arcname: str) -> None:
         # ditto preserves macOS resource forks, permissions and framework links.
         run("ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(source), str(output))
     else:
-        with tempfile.TemporaryDirectory(prefix="mdsscope-zip-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="mdslens-zip-") as temporary:
             staged = Path(temporary) / arcname
             replace_tree(source, staged)
             archive_base = output.with_suffix("")
@@ -572,7 +572,7 @@ def make_7z(source: Path, output: Path, arcname: str, formats: set[str]) -> None
     if seven_zip is None:
         return
     staged_source = source
-    with tempfile.TemporaryDirectory(prefix="mdsscope-7z-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="mdslens-7z-") as temporary:
         if source.name != arcname:
             staged_source = Path(temporary) / arcname
             replace_tree(source, staged_source)
@@ -647,7 +647,7 @@ def create_xcarchive(app: Path, output: Path, *, name: str) -> None:
                 "SchemeName": "Runner",
                 "ApplicationProperties": {
                     "ApplicationPath": f"Applications/{app.name}",
-                    "CFBundleIdentifier": "com.mdsscope.app",
+                    "CFBundleIdentifier": "com.mdslens.app",
                     "CFBundleShortVersionString": version,
                 },
             },
@@ -665,7 +665,7 @@ def package_macos(formats: set[str], no_build: bool, requested_arch: str) -> Non
     if not no_build:
         flutter_build("macos")
 
-    source = ROOT / "build/macos/Build/Products/Release/MdsScope.app"
+    source = ROOT / "build/macos/Build/Products/Release/MDSLens.app"
     if not source.is_dir():
         fail(f"macOS application bundle not found: {source}")
     architectures = (
@@ -673,11 +673,11 @@ def package_macos(formats: set[str], no_build: bool, requested_arch: str) -> Non
         if requested_arch == "universal"
         else [requested_arch]
     )
-    with tempfile.TemporaryDirectory(prefix="mdsscope-macos-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="mdslens-macos-") as temporary:
         for arch in architectures:
-            app = Path(temporary) / arch / "MdsScope.app"
+            app = Path(temporary) / arch / "MDSLens.app"
             prepare_macos_architecture(source, app, arch)
-            base = f"mdsscope-macos-{arch}-unsigned"
+            base = f"mdslens-macos-{arch}-unsigned"
 
             if selected(formats, "app"):
                 replace_tree(app, DIST / f"{base}.app")
@@ -694,7 +694,7 @@ def package_macos(formats: set[str], no_build: bool, requested_arch: str) -> Non
                 make_tar(app, DIST / f"{base}.tar.bz2", app.name, "w:bz2")
             if selected(formats, "dmg"):
                 run(
-                    "hdiutil", "create", "-quiet", "-volname", "MdsScope",
+                    "hdiutil", "create", "-quiet", "-volname", "MDSLens",
                     "-srcfolder", str(app), "-ov", "-format", "UDZO",
                     str(DIST / f"{base}.dmg"),
                 )
@@ -706,7 +706,7 @@ def package_macos(formats: set[str], no_build: bool, requested_arch: str) -> Non
                 )
             if selected(formats, "xcarchive"):
                 create_xcarchive(
-                    app, DIST / f"{base}.xcarchive", name="MdsScope"
+                    app, DIST / f"{base}.xcarchive", name="MDSLens"
                 )
 
 
@@ -735,11 +735,11 @@ def stage_windows_msix(bundle: Path, staging: Path, arch: str) -> None:
               xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
               xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
               IgnorableNamespaces="uap rescap">
-              <Identity Name="MdsScope" Publisher="CN=MdsScope"
+              <Identity Name="MDSLens" Publisher="CN=MDSLens"
                 Version="{windows_msix_version()}" ProcessorArchitecture="{architecture}" />
               <Properties>
-                <DisplayName>MdsScope</DisplayName>
-                <PublisherDisplayName>MdsScope Contributors</PublisherDisplayName>
+                <DisplayName>MDSLens</DisplayName>
+                <PublisherDisplayName>MDSLens Contributors</PublisherDisplayName>
                 <Description>MDSplus signal waveform viewer</Description>
                 <Logo>Assets\\StoreLogo.png</Logo>
               </Properties>
@@ -749,9 +749,9 @@ def stage_windows_msix(bundle: Path, staging: Path, arch: str) -> None:
                   MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
               </Dependencies>
               <Applications>
-                <Application Id="MdsScope" Executable="mdsscope.exe"
+                <Application Id="MDSLens" Executable="mdslens.exe"
                   EntryPoint="Windows.FullTrustApplication">
-                  <uap:VisualElements DisplayName="MdsScope"
+                  <uap:VisualElements DisplayName="MDSLens"
                     Description="MDSplus signal waveform viewer"
                     BackgroundColor="transparent"
                     Square150x150Logo="Assets\\Square150x150Logo.png"
@@ -784,9 +784,9 @@ def package_windows(formats: set[str], no_build: bool, arch: str) -> None:
         flutter_build("windows")
 
     bundle = windows_bundle(arch)
-    if not (bundle / "mdsscope.exe").is_file():
+    if not (bundle / "mdslens.exe").is_file():
         fail(f"Windows application bundle not found: {bundle}")
-    base = f"mdsscope-windows-{arch}"
+    base = f"mdslens-windows-{arch}"
 
     if selected(formats, "zip"):
         make_zip(bundle, DIST / f"{base}.zip", base)
@@ -807,14 +807,14 @@ def package_windows(formats: set[str], no_build: bool, arch: str) -> None:
                 f"/DOutputDir={DIST}",
                 f"/DOutputBase={base}-setup",
                 f"/DAppVersion={project_version()}",
-                str(ROOT / "packaging/windows/mdsscope.iss"),
+                str(ROOT / "packaging/windows/mdslens.iss"),
             )
     if selected(formats, "msi"):
         heat = format_tool("heat", formats, "msi")
         candle = format_tool("candle", formats, "msi")
         light = format_tool("light", formats, "msi")
         if heat is not None and candle is not None and light is not None:
-            with tempfile.TemporaryDirectory(prefix="mdsscope-wix-") as temporary:
+            with tempfile.TemporaryDirectory(prefix="mdslens-wix-") as temporary:
                 wix = Path(temporary)
                 harvested = wix / "bundle.wxs"
                 run(
@@ -828,17 +828,17 @@ def package_windows(formats: set[str], no_build: bool, arch: str) -> None:
                     f"-dBundleDir={bundle}", f"-dAppVersion={project_version()}",
                     f"-dIconPath={ROOT / 'windows/runner/resources/app_icon.ico'}",
                     "-out", str(wix) + os.sep,
-                    str(ROOT / "packaging/windows/mdsscope.wxs"), str(harvested),
+                    str(ROOT / "packaging/windows/mdslens.wxs"), str(harvested),
                 )
                 run(
                     light, "-nologo", "-ext", "WixUIExtension",
                     "-out", str(DIST / f"{base}.msi"),
-                    str(wix / "mdsscope.wixobj"), str(wix / "bundle.wixobj"),
+                    str(wix / "mdslens.wixobj"), str(wix / "bundle.wixobj"),
                 )
     if selected(formats, "msix"):
         makeappx = format_tool("makeappx", formats, "msix")
         if makeappx is not None:
-            with tempfile.TemporaryDirectory(prefix="mdsscope-msix-") as temporary:
+            with tempfile.TemporaryDirectory(prefix="mdslens-msix-") as temporary:
                 staging = Path(temporary) / base
                 stage_windows_msix(bundle, staging, arch)
                 run(
@@ -980,20 +980,20 @@ def patch_linux_runtime_paths(root: Path) -> None:
 
 def stage_linux_portable(bundle: Path, portable: Path) -> None:
     replace_tree(bundle, portable)
-    executable = portable / "mdsscope"
+    executable = portable / "mdslens"
     if not is_elf(executable):
         fail(f"Linux application executable is not ELF: {executable}")
     executable.chmod(0o755)
     applications = portable / "share/applications"
     applications.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(ROOT / "packaging/linux/com.mdsscope.app.desktop", applications)
+    shutil.copy2(ROOT / "packaging/linux/com.mdslens.app.desktop", applications)
     icons = portable / "share/icons/hicolor/scalable/apps"
     icons.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(ROOT / "assets/app_icon.svg", icons / "com.mdsscope.app.svg")
+    shutil.copy2(ROOT / "assets/app_icon.svg", icons / "com.mdslens.app.svg")
     mime_packages = portable / "share/mime/packages"
     mime_packages.mkdir(parents=True, exist_ok=True)
     shutil.copy2(
-        ROOT / "packaging/linux/com.mdsscope.configuration.xml",
+        ROOT / "packaging/linux/com.mdslens.configuration.xml",
         mime_packages,
     )
     copy_linux_portable_dependencies(portable)
@@ -1001,22 +1001,22 @@ def stage_linux_portable(bundle: Path, portable: Path) -> None:
 
 
 def stage_linux_root(bundle: Path, root: Path) -> None:
-    app_dir = root / "usr/lib/mdsscope"
+    app_dir = root / "usr/lib/mdslens"
     replace_tree(bundle, app_dir)
     patch_linux_runtime_paths(app_dir)
     bin_dir = root / "usr/bin"
     bin_dir.mkdir(parents=True, exist_ok=True)
-    os.symlink("../lib/mdsscope/mdsscope", bin_dir / "mdsscope")
+    os.symlink("../lib/mdslens/mdslens", bin_dir / "mdslens")
     applications = root / "usr/share/applications"
     applications.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(ROOT / "packaging/linux/com.mdsscope.app.desktop", applications)
+    shutil.copy2(ROOT / "packaging/linux/com.mdslens.app.desktop", applications)
     icons = root / "usr/share/icons/hicolor/scalable/apps"
     icons.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(ROOT / "assets/app_icon.svg", icons / "com.mdsscope.app.svg")
+    shutil.copy2(ROOT / "assets/app_icon.svg", icons / "com.mdslens.app.svg")
     mime_packages = root / "usr/share/mime/packages"
     mime_packages.mkdir(parents=True, exist_ok=True)
     shutil.copy2(
-        ROOT / "packaging/linux/com.mdsscope.configuration.xml",
+        ROOT / "packaging/linux/com.mdslens.configuration.xml",
         mime_packages,
     )
 
@@ -1028,23 +1028,23 @@ def package_linux_flatpak(
     if flatpak is None:
         return
     flatpak_arch = {"x64": "x86_64", "arm64": "aarch64"}[arch]
-    with tempfile.TemporaryDirectory(prefix="mdsscope-flatpak-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="mdslens-flatpak-") as temporary:
         root = Path(temporary)
         build_dir = root / "build"
         repo = root / "repo"
         run(
             flatpak, "build-init", f"--arch={flatpak_arch}", str(build_dir),
-            "com.mdsscope.app", "org.gnome.Sdk", "org.gnome.Platform", "48",
+            "com.mdslens.app", "org.gnome.Sdk", "org.gnome.Platform", "48",
         )
-        app_dir = build_dir / "files/lib/mdsscope"
+        app_dir = build_dir / "files/lib/mdslens"
         replace_tree(portable, app_dir)
         bin_dir = build_dir / "files/bin"
         bin_dir.mkdir(parents=True)
-        os.symlink("../lib/mdsscope/mdsscope", bin_dir / "mdsscope")
+        os.symlink("../lib/mdslens/mdslens", bin_dir / "mdslens")
         applications = build_dir / "files/share/applications"
         applications.mkdir(parents=True)
         shutil.copy2(
-            ROOT / "packaging/linux/com.mdsscope.app.desktop", applications
+            ROOT / "packaging/linux/com.mdslens.app.desktop", applications
         )
         # Flatpak validates exported icons with the image loaders installed on
         # the build host. A minimal runner may not provide the optional SVG
@@ -1052,10 +1052,10 @@ def package_linux_flatpak(
         # asset and keep the bundle independent of that host plugin.
         icons = build_dir / "files/share/icons/hicolor/256x256/apps"
         icons.mkdir(parents=True)
-        shutil.copy2(ROOT / "assets/app_icon.png", icons / "com.mdsscope.app.png")
+        shutil.copy2(ROOT / "assets/app_icon.png", icons / "com.mdslens.app.png")
         run(
             flatpak, "build-finish",
-            "--command=mdsscope",
+            "--command=mdslens",
             "--share=network",
             "--share=ipc",
             "--socket=x11",
@@ -1068,7 +1068,7 @@ def package_linux_flatpak(
         run(flatpak, "build-export", str(repo), str(build_dir), "stable")
         run(
             flatpak, "build-bundle", f"--arch={flatpak_arch}",
-            str(repo), str(output), "com.mdsscope.app", "stable",
+            str(repo), str(output), "com.mdslens.app", "stable",
         )
     log(f"Created {output.name}")
 
@@ -1080,21 +1080,21 @@ def package_linux_snap(
     if mksquashfs is None:
         return
     snap_arch = {"x64": "amd64", "arm64": "arm64"}[arch]
-    with tempfile.TemporaryDirectory(prefix="mdsscope-snap-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="mdslens-snap-") as temporary:
         root = Path(temporary)
-        app_dir = root / "lib/mdsscope"
+        app_dir = root / "lib/mdslens"
         replace_tree(portable, app_dir)
         meta = root / "meta"
         (meta / "gui").mkdir(parents=True)
         shutil.copy2(
-            ROOT / "packaging/linux/com.mdsscope.app.desktop",
-            meta / "gui/com.mdsscope.app.desktop",
+            ROOT / "packaging/linux/com.mdslens.app.desktop",
+            meta / "gui/com.mdslens.app.desktop",
         )
         shutil.copy2(ROOT / "assets/app_icon.png", meta / "gui/icon.png")
         (meta / "snap.yaml").write_text(
             textwrap.dedent(
                 f"""\
-                name: mdsscope
+                name: mdslens
                 version: '{version}'
                 summary: MDSplus signal waveform viewer
                 description: View and compare signal waveforms from MDSplus experiments.
@@ -1104,9 +1104,9 @@ def package_linux_snap(
                 grade: stable
                 confinement: classic
                 apps:
-                  mdsscope:
-                    command: lib/mdsscope/mdsscope
-                    desktop: meta/gui/com.mdsscope.app.desktop
+                  mdslens:
+                    command: lib/mdslens/mdslens
+                    desktop: meta/gui/com.mdslens.app.desktop
                 """
             ),
             encoding="utf-8",
@@ -1129,11 +1129,11 @@ def package_linux(formats: set[str], no_build: bool, arch: str, version: str) ->
         flutter_build("linux")
 
     bundle = linux_bundle(arch)
-    if not (bundle / "mdsscope").is_file():
+    if not (bundle / "mdslens").is_file():
         fail(f"Linux application bundle not found: {bundle}")
-    base = f"mdsscope-linux-{arch}"
+    base = f"mdslens-linux-{arch}"
 
-    with tempfile.TemporaryDirectory(prefix="mdsscope-linux-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="mdslens-linux-") as temporary:
         portable = Path(temporary) / base
         stage_linux_portable(bundle, portable)
         if selected(formats, "zip"):
@@ -1159,8 +1159,8 @@ def package_linux(formats: set[str], no_build: bool, arch: str, version: str) ->
                 control.mkdir()
                 (control / "control").write_text(
                     "\n".join([
-                        "Package: mdsscope", f"Version: {version}", f"Architecture: {deb_arch}",
-                        "Maintainer: MdsScope Contributors",
+                        "Package: mdslens", f"Version: {version}", f"Architecture: {deb_arch}",
+                        "Maintainer: MDSLens Contributors",
                         "Depends: libc6, libegl1, libgles2, libgtk-3-0, "
                         "libsecret-1-0, libstdc++6",
                         "Section: science", "Priority: optional",
@@ -1176,7 +1176,7 @@ def package_linux(formats: set[str], no_build: bool, arch: str, version: str) ->
                 package_info = staging / ".PKGINFO"
                 installed_size = sum(path.stat().st_size for path in staging.rglob("*") if path.is_file())
                 package_info.write_text(
-                    f"pkgname = mdsscope\npkgver = {version}-1\npkgdesc = MDSplus signal waveform viewer\n"
+                    f"pkgname = mdslens\npkgver = {version}-1\npkgdesc = MDSplus signal waveform viewer\n"
                     f"arch = {rpm_arch}\nsize = {installed_size}\n"
                     "depend = gtk3\ndepend = libglvnd\ndepend = libsecret\n",
                     encoding="utf-8",
@@ -1193,8 +1193,8 @@ def package_linux(formats: set[str], no_build: bool, arch: str, version: str) ->
                 source_root = top / "SOURCES/root"
                 replace_tree(staging, source_root)
                 run(
-                    rpmbuild, "-bb", "--define", f"_topdir {top}", "--define", f"mdsscope_version {version}",
-                    "--define", f"mdsscope_arch {rpm_arch}", str(ROOT / "packaging/linux/mdsscope.spec"),
+                    rpmbuild, "-bb", "--define", f"_topdir {top}", "--define", f"mdslens_version {version}",
+                    "--define", f"mdslens_arch {rpm_arch}", str(ROOT / "packaging/linux/mdslens.spec"),
                 )
                 rpms = list((top / "RPMS").rglob("*.rpm"))
                 if len(rpms) != 1:
@@ -1204,12 +1204,12 @@ def package_linux(formats: set[str], no_build: bool, arch: str, version: str) ->
         if selected(formats, "AppImage"):
             appimagetool = format_tool("appimagetool", formats, "AppImage")
             if appimagetool is not None:
-                app_dir = Path(temporary) / "MdsScope.AppDir"
-                app_bundle = app_dir / "usr/lib/mdsscope"
+                app_dir = Path(temporary) / "MDSLens.AppDir"
+                app_bundle = app_dir / "usr/lib/mdslens"
                 replace_tree(portable, app_bundle)
-                os.symlink("usr/lib/mdsscope/mdsscope", app_dir / "AppRun")
-                shutil.copy2(ROOT / "packaging/linux/com.mdsscope.app.desktop", app_dir)
-                shutil.copy2(ROOT / "assets/app_icon.svg", app_dir / "com.mdsscope.app.svg")
+                os.symlink("usr/lib/mdslens/mdslens", app_dir / "AppRun")
+                shutil.copy2(ROOT / "packaging/linux/com.mdslens.app.desktop", app_dir)
+                shutil.copy2(ROOT / "assets/app_icon.svg", app_dir / "com.mdslens.app.svg")
                 environment = dict(os.environ)
                 environment["ARCH"] = rpm_arch
                 log(f"Running: {appimagetool} {app_dir} {DIST / (base + '.AppImage')}")
@@ -1246,10 +1246,10 @@ def package_android(formats: set[str], no_build: bool) -> None:
 
     if selected(formats, "apk"):
         outputs = {
-            "app-armeabi-v7a-release.apk": "mdsscope-android-armv7.apk",
-            "app-arm64-v8a-release.apk": "mdsscope-android-arm64.apk",
-            "app-x86_64-release.apk": "mdsscope-android-x64.apk",
-            "app-release.apk": "mdsscope-android-universal.apk",
+            "app-armeabi-v7a-release.apk": "mdslens-android-armv7.apk",
+            "app-arm64-v8a-release.apk": "mdslens-android-arm64.apk",
+            "app-x86_64-release.apk": "mdslens-android-x64.apk",
+            "app-release.apk": "mdslens-android-universal.apk",
         }
         for source, destination in outputs.items():
             path = apk_dir / source
@@ -1261,7 +1261,7 @@ def package_android(formats: set[str], no_build: bool) -> None:
         if not source.is_file():
             fail(f"Android App Bundle not found: {source}")
         if selected(formats, "aab"):
-            shutil.copy2(source, DIST / "mdsscope-android-universal.aab")
+            shutil.copy2(source, DIST / "mdslens-android-universal.aab")
         if selected(formats, "apks"):
             bundletool = find_bundletool()
             if bundletool is None:
@@ -1272,17 +1272,17 @@ def package_android(formats: set[str], no_build: bool) -> None:
             command = [
                 "java", "-jar", str(bundletool), "build-apks",
                 f"--bundle={source}",
-                f"--output={DIST / 'mdsscope-android.apks'}",
+                f"--output={DIST / 'mdslens-android.apks'}",
                 "--overwrite",
             ]
-            keystore = os.environ.get("MDSSCOPE_ANDROID_KEYSTORE", "").strip()
-            alias = os.environ.get("MDSSCOPE_ANDROID_KEY_ALIAS", "").strip()
+            keystore = os.environ.get("MDSLENS_ANDROID_KEYSTORE", "").strip()
+            alias = os.environ.get("MDSLENS_ANDROID_KEY_ALIAS", "").strip()
             if keystore and alias:
                 command.extend([
                     f"--ks={keystore}",
                     f"--ks-key-alias={alias}",
-                    "--ks-pass=env:MDSSCOPE_ANDROID_STORE_PASSWORD",
-                    "--key-pass=env:MDSSCOPE_ANDROID_KEY_PASSWORD",
+                    "--ks-pass=env:MDSLENS_ANDROID_STORE_PASSWORD",
+                    "--key-pass=env:MDSLENS_ANDROID_KEY_PASSWORD",
                 ])
             run(*command)
 
@@ -1307,16 +1307,16 @@ def package_ios(formats: set[str], no_build: bool) -> None:
     if not source.is_dir():
         fail(f"Unsigned iOS application bundle not found: {source}")
 
-    with tempfile.TemporaryDirectory(prefix="mdsscope-ios-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="mdslens-ios-") as temporary:
         temporary_root = Path(temporary)
-        app = temporary_root / "MdsScope.app"
+        app = temporary_root / "MDSLens.app"
         replace_tree(source, app)
         remove_apple_signing_material(app)
 
         # One application supports both iPhone and iPad. Publish aliases so
         # platform-filtered release clients can discover the same binary.
         for platform_name in ("ios", "ipados"):
-            base = f"mdsscope-{platform_name}-arm64-unsigned"
+            base = f"mdslens-{platform_name}-arm64-unsigned"
             if selected(formats, "unsigned-app"):
                 replace_tree(app, DIST / f"{base}.app")
                 log(f"Created {base}.app")
@@ -1341,7 +1341,7 @@ def package_ios(formats: set[str], no_build: bool) -> None:
                 make_tar(app, DIST / f"{base}.tar.bz2", app.name, "w:bz2")
             if selected(formats, "xcarchive"):
                 create_xcarchive(
-                    app, DIST / f"{base}.xcarchive", name="MdsScope"
+                    app, DIST / f"{base}.xcarchive", name="MDSLens"
                 )
 
 
@@ -1386,7 +1386,7 @@ def create_parser() -> argparse.ArgumentParser:
     )
     return argparse.ArgumentParser(
         description=(
-            "Build and package MdsScope, including its native Rust bridge.\n"
+            "Build and package MDSLens, including its native Rust bridge.\n"
             "Desktop and Apple builds must run on a native host; Android builds "
             "run on Windows, macOS, or Linux."
         ),
@@ -1455,7 +1455,7 @@ def main() -> None:
         "--version",
         action="version",
         version=(
-            f"MdsScope {project_version()} build script "
+            f"MDSLens {project_version()} build script "
             f"(Flutter {FLUTTER_BASELINE}, Rust {RUST_BASELINE})"
         ),
     )

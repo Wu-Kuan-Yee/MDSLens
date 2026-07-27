@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 MdsScope Contributors
+// SPDX-FileCopyrightText: 2026 MDSLens Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Integration tests using real EAST configuration files.
@@ -121,7 +121,7 @@ fn test_toml_roundtrip_real() {
     let config = parse_toml_environment(path.to_str().unwrap());
 
     // Write to temp file
-    let tmp = std::env::temp_dir().join("mdsscope_test_roundtrip_real.toml");
+    let tmp = std::env::temp_dir().join("mdslens_test_roundtrip_real.toml");
     write_environment_toml(&config, tmp.to_str().unwrap()).unwrap();
 
     // Read back
@@ -190,7 +190,7 @@ y = "\\test"
 read_mode = "full"
 "#;
 
-    let tmp = std::env::temp_dir().join("mdsscope_grid_test.toml");
+    let tmp = std::env::temp_dir().join("mdslens_grid_test.toml");
     std::fs::write(&tmp, original_content).unwrap();
 
     let config = parse_toml_environment(tmp.to_str().unwrap());
@@ -209,7 +209,7 @@ read_mode = "full"
 #[test]
 fn test_toml_handles_trailing_newline() {
     let content = "version = 1\n\n[[panels]]\ncolumn = 1\nrow = 1\n\n[[panels.signals]]\ntree = \"pcs_east\"\nserver = \"202.127.204.12\"\ny = \"\\\\pcrl01\"\n\n";
-    let tmp = std::env::temp_dir().join("mdsscope_trailing_test.toml");
+    let tmp = std::env::temp_dir().join("mdslens_trailing_test.toml");
     std::fs::write(&tmp, content).unwrap();
 
     let config = parse_toml_environment(tmp.to_str().unwrap());

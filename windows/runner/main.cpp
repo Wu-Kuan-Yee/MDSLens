@@ -18,7 +18,7 @@ void EnsurePortableStartMenuShortcut() {
     return;
   }
   const std::wstring shortcut_path =
-      std::wstring(programs_path) + L"\\MdsScope.lnk";
+      std::wstring(programs_path) + L"\\MDSLens.lnk";
   CoTaskMemFree(programs_path);
   if (GetFileAttributesW(shortcut_path.c_str()) != INVALID_FILE_ATTRIBUTES) {
     return;
@@ -34,7 +34,7 @@ void EnsurePortableStartMenuShortcut() {
     return;
   }
   HRESULT result = link->SetPath(executable);
-  if (SUCCEEDED(result)) result = link->SetDescription(L"MdsScope");
+  if (SUCCEEDED(result)) result = link->SetDescription(L"MDSLens");
   if (SUCCEEDED(result)) result = link->SetIconLocation(executable, 0);
 
   IPropertyStore* properties = nullptr;
@@ -44,7 +44,7 @@ void EnsurePortableStartMenuShortcut() {
   if (SUCCEEDED(result)) {
     PROPVARIANT value = {};
     value.vt = VT_LPWSTR;
-    value.pwszVal = const_cast<wchar_t*>(L"MdsScope.MdsScope");
+    value.pwszVal = const_cast<wchar_t*>(L"MDSLens.MDSLens");
     result = properties->SetValue(PKEY_AppUserModel_ID, value);
     if (SUCCEEDED(result)) result = properties->Commit();
   }
@@ -74,7 +74,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // Initialize COM, so that it is available for use in the library and/or
   // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-  ::SetCurrentProcessExplicitAppUserModelID(L"MdsScope.MdsScope");
+  ::SetCurrentProcessExplicitAppUserModelID(L"MDSLens.MDSLens");
   ::RegisterApplicationRestart(L"", RESTART_NO_PATCH | RESTART_NO_REBOOT);
   EnsurePortableStartMenuShortcut();
 
@@ -88,7 +88,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1440, 920);
-  if (!window.Create(L"MdsScope", origin, size)) {
+  if (!window.Create(L"MDSLens", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

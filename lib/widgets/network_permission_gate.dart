@@ -75,7 +75,8 @@ class _NetworkPermissionGateState extends State<NetworkPermissionGate> {
   }
 
   void _scheduleStartupRequest() {
-    final shouldRequest = widget.requestOnStartup ??
+    final shouldRequest =
+        widget.requestOnStartup ??
         NetworkPermissionService.requestsLocalNetworkOnStartup;
     if (!shouldRequest || _startupRequestScheduled) return;
     _startupRequestScheduled = true;
@@ -114,9 +115,9 @@ class _NetworkPermissionGateState extends State<NetworkPermissionGate> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'MdsScope needs local network access to connect to your '
+                  'MDSLens needs local network access to connect to your '
                   'MDSplus or SSH server. If access was denied, enable Local '
-                  'Network for MdsScope in system settings, then retry.',
+                  'Network for MDSLens in system settings, then retry.',
                 ),
                 if (details.isNotEmpty) ...[
                   const SizedBox(height: 12),
@@ -132,18 +133,14 @@ class _NetworkPermissionGateState extends State<NetworkPermissionGate> {
         actions: [
           TextButton(
             key: const ValueKey('network-permission-cancel'),
-            onPressed: () => Navigator.pop(
-              dialogContext,
-              _NetworkPermissionAction.cancel,
-            ),
+            onPressed: () =>
+                Navigator.pop(dialogContext, _NetworkPermissionAction.cancel),
             child: const Text('Cancel'),
           ),
           OutlinedButton.icon(
             key: const ValueKey('network-permission-settings'),
-            onPressed: () => Navigator.pop(
-              dialogContext,
-              _NetworkPermissionAction.settings,
-            ),
+            onPressed: () =>
+                Navigator.pop(dialogContext, _NetworkPermissionAction.settings),
             icon: const Icon(Icons.settings_outlined),
             label: const Text('Open Settings'),
           ),
@@ -151,9 +148,9 @@ class _NetworkPermissionGateState extends State<NetworkPermissionGate> {
             key: const ValueKey('network-permission-retry'),
             onPressed: widget.app.canRetryNetworkOperation
                 ? () => Navigator.pop(
-                      dialogContext,
-                      _NetworkPermissionAction.retry,
-                    )
+                    dialogContext,
+                    _NetworkPermissionAction.retry,
+                  )
                 : null,
             icon: const Icon(Icons.refresh_rounded),
             label: const Text('Retry'),

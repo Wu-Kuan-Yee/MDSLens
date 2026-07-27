@@ -35,7 +35,7 @@ typedef RuntimeSystemInfoLoader = Future<RuntimeSystemInfo> Function();
 typedef AppVersionLoader = Future<String> Function();
 typedef GitVersionLoader = Future<String> Function();
 
-const _systemInfoChannel = MethodChannel('mdsscope/system_info');
+const _systemInfoChannel = MethodChannel('mdslens/system_info');
 
 Future<RuntimeSystemInfo> loadRuntimeSystemInfo({
   bool? useLinuxReleaseInfo,
@@ -54,13 +54,15 @@ Future<RuntimeSystemInfo> loadRuntimeSystemInfo({
     }
   }
   try {
-    final result =
-        await _systemInfoChannel.invokeMapMethod<String, dynamic>('get');
+    final result = await _systemInfoChannel.invokeMapMethod<String, dynamic>(
+      'get',
+    );
     if (result == null) return fallback;
     final name = result['name']?.toString().trim() ?? '';
     final version = result['version']?.toString().trim() ?? '';
-    final architecture =
-        normalizedArchitecture(result['architecture']?.toString() ?? '');
+    final architecture = normalizedArchitecture(
+      result['architecture']?.toString() ?? '',
+    );
     return RuntimeSystemInfo(
       name: name.isEmpty ? fallback.name : name,
       version: version.isEmpty ? fallback.version : version,
@@ -94,8 +96,9 @@ RuntimeSystemInfo windowsRuntimeSystemInfo(
   String rawVersion,
   String architecture,
 ) {
-  final buildMatch =
-      RegExp(r'\b10\.0\.(\d+)(?:\.(\d+))?').firstMatch(rawVersion);
+  final buildMatch = RegExp(
+    r'\b10\.0\.(\d+)(?:\.(\d+))?',
+  ).firstMatch(rawVersion);
   final build = int.tryParse(buildMatch?.group(1) ?? '');
   if (build == null) {
     return RuntimeSystemInfo(
@@ -105,8 +108,9 @@ RuntimeSystemInfo windowsRuntimeSystemInfo(
     );
   }
   final revision = buildMatch?.group(2);
-  final completeBuild =
-      revision == null ? build.toString() : '$build.$revision';
+  final completeBuild = revision == null
+      ? build.toString()
+      : '$build.$revision';
   final isWindows11 = build >= 22000;
   final release = switch (build) {
     >= 28000 => '26H1',
@@ -152,8 +156,9 @@ RuntimeSystemInfo linuxRuntimeSystemInfo({
   final name = values['PRETTY_NAME']?.trim().isNotEmpty == true
       ? values['PRETTY_NAME']!.trim()
       : 'Linux';
-  final kernelMatch =
-      RegExp(r'(?:^|\bLinux\s+)([0-9][^\s]*)').firstMatch(kernelVersion);
+  final kernelMatch = RegExp(
+    r'(?:^|\bLinux\s+)([0-9][^\s]*)',
+  ).firstMatch(kernelVersion);
   final kernel = kernelMatch?.group(1) ?? kernelVersion.trim();
   return RuntimeSystemInfo(
     name: name,
@@ -162,7 +167,7 @@ RuntimeSystemInfo linuxRuntimeSystemInfo({
   );
 }
 
-Future<String> loadMdsScopeGitVersion() async {
+Future<String> loadMDSLensGitVersion() async {
   try {
     final version = RustBridge.instance.buildGitVersion().trim();
     if (version.isNotEmpty) return version;
@@ -170,7 +175,7 @@ Future<String> loadMdsScopeGitVersion() async {
   return 'unknown';
 }
 
-Future<String> loadMdsScopeVersion() async {
+Future<String> loadMDSLensVersion() async {
   try {
     final version = RustBridge.instance.buildVersion().trim();
     if (version.isNotEmpty) return version;
@@ -202,8 +207,10 @@ String normalizedOperatingSystemVersion(String value) {
   if (trimmed.isEmpty) return '';
   for (final pattern in [
     RegExp(r'\bVersion\s+([0-9]+(?:\.[0-9]+)*)', caseSensitive: false),
-    RegExp(r'\b(?:Android|iOS|macOS|Windows)\s+([0-9]+(?:\.[0-9]+)*)',
-        caseSensitive: false),
+    RegExp(
+      r'\b(?:Android|iOS|macOS|Windows)\s+([0-9]+(?:\.[0-9]+)*)',
+      caseSensitive: false,
+    ),
   ]) {
     final match = pattern.firstMatch(trimmed);
     if (match != null) return match.group(1) ?? '';

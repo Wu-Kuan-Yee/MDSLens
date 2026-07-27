@@ -19,12 +19,18 @@ class MainPage extends StatelessWidget {
     );
     return CallbackShortcuts(
       bindings: {
-        SingleActivator(LogicalKeyboardKey.keyZ,
-            control: !Platform.isMacOS,
-            meta: Platform.isMacOS): () => app.interactionMode = 0,
-        SingleActivator(LogicalKeyboardKey.keyP,
-            control: !Platform.isMacOS,
-            meta: Platform.isMacOS): () => app.interactionMode = 1,
+        SingleActivator(
+          LogicalKeyboardKey.keyZ,
+          control: !Platform.isMacOS,
+          meta: Platform.isMacOS,
+        ): () =>
+            app.interactionMode = 0,
+        SingleActivator(
+          LogicalKeyboardKey.keyP,
+          control: !Platform.isMacOS,
+          meta: Platform.isMacOS,
+        ): () =>
+            app.interactionMode = 1,
         SingleActivator(LogicalKeyboardKey.escape): app.handleEscapeKey,
         SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
             _stepCrosshair(app, -1),
@@ -32,54 +38,69 @@ class MainPage extends StatelessWidget {
             _stepCrosshair(app, 1),
       },
       child: Focus(
-          autofocus: true,
-          child: Scaffold(
-            body: SafeArea(
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onTap: () {
-                  FocusManager.instance.primaryFocus?.unfocus();
-                  app.clearSelectedPanel();
-                },
-                child: Column(
-                  children: [
-                    const ResponsiveToolbar(),
-                    if (app.columns.isEmpty)
-                      const Expanded(
-                          child: Center(
-                              child: SelectableText(
-                                  'No environment loaded. Use Open to load a .toml or .webscp file.')))
-                    else
-                      const Expanded(child: PlotGrid()),
-                    Container(
-                      color:
-                          Theme.of(context).colorScheme.surfaceContainerHighest,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      child: Row(children: [
+        autofocus: true,
+        child: Scaffold(
+          body: SafeArea(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () {
+                FocusManager.instance.primaryFocus?.unfocus();
+                app.clearSelectedPanel();
+              },
+              child: Column(
+                children: [
+                  const ResponsiveToolbar(),
+                  if (app.columns.isEmpty)
+                    const Expanded(
+                      child: Center(
+                        child: SelectableText(
+                          'No environment loaded. Use Open to load a .toml or .webscp file.',
+                        ),
+                      ),
+                    )
+                  else
+                    const Expanded(child: PlotGrid()),
+                  Container(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    child: Row(
+                      children: [
                         if (app.fetching)
                           const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2)),
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
                         const SizedBox(width: 8),
                         if (app.crosshairX != null &&
                             app.crosshairReadout.isNotEmpty)
                           Expanded(
-                              child: SelectableText(
-                                  'x=${app.crosshairX!.toStringAsFixed(4)}  ${app.crosshairReadout.map((e) => '${e.name}:${e.y.toStringAsFixed(4)}').join('  ')}',
-                                  style: statusStyle))
+                            child: SelectableText(
+                              'x=${app.crosshairX!.toStringAsFixed(4)}  ${app.crosshairReadout.map((e) => '${e.name}:${e.y.toStringAsFixed(4)}').join('  ')}',
+                              style: statusStyle,
+                            ),
+                          )
                         else
                           Expanded(
-                              child: SelectableText(app.status,
-                                  style: statusStyle)),
-                      ]),
+                            child: SelectableText(
+                              app.status,
+                              style: statusStyle,
+                            ),
+                          ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-          )),
+          ),
+        ),
+      ),
     );
   }
 

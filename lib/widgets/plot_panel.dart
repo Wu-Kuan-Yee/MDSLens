@@ -51,8 +51,10 @@ String resolveDataSourceShot({
 String signalLegendLabel(Map<dynamic, dynamic> signal) {
   final custom = signal['legend']?.toString().trim() ?? '';
   if (custom.isNotEmpty) return custom;
-  return (signal['y_expr']?.toString().trim() ?? '')
-      .replaceFirst(RegExp(r'^\\+'), '');
+  return (signal['y_expr']?.toString().trim() ?? '').replaceFirst(
+    RegExp(r'^\\+'),
+    '',
+  );
 }
 
 double? interpolateWaveformY(List<List<double>> points, double x) {
@@ -89,10 +91,7 @@ double? interpolateWaveformY(List<List<double>> points, double x) {
   return y.isFinite ? y : null;
 }
 
-String formatPointXForReadout(
-  double value,
-  List<List<double>>? points,
-) {
+String formatPointXForReadout(double value, List<List<double>>? points) {
   final resolution = _localXResolution(points, value);
   if (resolution == null || !resolution.isFinite || resolution <= 0) {
     return value.toStringAsPrecision(12);
@@ -229,13 +228,14 @@ class PlotPanel extends StatefulWidget {
   final void Function(String action)? onContextAction;
   final PlatformSaveDialog? exportSaveDialog;
 
-  const PlotPanel(
-      {super.key,
-      required this.plotIdx,
-      this.onTap,
-      this.onContextAction,
-      this.exportSaveDialog,
-      this.selected = false});
+  const PlotPanel({
+    super.key,
+    required this.plotIdx,
+    this.onTap,
+    this.onContextAction,
+    this.exportSaveDialog,
+    this.selected = false,
+  });
 
   @override
   State<PlotPanel> createState() => _PlotPanelState();
@@ -328,141 +328,168 @@ class _PlotPanelState extends State<PlotPanel> {
       if (s?.points == null || s!.points!.isEmpty) continue;
       if (i < sigSpecs.length && signalIsHidden(sigSpecs[i])) continue;
       activeSeries.add(s);
-      final rendered =
-          _renderCache.render(s, minX: renderMinX, maxX: renderMaxX);
+      final rendered = _renderCache.render(
+        s,
+        minX: renderMinX,
+        maxX: renderMaxX,
+      );
       final spots = rendered.spots;
-      viewMinX =
-          viewMinX == null ? rendered.minX : math.min(viewMinX, rendered.minX);
-      viewMaxX =
-          viewMaxX == null ? rendered.maxX : math.max(viewMaxX, rendered.maxX);
-      viewMinY =
-          viewMinY == null ? rendered.minY : math.min(viewMinY, rendered.minY);
-      viewMaxY =
-          viewMaxY == null ? rendered.maxY : math.max(viewMaxY, rendered.maxY);
-      bars.add(LineChartBarData(
-        spots: spots,
-        isCurved: false,
-        color: _sigColor(i, sigSpecs),
-        barWidth: 1,
-        dotData: const FlDotData(show: false),
-        belowBarData: BarAreaData(show: false),
-      ));
+      viewMinX = viewMinX == null
+          ? rendered.minX
+          : math.min(viewMinX, rendered.minX);
+      viewMaxX = viewMaxX == null
+          ? rendered.maxX
+          : math.max(viewMaxX, rendered.maxX);
+      viewMinY = viewMinY == null
+          ? rendered.minY
+          : math.min(viewMinY, rendered.minY);
+      viewMaxY = viewMaxY == null
+          ? rendered.maxY
+          : math.max(viewMaxY, rendered.maxY);
+      bars.add(
+        LineChartBarData(
+          spots: spots,
+          isCurved: false,
+          color: _sigColor(i, sigSpecs),
+          barWidth: 1,
+          dotData: const FlDotData(show: false),
+          belowBarData: BarAreaData(show: false),
+        ),
+      );
     }
     _renderCache.retain(activeSeries);
 
-    return Stack(children: [
-      GestureDetector(
-        onTapDown: (_) => widget.onTap?.call(),
-        onTapUp: (details) {
-          final a = context.read<AppState>();
-          if (a.interactionMode != 1) return;
-          if (a.pointLocked) a.pointLocked = false;
-          _updatePointCrosshair(details.localPosition, chooseSeries: true);
-        },
-        onSecondaryTapUp: (details) {
-          if (_isStylusKind(details.kind)) return;
-          _showContextMenu(context, details.globalPosition);
-        },
-        // Long press handled manually via _longPressTimer in onPointerDown/Up for mobile compatibility
-        child: Listener(
-          key: _listenerKey,
-          onPointerSignal: _handleScrollWheel,
-          onPointerPanZoomStart: _handleTrackpadGestureStart,
-          onPointerPanZoomUpdate: _handleTrackpadGestureUpdate,
-          onPointerPanZoomEnd: _handleTrackpadGestureEnd,
-          onPointerDown: (e) {
-            _handlePointerDown(e);
-            if (e.kind == PointerDeviceKind.touch &&
-                _activeStylusPointer == null &&
-                !_multiTouchActive) {
-              _startLongPressTimer(e);
-            }
+    return Stack(
+      children: [
+        GestureDetector(
+          onTapDown: (_) => widget.onTap?.call(),
+          onTapUp: (details) {
+            final a = context.read<AppState>();
+            if (a.interactionMode != 1) return;
+            if (a.pointLocked) a.pointLocked = false;
+            _updatePointCrosshair(details.localPosition, chooseSeries: true);
           },
-          onPointerMove: (e) {
-            _handlePointerMove(e);
-            _cancelLongPressIfMoved(e);
+          onSecondaryTapUp: (details) {
+            if (_isStylusKind(details.kind)) return;
+            _showContextMenu(context, details.globalPosition);
           },
-          onPointerHover: _handlePointerHover,
-          onPointerUp: (e) {
-            _handlePointerUp(e);
-            _cancelLongPressTimer();
-          },
-          onPointerCancel: (e) {
-            _handlePointerCancel(e);
-            _cancelLongPressTimer();
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(2),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface,
-                  border: Border.all(
-                    color: widget.selected
-                        ? const Color(0xFFFF00FF)
-                        : theme.dividerColor.withValues(alpha: 0.3),
-                    width: widget.selected ? 2 : 1,
+          // Long press handled manually via _longPressTimer in onPointerDown/Up for mobile compatibility
+          child: Listener(
+            key: _listenerKey,
+            onPointerSignal: _handleScrollWheel,
+            onPointerPanZoomStart: _handleTrackpadGestureStart,
+            onPointerPanZoomUpdate: _handleTrackpadGestureUpdate,
+            onPointerPanZoomEnd: _handleTrackpadGestureEnd,
+            onPointerDown: (e) {
+              _handlePointerDown(e);
+              if (e.kind == PointerDeviceKind.touch &&
+                  _activeStylusPointer == null &&
+                  !_multiTouchActive) {
+                _startLongPressTimer(e);
+              }
+            },
+            onPointerMove: (e) {
+              _handlePointerMove(e);
+              _cancelLongPressIfMoved(e);
+            },
+            onPointerHover: _handlePointerHover,
+            onPointerUp: (e) {
+              _handlePointerUp(e);
+              _cancelLongPressTimer();
+            },
+            onPointerCancel: (e) {
+              _handlePointerCancel(e);
+              _cancelLongPressTimer();
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(2),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface,
+                    border: Border.all(
+                      color: widget.selected
+                          ? const Color(0xFFFF00FF)
+                          : theme.dividerColor.withValues(alpha: 0.3),
+                      width: widget.selected ? 2 : 1,
+                    ),
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                  borderRadius: BorderRadius.circular(4),
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: bars.isEmpty
+                            ? isLoading
+                                  ? _buildLoadingIndicator(app, theme)
+                                  : Center(
+                                      child: Text(
+                                        _getPlaceholderText(plot),
+                                        style: TextStyle(
+                                          color: Colors.grey,
+                                          fontFamily: app.effectiveFontFamily,
+                                          fontSize: app.fontUiSize.toDouble(),
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    )
+                            : Stack(
+                                key: _chartAreaKey,
+                                children: [
+                                  _buildChart(
+                                    bars,
+                                    plot,
+                                    panel,
+                                    theme,
+                                    viewMinX,
+                                    viewMaxX,
+                                    viewMinY,
+                                    viewMaxY,
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ],
+                  ),
                 ),
-                child: Column(children: [
-                  Expanded(
-                    child: bars.isEmpty
-                        ? isLoading
-                            ? _buildLoadingIndicator(app, theme)
-                            : Center(
-                                child: Text(_getPlaceholderText(plot),
-                                    style: TextStyle(
-                                      color: Colors.grey,
-                                      fontFamily: app.effectiveFontFamily,
-                                      fontSize: app.fontUiSize.toDouble(),
-                                    ),
-                                    textAlign: TextAlign.center))
-                        : Stack(key: _chartAreaKey, children: [
-                            _buildChart(bars, plot, panel, theme, viewMinX,
-                                viewMaxX, viewMinY, viewMaxY),
-                          ]),
-                  ),
-                ]),
               ),
             ),
           ),
         ),
-      ),
-      if (isLoading && bars.isNotEmpty)
-        Positioned.fill(
-          child: IgnorePointer(
-            child: _buildLoadingIndicator(app, theme),
+        if (isLoading && bars.isNotEmpty)
+          Positioned.fill(
+            child: IgnorePointer(child: _buildLoadingIndicator(app, theme)),
           ),
-        ),
-      if (_inRubberBand && _rubberBandRect != null)
-        Positioned(
-          key: ValueKey('plot-rubber-band-${widget.plotIdx}'),
-          left: _rubberBandRect!.left,
-          top: _rubberBandRect!.top,
-          width: _rubberBandRect!.width,
-          height: _rubberBandRect!.height,
-          child: IgnorePointer(
-            child: Container(
-              decoration: BoxDecoration(
+        if (_inRubberBand && _rubberBandRect != null)
+          Positioned(
+            key: ValueKey('plot-rubber-band-${widget.plotIdx}'),
+            left: _rubberBandRect!.left,
+            top: _rubberBandRect!.top,
+            width: _rubberBandRect!.width,
+            height: _rubberBandRect!.height,
+            child: IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
                   color: const Color(0x180000FF),
-                  border: Border.all(color: const Color(0xFF0000FF), width: 1)),
+                  border: Border.all(color: const Color(0xFF0000FF), width: 1),
+                ),
+              ),
             ),
           ),
-        ),
-    ]);
+      ],
+    );
   }
 
   Widget _buildChart(
-      List<LineChartBarData> bars,
-      PlotData plot,
-      Map<String, dynamic> panel,
-      ThemeData theme,
-      double? autoMinX,
-      double? autoMaxX,
-      double? autoMinY,
-      double? autoMaxY) {
+    List<LineChartBarData> bars,
+    PlotData plot,
+    Map<String, dynamic> panel,
+    ThemeData theme,
+    double? autoMinX,
+    double? autoMaxX,
+    double? autoMinY,
+    double? autoMaxY,
+  ) {
     final textColor = theme.colorScheme.onSurface.withValues(alpha: 0.6);
     final tickColor = theme.colorScheme.onSurface.withValues(alpha: 0.4);
     final app = context.read<AppState>();
@@ -522,25 +549,32 @@ class _PlotPanelState extends State<PlotPanel> {
         final yTickCount = yMin != null && yMax != null
             ? (gridH / 34.0 + 1).round().clamp(3, 6)
             : 0;
-        final xTicks =
-            xTickCount > 1 ? evenTicks(xMin!, xMax!, xTickCount) : <double>[];
-        final yTicks =
-            yTickCount > 1 ? evenTicks(yMin!, yMax!, yTickCount) : <double>[];
+        final xTicks = xTickCount > 1
+            ? evenTicks(xMin!, xMax!, xTickCount)
+            : <double>[];
+        final yTicks = yTickCount > 1
+            ? evenTicks(yMin!, yMax!, yTickCount)
+            : <double>[];
 
         return Stack(
           children: [
             if (plot.title.isNotEmpty)
               Positioned(
-                  left: gridLeft,
-                  right: 0,
-                  top: gridTop + 2,
-                  child: Center(
-                      child: Text(plot.title,
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontFamily: fontFamily,
-                              fontSize: legendSize,
-                              color: textColor)))),
+                left: gridLeft,
+                right: 0,
+                top: gridTop + 2,
+                child: Center(
+                  child: Text(
+                    plot.title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontFamily: fontFamily,
+                      fontSize: legendSize,
+                      color: textColor,
+                    ),
+                  ),
+                ),
+              ),
             LineChart(
               LineChartData(
                 clipData: const FlClipData.all(),
@@ -550,33 +584,43 @@ class _PlotPanelState extends State<PlotPanel> {
                   drawVerticalLine: showGrid,
                   drawHorizontalLine: showGrid,
                   getDrawingHorizontalLine: (v) => FlLine(
-                      color: theme.dividerColor.withValues(alpha: 0.15),
-                      strokeWidth: 0.5),
+                    color: theme.dividerColor.withValues(alpha: 0.15),
+                    strokeWidth: 0.5,
+                  ),
                   getDrawingVerticalLine: (v) => FlLine(
-                      color: theme.dividerColor.withValues(alpha: 0.15),
-                      strokeWidth: 0.5),
+                    color: theme.dividerColor.withValues(alpha: 0.15),
+                    strokeWidth: 0.5,
+                  ),
                 ),
                 titlesData: FlTitlesData(
                   bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                          showTitles: true,
-                          reservedSize: bottomInset,
-                          getTitlesWidget: (v, m) => const SizedBox())),
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: bottomInset,
+                      getTitlesWidget: (v, m) => const SizedBox(),
+                    ),
+                  ),
                   leftTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                          showTitles: true,
-                          reservedSize: gridLeft,
-                          getTitlesWidget: (v, m) => const SizedBox())),
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: gridLeft,
+                      getTitlesWidget: (v, m) => const SizedBox(),
+                    ),
+                  ),
                   topTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
                   rightTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
                 ),
                 borderData: FlBorderData(
-                    show: true,
-                    border: Border.all(
-                        color: theme.dividerColor.withValues(alpha: 0.5),
-                        width: 1)),
+                  show: true,
+                  border: Border.all(
+                    color: theme.dividerColor.withValues(alpha: 0.5),
+                    width: 1,
+                  ),
+                ),
                 // Point interaction is handled by the panel's outer pointer
                 // layer. Keeping fl_chart's pan recognizer enabled would win
                 // the gesture arena and prevent one-finger page scrolling.
@@ -585,17 +629,19 @@ class _PlotPanelState extends State<PlotPanel> {
                   verticalLines: cx != null
                       ? [
                           VerticalLine(
-                              x: cx,
-                              color: const Color(0xFFFF00FF),
-                              strokeWidth: 1)
+                            x: cx,
+                            color: const Color(0xFFFF00FF),
+                            strokeWidth: 1,
+                          ),
                         ]
                       : [],
                   horizontalLines: crosshairY != null
                       ? [
                           HorizontalLine(
-                              y: crosshairY,
-                              color: const Color(0xFFFF00FF),
-                              strokeWidth: 1)
+                            y: crosshairY,
+                            color: const Color(0xFFFF00FF),
+                            strokeWidth: 1,
+                          ),
                         ]
                       : [],
                 ),
@@ -614,7 +660,8 @@ class _PlotPanelState extends State<PlotPanel> {
             for (int i = 0; i < yTicks.length; i++)
               Positioned(
                 left: gridLeft,
-                top: gridTop +
+                top:
+                    gridTop +
                     ((yTicks.length - 1 - i) / (yTicks.length - 1)) * gridH,
                 child: Container(width: 3, height: 1, color: tickColor),
               ),
@@ -629,19 +676,24 @@ class _PlotPanelState extends State<PlotPanel> {
             for (int i = 0; i < yTicks.length; i++)
               Positioned(
                 left: 2,
-                top: (gridTop +
-                        ((yTicks.length - 1 - i) / (yTicks.length - 1)) *
-                            gridH -
-                        6)
-                    .clamp(2.0, double.infinity),
+                top:
+                    (gridTop +
+                            ((yTicks.length - 1 - i) / (yTicks.length - 1)) *
+                                gridH -
+                            6)
+                        .clamp(2.0, double.infinity),
                 child: SizedBox(
-                    width: gridLeft - 6,
-                    child: Text(_fmtAxis(yTicks[i]),
-                        style: TextStyle(
-                            fontFamily: fontFamily,
-                            fontSize: axisSize,
-                            color: textColor),
-                        textAlign: TextAlign.right)),
+                  width: gridLeft - 6,
+                  child: Text(
+                    _fmtAxis(yTicks[i]),
+                    style: TextStyle(
+                      fontFamily: fontFamily,
+                      fontSize: axisSize,
+                      color: textColor,
+                    ),
+                    textAlign: TextAlign.right,
+                  ),
+                ),
               ),
             // X-axis tick values — below tick marks (row 1 of 2 below axis)
             // First label left-aligned, last label right-aligned, others centered
@@ -651,31 +703,40 @@ class _PlotPanelState extends State<PlotPanel> {
                   Positioned(
                     left: gridLeft,
                     top: gridBottom + 4,
-                    child: Text(_fmtAxis(xTicks[i]),
-                        style: TextStyle(
-                            fontFamily: fontFamily,
-                            fontSize: axisSize,
-                            color: textColor)),
+                    child: Text(
+                      _fmtAxis(xTicks[i]),
+                      style: TextStyle(
+                        fontFamily: fontFamily,
+                        fontSize: axisSize,
+                        color: textColor,
+                      ),
+                    ),
                   )
                 else if (i == xTicks.length - 1)
                   Positioned(
                     right: cw - gridRight,
                     top: gridBottom + 4,
-                    child: Text(_fmtAxis(xTicks[i]),
-                        style: TextStyle(
-                            fontFamily: fontFamily,
-                            fontSize: axisSize,
-                            color: textColor)),
+                    child: Text(
+                      _fmtAxis(xTicks[i]),
+                      style: TextStyle(
+                        fontFamily: fontFamily,
+                        fontSize: axisSize,
+                        color: textColor,
+                      ),
+                    ),
                   )
                 else
                   Positioned(
                     left: gridLeft + (i / (xTicks.length - 1)) * gridW - 16,
                     top: gridBottom + 4,
-                    child: Text(_fmtAxis(xTicks[i]),
-                        style: TextStyle(
-                            fontFamily: fontFamily,
-                            fontSize: axisSize,
-                            color: textColor)),
+                    child: Text(
+                      _fmtAxis(xTicks[i]),
+                      style: TextStyle(
+                        fontFamily: fontFamily,
+                        fontSize: axisSize,
+                        color: textColor,
+                      ),
+                    ),
                   ),
               ],
             // X-axis name label — below tick values (row 2 of 2 below axis)
@@ -684,26 +745,36 @@ class _PlotPanelState extends State<PlotPanel> {
               right: 0,
               top: gridBottom + 16,
               child: Center(
-                  child: Text(_effectiveXLabel(plot, panel),
-                      style: TextStyle(
-                          fontFamily: fontFamily,
-                          fontSize: unitSize,
-                          color: textColor))),
+                child: Text(
+                  _effectiveXLabel(plot, panel),
+                  style: TextStyle(
+                    fontFamily: fontFamily,
+                    fontSize: unitSize,
+                    color: textColor,
+                  ),
+                ),
+              ),
             ),
             Positioned(
               left: -2,
               top: gridTop,
               bottom: ch - gridBottom,
               child: Center(
-                  child: Padding(
-                      padding: const EdgeInsets.only(bottom: 2),
-                      child: RotatedBox(
-                          quarterTurns: -1,
-                          child: Text(_effectiveYLabel(plot, panel),
-                              style: TextStyle(
-                                  fontFamily: fontFamily,
-                                  fontSize: unitSize,
-                                  color: textColor))))),
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: RotatedBox(
+                    quarterTurns: -1,
+                    child: Text(
+                      _effectiveYLabel(plot, panel),
+                      style: TextStyle(
+                        fontFamily: fontFamily,
+                        fontSize: unitSize,
+                        color: textColor,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
             _buildLegend(
               panel,
@@ -781,14 +852,17 @@ class _PlotPanelState extends State<PlotPanel> {
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surface.withValues(alpha: 0.82),
                   border: Border.all(
-                    color:
-                        theme.colorScheme.outlineVariant.withValues(alpha: 0.7),
+                    color: theme.colorScheme.outlineVariant.withValues(
+                      alpha: 0.7,
+                    ),
                   ),
                   borderRadius: BorderRadius.circular(7),
                 ),
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 4,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
@@ -857,8 +931,9 @@ class _PlotPanelState extends State<PlotPanel> {
         key: ValueKey('plot-loading-${widget.plotIdx}'),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color:
-              theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.92),
+          color: theme.colorScheme.surfaceContainerHighest.withValues(
+            alpha: 0.92,
+          ),
           border: Border.all(color: theme.colorScheme.primary),
           borderRadius: BorderRadius.circular(18),
           boxShadow: [
@@ -905,17 +980,11 @@ class _PlotPanelState extends State<PlotPanel> {
   }
 
   double _gridLeftInset(AppState app) {
-    return math.max(
-      50,
-      app.fontAxisSize * 3.8 + app.fontUnitSize + 6,
-    );
+    return math.max(50, app.fontAxisSize * 3.8 + app.fontUnitSize + 6);
   }
 
   double _gridBottomInset(AppState app) {
-    return math.max(
-      32,
-      app.fontAxisSize + app.fontUnitSize + 15,
-    );
+    return math.max(32, app.fontAxisSize + app.fontUnitSize + 15);
   }
 
   ({int seriesIndex, double y})? _crosshairValue(
@@ -925,8 +994,11 @@ class _PlotPanelState extends State<PlotPanel> {
     AppState app,
   ) {
     if (x == null) return null;
-    final seriesIndex =
-        _usableSeriesIndex(plot, panel, app.crosshairSourceSeries);
+    final seriesIndex = _usableSeriesIndex(
+      plot,
+      panel,
+      app.crosshairSourceSeries,
+    );
     if (seriesIndex == null) return null;
     final points = plot.series[seriesIndex]?.points;
     if (points == null) return null;
@@ -989,9 +1061,7 @@ class _PlotPanelState extends State<PlotPanel> {
     final xPoints = seriesIndex < plot.series.length
         ? plot.series[seriesIndex]?.points
         : null;
-    final lines = <String>[
-      '$xName: ${formatPointXForReadout(x, xPoints)}',
-    ];
+    final lines = <String>['$xName: ${formatPointXForReadout(x, xPoints)}'];
     for (var index = 0; index < plot.series.length; index++) {
       final usable = _usableSeriesIndex(plot, panel, index);
       if (usable != index) continue;
@@ -1001,8 +1071,10 @@ class _PlotPanelState extends State<PlotPanel> {
       final name = index < signals.length
           ? signalLegendLabel(signals[index])
           : 'Signal ${index + 1}';
-      lines.add('${name.isEmpty ? "Signal ${index + 1}" : name}: '
-          '${_fmtPointValue(value)}');
+      lines.add(
+        '${name.isEmpty ? "Signal ${index + 1}" : name}: '
+        '${_fmtPointValue(value)}',
+      );
     }
 
     final labelWidth = math.min(240.0, math.max(132.0, gridWidth * 0.46));
@@ -1183,10 +1255,7 @@ class _PlotPanelState extends State<PlotPanel> {
     return chart.globalToLocal(listener.localToGlobal(localPosition));
   }
 
-  int? _pickSeriesAt(
-    Offset localPosition, {
-    required double maximumDistance,
-  }) {
+  int? _pickSeriesAt(Offset localPosition, {required double maximumDistance}) {
     final app = context.read<AppState>();
     if (widget.plotIdx >= app.plots.length) return null;
     final plot = app.plots[widget.plotIdx];
@@ -1206,9 +1275,9 @@ class _PlotPanelState extends State<PlotPanel> {
     }
 
     Offset toPixel(FlSpot spot) => Offset(
-          gridLeft + (spot.x - _viewMinX) / (_viewMaxX - _viewMinX) * gridWidth,
-          (_viewMaxY - spot.y) / (_viewMaxY - _viewMinY) * gridHeight,
-        );
+      gridLeft + (spot.x - _viewMinX) / (_viewMaxX - _viewMinX) * gridWidth,
+      (_viewMaxY - spot.y) / (_viewMaxY - _viewMinY) * gridHeight,
+    );
 
     var bestDistance = double.infinity;
     int? bestSeries;
@@ -1279,10 +1348,8 @@ class _PlotPanelState extends State<PlotPanel> {
         ? app.crosshairSourceSeries
         : 0;
     if (chooseSeries) {
-      seriesIndex = _pickSeriesAt(
-            localPosition,
-            maximumDistance: pickRadius,
-          ) ??
+      seriesIndex =
+          _pickSeriesAt(localPosition, maximumDistance: pickRadius) ??
           (_usableSeriesIndex(
                 app.plots[widget.plotIdx],
                 _findPanel(app),
@@ -1343,8 +1410,9 @@ class _PlotPanelState extends State<PlotPanel> {
 
     final previousScale = _lastTrackpadScale;
     _lastTrackpadScale = event.scale;
-    final incrementalScale =
-        previousScale > 0 ? event.scale / previousScale : 1.0;
+    final incrementalScale = previousScale > 0
+        ? event.scale / previousScale
+        : 1.0;
     final canScale = incrementalScale.isFinite && incrementalScale > 0;
     final panDelta = event.localPanDelta;
 
@@ -1383,7 +1451,8 @@ class _PlotPanelState extends State<PlotPanel> {
       _stylusDragStarted = false;
       _stylusLongPressTriggered = false;
       final app = context.read<AppState>();
-      _stylusShouldErase = event.kind == PointerDeviceKind.invertedStylus ||
+      _stylusShouldErase =
+          event.kind == PointerDeviceKind.invertedStylus ||
           app.stylusEraserMode ||
           _hasStylusButton(event.buttons);
       _startLongPressTimer(event, stylus: true);
@@ -1420,7 +1489,8 @@ class _PlotPanelState extends State<PlotPanel> {
     final isMid = (event.buttons & kMiddleMouseButton) != 0;
     final isShiftLeft =
         app.shiftHeld && (event.buttons & kPrimaryMouseButton) != 0;
-    final isMouseLeft = event.kind == PointerDeviceKind.mouse &&
+    final isMouseLeft =
+        event.kind == PointerDeviceKind.mouse &&
         (event.buttons & kPrimaryMouseButton) != 0 &&
         !app.shiftHeld;
     if (isMouseLeft) {
@@ -1496,8 +1566,10 @@ class _PlotPanelState extends State<PlotPanel> {
 
     if (_inRubberBand && _rubberBandStart != null) {
       setState(() {
-        _rubberBandRect =
-            Rect.fromPoints(_rubberBandStart!, event.localPosition);
+        _rubberBandRect = Rect.fromPoints(
+          _rubberBandStart!,
+          event.localPosition,
+        );
       });
       return;
     }
@@ -1858,10 +1930,7 @@ class _PlotPanelState extends State<PlotPanel> {
     _lastTrackpadScale = 1;
   }
 
-  Future<void> _showContextMenu(
-    BuildContext ctx,
-    Offset globalPosition,
-  ) async {
+  Future<void> _showContextMenu(BuildContext ctx, Offset globalPosition) async {
     final app = ctx.read<AppState>();
     final isMaxed = app.maximizedPlot != null;
     final value = await showPolishedPopupMenu<String>(
@@ -2003,9 +2072,11 @@ class _PlotPanelState extends State<PlotPanel> {
   Future<void> _showDataSourceSetup(BuildContext ctx, AppState app) async {
     final panel = _findPanel(app);
     final sigs = List<Map<String, dynamic>>.from(
-        (panel['signal_specs'] as List?)
-                ?.map((s) => Map<String, dynamic>.from(s as Map)) ??
-            []);
+      (panel['signal_specs'] as List?)?.map(
+            (s) => Map<String, dynamic>.from(s as Map),
+          ) ??
+          [],
+    );
     final defaultShot = resolveDataSourceShot(
       panelShot: panel['shot'],
       displayedShot: app.displayedShot,
@@ -2033,20 +2104,23 @@ class _PlotPanelState extends State<PlotPanel> {
     for (final col in app.columns) {
       for (final p in col) {
         final sc = (p['signal_specs'] as List?)?.length ?? 1;
-        final oldSeries =
-            idx < curPlots.length ? curPlots[idx].series : <SeriesData?>[];
+        final oldSeries = idx < curPlots.length
+            ? curPlots[idx].series
+            : <SeriesData?>[];
         final oldPlot = idx < curPlots.length ? curPlots[idx] : null;
-        newPlots.add(PlotData(
-          title: p['title']?.toString() ?? '',
-          xLabel: p['x_label']?.toString() ?? 's',
-          yLabel: p['y_label']?.toString() ?? 'a.u.',
-          series: _resizeSeries(oldSeries, sc > 0 ? sc : 1),
-        )..setViewRange(
+        newPlots.add(
+          PlotData(
+            title: p['title']?.toString() ?? '',
+            xLabel: p['x_label']?.toString() ?? 's',
+            yLabel: p['y_label']?.toString() ?? 'a.u.',
+            series: _resizeSeries(oldSeries, sc > 0 ? sc : 1),
+          )..setViewRange(
             oldPlot?.viewMinX ?? double.nan,
             oldPlot?.viewMaxX ?? double.nan,
             oldPlot?.viewMinY ?? double.nan,
             oldPlot?.viewMaxY ?? double.nan,
-          ));
+          ),
+        );
         idx++;
       }
     }
@@ -2080,8 +2154,9 @@ class _PlotPanelState extends State<PlotPanel> {
           title: plot.title,
           xLabel: _effectiveXLabel(plot, panel),
           yLabel: _effectiveYLabel(plot, panel),
-          extractionPoints:
-              parsedPoints != null && parsedPoints >= 2 ? parsedPoints : 2000,
+          extractionPoints: parsedPoints != null && parsedPoints >= 2
+              ? parsedPoints
+              : 2000,
         );
       },
     );
@@ -2098,7 +2173,8 @@ class _PlotPanelState extends State<PlotPanel> {
     final plot = app.plots[widget.plotIdx];
     final buf = StringBuffer();
     buf.writeln(
-        '# MdsScope Export — ${plot.title.isNotEmpty ? plot.title : "Panel ${widget.plotIdx + 1}"}');
+      '# MDSLens Export — ${plot.title.isNotEmpty ? plot.title : "Panel ${widget.plotIdx + 1}"}',
+    );
     for (var i = 0; i < plot.series.length; i++) {
       final s = plot.series[i];
       if (s?.points == null || s!.points!.isEmpty) continue;
@@ -2144,8 +2220,10 @@ class _PlotPanelState extends State<PlotPanel> {
     }
   }
 
-  List<double>? _computeDataBounds(PlotData plot,
-      [Map<String, dynamic>? panel]) {
+  List<double>? _computeDataBounds(
+    PlotData plot, [
+    Map<String, dynamic>? panel,
+  ]) {
     double? minX, maxX, minY, maxY;
     for (final s in plot.series) {
       if (s?.points == null || s!.points!.isEmpty) continue;
@@ -2210,14 +2288,18 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
   late bool _grid = widget.panel['grid'] ?? true;
   late bool _customX = widget.panel['custom_x_range'] ?? false;
   late bool _customY = widget.panel['custom_y_range'] ?? false;
-  late final _xMinCtrl =
-      TextEditingController(text: (widget.panel['xmin'] ?? '').toString());
-  late final _xMaxCtrl =
-      TextEditingController(text: (widget.panel['xmax'] ?? '').toString());
-  late final _yMinCtrl =
-      TextEditingController(text: (widget.panel['ymin'] ?? '').toString());
-  late final _yMaxCtrl =
-      TextEditingController(text: (widget.panel['ymax'] ?? '').toString());
+  late final _xMinCtrl = TextEditingController(
+    text: (widget.panel['xmin'] ?? '').toString(),
+  );
+  late final _xMaxCtrl = TextEditingController(
+    text: (widget.panel['xmax'] ?? '').toString(),
+  );
+  late final _yMinCtrl = TextEditingController(
+    text: (widget.panel['ymin'] ?? '').toString(),
+  );
+  late final _yMaxCtrl = TextEditingController(
+    text: (widget.panel['ymax'] ?? '').toString(),
+  );
 
   @override
   void initState() {
@@ -2233,10 +2315,11 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
       text: actual?.yLabel ?? widget.panel['y_label']?.toString() ?? 'a.u.',
     );
     _pointsCtrl = TextEditingController(
-      text: (actual?.extractionPoints ??
-              widget.panel['extraction_points'] ??
-              2000)
-          .toString(),
+      text:
+          (actual?.extractionPoints ??
+                  widget.panel['extraction_points'] ??
+                  2000)
+              .toString(),
     );
     _titleCtrl.addListener(() {
       if (!_syncingActualValues) _titleEdited = true;
@@ -2292,93 +2375,132 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
     return KeyboardSafeDialog(
       title: const Text('Panel Setup'),
       content: SingleChildScrollView(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
               key: const ValueKey('panel-setup-title'),
               controller: _titleCtrl,
-              decoration:
-                  const InputDecoration(labelText: 'Title', isDense: true)),
-          const SizedBox(height: 8),
-          TextField(
+              decoration: const InputDecoration(
+                labelText: 'Title',
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
               key: const ValueKey('panel-setup-x-label'),
               controller: _xLabelCtrl,
-              decoration:
-                  const InputDecoration(labelText: 'X Label', isDense: true)),
-          const SizedBox(height: 8),
-          TextField(
+              decoration: const InputDecoration(
+                labelText: 'X Label',
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
               key: const ValueKey('panel-setup-y-label'),
               controller: _yLabelCtrl,
-              decoration:
-                  const InputDecoration(labelText: 'Y Label', isDense: true)),
-          const SizedBox(height: 8),
-          TextField(
+              decoration: const InputDecoration(
+                labelText: 'Y Label',
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
               key: const ValueKey('panel-setup-extraction-points'),
               controller: _pointsCtrl,
               decoration: const InputDecoration(
-                  labelText: 'Extraction Points', isDense: true),
-              keyboardType: TextInputType.number),
-          const SizedBox(height: 8),
-          CheckboxListTile(
+                labelText: 'Extraction Points',
+                isDense: true,
+              ),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 8),
+            CheckboxListTile(
               title: const Text('Show Grid'),
               value: _grid,
               onChanged: (v) => setState(() => _grid = v ?? true),
               contentPadding: EdgeInsets.zero,
               dense: true,
-              controlAffinity: ListTileControlAffinity.leading),
-          CheckboxListTile(
+              controlAffinity: ListTileControlAffinity.leading,
+            ),
+            CheckboxListTile(
               title: const Text('Custom X range'),
               value: _customX,
               onChanged: (v) => setState(() => _customX = v ?? false),
               contentPadding: EdgeInsets.zero,
               dense: true,
-              controlAffinity: ListTileControlAffinity.leading),
-          if (_customX) ...[
-            Row(children: [
-              Expanded(
-                  child: TextField(
+              controlAffinity: ListTileControlAffinity.leading,
+            ),
+            if (_customX) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
                       controller: _xMinCtrl,
                       decoration: const InputDecoration(
-                          labelText: 'X min', isDense: true),
-                      keyboardType: TextInputType.number)),
-              const SizedBox(width: 8),
-              Expanded(
-                  child: TextField(
+                        labelText: 'X min',
+                        isDense: true,
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
                       controller: _xMaxCtrl,
                       decoration: const InputDecoration(
-                          labelText: 'X max', isDense: true),
-                      keyboardType: TextInputType.number)),
-            ]),
-          ],
-          CheckboxListTile(
+                        labelText: 'X max',
+                        isDense: true,
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            CheckboxListTile(
               title: const Text('Custom Y range'),
               value: _customY,
               onChanged: (v) => setState(() => _customY = v ?? false),
               contentPadding: EdgeInsets.zero,
               dense: true,
-              controlAffinity: ListTileControlAffinity.leading),
-          if (_customY) ...[
-            Row(children: [
-              Expanded(
-                child: TextField(
-                    controller: _yMinCtrl,
-                    decoration: const InputDecoration(
-                        labelText: 'Y min', isDense: true),
-                    keyboardType: TextInputType.number),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                  child: TextField(
+              controlAffinity: ListTileControlAffinity.leading,
+            ),
+            if (_customY) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _yMinCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Y min',
+                        isDense: true,
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
                       controller: _yMaxCtrl,
                       decoration: const InputDecoration(
-                          labelText: 'Y max', isDense: true),
-                      keyboardType: TextInputType.number)),
-            ]),
+                        labelText: 'Y max',
+                        isDense: true,
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
-        ]),
+        ),
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel'),
+        ),
         TextButton(onPressed: _save, child: const Text('Save')),
       ],
     );
@@ -2398,8 +2520,8 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
       final extractionPoints = int.tryParse(_pointsCtrl.text);
       widget.panel['extraction_points'] =
           extractionPoints != null && extractionPoints >= 2
-              ? extractionPoints
-              : 2000;
+          ? extractionPoints
+          : 2000;
     }
     widget.panel['grid'] = _grid;
     widget.panel['custom_x_range'] = _customX;
@@ -2504,8 +2626,11 @@ class _DataSourceDialog extends StatefulWidget {
   final List<Map<String, dynamic>> signals;
   final String defaultShot;
   final VoidCallback onSave;
-  const _DataSourceDialog(
-      {required this.signals, required this.defaultShot, required this.onSave});
+  const _DataSourceDialog({
+    required this.signals,
+    required this.defaultShot,
+    required this.onSave,
+  });
 
   @override
   State<_DataSourceDialog> createState() => _DataSourceDialogState();
@@ -2531,7 +2656,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
     0xFFdb2777,
     0xFF16a34a,
     0xFFea580c,
-    0xFF0891b2
+    0xFF0891b2,
   ];
 
   @override
@@ -2557,8 +2682,9 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
       _treeNames = ['pcs_east'];
     }
     for (final rememberedTree in _sourceIndexMemory.trees) {
-      if (!_treeNames
-          .any((tree) => tree.toLowerCase() == rememberedTree.toLowerCase())) {
+      if (!_treeNames.any(
+        (tree) => tree.toLowerCase() == rememberedTree.toLowerCase(),
+      )) {
         _treeNames.add(rememberedTree);
       }
     }
@@ -2574,32 +2700,31 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
   }
 
   Future<List<String>> _signalsForTree(String tree) async {
-    final key =
-        tree.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]+'), '_');
+    final key = tree.trim().toLowerCase().replaceAll(
+      RegExp(r'[^a-z0-9_-]+'),
+      '_',
+    );
     if (key.isEmpty) {
       const allKey = '__all__';
       if (_signalCache.containsKey(allKey)) return _signalCache[allKey]!;
-      final signalLists = await Future.wait(
-        _treeNames.map(_signalsForTree),
-      );
-      final allSignals = signalLists
-          .expand((signals) => signals)
-          .toSet()
-          .toList()
-        ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      final signalLists = await Future.wait(_treeNames.map(_signalsForTree));
+      final allSignals =
+          signalLists.expand((signals) => signals).toSet().toList()
+            ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
       _signalCache[allKey] = allSignals;
       return allSignals;
     }
     if (_signalCache.containsKey(key)) return _signalCache[key]!;
     try {
       final text = await _loadAsset('assets/source_index/signals/$key.txt');
-      final sigs = text
-          .split('\n')
-          .expand(sourceIndexSignalNames)
-          .followedBy(_sourceIndexMemory.signalsForTree(tree))
-          .toSet()
-          .toList()
-        ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      final sigs =
+          text
+              .split('\n')
+              .expand(sourceIndexSignalNames)
+              .followedBy(_sourceIndexMemory.signalsForTree(tree))
+              .toSet()
+              .toList()
+            ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
       _signalCache[key] = sigs;
       _indexTreeSignals(tree, sigs);
       return sigs;
@@ -2632,20 +2757,21 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
   }
 
   static InputDecoration _dsDeco() => InputDecoration(
-        isDense: true,
-        filled: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-      );
+    isDense: true,
+    filled: true,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+  );
 
   static Widget _hdrCell(String text, double rightPad) {
     return Padding(
       padding: EdgeInsets.only(right: rightPad),
       child: Center(
-          child: Text(text,
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade600))),
+        child: Text(
+          text,
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+        ),
+      ),
     );
   }
 
@@ -2656,24 +2782,28 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
 
   void _addRowFromSignal(Map<String, dynamic>? s, int i) {
     final defaultRate = context.read<AppState>().dataMode;
-    _rows.add(_DSRow(
-      shot: TextEditingController(
-        text: resolveDataSourceShot(
-          signalShot: s?['shot'],
-          inputShot: widget.defaultShot,
-        ),
-      ),
-      y: TextEditingController(text: s?['y_expr']?.toString() ?? ''),
-      legend: TextEditingController(text: s?['legend']?.toString() ?? ''),
-      tree: TextEditingController(
-          text: s?['experiment']?.toString() ?? 'pcs_east'),
-      server: TextEditingController(
-          text: s?['server_ip']?.toString() ?? '202.127.204.12'),
-      xExpr: s?['x_expr']?.toString() ?? '',
-    )
-      ..hideMode = s == null ? signalHideModeVisible : signalHideModeOf(s)
-      ..colorIdx = i % _presetColors.length
-      ..readMode = (s?['read_mode'] as int?) ?? defaultRate);
+    _rows.add(
+      _DSRow(
+          shot: TextEditingController(
+            text: resolveDataSourceShot(
+              signalShot: s?['shot'],
+              inputShot: widget.defaultShot,
+            ),
+          ),
+          y: TextEditingController(text: s?['y_expr']?.toString() ?? ''),
+          legend: TextEditingController(text: s?['legend']?.toString() ?? ''),
+          tree: TextEditingController(
+            text: s?['experiment']?.toString() ?? 'pcs_east',
+          ),
+          server: TextEditingController(
+            text: s?['server_ip']?.toString() ?? '202.127.204.12',
+          ),
+          xExpr: s?['x_expr']?.toString() ?? '',
+        )
+        ..hideMode = s == null ? signalHideModeVisible : signalHideModeOf(s)
+        ..colorIdx = i % _presetColors.length
+        ..readMode = (s?['read_mode'] as int?) ?? defaultRate,
+    );
     if (s != null && s['color_name'] != null) {
       final hex = s['color_name'].toString().replaceFirst('#', '');
       final c = int.tryParse(hex, radix: 16);
@@ -2706,15 +2836,16 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
       onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
       child: KeyboardSafeDialog(
         maxWidth: 960,
-        title: Row(children: [
-          const Expanded(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text('Data Source Setup'),
+        title: Row(
+          children: [
+            const Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text('Data Source Setup'),
+              ),
             ),
-          ),
-          IconButton(
+            IconButton(
               icon: const Icon(Icons.add, size: 18),
               tooltip: 'Add Curve',
               onPressed: _rows.length < 8
@@ -2722,30 +2853,37 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                       FocusManager.instance.primaryFocus?.unfocus();
                       final last = _rows.isNotEmpty ? _rows.last : null;
                       final shotCtrl = TextEditingController(
-                          text: last?.shot.text ?? widget.defaultShot);
+                        text: last?.shot.text ?? widget.defaultShot,
+                      );
                       final treeCtrl = TextEditingController(
-                          text: last?.tree.text ?? 'pcs_east');
+                        text: last?.tree.text ?? 'pcs_east',
+                      );
                       final yCtrl = TextEditingController();
                       final legendCtrl = TextEditingController();
                       final serverCtrl = TextEditingController(
-                          text: last?.server.text ?? '202.127.204.12');
+                        text: last?.server.text ?? '202.127.204.12',
+                      );
                       final defaultRate = context.read<AppState>().dataMode;
-                      final newRow = _DSRow(
-                          shot: shotCtrl,
-                          y: yCtrl,
-                          legend: legendCtrl,
-                          tree: treeCtrl,
-                          server: serverCtrl,
-                          xExpr: '')
-                        ..colorIdx = _rows.length % _presetColors.length
-                        ..readMode = defaultRate;
+                      final newRow =
+                          _DSRow(
+                              shot: shotCtrl,
+                              y: yCtrl,
+                              legend: legendCtrl,
+                              tree: treeCtrl,
+                              server: serverCtrl,
+                              xExpr: '',
+                            )
+                            ..colorIdx = _rows.length % _presetColors.length
+                            ..readMode = defaultRate;
                       setState(() {
                         _rows.add(newRow);
                       });
                       _updateSignalOptions(newRow);
                     }
-                  : null),
-        ]),
+                  : null,
+            ),
+          ],
+        ),
         content: SizedBox(
           height: 180,
           child: _InteractiveHorizontalScrollView(
@@ -2770,100 +2908,116 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                   },
                   defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                   children: [
-                    TableRow(children: [
-                      _hdrCell('Shot', 4),
-                      _hdrCell('Tree', 4),
-                      _hdrCell('Signal', 4),
-                      _hdrCell('Legend', 4),
-                      _hdrCell('Server IP', 4),
-                      _hdrCell('Color', 4),
-                      _hdrCell('Visibility', 4),
-                      _hdrCell('Data', 4),
-                      _hdrCell('Del', 0),
-                    ]),
+                    TableRow(
+                      children: [
+                        _hdrCell('Shot', 4),
+                        _hdrCell('Tree', 4),
+                        _hdrCell('Signal', 4),
+                        _hdrCell('Legend', 4),
+                        _hdrCell('Server IP', 4),
+                        _hdrCell('Color', 4),
+                        _hdrCell('Visibility', 4),
+                        _hdrCell('Data', 4),
+                        _hdrCell('Del', 0),
+                      ],
+                    ),
                     for (var i = 0; i < _rows.length; i++)
-                      TableRow(children: [
-                        Padding(
+                      TableRow(
+                        children: [
+                          Padding(
                             padding: const EdgeInsets.only(right: 4),
                             child: TextField(
-                                key: ValueKey('data-shot-$i'),
-                                controller: _rows[i].shot,
-                                decoration: _dsDeco(),
-                                style: const TextStyle(fontSize: 12))),
-                        Padding(
+                              key: ValueKey('data-shot-$i'),
+                              controller: _rows[i].shot,
+                              decoration: _dsDeco(),
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                          Padding(
                             padding: const EdgeInsets.only(right: 4),
                             child: _AutocompleteField(
-                                key: ValueKey('data-tree-$i'),
-                                controller: _rows[i].tree,
-                                options: _treeOptionsFor(_rows[i]),
-                                label: 'Tree',
-                                onChanged: () {
-                                  _updateSignalOptions(_rows[i]);
-                                  setState(() {});
-                                })),
-                        Padding(
+                              key: ValueKey('data-tree-$i'),
+                              controller: _rows[i].tree,
+                              options: _treeOptionsFor(_rows[i]),
+                              label: 'Tree',
+                              onChanged: () {
+                                _updateSignalOptions(_rows[i]);
+                                setState(() {});
+                              },
+                            ),
+                          ),
+                          Padding(
                             padding: const EdgeInsets.only(right: 4),
                             child: _AutocompleteField(
-                                key: ValueKey('data-signal-$i'),
-                                controller: _rows[i].y,
-                                options: _rows[i]._signalOptions,
-                                label: 'Signal',
-                                onChanged: () => setState(() {}))),
-                        Padding(
+                              key: ValueKey('data-signal-$i'),
+                              controller: _rows[i].y,
+                              options: _rows[i]._signalOptions,
+                              label: 'Signal',
+                              onChanged: () => setState(() {}),
+                            ),
+                          ),
+                          Padding(
                             padding: const EdgeInsets.only(right: 4),
                             child: TextField(
-                                key: ValueKey('data-legend-$i'),
-                                controller: _rows[i].legend,
-                                decoration: _dsDeco().copyWith(
-                                  hintText: signalLegendLabel({
-                                    'y_expr': _rows[i].y.text,
-                                  }),
-                                ),
-                                style: const TextStyle(fontSize: 12))),
-                        Padding(
+                              key: ValueKey('data-legend-$i'),
+                              controller: _rows[i].legend,
+                              decoration: _dsDeco().copyWith(
+                                hintText: signalLegendLabel({
+                                  'y_expr': _rows[i].y.text,
+                                }),
+                              ),
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                          Padding(
                             padding: const EdgeInsets.only(right: 4),
                             child: TextField(
-                                controller: _rows[i].server,
-                                decoration: _dsDeco(),
-                                style: const TextStyle(fontSize: 12))),
-                        Padding(
+                              controller: _rows[i].server,
+                              decoration: _dsDeco(),
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                          Padding(
                             padding: const EdgeInsets.only(right: 4),
                             child: Center(
-                                child: _ColorPicker(
-                                    row: _rows[i],
-                                    onChanged: () => setState(() {})))),
-                        Padding(
-                          padding: const EdgeInsets.only(right: 4),
-                          child: PolishedDropdown<int>(
-                            key: ValueKey('data-hide-mode-dropdown-$i'),
-                            id: 'data-hide-mode-$i',
-                            value: _rows[i].hideMode,
-                            height: 42,
-                            fontSize: 11,
-                            leadingIcon: Icons.visibility_rounded,
-                            minimumMenuWidth: 220,
-                            options: const [
-                              PolishedDropdownOption(
-                                value: signalHideModeVisible,
-                                label: 'Not hidden',
-                                icon: Icons.visibility_rounded,
+                              child: _ColorPicker(
+                                row: _rows[i],
+                                onChanged: () => setState(() {}),
                               ),
-                              PolishedDropdownOption(
-                                value: signalHideModeTemporary,
-                                label: 'Hide this shot',
-                                icon: Icons.visibility_off_outlined,
-                              ),
-                              PolishedDropdownOption(
-                                value: signalHideModePersistent,
-                                label: 'Always hide',
-                                icon: Icons.lock_outline_rounded,
-                              ),
-                            ],
-                            onChanged: (value) =>
-                                setState(() => _rows[i].hideMode = value),
+                            ),
                           ),
-                        ),
-                        Padding(
+                          Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: PolishedDropdown<int>(
+                              key: ValueKey('data-hide-mode-dropdown-$i'),
+                              id: 'data-hide-mode-$i',
+                              value: _rows[i].hideMode,
+                              height: 42,
+                              fontSize: 11,
+                              leadingIcon: Icons.visibility_rounded,
+                              minimumMenuWidth: 220,
+                              options: const [
+                                PolishedDropdownOption(
+                                  value: signalHideModeVisible,
+                                  label: 'Not hidden',
+                                  icon: Icons.visibility_rounded,
+                                ),
+                                PolishedDropdownOption(
+                                  value: signalHideModeTemporary,
+                                  label: 'Hide this shot',
+                                  icon: Icons.visibility_off_outlined,
+                                ),
+                                PolishedDropdownOption(
+                                  value: signalHideModePersistent,
+                                  label: 'Always hide',
+                                  icon: Icons.lock_outline_rounded,
+                                ),
+                              ],
+                              onChanged: (value) =>
+                                  setState(() => _rows[i].hideMode = value),
+                            ),
+                          ),
+                          Padding(
                             padding: const EdgeInsets.only(right: 4),
                             child: PolishedDropdown<int>(
                               key: ValueKey('data-mode-dropdown-$i'),
@@ -2892,17 +3046,23 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                               ],
                               onChanged: (value) =>
                                   setState(() => _rows[i].readMode = value),
-                            )),
-                        _rows.length > 1
-                            ? GestureDetector(
-                                onTap: () => setState(() {
-                                      _rows[i].dispose();
-                                      _rows.removeAt(i);
-                                    }),
-                                child: const Icon(Icons.close,
-                                    size: 16, color: Colors.red))
-                            : const SizedBox(width: 16),
-                      ]),
+                            ),
+                          ),
+                          _rows.length > 1
+                              ? GestureDetector(
+                                  onTap: () => setState(() {
+                                    _rows[i].dispose();
+                                    _rows.removeAt(i);
+                                  }),
+                                  child: const Icon(
+                                    Icons.close,
+                                    size: 16,
+                                    color: Colors.red,
+                                  ),
+                                )
+                              : const SizedBox(width: 16),
+                        ],
+                      ),
                   ],
                 ),
               ),
@@ -2911,9 +3071,10 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          TextButton(onPressed: _save, child: const Text('OK'))
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(onPressed: _save, child: const Text('OK')),
         ],
       ),
     );
@@ -2931,7 +3092,8 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
     for (final r in _rows) {
       if (r.y.text.trim().isEmpty) continue;
       final shot = r.shot.text.trim();
-      final colorValue = r.customColor ??
+      final colorValue =
+          r.customColor ??
           Color(_presetColors[r.colorIdx % _presetColors.length]);
       widget.signals.add({
         'shot': shot.isNotEmpty ? shot : widget.defaultShot,
@@ -2958,12 +3120,13 @@ class _AutocompleteField extends StatefulWidget {
   final List<String> options;
   final String label;
   final VoidCallback? onChanged;
-  const _AutocompleteField(
-      {super.key,
-      required this.controller,
-      required this.options,
-      required this.label,
-      this.onChanged});
+  const _AutocompleteField({
+    super.key,
+    required this.controller,
+    required this.options,
+    required this.label,
+    this.onChanged,
+  });
   @override
   State<_AutocompleteField> createState() => _AutocompleteFieldState();
 }
@@ -3052,15 +3215,14 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
                   elevation: 8,
                   shadowColor: theme.colorScheme.shadow.withValues(alpha: 0.22),
                   shape: RoundedRectangleBorder(
-                    side: BorderSide(
-                      color: theme.colorScheme.outlineVariant,
-                    ),
+                    side: BorderSide(color: theme.colorScheme.outlineVariant),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   clipBehavior: Clip.antiAlias,
                   child: ConstrainedBox(
                     key: ValueKey(
-                        'autocomplete-${widget.label.toLowerCase()}-menu'),
+                      'autocomplete-${widget.label.toLowerCase()}-menu',
+                    ),
                     constraints: const BoxConstraints(maxHeight: 240),
                     child: Scrollbar(
                       controller: _scrollController,
@@ -3119,15 +3281,17 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
 
   @override
   Widget build(BuildContext ctx) => CompositedTransformTarget(
-      link: _layerLink,
-      child: TextField(
-          groupId: _tapRegionGroup,
-          controller: widget.controller,
-          focusNode: _node,
-          decoration: _DataSourceDialogState._dsDeco(),
-          style: const TextStyle(fontSize: 12),
-          onTap: _update,
-          onChanged: (_) => widget.onChanged?.call()));
+    link: _layerLink,
+    child: TextField(
+      groupId: _tapRegionGroup,
+      controller: widget.controller,
+      focusNode: _node,
+      decoration: _DataSourceDialogState._dsDeco(),
+      style: const TextStyle(fontSize: 12),
+      onTap: _update,
+      onChanged: (_) => widget.onChanged?.call(),
+    ),
+  );
 }
 
 class _ColorPicker extends StatelessWidget {
@@ -3137,18 +3301,23 @@ class _ColorPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext ctx) {
-    final current = row.customColor ??
-        Color(_DataSourceDialogState._presetColors[
-            row.colorIdx % _DataSourceDialogState._presetColors.length]);
+    final current =
+        row.customColor ??
+        Color(
+          _DataSourceDialogState._presetColors[row.colorIdx %
+              _DataSourceDialogState._presetColors.length],
+        );
     return GestureDetector(
       onTap: () => _showColorDialog(ctx, current),
       child: Container(
-          width: 22,
-          height: 22,
-          decoration: BoxDecoration(
-              color: current,
-              border: Border.all(color: Colors.grey),
-              borderRadius: BorderRadius.circular(3))),
+        width: 22,
+        height: 22,
+        decoration: BoxDecoration(
+          color: current,
+          border: Border.all(color: Colors.grey),
+          borderRadius: BorderRadius.circular(3),
+        ),
+      ),
     );
   }
 
@@ -3156,99 +3325,131 @@ class _ColorPicker extends StatelessWidget {
     final topColors = _DataSourceDialogState._presetColors;
     Color selected = current;
     showDialog(
-        context: ctx,
-        builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) {
-              return KeyboardSafeDialog(
-                title: Row(children: [
-                  const Text('Curve Color'),
-                  const SizedBox(width: 12),
-                  Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                          color: selected,
-                          border: Border.all(color: Colors.grey),
-                          borderRadius: BorderRadius.circular(3)))
-                ]),
-                content: SizedBox(
-                    width: 300,
-                    child: SingleChildScrollView(
-                      child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        Wrap(
-                            spacing: 2,
-                            runSpacing: 2,
-                            children: topColors
-                                .map((c) => GestureDetector(
-                                      onTap: () {
-                                        selected = Color(c);
-                                        setSt(() {});
-                                      },
-                                      child: Container(
-                                          width: 22,
-                                          height: 22,
-                                          decoration: BoxDecoration(
-                                              color: Color(c),
-                                              border: Border.all(
-                                                  color: selected == Color(c)
-                                                      ? Colors.black
-                                                      : Colors.grey,
-                                                  width: selected == Color(c)
-                                                      ? 2
-                                                      : 1))),
-                                    ))
-                                .toList()),
-                        const SizedBox(height: 8),
-                        // Continuous HSV picker: X = hue, Y = value (brightness)
-                        GestureDetector(
-                          onPanDown: (d) => _pickColor(
-                              d.localPosition, setSt, (c) => selected = c),
-                          onPanUpdate: (d) => _pickColor(
-                              d.localPosition, setSt, (c) => selected = c),
-                          child: ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: CustomPaint(
-                                  size: const Size(280, 180),
-                                  painter: _HsvPainter())),
+      context: ctx,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) {
+          return KeyboardSafeDialog(
+            title: Row(
+              children: [
+                const Text('Curve Color'),
+                const SizedBox(width: 12),
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: selected,
+                    border: Border.all(color: Colors.grey),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 300,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Wrap(
+                      spacing: 2,
+                      runSpacing: 2,
+                      children: topColors
+                          .map(
+                            (c) => GestureDetector(
+                              onTap: () {
+                                selected = Color(c);
+                                setSt(() {});
+                              },
+                              child: Container(
+                                width: 22,
+                                height: 22,
+                                decoration: BoxDecoration(
+                                  color: Color(c),
+                                  border: Border.all(
+                                    color: selected == Color(c)
+                                        ? Colors.black
+                                        : Colors.grey,
+                                    width: selected == Color(c) ? 2 : 1,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                    const SizedBox(height: 8),
+                    // Continuous HSV picker: X = hue, Y = value (brightness)
+                    GestureDetector(
+                      onPanDown: (d) => _pickColor(
+                        d.localPosition,
+                        setSt,
+                        (c) => selected = c,
+                      ),
+                      onPanUpdate: (d) => _pickColor(
+                        d.localPosition,
+                        setSt,
+                        (c) => selected = c,
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: CustomPaint(
+                          size: const Size(280, 180),
+                          painter: _HsvPainter(),
                         ),
-                        const SizedBox(height: 8),
-                        Row(children: [
-                          const Text('#'),
-                          Expanded(
-                              child: TextField(
-                                  decoration:
-                                      const InputDecoration(isDense: true),
-                                  onSubmitted: (v) {
-                                    final cleaned = v.replaceFirst('#', '');
-                                    final c = int.tryParse(cleaned, radix: 16);
-                                    if (c != null && cleaned.length == 6) {
-                                      selected = Color(0xFF000000 | c);
-                                      setSt(() {});
-                                    }
-                                  }))
-                        ]),
-                      ]),
-                    )),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Cancel')),
-                  TextButton(
-                      onPressed: () {
-                        row.customColor = selected;
-                        row.colorIdx = topColors
-                            .indexWhere((c) => c == selected.toARGB32());
-                        if (row.colorIdx < 0) row.colorIdx = 0;
-                        onChanged();
-                        Navigator.pop(ctx);
-                      },
-                      child: const Text('OK')),
-                ],
-              );
-            }));
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Text('#'),
+                        Expanded(
+                          child: TextField(
+                            decoration: const InputDecoration(isDense: true),
+                            onSubmitted: (v) {
+                              final cleaned = v.replaceFirst('#', '');
+                              final c = int.tryParse(cleaned, radix: 16);
+                              if (c != null && cleaned.length == 6) {
+                                selected = Color(0xFF000000 | c);
+                                setSt(() {});
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  row.customColor = selected;
+                  row.colorIdx = topColors.indexWhere(
+                    (c) => c == selected.toARGB32(),
+                  );
+                  if (row.colorIdx < 0) row.colorIdx = 0;
+                  onChanged();
+                  Navigator.pop(ctx);
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   void _pickColor(
-      Offset pos, StateSetter setSt, void Function(Color) setColor) {
+    Offset pos,
+    StateSetter setSt,
+    void Function(Color) setColor,
+  ) {
     if (pos.dx < 0 || pos.dy < 0 || pos.dx > 280 || pos.dy > 180) return;
     final hue = (pos.dx / 280 * 360).clamp(0.0, 359.0);
     final val = (1.0 - pos.dy / 180).clamp(0.0, 1.0);
@@ -3263,12 +3464,13 @@ class _HsvPainter extends CustomPainter {
       final hue = (x / size.width * 360);
       final paint = Paint()
         ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              HSVColor.fromAHSV(1.0, hue, 1.0, 1.0).toColor(),
-              Colors.black
-            ]).createShader(Rect.fromLTWH(x, 0, 1.0, size.height));
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            HSVColor.fromAHSV(1.0, hue, 1.0, 1.0).toColor(),
+            Colors.black,
+          ],
+        ).createShader(Rect.fromLTWH(x, 0, 1.0, size.height));
       canvas.drawRect(Rect.fromLTWH(x, 0, 1.0, size.height), paint);
     }
   }
@@ -3285,13 +3487,14 @@ class _DSRow {
   int colorIdx = 0;
   Color? customColor;
   List<String> _signalOptions = [];
-  _DSRow(
-      {required this.shot,
-      required this.y,
-      required this.legend,
-      required this.tree,
-      required this.server,
-      required this.xExpr});
+  _DSRow({
+    required this.shot,
+    required this.y,
+    required this.legend,
+    required this.tree,
+    required this.server,
+    required this.xExpr,
+  });
   void dispose() {
     shot.dispose();
     y.dispose();

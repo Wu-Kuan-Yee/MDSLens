@@ -1,14 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
-const mdsScopeRepositoryUrl = 'https://github.com/Wu-Kuan-Yee/MdsScope';
-const mdsScopeSourceUrl =
-    'https://github.com/Wu-Kuan-Yee/MdsScope/tree/flutter-rewrite';
-const mdsScopeMaintainerUrl = 'https://github.com/Wu-Kuan-Yee';
+const mdsLensRepositoryUrl = 'https://github.com/Wu-Kuan-Yee/MDSLens';
+const mdsLensSourceUrl = 'https://github.com/Wu-Kuan-Yee/MDSLens';
+const mdsLensMaintainerUrl = 'https://github.com/Wu-Kuan-Yee';
 const originalMdsScopeRepositoryUrl = 'https://github.com/wwktz/MdsScope';
-const mdsScopeReleasesUrl = 'https://github.com/Wu-Kuan-Yee/MdsScope/releases';
-const mdsScopeLatestReleaseApiUrl =
-    'https://api.github.com/repos/Wu-Kuan-Yee/MdsScope/releases/latest';
+const mdsLensReleasesUrl = 'https://github.com/Wu-Kuan-Yee/MDSLens/releases';
+const mdsLensLatestReleaseApiUrl =
+    'https://api.github.com/repos/Wu-Kuan-Yee/MDSLens/releases/latest';
 
 class ReleaseUpdate {
   final String latestVersion;
@@ -22,15 +21,15 @@ class ReleaseUpdate {
   });
 }
 
-Future<ReleaseUpdate> checkLatestMdsScopeRelease(String currentVersion) async {
+Future<ReleaseUpdate> checkLatestMDSLensRelease(String currentVersion) async {
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
   try {
-    final request = await client.getUrl(
-      Uri.parse(mdsScopeLatestReleaseApiUrl),
+    final request = await client.getUrl(Uri.parse(mdsLensLatestReleaseApiUrl));
+    request.headers.set(HttpHeaders.userAgentHeader, 'MDSLens');
+    request.headers.set(
+      HttpHeaders.acceptHeader,
+      'application/vnd.github+json',
     );
-    request.headers.set(HttpHeaders.userAgentHeader, 'MdsScope');
-    request.headers
-        .set(HttpHeaders.acceptHeader, 'application/vnd.github+json');
     final response = await request.close();
     final body = await response.transform(utf8.decoder).join();
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -51,7 +50,7 @@ Future<ReleaseUpdate> checkLatestMdsScopeRelease(String currentVersion) async {
     return ReleaseUpdate(
       latestVersion: latest,
       releaseUrl: releaseUrl == null || releaseUrl.isEmpty
-          ? mdsScopeReleasesUrl
+          ? mdsLensReleasesUrl
           : releaseUrl,
       updateAvailable: compareVersions(latest, currentVersion) > 0,
     );

@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master, main, flutter-rewrite]
+    branches: [main]
   pull_request:
-    branches: [master, main, flutter-rewrite]
+    branches: [main]
 
 env:
   FLUTTER_VERSION: 3.44.7
@@ -51,21 +51,21 @@ jobs:
             python: python3
             channel: stable
             artifact: macos-universal
-            bundle: build/dist/mdsscope-macos-universal-unsigned.zip
+            bundle: build/dist/mdslens-macos-universal-unsigned.zip
           - os: windows-2025
             target: windows
             arch: x64
             python: python
             channel: stable
             artifact: windows-x64
-            bundle: build/dist/mdsscope-windows-x64.zip
+            bundle: build/dist/mdslens-windows-x64.zip
           - os: windows-11-arm
             target: windows
             arch: arm64
             python: python
             channel: main
             artifact: windows-arm64
-            bundle: build/dist/mdsscope-windows-arm64.zip
+            bundle: build/dist/mdslens-windows-arm64.zip
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -119,11 +119,11 @@ jobs:
       - run: python3 build_app.py -p linux -a ${{ matrix.arch }} -f zip
       - run: >-
           python3 scripts/verify_linux_portable.py
-          build/dist/mdsscope-linux-${{ matrix.arch }}.zip --max-glibc 2.31
+          build/dist/mdslens-linux-${{ matrix.arch }}.zip --max-glibc 2.31
       - uses: actions/upload-artifact@v4
         with:
           name: ci-linux-${{ matrix.arch }}
-          path: build/dist/mdsscope-linux-${{ matrix.arch }}.zip
+          path: build/dist/mdslens-linux-${{ matrix.arch }}.zip
           if-no-files-found: error
 
   linux-portable-runtime:
@@ -188,7 +188,7 @@ jobs:
       - name: Verify portable dependency closure
         run: >-
           python3 scripts/verify_linux_portable.py
-          build/dist/mdsscope-linux-${{ matrix.arch }}.zip
+          build/dist/mdslens-linux-${{ matrix.arch }}.zip
           --max-glibc 2.31
       - name: Smoke-launch portable application
         if: matrix.launch
@@ -196,7 +196,7 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: "1"
         run: >-
           python3 scripts/verify_linux_portable.py
-          build/dist/mdsscope-linux-${{ matrix.arch }}.zip
+          build/dist/mdslens-linux-${{ matrix.arch }}.zip
           --max-glibc 2.31 --launch
 
   android-build:

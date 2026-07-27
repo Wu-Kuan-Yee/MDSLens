@@ -156,31 +156,30 @@ class KeyboardSafeDialog extends StatelessWidget {
     final tinyScreen = tinyWidth || tinyHeight;
 
     Widget header() => Padding(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-          child: DefaultTextStyle(
-            style: theme.textTheme.titleLarge!,
-            child: title,
-          ),
-        );
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+      child: DefaultTextStyle(style: theme.textTheme.titleLarge!, child: title),
+    );
 
     Widget actionBar() => Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: Wrap(
-              alignment: WrapAlignment.end,
-              spacing: 8,
-              runSpacing: 8,
-              children: actions,
-            ),
-          ),
-        );
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Wrap(
+          alignment: WrapAlignment.end,
+          spacing: 8,
+          runSpacing: 8,
+          children: actions,
+        ),
+      ),
+    );
 
     if (tinyScreen) {
-      final viewportWidth =
-          (screenSize.width - 24).clamp(80.0, maxWidth).toDouble();
-      final viewportHeight =
-          (screenSize.height - 24).clamp(80.0, maxHeight).toDouble();
+      final viewportWidth = (screenSize.width - 24)
+          .clamp(80.0, maxWidth)
+          .toDouble();
+      final viewportHeight = (screenSize.height - 24)
+          .clamp(80.0, maxHeight)
+          .toDouble();
       final contentWidth = tinyWidth ? 320.0 : viewportWidth;
       return Dialog(
         key: const ValueKey('keyboard-safe-dialog'),
@@ -223,10 +222,7 @@ class KeyboardSafeDialog extends StatelessWidget {
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       clipBehavior: Clip.antiAlias,
       child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: maxWidth,
-          maxHeight: maxHeight,
-        ),
+        constraints: BoxConstraints(maxWidth: maxWidth, maxHeight: maxHeight),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,

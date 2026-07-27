@@ -92,9 +92,7 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
           EdgeInsets.symmetric(horizontal: 6, vertical: 7),
         ),
         minimumSize: WidgetStatePropertyAll(Size(menuWidth, 0)),
-        maximumSize: WidgetStatePropertyAll(
-          Size(360, widget.menuMaxHeight),
-        ),
+        maximumSize: WidgetStatePropertyAll(Size(360, widget.menuMaxHeight)),
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
@@ -178,13 +176,11 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
     );
   }
 
-  Widget _menuAction(
-    BuildContext context,
-    PolishedDropdownAction action,
-  ) {
+  Widget _menuAction(BuildContext context, PolishedDropdownAction action) {
     final colors = Theme.of(context).colorScheme;
-    final foreground =
-        action.destructive ? colors.error : colors.onSurfaceVariant;
+    final foreground = action.destructive
+        ? colors.error
+        : colors.onSurfaceVariant;
     final background = action.destructive
         ? colors.errorContainer.withValues(alpha: 0.46)
         : colors.surfaceContainerHighest;
@@ -216,9 +212,9 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
           foregroundColor: WidgetStatePropertyAll(foreground),
           textStyle: WidgetStatePropertyAll(
             Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontSize: widget.fontSize,
-                  fontWeight: FontWeight.w700,
-                ),
+              fontSize: widget.fontSize,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
         child: Text(action.label, maxLines: 1),
@@ -267,11 +263,7 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
               color: colors.primary.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(
-              widget.leadingIcon,
-              size: 16,
-              color: colors.primary,
-            ),
+            child: Icon(widget.leadingIcon, size: 16, color: colors.primary),
           ),
           const SizedBox(width: 8),
         ],
@@ -352,9 +344,9 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
         foregroundColor: WidgetStatePropertyAll(colors.onSurface),
         textStyle: WidgetStatePropertyAll(
           Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontSize: widget.fontSize,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-              ),
+            fontSize: widget.fontSize,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+          ),
         ),
       ),
       child: Text(

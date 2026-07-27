@@ -22,20 +22,21 @@ class RustBridge {
   final void Function() disconnectSsh;
 
   RustBridge._(this._lib)
-      : parseEnv = _wrap1(_lib, 'mds_parse_environment'),
-        encodeEnv = _wrap1(_lib, 'mds_encode_environment'),
-        writeEnv = _wrap2(_lib, 'mds_write_environment'),
-        reqLogin = _wrap3(_lib, 'mds_request_login'),
-        fetchS = _wrap2(_lib, 'mds_fetch_shot'),
-        fetchSInfo = _wrap3(_lib, 'mds_fetch_shot_info'),
-        prepareUrl = _wrap2(_lib, 'mds_prepare_url'),
-        sshT = _wrap1(_lib, 'mds_ssh_test'),
-        fetchSig = _wrap2(_lib, 'mds_fetch_signals'),
-        fetchSigSsh = _wrap3(_lib, 'mds_fetch_signals_ssh'),
-        prewarmSig = _wrap2(_lib, 'mds_prewarm_signals'),
-        cancelFetch = _wrapCancelFetch(_lib),
-        disconnectSsh = _lib.lookupFunction<Void Function(), void Function()>(
-            'mds_disconnect_ssh');
+    : parseEnv = _wrap1(_lib, 'mds_parse_environment'),
+      encodeEnv = _wrap1(_lib, 'mds_encode_environment'),
+      writeEnv = _wrap2(_lib, 'mds_write_environment'),
+      reqLogin = _wrap3(_lib, 'mds_request_login'),
+      fetchS = _wrap2(_lib, 'mds_fetch_shot'),
+      fetchSInfo = _wrap3(_lib, 'mds_fetch_shot_info'),
+      prepareUrl = _wrap2(_lib, 'mds_prepare_url'),
+      sshT = _wrap1(_lib, 'mds_ssh_test'),
+      fetchSig = _wrap2(_lib, 'mds_fetch_signals'),
+      fetchSigSsh = _wrap3(_lib, 'mds_fetch_signals_ssh'),
+      prewarmSig = _wrap2(_lib, 'mds_prewarm_signals'),
+      cancelFetch = _wrapCancelFetch(_lib),
+      disconnectSsh = _lib.lookupFunction<Void Function(), void Function()>(
+        'mds_disconnect_ssh',
+      );
 
   static RustBridge get instance => _i ??= RustBridge._(_openLib());
 
@@ -83,19 +84,19 @@ class RustBridge {
             'rust/target/release/libmds_bridge.dylib',
           ]
         : Platform.isLinux
-            ? [
-                if (debugBuild) 'rust/target/debug/libmds_bridge.so',
-                '$exeDir/lib/libmds_bridge.so',
-                '$exeDir/libmds_bridge.so',
-                'libmds_bridge.so',
-                'rust/target/release/libmds_bridge.so',
-              ]
-            : [
-                if (debugBuild) 'rust/target/debug/mds_bridge.dll',
-                '$exeDir/mds_bridge.dll',
-                'mds_bridge.dll',
-                'rust/target/release/mds_bridge.dll',
-              ];
+        ? [
+            if (debugBuild) 'rust/target/debug/libmds_bridge.so',
+            '$exeDir/lib/libmds_bridge.so',
+            '$exeDir/libmds_bridge.so',
+            'libmds_bridge.so',
+            'rust/target/release/libmds_bridge.so',
+          ]
+        : [
+            if (debugBuild) 'rust/target/debug/mds_bridge.dll',
+            '$exeDir/mds_bridge.dll',
+            'mds_bridge.dll',
+            'rust/target/release/mds_bridge.dll',
+          ];
 
     for (final name in names) {
       try {
@@ -114,12 +115,10 @@ class RustBridge {
     );
   }
 
-  static void _requireCompatibleAbi(
-    DynamicLibrary library,
-    String source,
-  ) {
+  static void _requireCompatibleAbi(DynamicLibrary library, String source) {
     final version = library.lookupFunction<Uint32 Function(), int Function()>(
-        'mds_bridge_abi_version')();
+      'mds_bridge_abi_version',
+    )();
     if (version != _expectedAbiVersion) {
       throw StateError(
         '$source has native ABI $version; expected $_expectedAbiVersion',
@@ -128,8 +127,11 @@ class RustBridge {
   }
 
   static String Function(String) _wrap1(DynamicLibrary lib, String name) {
-    final f = lib.lookupFunction<Pointer<Utf8> Function(Pointer<Utf8>),
-        Pointer<Utf8> Function(Pointer<Utf8>)>(name);
+    final f = lib
+        .lookupFunction<
+          Pointer<Utf8> Function(Pointer<Utf8>),
+          Pointer<Utf8> Function(Pointer<Utf8>)
+        >(name);
     final freeResult = _rustStringFree(lib);
     return (a) {
       final aPointer = a.toNativeUtf8();
@@ -155,9 +157,10 @@ class RustBridge {
   }
 
   String _buildString(String symbol) {
-    final function =
-        _lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>(
-            symbol);
+    final function = _lib
+        .lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>(
+          symbol,
+        );
     final freeResult = _rustStringFree(_lib);
     final result = function();
     try {
@@ -168,10 +171,14 @@ class RustBridge {
   }
 
   static String Function(String, String) _wrap2(
-      DynamicLibrary lib, String name) {
-    final f = lib.lookupFunction<
-        Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>),
-        Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>)>(name);
+    DynamicLibrary lib,
+    String name,
+  ) {
+    final f = lib
+        .lookupFunction<
+          Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>),
+          Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>)
+        >(name);
     final freeResult = _rustStringFree(lib);
     return (a, b) {
       final aPointer = a.toNativeUtf8();
@@ -191,11 +198,14 @@ class RustBridge {
   }
 
   static String Function(String, String, String) _wrap3(
-      DynamicLibrary lib, String name) {
-    final f = lib.lookupFunction<
-        Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>),
-        Pointer<Utf8> Function(
-            Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>)>(name);
+    DynamicLibrary lib,
+    String name,
+  ) {
+    final f = lib
+        .lookupFunction<
+          Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>),
+          Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>)
+        >(name);
     final freeResult = _rustStringFree(lib);
     return (a, b, c) {
       final aPointer = a.toNativeUtf8();
@@ -217,14 +227,17 @@ class RustBridge {
   }
 
   static void Function(Pointer<Utf8>) _rustStringFree(DynamicLibrary lib) {
-    return lib.lookupFunction<Void Function(Pointer<Utf8>),
-        void Function(Pointer<Utf8>)>('mds_free_string');
+    return lib.lookupFunction<
+      Void Function(Pointer<Utf8>),
+      void Function(Pointer<Utf8>)
+    >('mds_free_string');
   }
 
   static bool Function(int) _wrapCancelFetch(DynamicLibrary lib) {
-    final function =
-        lib.lookupFunction<Uint8 Function(Uint64), int Function(int)>(
-            'mds_cancel_fetch');
+    final function = lib
+        .lookupFunction<Uint8 Function(Uint64), int Function(int)>(
+          'mds_cancel_fetch',
+        );
     return (requestId) => function(requestId) != 0;
   }
 

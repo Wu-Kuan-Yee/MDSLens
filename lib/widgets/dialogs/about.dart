@@ -24,10 +24,7 @@ class AboutDialogWidget extends StatefulWidget {
   });
 
   static void show(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => const AboutDialogWidget(),
-    );
+    showDialog(context: context, builder: (ctx) => const AboutDialogWidget());
   }
 
   @override
@@ -38,7 +35,7 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
   String _updateStatus = '';
   bool _checkingUpdate = false;
   late RuntimeSystemInfo _systemInfo;
-  String _mdsScopeVersion = 'Loading...';
+  String _mdsLensVersion = 'Loading...';
   String _gitVersion = 'Loading...';
 
   @override
@@ -51,13 +48,13 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
   Future<void> _loadBuildInformation() async {
     final values = await Future.wait<Object>([
       (widget.systemInfoLoader ?? loadRuntimeSystemInfo)(),
-      (widget.versionLoader ?? loadMdsScopeVersion)(),
-      (widget.gitVersionLoader ?? loadMdsScopeGitVersion)(),
+      (widget.versionLoader ?? loadMDSLensVersion)(),
+      (widget.gitVersionLoader ?? loadMDSLensGitVersion)(),
     ]);
     if (!mounted) return;
     setState(() {
       _systemInfo = values[0] as RuntimeSystemInfo;
-      _mdsScopeVersion = values[1] as String;
+      _mdsLensVersion = values[1] as String;
       _gitVersion = values[2] as String;
     });
   }
@@ -79,12 +76,12 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
     try {
       final result = await (widget.updateChecker != null
           ? widget.updateChecker!()
-          : checkLatestMdsScopeRelease(_mdsScopeVersion));
+          : checkLatestMDSLensRelease(_mdsLensVersion));
       if (!mounted) return;
       if (!result.updateAvailable) {
         setState(() {
           _checkingUpdate = false;
-          _updateStatus = 'MdsScope $_mdsScopeVersion is up to date';
+          _updateStatus = 'MDSLens $_mdsLensVersion is up to date';
         });
         return;
       }
@@ -97,7 +94,7 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
         builder: (context) => KeyboardSafeDialog(
           title: const Text('Update available'),
           content: Text(
-            'MdsScope ${result.latestVersion} is available. Open the release page?',
+            'MDSLens ${result.latestVersion} is available. Open the release page?',
           ),
           actions: [
             TextButton(
@@ -137,7 +134,7 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
           ],
         ),
       );
-      if (openReleases == true) await _openUrl(mdsScopeReleasesUrl);
+      if (openReleases == true) await _openUrl(mdsLensReleasesUrl);
     }
   }
 
@@ -158,62 +155,65 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
     );
   }
 
-  Widget _buildRow(
-    String name,
-    Widget valueWidget, {
-    bool showBorder = true,
-  }) {
+  Widget _buildRow(String name, Widget valueWidget, {bool showBorder = true}) {
     final theme = Theme.of(context);
-    return Column(children: [
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: LayoutBuilder(builder: (context, constraints) {
-          final label = Text(
-            name,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          );
-          if (constraints.maxWidth < 390) {
-            return Column(
-              key: ValueKey('about-row-narrow-$name'),
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Center(child: label),
-                const SizedBox(height: 4),
-                Align(
-                  alignment: Alignment.center,
-                  widthFactor: 1,
-                  child: valueWidget,
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final label = Text(
+                name,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
-              ],
-            );
-          }
-          return Row(key: ValueKey('about-row-wide-$name'), children: [
-            label,
-            const SizedBox(width: 16),
-            Expanded(
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: valueWidget,
-              ),
-            ),
-          ]);
-        }),
-      ),
-      if (showBorder)
-        Divider(
-          height: 1,
-          thickness: 1,
-          color: theme.dividerColor.withValues(alpha: 0.5),
+              );
+              if (constraints.maxWidth < 390) {
+                return Column(
+                  key: ValueKey('about-row-narrow-$name'),
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Center(child: label),
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.center,
+                      widthFactor: 1,
+                      child: valueWidget,
+                    ),
+                  ],
+                );
+              }
+              return Row(
+                key: ValueKey('about-row-wide-$name'),
+                children: [
+                  label,
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: valueWidget,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         ),
-    ]);
+        if (showBorder)
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: theme.dividerColor.withValues(alpha: 0.5),
+          ),
+      ],
+    );
   }
 
   TextStyle? _valueStyle(BuildContext context) {
-    return Theme.of(context).textTheme.bodySmall?.copyWith(
-          fontWeight: FontWeight.bold,
-        );
+    return Theme.of(
+      context,
+    ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold);
   }
 
   @override
@@ -279,7 +279,7 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'MdsScope',
+                                'MDSLens',
                                 style: theme.textTheme.titleLarge?.copyWith(
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -298,7 +298,7 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
                                 runSpacing: 3,
                                 children: [
                                   Text(
-                                    'Independent fork rebuilt with Flutter and Rust from the original',
+                                    'Independent cross-platform application built with Flutter and Rust, based on the original',
                                     softWrap: true,
                                     style: theme.textTheme.bodySmall?.copyWith(
                                       color: theme.colorScheme.onSurfaceVariant,
@@ -324,96 +324,103 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
                       border: Border.all(color: theme.dividerColor),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Column(children: [
-                      _buildRow(
-                        'MdsScope Version',
-                        Text(_mdsScopeVersion, style: _valueStyle(context)),
-                      ),
-                      _buildRow(
-                        'Git Version',
-                        Text(_gitVersion, style: _valueStyle(context)),
-                      ),
-                      _buildRow(
-                        'Framework & Engine',
-                        Text(
-                          'Flutter & Rust FFI (libmds_bridge)',
-                          style: _valueStyle(context),
-                          softWrap: true,
+                    child: Column(
+                      children: [
+                        _buildRow(
+                          'MDSLens Version',
+                          Text(_mdsLensVersion, style: _valueStyle(context)),
                         ),
-                      ),
-                      _buildRow(
-                        'Runtime System',
-                        Text(
-                          _systemInfo.displayText,
-                          style: _valueStyle(context),
-                          softWrap: true,
+                        _buildRow(
+                          'Git Version',
+                          Text(_gitVersion, style: _valueStyle(context)),
                         ),
-                      ),
-                      _buildRow(
-                        'Copyright',
-                        Wrap(
-                          spacing: 3,
-                          runSpacing: 3,
-                          children: [
-                            Text('Copyright (C) 2026',
-                                style: _valueStyle(context)),
-                            _buildLink(
-                              'Pingzhong Wu',
-                              mdsScopeMaintainerUrl,
-                            ),
-                          ],
+                        _buildRow(
+                          'Framework & Engine',
+                          Text(
+                            'Flutter & Rust FFI (libmds_bridge)',
+                            style: _valueStyle(context),
+                            softWrap: true,
+                          ),
                         ),
-                      ),
-                      _buildRow(
-                        'License',
-                        _buildLink('GPL-3.0-or-later',
-                            'https://www.gnu.org/licenses/gpl-3.0.html'),
-                      ),
-                      _buildRow(
-                        'Source',
-                        _buildLink('GitHub', mdsScopeSourceUrl),
-                        showBorder: false,
-                      ),
-                    ]),
+                        _buildRow(
+                          'Runtime System',
+                          Text(
+                            _systemInfo.displayText,
+                            style: _valueStyle(context),
+                            softWrap: true,
+                          ),
+                        ),
+                        _buildRow(
+                          'Copyright',
+                          Wrap(
+                            spacing: 3,
+                            runSpacing: 3,
+                            children: [
+                              Text(
+                                'Copyright (C) 2026',
+                                style: _valueStyle(context),
+                              ),
+                              _buildLink('Pingzhong Wu', mdsLensMaintainerUrl),
+                            ],
+                          ),
+                        ),
+                        _buildRow(
+                          'License',
+                          _buildLink(
+                            'GPL-3.0-or-later',
+                            'https://www.gnu.org/licenses/gpl-3.0.html',
+                          ),
+                        ),
+                        _buildRow(
+                          'Source',
+                          _buildLink('GitHub', mdsLensSourceUrl),
+                          showBorder: false,
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 16),
-                  LayoutBuilder(builder: (context, constraints) {
-                    final updateButton = OutlinedButton(
-                      onPressed: _checkingUpdate ? null : _checkUpdate,
-                      child: Text(_checkingUpdate ? 'Checking...' : 'Update'),
-                    );
-                    final closeButton = FilledButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Close'),
-                    );
-                    final status = Text(
-                      _updateStatus,
-                      softWrap: true,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    );
-                    if (constraints.maxWidth < 390) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final updateButton = OutlinedButton(
+                        onPressed: _checkingUpdate ? null : _checkUpdate,
+                        child: Text(_checkingUpdate ? 'Checking...' : 'Update'),
+                      );
+                      final closeButton = FilledButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Close'),
+                      );
+                      final status = Text(
+                        _updateStatus,
+                        softWrap: true,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      );
+                      if (constraints.maxWidth < 390) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            updateButton,
+                            if (_updateStatus.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              status,
+                            ],
+                            const SizedBox(height: 8),
+                            closeButton,
+                          ],
+                        );
+                      }
+                      return Row(
                         children: [
                           updateButton,
-                          if (_updateStatus.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            status,
-                          ],
-                          const SizedBox(height: 8),
+                          const SizedBox(width: 8),
+                          Expanded(child: status),
                           closeButton,
                         ],
                       );
-                    }
-                    return Row(children: [
-                      updateButton,
-                      const SizedBox(width: 8),
-                      Expanded(child: status),
-                      closeButton,
-                    ]);
-                  }),
+                    },
+                  ),
                 ],
               ),
             ),

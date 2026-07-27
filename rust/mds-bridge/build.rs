@@ -60,7 +60,7 @@ fn main() {
         git_dir.join("logs/HEAD").display()
     );
     println!("cargo:rerun-if-changed={}", repo.join("pubspec.yaml").display());
-    println!("cargo:rerun-if-env-changed=MDSSCOPE_VERSION");
+    println!("cargo:rerun-if-env-changed=MDSLENS_VERSION");
     println!("cargo:rerun-if-env-changed=GITHUB_REF_TYPE");
     println!("cargo:rerun-if-env-changed=GITHUB_REF_NAME");
 
@@ -74,7 +74,7 @@ fn main() {
     let tagged_version = github_tagged_version
         .clone()
         .or_else(|| latest_release_tag(&repo));
-    let public_version = std::env::var("MDSSCOPE_VERSION")
+    let public_version = std::env::var("MDSLENS_VERSION")
         .ok()
         .map(|value| value.trim_start_matches('v').to_string())
         .or_else(|| tagged_version.as_ref().map(|(_, version)| version.clone()))

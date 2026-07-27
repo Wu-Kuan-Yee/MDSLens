@@ -22,10 +22,10 @@ if (flutterVersionName == null) {
     flutterVersionName = '1.0'
 }
 
-def releaseStorePath = System.getenv('MDSSCOPE_ANDROID_KEYSTORE')
-def releaseStorePassword = System.getenv('MDSSCOPE_ANDROID_STORE_PASSWORD')
-def releaseKeyAlias = System.getenv('MDSSCOPE_ANDROID_KEY_ALIAS')
-def releaseKeyPassword = System.getenv('MDSSCOPE_ANDROID_KEY_PASSWORD')
+def releaseStorePath = System.getenv('MDSLENS_ANDROID_KEYSTORE')
+def releaseStorePassword = System.getenv('MDSLENS_ANDROID_STORE_PASSWORD')
+def releaseKeyAlias = System.getenv('MDSLENS_ANDROID_KEY_ALIAS')
+def releaseKeyPassword = System.getenv('MDSLENS_ANDROID_KEY_PASSWORD')
 def hasReleaseSigning = releaseStorePath != null &&
     new File(releaseStorePath).isFile() &&
     releaseStorePassword != null &&
@@ -33,7 +33,7 @@ def hasReleaseSigning = releaseStorePath != null &&
     releaseKeyPassword != null
 
 android {
-    namespace "com.mdsscope.app"
+    namespace "com.mdslens.app"
     compileSdk 36
     ndkVersion "28.2.13676358"
 
@@ -52,7 +52,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.mdsscope.app"
+        applicationId "com.mdslens.app"
         minSdkVersion flutter.minSdkVersion
         targetSdk 36
         versionCode flutterVersionCode.toInteger()
@@ -76,9 +76,9 @@ android {
                 signingConfig signingConfigs.release
             } else {
                 // Keep one-command local device builds possible. CI and store
-                // releases should always supply the four MDSSCOPE_ANDROID_*
+                // releases should always supply the four MDSLENS_ANDROID_*
                 // signing variables so the package has a stable identity.
-                logger.warn('MdsScope release signing is not configured; using the local debug key.')
+                logger.warn('MDSLens release signing is not configured; using the local debug key.')
                 signingConfig signingConfigs.debug
             }
         }

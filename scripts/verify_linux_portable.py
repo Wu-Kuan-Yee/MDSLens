@@ -118,13 +118,13 @@ def needed_libraries(binary: Path) -> set[str]:
 
 
 def verify(root: Path, maximum_glibc: tuple[int, int], launch: bool) -> None:
-    executable = root / "mdsscope"
+    executable = root / "mdslens"
     library_dir = root / "lib"
     for required in (executable, library_dir):
         if not required.exists():
             raise RuntimeError(f"Portable bundle is missing {required.relative_to(root)}")
     if not is_elf(executable):
-        raise RuntimeError("Portable mdsscope is not an ELF executable")
+        raise RuntimeError("Portable mdslens is not an ELF executable")
     if not os.access(executable, os.X_OK):
         raise RuntimeError("Portable executable is not executable")
 
@@ -195,7 +195,7 @@ def verify(root: Path, maximum_glibc: tuple[int, int], launch: bool) -> None:
             if virtual_display is not None:
                 virtual_display.terminate()
             raise RuntimeError(
-                f"MdsScope exited during portable smoke test ({status}):\n{output}"
+                f"MDSLens exited during portable smoke test ({status}):\n{output}"
             )
         process.terminate()
         try:
@@ -215,7 +215,7 @@ def main() -> None:
     parser.add_argument("--launch", action="store_true")
     args = parser.parse_args()
     maximum = tuple(int(part) for part in args.max_glibc.split(".", 1))
-    with tempfile.TemporaryDirectory(prefix="mdsscope-portable-test-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="mdslens-portable-test-") as temporary:
         root = extract(args.archive.resolve(), Path(temporary))
         verify(root, maximum, args.launch)
     print(f"Verified portable runtime: {args.archive}")

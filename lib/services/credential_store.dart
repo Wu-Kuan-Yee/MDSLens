@@ -10,31 +10,32 @@ abstract interface class CredentialStore {
 
 class PlatformCredentialStore implements CredentialStore {
   PlatformCredentialStore({FlutterSecureStorage? storage})
-      : _storage = storage ??
-            const FlutterSecureStorage(
-              iOptions: IOSOptions(
-                accountName: 'com.mdsscope.app.credentials',
-                accessibility: KeychainAccessibility.first_unlock_this_device,
-                synchronizable: false,
-                label: 'MdsScope credentials',
-              ),
-              mOptions: MacOsOptions(
-                accountName: 'com.mdsscope.app.credentials',
-                accessibility: KeychainAccessibility.first_unlock_this_device,
-                synchronizable: false,
-                label: 'MdsScope credentials',
-                // Direct-distribution macOS builds are intentionally
-                // unsandboxed so ~/.mdsscope remains available. The Data
-                // Protection Keychain requires an application-group
-                // entitlement and rejects these builds with errSecMissingEntitlement.
-                // The standard login Keychain remains encrypted and scoped to
-                // this signed application without that entitlement.
-                usesDataProtectionKeychain: false,
-              ),
-              aOptions: AndroidOptions(
-                storageNamespace: 'com.mdsscope.app.credentials',
-              ),
-            );
+    : _storage =
+          storage ??
+          const FlutterSecureStorage(
+            iOptions: IOSOptions(
+              accountName: 'com.mdslens.app.credentials',
+              accessibility: KeychainAccessibility.first_unlock_this_device,
+              synchronizable: false,
+              label: 'MDSLens credentials',
+            ),
+            mOptions: MacOsOptions(
+              accountName: 'com.mdslens.app.credentials',
+              accessibility: KeychainAccessibility.first_unlock_this_device,
+              synchronizable: false,
+              label: 'MDSLens credentials',
+              // Direct-distribution macOS builds are intentionally
+              // unsandboxed so ~/.mdslens remains available. The Data
+              // Protection Keychain requires an application-group
+              // entitlement and rejects these builds with errSecMissingEntitlement.
+              // The standard login Keychain remains encrypted and scoped to
+              // this signed application without that entitlement.
+              usesDataProtectionKeychain: false,
+            ),
+            aOptions: AndroidOptions(
+              storageNamespace: 'com.mdslens.app.credentials',
+            ),
+          );
 
   final FlutterSecureStorage _storage;
 
@@ -51,7 +52,7 @@ class PlatformCredentialStore implements CredentialStore {
 
 class MemoryCredentialStore implements CredentialStore {
   MemoryCredentialStore([Map<String, String>? initialValues])
-      : values = {...?initialValues};
+    : values = {...?initialValues};
 
   final Map<String, String> values;
 

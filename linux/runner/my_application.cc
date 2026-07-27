@@ -112,11 +112,11 @@ static void my_application_activate(GApplication* application) {
   if (use_header_bar) {
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "MdsScope");
+    gtk_header_bar_set_title(header_bar, "MDSLens");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
   } else {
-    gtk_window_set_title(window, "MdsScope");
+    gtk_window_set_title(window, "MDSLens");
   }
 
   set_window_icon(window);
@@ -131,7 +131,7 @@ static void my_application_activate(GApplication* application) {
   FlBinaryMessenger* messenger = fl_engine_get_binary_messenger(engine);
   g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
   g_autoptr(FlMethodChannel) system_fonts_channel =
-      fl_method_channel_new(messenger, "mdsscope/system_fonts",
+      fl_method_channel_new(messenger, "mdslens/system_fonts",
                             FL_METHOD_CODEC(codec));
   fl_method_channel_set_method_call_handler(
       system_fonts_channel, system_fonts_method_call_cb, self, nullptr);

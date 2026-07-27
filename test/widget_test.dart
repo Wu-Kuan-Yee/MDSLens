@@ -8,26 +8,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:mdsscope/app.dart';
-import 'package:mdsscope/pages/main_page.dart';
-import 'package:mdsscope/models/app_state.dart';
-import 'package:mdsscope/services/credential_store.dart';
-import 'package:mdsscope/services/external_url_launcher.dart';
-import 'package:mdsscope/services/identity_file_access.dart';
-import 'package:mdsscope/services/incoming_configuration_service.dart';
-import 'package:mdsscope/services/platform_file_dialog.dart';
-import 'package:mdsscope/services/runtime_build_info.dart';
-import 'package:mdsscope/services/source_index.dart';
-import 'package:mdsscope/services/update_service.dart';
-import 'package:mdsscope/services/user_data_store.dart';
-import 'package:mdsscope/theme/mdsscope_theme.dart';
-import 'package:mdsscope/widgets/dialogs/about.dart';
-import 'package:mdsscope/widgets/dialogs/login.dart';
-import 'package:mdsscope/widgets/plot_panel.dart';
-import 'package:mdsscope/widgets/plot_grid.dart';
-import 'package:mdsscope/widgets/plot_render_cache.dart';
-import 'package:mdsscope/widgets/responsive_plot_layout.dart';
-import 'package:mdsscope/widgets/toolbar.dart';
+import 'package:mdslens/app.dart';
+import 'package:mdslens/pages/main_page.dart';
+import 'package:mdslens/models/app_state.dart';
+import 'package:mdslens/services/credential_store.dart';
+import 'package:mdslens/services/external_url_launcher.dart';
+import 'package:mdslens/services/identity_file_access.dart';
+import 'package:mdslens/services/incoming_configuration_service.dart';
+import 'package:mdslens/services/platform_file_dialog.dart';
+import 'package:mdslens/services/runtime_build_info.dart';
+import 'package:mdslens/services/source_index.dart';
+import 'package:mdslens/services/update_service.dart';
+import 'package:mdslens/services/user_data_store.dart';
+import 'package:mdslens/theme/mdslens_theme.dart';
+import 'package:mdslens/widgets/dialogs/about.dart';
+import 'package:mdslens/widgets/dialogs/login.dart';
+import 'package:mdslens/widgets/plot_panel.dart';
+import 'package:mdslens/widgets/plot_grid.dart';
+import 'package:mdslens/widgets/plot_render_cache.dart';
+import 'package:mdslens/widgets/responsive_plot_layout.dart';
+import 'package:mdslens/widgets/toolbar.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -40,33 +40,24 @@ void main() {
 
   test('Point readout interpolates ascending and descending waveforms', () {
     expect(
-      interpolateWaveformY(
-        [
-          [0, 10],
-          [2, 20],
-        ],
-        0.5,
-      ),
+      interpolateWaveformY([
+        [0, 10],
+        [2, 20],
+      ], 0.5),
       12.5,
     );
     expect(
-      interpolateWaveformY(
-        [
-          [2, 20],
-          [0, 10],
-        ],
-        0.5,
-      ),
+      interpolateWaveformY([
+        [2, 20],
+        [0, 10],
+      ], 0.5),
       12.5,
     );
     expect(
-      interpolateWaveformY(
-        [
-          [0, 10],
-          [2, 20],
-        ],
-        -1,
-      ),
+      interpolateWaveformY([
+        [0, 10],
+        [2, 20],
+      ], -1),
       10,
     );
   });
@@ -97,29 +88,30 @@ void main() {
   });
 
   test(
-      'Login responses reject empty bodies without exposing JSON parser errors',
-      () {
-    expect(
-      () => decodeLoginToken('', httpStatus: 200),
-      throwsA(
-        isA<EmptyApiResponseException>().having(
-          (error) => error.toString(),
-          'message',
-          'Login server returned an empty response (HTTP 200).',
+    'Login responses reject empty bodies without exposing JSON parser errors',
+    () {
+      expect(
+        () => decodeLoginToken('', httpStatus: 200),
+        throwsA(
+          isA<EmptyApiResponseException>().having(
+            (error) => error.toString(),
+            'message',
+            'Login server returned an empty response (HTTP 200).',
+          ),
         ),
-      ),
-    );
-    expect(
-      () => decodeLoginToken('<html>gateway error</html>', httpStatus: 502),
-      throwsA(
-        predicate(
-          (error) =>
-              error.toString().contains('invalid JSON') &&
-              !error.toString().contains('FormatException'),
+      );
+      expect(
+        () => decodeLoginToken('<html>gateway error</html>', httpStatus: 502),
+        throwsA(
+          predicate(
+            (error) =>
+                error.toString().contains('invalid JSON') &&
+                !error.toString().contains('FormatException'),
+          ),
         ),
-      ),
-    );
-  });
+      );
+    },
+  );
 
   test('Login responses support API and native transport formats', () {
     expect(
@@ -173,40 +165,39 @@ void main() {
     );
   });
 
-  test('Source index extracts MDS nodes from expressions and remembers them',
-      () {
-    expect(
-      sourceIndexSignalNames(r'build_signal(\PCRL01 / 1000, \TIMEBASE)'),
-      [r'\PCRL01', r'\TIMEBASE'],
-    );
-    expect(sourceIndexSignalNames('PCRL02'), [r'\PCRL02']);
-    expect(sourceIndexSignalKey(r'\PCRL01 / 1000'), 'pcrl01');
+  test(
+    'Source index extracts MDS nodes from expressions and remembers them',
+    () {
+      expect(
+        sourceIndexSignalNames(r'build_signal(\PCRL01 / 1000, \TIMEBASE)'),
+        [r'\PCRL01', r'\TIMEBASE'],
+      );
+      expect(sourceIndexSignalNames('PCRL02'), [r'\PCRL02']);
+      expect(sourceIndexSignalKey(r'\PCRL01 / 1000'), 'pcrl01');
 
-    final memory = SourceIndexMemory();
-    memory.remember(
-      'test_tree_for_source_index',
-      r'\NEW_SIGNAL * 2',
-    );
-    expect(
-      memory.signalsForTree('TEST_TREE_FOR_SOURCE_INDEX'),
-      contains(r'\NEW_SIGNAL'),
-    );
-    final restored = SourceIndexMemory()
-      ..restore(jsonDecode(jsonEncode(memory.toJson())));
-    expect(
-      restored.signalsForTree('TEST_TREE_FOR_SOURCE_INDEX'),
-      contains(r'\NEW_SIGNAL'),
-    );
-  });
+      final memory = SourceIndexMemory();
+      memory.remember('test_tree_for_source_index', r'\NEW_SIGNAL * 2');
+      expect(
+        memory.signalsForTree('TEST_TREE_FOR_SOURCE_INDEX'),
+        contains(r'\NEW_SIGNAL'),
+      );
+      final restored = SourceIndexMemory()
+        ..restore(jsonDecode(jsonEncode(memory.toJson())));
+      expect(
+        restored.signalsForTree('TEST_TREE_FOR_SOURCE_INDEX'),
+        contains(r'\NEW_SIGNAL'),
+      );
+    },
+  );
 
-  test('System open requests accept config files and MdsScope links', () {
+  test('System open requests accept config files and MDSLens links', () {
     expect(
       configurationPathFromOpenRequest('/tmp/example.toml'),
       '/tmp/example.toml',
     );
     expect(
       configurationPathFromOpenRequest(
-        'mdsscope://open?path=%2Ftmp%2Fshared.webscp',
+        'mdslens://open?path=%2Ftmp%2Fshared.webscp',
       ),
       '/tmp/shared.webscp',
     );
@@ -264,9 +255,7 @@ void main() {
 
   test('Runtime system information normalizes versions and architectures', () {
     expect(
-      normalizedOperatingSystemVersion(
-        'Version 15.5 (Build 24F74)',
-      ),
+      normalizedOperatingSystemVersion('Version 15.5 (Build 24F74)'),
       '15.5',
     );
     expect(normalizedArchitecture('androidArm64'), 'arm64');
@@ -298,34 +287,33 @@ void main() {
     );
   });
 
-  test('Runtime system information prefers the native platform channel',
-      () async {
-    const channel = MethodChannel('mdsscope/system_info');
-    final messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(channel, (call) async {
-      expect(call.method, 'get');
-      return {
-        'name': 'Windows 11 Pro',
-        'version': '25H2, build 26200.8875',
-        'architecture': 'AMD64',
-      };
-    });
-    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+  test(
+    'Runtime system information prefers the native platform channel',
+    () async {
+      const channel = MethodChannel('mdslens/system_info');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        expect(call.method, 'get');
+        return {
+          'name': 'Windows 11 Pro',
+          'version': '25H2, build 26200.8875',
+          'architecture': 'AMD64',
+        };
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final info = await loadRuntimeSystemInfo(useLinuxReleaseInfo: false);
+      final info = await loadRuntimeSystemInfo(useLinuxReleaseInfo: false);
 
-    expect(
-      info.displayText,
-      'Windows 11 Pro (25H2, build 26200.8875) (x86_64)',
-    );
-  });
+      expect(
+        info.displayText,
+        'Windows 11 Pro (25H2, build 26200.8875) (x86_64)',
+      );
+    },
+  );
 
   test('Customize Fonts values are applied to the application theme', () {
-    final theme = MdsScopeTheme.light(
-      fontFamily: 'Courier New',
-      uiFontSize: 18,
-    );
+    final theme = MDSLensTheme.light(fontFamily: 'Courier New', uiFontSize: 18);
 
     expect(theme.textTheme.bodyMedium?.fontFamily, 'Courier New');
     expect(theme.textTheme.bodyMedium?.fontSize, 18);
@@ -335,50 +323,56 @@ void main() {
     expect(popupShape.borderRadius, BorderRadius.circular(12));
   });
 
-  testWidgets('Auto theme follows live platform brightness changes',
-      (tester) async {
+  testWidgets('Auto theme follows live platform brightness changes', (
+    tester,
+  ) async {
     final app = AppState();
     await app.preferencesReady;
     app.themeMode = 2;
     addTearDown(
-        tester.binding.platformDispatcher.clearPlatformBrightnessTestValue);
+      tester.binding.platformDispatcher.clearPlatformBrightnessTestValue,
+    );
     tester.binding.platformDispatcher.platformBrightnessTestValue =
         Brightness.light;
 
     await tester.pumpWidget(
-      ChangeNotifierProvider.value(
-        value: app,
-        child: const MdsScopeApp(),
-      ),
+      ChangeNotifierProvider.value(value: app, child: const MDSLensApp()),
     );
-    expect(tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
-        ThemeMode.light);
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+      ThemeMode.light,
+    );
 
     tester.binding.platformDispatcher.platformBrightnessTestValue =
         Brightness.dark;
     await tester.pump();
-    expect(tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
-        ThemeMode.dark);
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+      ThemeMode.dark,
+    );
 
     tester.binding.platformDispatcher.platformBrightnessTestValue =
         Brightness.light;
     await tester.pump();
-    expect(tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
-        ThemeMode.light);
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+      ThemeMode.light,
+    );
   });
 
-  testWidgets('Auto theme keeps the authoritative startup brightness',
-      (tester) async {
-    const channel = MethodChannel('mdsscope/theme');
+  testWidgets('Auto theme keeps the authoritative startup brightness', (
+    tester,
+  ) async {
+    const channel = MethodChannel('mdslens/theme');
     var nativeBrightnessQueries = 0;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      if (call.method == 'isDark') {
-        nativeBrightnessQueries++;
-        return nativeBrightnessQueries == 1 ? false : true;
-      }
-      return null;
-    });
+          if (call.method == 'isDark') {
+            nativeBrightnessQueries++;
+            return nativeBrightnessQueries == 1 ? false : true;
+          }
+          return null;
+        });
     addTearDown(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, null);
@@ -391,25 +385,25 @@ void main() {
     await app.preferencesReady;
     app.themeMode = 2;
     await tester.pumpWidget(
-      ChangeNotifierProvider.value(
-        value: app,
-        child: const MdsScopeApp(),
-      ),
+      ChangeNotifierProvider.value(value: app, child: const MDSLensApp()),
     );
     await tester.pump(const Duration(milliseconds: 400));
 
-    expect(tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
-        ThemeMode.dark);
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+      ThemeMode.dark,
+    );
     expect(nativeBrightnessQueries, 2);
   });
 
-  testWidgets('Auto theme corrects a stale light startup value on macOS',
-      (tester) async {
-    const channel = MethodChannel('mdsscope/theme');
+  testWidgets('Auto theme corrects a stale light startup value on macOS', (
+    tester,
+  ) async {
+    const channel = MethodChannel('mdslens/theme');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      return call.method == 'isDark' ? true : null;
-    });
+          return call.method == 'isDark' ? true : null;
+        });
     addTearDown(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, null);
@@ -422,25 +416,29 @@ void main() {
     await app.preferencesReady;
     app.themeMode = 2;
     await tester.pumpWidget(
-      ChangeNotifierProvider.value(
-        value: app,
-        child: const MdsScopeApp(),
-      ),
+      ChangeNotifierProvider.value(value: app, child: const MDSLensApp()),
     );
-    expect(tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
-        ThemeMode.light);
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+      ThemeMode.light,
+    );
 
     await tester.pump(const Duration(milliseconds: 100));
-    expect(tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
-        ThemeMode.dark);
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+      ThemeMode.dark,
+    );
 
     await tester.pump(const Duration(milliseconds: 300));
-    expect(tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
-        ThemeMode.dark);
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+      ThemeMode.dark,
+    );
   });
 
-  testWidgets('Tapping empty main-page space dismisses the Shot keyboard',
-      (tester) async {
+  testWidgets('Tapping empty main-page space dismisses the Shot keyboard', (
+    tester,
+  ) async {
     final app = AppState();
     await app.preferencesReady;
     addTearDown(tester.view.reset);
@@ -486,21 +484,18 @@ void main() {
 
   test('Manual application settings survive an application restart', () async {
     final temporary = await Directory.systemTemp.createTemp(
-      'mdsscope-user-data-test-',
+      'mdslens-user-data-test-',
     );
     addTearDown(() => temporary.delete(recursive: true));
     final store = UserDataStore(
-      rootOverride: Directory('${temporary.path}/.mdsscope'),
+      rootOverride: Directory('${temporary.path}/.mdslens'),
     );
     SharedPreferences.setMockInitialValues({
       'shotHistory': '["163700","163699"]',
     });
 
     final credentials = MemoryCredentialStore();
-    final first = AppState(
-      userDataStore: store,
-      credentialStore: credentials,
-    );
+    final first = AppState(userDataStore: store, credentialStore: credentials);
     await first.preferencesReady;
     addTearDown(first.dispose);
     first.dataMode = 2;
@@ -517,10 +512,7 @@ void main() {
     first.rebuild();
     await first.savePreferences();
 
-    final second = AppState(
-      userDataStore: store,
-      credentialStore: credentials,
-    );
+    final second = AppState(userDataStore: store, credentialStore: credentials);
     await second.preferencesReady;
     addTearDown(second.dispose);
 
@@ -532,13 +524,13 @@ void main() {
     expect(second.fontFamily, 'Courier New');
     expect(second.fontLegendSize, 17);
     expect(second.webBookmarks, [
-      {'Status': 'http://10.0.0.8/status'}
+      {'Status': 'http://10.0.0.8/status'},
     ]);
     expect(second.shotHistory, ['163700', '163699']);
     expect(second.columns.map((column) => column.length), [1, 2]);
     expect(second.columns[0][0]['title'], 'Saved panel');
     expect(second.columns[0][0]['xmin'], isNull);
-    final settingsFile = File('${temporary.path}/.mdsscope/settings.json');
+    final settingsFile = File('${temporary.path}/.mdslens/settings.json');
     expect(await settingsFile.exists(), isTrue);
     expect(
       jsonDecode(await settingsFile.readAsString())['fontFamily'],
@@ -548,74 +540,76 @@ void main() {
     expect(legacy.containsKey('shotHistory'), isFalse);
   });
 
-  test('Plaintext credentials migrate to the platform vault and are erased',
-      () async {
-    final temporary = await Directory.systemTemp.createTemp(
-      'mdsscope-secure-settings-test-',
-    );
-    addTearDown(() => temporary.delete(recursive: true));
-    final store = UserDataStore(
-      rootOverride: Directory('${temporary.path}/.mdsscope'),
-    );
-    final credentials = MemoryCredentialStore();
-    SharedPreferences.setMockInitialValues({
-      'rememberLogin': true,
-      'loggedIn': true,
-      'loginApiUrl': 'https://east.example/api',
-      'loginUser': 'scientist',
-      'loginPass': 'login-secret',
-      'authToken': 'session-secret',
-      'sshPass': 'ssh-secret',
-      'themeMode': 2,
-    });
+  test(
+    'Plaintext credentials migrate to the platform vault and are erased',
+    () async {
+      final temporary = await Directory.systemTemp.createTemp(
+        'mdslens-secure-settings-test-',
+      );
+      addTearDown(() => temporary.delete(recursive: true));
+      final store = UserDataStore(
+        rootOverride: Directory('${temporary.path}/.mdslens'),
+      );
+      final credentials = MemoryCredentialStore();
+      SharedPreferences.setMockInitialValues({
+        'rememberLogin': true,
+        'loggedIn': true,
+        'loginApiUrl': 'https://east.example/api',
+        'loginUser': 'scientist',
+        'loginPass': 'login-secret',
+        'authToken': 'session-secret',
+        'sshPass': 'ssh-secret',
+        'themeMode': 2,
+      });
 
-    final first = AppState(
-      userDataStore: store,
-      credentialStore: credentials,
-    );
-    await first.preferencesReady;
-    addTearDown(first.dispose);
+      final first = AppState(
+        userDataStore: store,
+        credentialStore: credentials,
+      );
+      await first.preferencesReady;
+      addTearDown(first.dispose);
 
-    expect(first.loginPass, 'login-secret');
-    expect(first.authToken, 'session-secret');
-    expect(first.sshPass, 'ssh-secret');
-    expect(credentials.values, {
-      'mdsscope.login.password': 'login-secret',
-      'mdsscope.login.token': 'session-secret',
-      'mdsscope.ssh.password': 'ssh-secret',
-    });
+      expect(first.loginPass, 'login-secret');
+      expect(first.authToken, 'session-secret');
+      expect(first.sshPass, 'ssh-secret');
+      expect(credentials.values, {
+        'mdslens.login.password': 'login-secret',
+        'mdslens.login.token': 'session-secret',
+        'mdslens.ssh.password': 'ssh-secret',
+      });
 
-    final oldPreferences = await SharedPreferences.getInstance();
-    expect(oldPreferences.containsKey('loginPass'), isFalse);
-    expect(oldPreferences.containsKey('authToken'), isFalse);
-    expect(oldPreferences.containsKey('sshPass'), isFalse);
+      final oldPreferences = await SharedPreferences.getInstance();
+      expect(oldPreferences.containsKey('loginPass'), isFalse);
+      expect(oldPreferences.containsKey('authToken'), isFalse);
+      expect(oldPreferences.containsKey('sshPass'), isFalse);
 
-    final settingsFile = File('${temporary.path}/.mdsscope/settings.json');
-    final settingsText = await settingsFile.readAsString();
-    expect(settingsText, isNot(contains('login-secret')));
-    expect(settingsText, isNot(contains('session-secret')));
-    expect(settingsText, isNot(contains('ssh-secret')));
-    expect(jsonDecode(settingsText)['themeMode'], 2);
+      final settingsFile = File('${temporary.path}/.mdslens/settings.json');
+      final settingsText = await settingsFile.readAsString();
+      expect(settingsText, isNot(contains('login-secret')));
+      expect(settingsText, isNot(contains('session-secret')));
+      expect(settingsText, isNot(contains('ssh-secret')));
+      expect(jsonDecode(settingsText)['themeMode'], 2);
 
-    final second = AppState(
-      userDataStore: store,
-      credentialStore: credentials,
-    );
-    await second.preferencesReady;
-    addTearDown(second.dispose);
-    expect(second.loginPass, 'login-secret');
-    expect(second.authToken, 'session-secret');
-    expect(second.sshPass, 'ssh-secret');
-    expect(second.loggedIn, isTrue);
-  });
+      final second = AppState(
+        userDataStore: store,
+        credentialStore: credentials,
+      );
+      await second.preferencesReady;
+      addTearDown(second.dispose);
+      expect(second.loginPass, 'login-secret');
+      expect(second.authToken, 'session-secret');
+      expect(second.sshPass, 'ssh-secret');
+      expect(second.loggedIn, isTrue);
+    },
+  );
 
   test('Shot history retention is bounded, optional, and persisted', () async {
     final temporary = await Directory.systemTemp.createTemp(
-      'mdsscope-shot-history-test-',
+      'mdslens-shot-history-test-',
     );
     addTearDown(() => temporary.delete(recursive: true));
     final store = UserDataStore(
-      rootOverride: Directory('${temporary.path}/.mdsscope'),
+      rootOverride: Directory('${temporary.path}/.mdslens'),
     );
     final history = List<String>.generate(55, (index) => '${170000 - index}');
     SharedPreferences.setMockInitialValues({
@@ -623,10 +617,7 @@ void main() {
     });
 
     final credentials = MemoryCredentialStore();
-    final first = AppState(
-      userDataStore: store,
-      credentialStore: credentials,
-    );
+    final first = AppState(userDataStore: store, credentialStore: credentials);
     await first.preferencesReady;
     addTearDown(first.dispose);
 
@@ -642,10 +633,7 @@ void main() {
     expect(first.shotHistory, history.take(3));
     await first.savePreferences();
 
-    final second = AppState(
-      userDataStore: store,
-      credentialStore: credentials,
-    );
+    final second = AppState(userDataStore: store, credentialStore: credentials);
     await second.preferencesReady;
     addTearDown(second.dispose);
     expect(second.limitShotHistory, isFalse);
@@ -659,122 +647,150 @@ void main() {
     expect(second.shotHistory, history.take(1));
   });
 
-  test('Configuration open accepts desktop paths and mobile file bytes',
-      () async {
-    const parsedConfig = '{"columns":[[{"title":"Opened panel","x_label":"s",'
-        '"y_label":"A","signal_specs":[{"y_expr":"\\\\ip"}]}]]}';
-    String? desktopParsedPath;
-    final desktop = AppState(
-      configOpenPicker: () async => ConfigOpenSelection(
-        name: 'desktop.toml',
-        path: '/chosen/desktop.toml',
-      ),
-      configParser: (path) {
-        desktopParsedPath = path;
-        return parsedConfig;
-      },
-    );
-    await desktop.preferencesReady;
-    await desktop.openFile();
-    expect(desktopParsedPath, '/chosen/desktop.toml');
-    expect(desktop.columns[0][0]['title'], 'Opened panel');
-    expect(desktop.status, contains('Loaded: desktop.toml'));
+  test(
+    'Configuration open accepts desktop paths and mobile file bytes',
+    () async {
+      const parsedConfig =
+          '{"columns":[[{"title":"Opened panel","x_label":"s",'
+          '"y_label":"A","signal_specs":[{"y_expr":"\\\\ip"}]}]]}';
+      String? desktopParsedPath;
+      final desktop = AppState(
+        configOpenPicker: () async => ConfigOpenSelection(
+          name: 'desktop.toml',
+          path: '/chosen/desktop.toml',
+        ),
+        configParser: (path) {
+          desktopParsedPath = path;
+          return parsedConfig;
+        },
+      );
+      await desktop.preferencesReady;
+      await desktop.openFile();
+      expect(desktopParsedPath, '/chosen/desktop.toml');
+      expect(desktop.columns[0][0]['title'], 'Opened panel');
+      expect(desktop.status, contains('Loaded: desktop.toml'));
 
-    final originalBytes = Uint8List.fromList(utf8.encode('mobile config'));
-    String? temporaryPath;
-    final mobile = AppState(
-      configOpenPicker: () async => ConfigOpenSelection(
-        name: 'mobile.toml',
-        bytes: originalBytes,
-      ),
-      configParser: (path) {
-        temporaryPath = path;
-        expect(File(path).readAsBytesSync(), originalBytes);
-        return parsedConfig;
-      },
-    );
-    await mobile.preferencesReady;
-    await mobile.openFile();
-    expect(mobile.columns[0][0]['title'], 'Opened panel');
-    expect(temporaryPath, isNotNull);
-    expect(File(temporaryPath!).existsSync(), isFalse);
-  });
+      final originalBytes = Uint8List.fromList(utf8.encode('mobile config'));
+      String? temporaryPath;
+      final mobile = AppState(
+        configOpenPicker: () async =>
+            ConfigOpenSelection(name: 'mobile.toml', bytes: originalBytes),
+        configParser: (path) {
+          temporaryPath = path;
+          expect(File(path).readAsBytesSync(), originalBytes);
+          return parsedConfig;
+        },
+      );
+      await mobile.preferencesReady;
+      await mobile.openFile();
+      expect(mobile.columns[0][0]['title'], 'Opened panel');
+      expect(temporaryPath, isNotNull);
+      expect(File(temporaryPath!).existsSync(), isFalse);
+    },
+  );
 
-  test('Configuration open never imports the legacy shared config directory',
-      () async {
-    var parserWasCalled = false;
-    final state = AppState(
-      configOpenPicker: () async => const ConfigOpenSelection(
-        name: 'legacy.toml',
-        path: '/home/example/.config/mdsscope/environment/legacy.toml',
-      ),
-      configParser: (_) {
-        parserWasCalled = true;
-        return '{"columns":[]}';
-      },
-    );
-    await state.preferencesReady;
-    addTearDown(state.dispose);
+  test(
+    'Configuration open never imports the legacy shared config directory',
+    () async {
+      var parserWasCalled = false;
+      final state = AppState(
+        configOpenPicker: () async => const ConfigOpenSelection(
+          name: 'legacy.toml',
+          path: '/home/example/.mdsscope/configurations/legacy.toml',
+        ),
+        configParser: (_) {
+          parserWasCalled = true;
+          return '{"columns":[]}';
+        },
+      );
+      await state.preferencesReady;
+      addTearDown(state.dispose);
 
-    await state.openFile();
+      await state.openFile();
 
-    expect(parserWasCalled, isFalse);
-    expect(state.status, contains('legacy application'));
-    expect(
-      isLegacyMdsScopeConfigurationPath(
-        r'C:\\Users\\example\\.config\\mdsscope\\old.toml',
-      ),
-      isTrue,
-    );
-  });
+      expect(parserWasCalled, isFalse);
+      expect(state.status, contains('legacy application'));
+      expect(
+        isLegacyMdsScopeConfigurationPath(
+          r'C:\\Users\\example\\.config\\mdsscope\\old.toml',
+        ),
+        isTrue,
+      );
+    },
+  );
 
-  test('Configuration save hands complete TOML bytes to the file dialog',
-      () async {
-    String? encodedJson;
-    String? suggestedName;
-    Uint8List? savedBytes;
-    final expectedBytes = Uint8List.fromList(utf8.encode('title = "Saved"'));
-    final app = AppState(
-      configEncoder: (configJson) async {
-        encodedJson = configJson;
-        return expectedBytes;
-      },
-      configSavePicker: (name, bytes) async {
-        suggestedName = name;
-        savedBytes = bytes;
-        return 'content://documents/config.toml';
-      },
-    );
-    await app.preferencesReady;
-    app.shotText = '143850';
+  test(
+    'Configuration save hands complete TOML bytes to the file dialog',
+    () async {
+      String? encodedJson;
+      String? suggestedName;
+      Uint8List? savedBytes;
+      final expectedBytes = Uint8List.fromList(utf8.encode('title = "Saved"'));
+      final app = AppState(
+        configEncoder: (configJson) async {
+          encodedJson = configJson;
+          return expectedBytes;
+        },
+        configSavePicker: (name, bytes) async {
+          suggestedName = name;
+          savedBytes = bytes;
+          return 'content://documents/config.toml';
+        },
+      );
+      await app.preferencesReady;
+      app.shotText = '143850';
 
-    await app.saveFile();
+      await app.saveFile();
 
-    expect(suggestedName, 'config.toml');
-    expect(savedBytes, expectedBytes);
-    expect(jsonDecode(encodedJson!)['columns'], isNotEmpty);
-    expect(jsonDecode(encodedJson!)['shot'], '143850');
-    expect(app.status, 'Saved to config.toml');
-  });
+      expect(suggestedName, 'config.toml');
+      expect(savedBytes, expectedBytes);
+      expect(jsonDecode(encodedJson!)['columns'], isNotEmpty);
+      expect(jsonDecode(encodedJson!)['shot'], '143850');
+      expect(app.status, 'Saved to config.toml');
+    },
+  );
 
-  test('Configuration save materializes every per-curve data source field',
-      () async {
-    String? encodedJson;
-    final app = AppState(
-      configEncoder: (configJson) async {
-        encodedJson = configJson;
-        return Uint8List.fromList(utf8.encode('version = 1'));
-      },
-      configSavePicker: (_, __) async => '/saved/complete.toml',
-    );
-    await app.preferencesReady;
-    app.shotText = '163900';
-    app.dataMode = 1;
-    app.columns[0][0]['signal_specs'] = [
-      {
+  test(
+    'Configuration save materializes every per-curve data source field',
+    () async {
+      String? encodedJson;
+      final app = AppState(
+        configEncoder: (configJson) async {
+          encodedJson = configJson;
+          return Uint8List.fromList(utf8.encode('version = 1'));
+        },
+        configSavePicker: (_, __) async => '/saved/complete.toml',
+      );
+      await app.preferencesReady;
+      app.shotText = '163900';
+      app.dataMode = 1;
+      app.columns[0][0]['signal_specs'] = [
+        {
+          'shot': '163899',
+          'y_expr': r'\FIRST',
+          'x_expr': 'dim_of(\\FIRST)',
+          'experiment': 'tree_a',
+          'server_ip': '10.0.0.1',
+          'color_name': '#123456',
+          'manual_color': true,
+          'hidden': true,
+          'hide_mode': signalHideModePersistent,
+          'read_mode': 2,
+        },
+        {'y_expr': r'\SECOND', 'experiment': 'tree_b', 'server_ip': '10.0.0.2'},
+      ];
+
+      await app.saveFile();
+
+      final signals =
+          (jsonDecode(encodedJson!)['columns'][0][0]['signal_specs'])
+              as List<dynamic>;
+      expect(signals, hasLength(2));
+      expect(signals[0], {
         'shot': '163899',
         'y_expr': r'\FIRST',
         'x_expr': 'dim_of(\\FIRST)',
+        'legend': '',
         'experiment': 'tree_a',
         'server_ip': '10.0.0.1',
         'color_name': '#123456',
@@ -782,272 +798,255 @@ void main() {
         'hidden': true,
         'hide_mode': signalHideModePersistent,
         'read_mode': 2,
-      },
-      {
+      });
+      expect(signals[1], {
+        'shot': '163900',
         'y_expr': r'\SECOND',
+        'x_expr': '',
+        'legend': '',
         'experiment': 'tree_b',
         'server_ip': '10.0.0.2',
-      },
-    ];
-
-    await app.saveFile();
-
-    final signals = (jsonDecode(encodedJson!)['columns'][0][0]['signal_specs'])
-        as List<dynamic>;
-    expect(signals, hasLength(2));
-    expect(signals[0], {
-      'shot': '163899',
-      'y_expr': r'\FIRST',
-      'x_expr': 'dim_of(\\FIRST)',
-      'legend': '',
-      'experiment': 'tree_a',
-      'server_ip': '10.0.0.1',
-      'color_name': '#123456',
-      'manual_color': true,
-      'hidden': true,
-      'hide_mode': signalHideModePersistent,
-      'read_mode': 2,
-    });
-    expect(signals[1], {
-      'shot': '163900',
-      'y_expr': r'\SECOND',
-      'x_expr': '',
-      'legend': '',
-      'experiment': 'tree_b',
-      'server_ip': '10.0.0.2',
-      'color_name': '#c44e52',
-      'manual_color': false,
-      'hidden': false,
-      'hide_mode': signalHideModeVisible,
-      'read_mode': 1,
-    });
-  });
-
-  test('Opening a portable configuration restores its shot and fetches data',
-      () async {
-    String? requestedConfig;
-    final app = AppState(
-      configOpenPicker: () async => ConfigOpenSelection(
-        name: 'portable.toml',
-        bytes: Uint8List(0),
-      ),
-      configParser: (_) => '{"shot":"143850","columns":[[{"title":"Ip",'
-          '"signal_specs":[{"y_expr":"\\\\pcrl01","experiment":"pcs_east",'
-          '"server_ip":"202.127.204.12"}]}]]}',
-      signalFetchWorker: (configJson, _, __) async {
-        requestedConfig = configJson;
-        return '[{"column":0,"row":0,"signal":0,"shot":"143850",'
-            '"series":{"error":"","points":[[0.0,1.0]]}}]';
-      },
-    );
-    await app.preferencesReady;
-    app.setLoggedIn(true, 'test-token');
-
-    await app.openFile(importedShotDecision: (_) async => true);
-    await Future<void>.delayed(Duration.zero);
-
-    expect(app.shotText, '143850');
-    expect(jsonDecode(requestedConfig!)['columns'][0][0]['shot'], '143850');
-    expect(app.plots.single.series.single?.points, [
-      [0.0, 1.0]
-    ]);
-  });
-
-  test('Imported shots are ignored by default at every configuration level',
-      () async {
-    String? requestedConfig;
-    final app = AppState(
-      configOpenPicker: () async => ConfigOpenSelection(
-        name: 'layout-only.toml',
-        bytes: Uint8List(0),
-      ),
-      configParser: (_) =>
-          '{"shot":"143850","columns":[[{"title":"Signals","shot":"143851",'
-          '"signal_specs":['
-          '{"shot":"143852","y_expr":"\\\\first","experiment":"pcs_east"},'
-          '{"shot":"143853","y_expr":"\\\\second","experiment":"pcs_east"}'
-          ']}]]}',
-      signalFetchWorker: (configJson, _, __) async {
-        requestedConfig = configJson;
-        return '[]';
-      },
-    );
-    await app.preferencesReady;
-    addTearDown(app.dispose);
-    app.setLoggedIn(true, 'test-token');
-    app.shotText = '163999';
-
-    await app.openFile();
-
-    expect(app.shotText, '163999');
-    expect(app.columns.single.single.containsKey('shot'), isFalse);
-    final storedSignals =
-        app.columns.single.single['signal_specs'] as List<dynamic>;
-    expect(
-      storedSignals.every((signal) => (signal as Map)['shot'] == '163999'),
-      isTrue,
-    );
-
-    final requestedPanel =
-        jsonDecode(requestedConfig!)['columns'][0][0] as Map<String, dynamic>;
-    expect(requestedPanel['shot'], '163999');
-    final requestedSignals = requestedPanel['signal_specs'] as List<dynamic>;
-    expect(
-      requestedSignals.every((signal) => (signal as Map)['shot'] == '163999'),
-      isTrue,
-    );
-  });
-
-  test('A newly loaded shot overrides every imported per-signal shot',
-      () async {
-    final requestedConfigs = <Map<String, dynamic>>[];
-    final app = AppState(
-      configOpenPicker: () async => ConfigOpenSelection(
-        name: 'switchable.toml',
-        bytes: Uint8List(0),
-      ),
-      configParser: (_) =>
-          '{"shot":"143850","columns":[[{"title":"Signals","shot":"143850",'
-          '"signal_specs":['
-          '{"shot":"143850","y_expr":"\\\\inherit","experiment":"pcs_east",'
-          '"server_ip":"202.127.204.12"},'
-          '{"shot":"143849","y_expr":"\\\\fixed","experiment":"pcs_east",'
-          '"server_ip":"202.127.204.12"}]}]]}',
-      signalFetchWorker: (configJson, _, __) async {
-        final config = Map<String, dynamic>.from(jsonDecode(configJson) as Map);
-        requestedConfigs.add(config);
-        final panel = (config['columns'] as List).first.first as Map;
-        final panelShot = panel['shot'].toString();
-        final signals = panel['signal_specs'] as List;
-        final fixedShot = (signals[1] as Map)['shot']?.toString() ?? panelShot;
-        return jsonEncode([
-          {
-            'column': 0,
-            'row': 0,
-            'signal': 0,
-            'shot': panelShot,
-            'series': {
-              'error': '',
-              'points': [
-                [0.0, 1.0]
-              ]
-            }
-          },
-          {
-            'column': 0,
-            'row': 0,
-            'signal': 1,
-            'shot': fixedShot,
-            'series': {
-              'error': '',
-              'points': [
-                [0.0, 2.0]
-              ]
-            }
-          }
-        ]);
-      },
-    );
-    await app.preferencesReady;
-    addTearDown(app.dispose);
-    app.setLoggedIn(true, 'test-token');
-
-    await app.openFile(importedShotDecision: (_) async => true);
-    expect(app.displayedShot, '143850');
-    var requestedPanel =
-        (requestedConfigs.single['columns'] as List).first.first as Map;
-    expect(requestedPanel['shot'], '143850');
-    var requestedSignals = requestedPanel['signal_specs'] as List;
-    expect((requestedSignals[0] as Map)['shot'], '143850');
-    expect((requestedSignals[1] as Map)['shot'], '143850');
-
-    app.shotText = '163999';
-    app.startRefresh();
-    await Future<void>.delayed(Duration.zero);
-
-    expect(app.displayedShot, '163999');
-    expect(requestedConfigs, hasLength(2));
-    requestedPanel =
-        (requestedConfigs.last['columns'] as List).first.first as Map;
-    expect(requestedPanel['shot'], '163999');
-    requestedSignals = requestedPanel['signal_specs'] as List;
-    expect((requestedSignals[0] as Map)['shot'], '163999');
-    expect((requestedSignals[1] as Map)['shot'], '163999');
-  });
+        'color_name': '#c44e52',
+        'manual_color': false,
+        'hidden': false,
+        'hide_mode': signalHideModeVisible,
+        'read_mode': 1,
+      });
+    },
+  );
 
   test(
-      'Full shot loads override signal Shot and Data and reset temporary hiding',
-      () async {
-    String? requestedConfig;
-    String? requestedDataMode;
-    final app = AppState(
-      signalFetchWorker: (configJson, dataMode, _) async {
-        requestedConfig = configJson;
-        requestedDataMode = dataMode;
-        return '[]';
-      },
-    );
-    await app.preferencesReady;
-    addTearDown(app.dispose);
-    app.setLoggedIn(true, 'test-token');
-    app.columns[0][0]['signal_specs'] = [
-      {
-        'shot': '100001',
-        'read_mode': 2,
-        'hide_mode': signalHideModeTemporary,
-        'hidden': true,
-        'experiment': 'tree_a',
-        'y_expr': r'\FIRST',
-        'legend': 'First',
-        'server_ip': '10.0.0.1',
-        'color_name': '#123456',
-      },
-      {
-        'shot': '100002',
-        'read_mode': 0,
-        'hide_mode': signalHideModePersistent,
-        'hidden': true,
-        'experiment': 'tree_b',
-        'y_expr': r'\SECOND',
-        'legend': 'Second',
-        'server_ip': '10.0.0.2',
-        'color_name': '#654321',
-      },
-    ];
-    app.dataMode = 1;
-    app.shotText = '170001';
+    'Opening a portable configuration restores its shot and fetches data',
+    () async {
+      String? requestedConfig;
+      final app = AppState(
+        configOpenPicker: () async =>
+            ConfigOpenSelection(name: 'portable.toml', bytes: Uint8List(0)),
+        configParser: (_) =>
+            '{"shot":"143850","columns":[[{"title":"Ip",'
+            '"signal_specs":[{"y_expr":"\\\\pcrl01","experiment":"pcs_east",'
+            '"server_ip":"202.127.204.12"}]}]]}',
+        signalFetchWorker: (configJson, _, __) async {
+          requestedConfig = configJson;
+          return '[{"column":0,"row":0,"signal":0,"shot":"143850",'
+              '"series":{"error":"","points":[[0.0,1.0]]}}]';
+        },
+      );
+      await app.preferencesReady;
+      app.setLoggedIn(true, 'test-token');
 
-    app.startRefresh();
-    await Future<void>.delayed(Duration.zero);
+      await app.openFile(importedShotDecision: (_) async => true);
+      await Future<void>.delayed(Duration.zero);
 
-    expect(requestedDataMode, '1');
-    final signals =
-        jsonDecode(requestedConfig!)['columns'][0][0]['signal_specs'] as List;
-    expect(signals.map((signal) => (signal as Map)['shot']),
-        everyElement('170001'));
-    expect(
-        signals.map((signal) => (signal as Map)['read_mode']), everyElement(1));
-    expect((signals[0] as Map)['hide_mode'], signalHideModeVisible);
-    expect((signals[0] as Map)['hidden'], isFalse);
-    expect((signals[1] as Map)['hide_mode'], signalHideModePersistent);
-    expect((signals[1] as Map)['hidden'], isTrue);
-    expect((signals[0] as Map)['experiment'], 'tree_a');
-    expect((signals[0] as Map)['y_expr'], r'\FIRST');
-    expect((signals[0] as Map)['legend'], 'First');
-    expect((signals[0] as Map)['server_ip'], '10.0.0.1');
-    expect((signals[0] as Map)['color_name'], '#123456');
+      expect(app.shotText, '143850');
+      expect(jsonDecode(requestedConfig!)['columns'][0][0]['shot'], '143850');
+      expect(app.plots.single.series.single?.points, [
+        [0.0, 1.0],
+      ]);
+    },
+  );
 
-    final stored = app.columns[0][0]['signal_specs'] as List;
-    expect((stored[0] as Map)['shot'], '170001');
-    expect((stored[0] as Map)['read_mode'], 1);
-    expect((stored[0] as Map)['hide_mode'], signalHideModeVisible);
-    expect((stored[1] as Map)['hide_mode'], signalHideModePersistent);
-  });
+  test(
+    'Imported shots are ignored by default at every configuration level',
+    () async {
+      String? requestedConfig;
+      final app = AppState(
+        configOpenPicker: () async =>
+            ConfigOpenSelection(name: 'layout-only.toml', bytes: Uint8List(0)),
+        configParser: (_) =>
+            '{"shot":"143850","columns":[[{"title":"Signals","shot":"143851",'
+            '"signal_specs":['
+            '{"shot":"143852","y_expr":"\\\\first","experiment":"pcs_east"},'
+            '{"shot":"143853","y_expr":"\\\\second","experiment":"pcs_east"}'
+            ']}]]}',
+        signalFetchWorker: (configJson, _, __) async {
+          requestedConfig = configJson;
+          return '[]';
+        },
+      );
+      await app.preferencesReady;
+      addTearDown(app.dispose);
+      app.setLoggedIn(true, 'test-token');
+      app.shotText = '163999';
+
+      await app.openFile();
+
+      expect(app.shotText, '163999');
+      expect(app.columns.single.single.containsKey('shot'), isFalse);
+      final storedSignals =
+          app.columns.single.single['signal_specs'] as List<dynamic>;
+      expect(
+        storedSignals.every((signal) => (signal as Map)['shot'] == '163999'),
+        isTrue,
+      );
+
+      final requestedPanel =
+          jsonDecode(requestedConfig!)['columns'][0][0] as Map<String, dynamic>;
+      expect(requestedPanel['shot'], '163999');
+      final requestedSignals = requestedPanel['signal_specs'] as List<dynamic>;
+      expect(
+        requestedSignals.every((signal) => (signal as Map)['shot'] == '163999'),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'A newly loaded shot overrides every imported per-signal shot',
+    () async {
+      final requestedConfigs = <Map<String, dynamic>>[];
+      final app = AppState(
+        configOpenPicker: () async =>
+            ConfigOpenSelection(name: 'switchable.toml', bytes: Uint8List(0)),
+        configParser: (_) =>
+            '{"shot":"143850","columns":[[{"title":"Signals","shot":"143850",'
+            '"signal_specs":['
+            '{"shot":"143850","y_expr":"\\\\inherit","experiment":"pcs_east",'
+            '"server_ip":"202.127.204.12"},'
+            '{"shot":"143849","y_expr":"\\\\fixed","experiment":"pcs_east",'
+            '"server_ip":"202.127.204.12"}]}]]}',
+        signalFetchWorker: (configJson, _, __) async {
+          final config = Map<String, dynamic>.from(
+            jsonDecode(configJson) as Map,
+          );
+          requestedConfigs.add(config);
+          final panel = (config['columns'] as List).first.first as Map;
+          final panelShot = panel['shot'].toString();
+          final signals = panel['signal_specs'] as List;
+          final fixedShot =
+              (signals[1] as Map)['shot']?.toString() ?? panelShot;
+          return jsonEncode([
+            {
+              'column': 0,
+              'row': 0,
+              'signal': 0,
+              'shot': panelShot,
+              'series': {
+                'error': '',
+                'points': [
+                  [0.0, 1.0],
+                ],
+              },
+            },
+            {
+              'column': 0,
+              'row': 0,
+              'signal': 1,
+              'shot': fixedShot,
+              'series': {
+                'error': '',
+                'points': [
+                  [0.0, 2.0],
+                ],
+              },
+            },
+          ]);
+        },
+      );
+      await app.preferencesReady;
+      addTearDown(app.dispose);
+      app.setLoggedIn(true, 'test-token');
+
+      await app.openFile(importedShotDecision: (_) async => true);
+      expect(app.displayedShot, '143850');
+      var requestedPanel =
+          (requestedConfigs.single['columns'] as List).first.first as Map;
+      expect(requestedPanel['shot'], '143850');
+      var requestedSignals = requestedPanel['signal_specs'] as List;
+      expect((requestedSignals[0] as Map)['shot'], '143850');
+      expect((requestedSignals[1] as Map)['shot'], '143850');
+
+      app.shotText = '163999';
+      app.startRefresh();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(app.displayedShot, '163999');
+      expect(requestedConfigs, hasLength(2));
+      requestedPanel =
+          (requestedConfigs.last['columns'] as List).first.first as Map;
+      expect(requestedPanel['shot'], '163999');
+      requestedSignals = requestedPanel['signal_specs'] as List;
+      expect((requestedSignals[0] as Map)['shot'], '163999');
+      expect((requestedSignals[1] as Map)['shot'], '163999');
+    },
+  );
+
+  test(
+    'Full shot loads override signal Shot and Data and reset temporary hiding',
+    () async {
+      String? requestedConfig;
+      String? requestedDataMode;
+      final app = AppState(
+        signalFetchWorker: (configJson, dataMode, _) async {
+          requestedConfig = configJson;
+          requestedDataMode = dataMode;
+          return '[]';
+        },
+      );
+      await app.preferencesReady;
+      addTearDown(app.dispose);
+      app.setLoggedIn(true, 'test-token');
+      app.columns[0][0]['signal_specs'] = [
+        {
+          'shot': '100001',
+          'read_mode': 2,
+          'hide_mode': signalHideModeTemporary,
+          'hidden': true,
+          'experiment': 'tree_a',
+          'y_expr': r'\FIRST',
+          'legend': 'First',
+          'server_ip': '10.0.0.1',
+          'color_name': '#123456',
+        },
+        {
+          'shot': '100002',
+          'read_mode': 0,
+          'hide_mode': signalHideModePersistent,
+          'hidden': true,
+          'experiment': 'tree_b',
+          'y_expr': r'\SECOND',
+          'legend': 'Second',
+          'server_ip': '10.0.0.2',
+          'color_name': '#654321',
+        },
+      ];
+      app.dataMode = 1;
+      app.shotText = '170001';
+
+      app.startRefresh();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(requestedDataMode, '1');
+      final signals =
+          jsonDecode(requestedConfig!)['columns'][0][0]['signal_specs'] as List;
+      expect(
+        signals.map((signal) => (signal as Map)['shot']),
+        everyElement('170001'),
+      );
+      expect(
+        signals.map((signal) => (signal as Map)['read_mode']),
+        everyElement(1),
+      );
+      expect((signals[0] as Map)['hide_mode'], signalHideModeVisible);
+      expect((signals[0] as Map)['hidden'], isFalse);
+      expect((signals[1] as Map)['hide_mode'], signalHideModePersistent);
+      expect((signals[1] as Map)['hidden'], isTrue);
+      expect((signals[0] as Map)['experiment'], 'tree_a');
+      expect((signals[0] as Map)['y_expr'], r'\FIRST');
+      expect((signals[0] as Map)['legend'], 'First');
+      expect((signals[0] as Map)['server_ip'], '10.0.0.1');
+      expect((signals[0] as Map)['color_name'], '#123456');
+
+      final stored = app.columns[0][0]['signal_specs'] as List;
+      expect((stored[0] as Map)['shot'], '170001');
+      expect((stored[0] as Map)['read_mode'], 1);
+      expect((stored[0] as Map)['hide_mode'], signalHideModeVisible);
+      expect((stored[1] as Map)['hide_mode'], signalHideModePersistent);
+    },
+  );
 
   test('Rate refresh preserves X range and resets Y range', () async {
-    final app = AppState(
-      signalFetchWorker: (_, __, ___) async => '[]',
-    );
+    final app = AppState(signalFetchWorker: (_, __, ___) async => '[]');
     await app.preferencesReady;
     addTearDown(app.dispose);
     app.setLoggedIn(true, 'test-token');
@@ -1068,8 +1067,9 @@ void main() {
     expect(app.plots.first.viewMaxY, isNull);
   });
 
-  testWidgets('Rapid Full shot changes coalesce into the latest request',
-      (tester) async {
+  testWidgets('Rapid Full shot changes coalesce into the latest request', (
+    tester,
+  ) async {
     final requestedShots = <String>[];
     final app = AppState(
       signalFetchWorker: (configJson, _, __) async {
@@ -1125,191 +1125,189 @@ void main() {
   });
 
   test(
-      'A configuration imported before login keeps its shot and loads after login',
-      () async {
-    var latestShotRequests = 0;
-    String? requestedConfig;
-    final app = AppState(
-      configOpenPicker: () async => ConfigOpenSelection(
-        name: 'before-login.toml',
-        bytes: Uint8List(0),
-      ),
-      configParser: (_) => '{"shot":"163807","columns":[[{"title":"Ip",'
-          '"signal_specs":[{"y_expr":"\\\\pcrl01","experiment":"pcs_east",'
-          '"server_ip":"202.127.204.12"}]}]]}',
-      loginWorker: (_, __, ___, ____) async =>
-          (token: 'test-token', usedSsh: false),
-      latestShotWorker: (_, __, ___) async {
-        latestShotRequests++;
-        return {'shot': 999999};
-      },
-      signalFetchWorker: (configJson, _, __) async {
-        requestedConfig = configJson;
-        return '[{"column":0,"row":0,"signal":0,"shot":"163807",'
-            '"series":{"error":"","points":[[0.0,7.0]]}}]';
-      },
-    );
-    await app.preferencesReady;
-    addTearDown(app.dispose);
+    'A configuration imported before login keeps its shot and loads after login',
+    () async {
+      var latestShotRequests = 0;
+      String? requestedConfig;
+      final app = AppState(
+        configOpenPicker: () async =>
+            ConfigOpenSelection(name: 'before-login.toml', bytes: Uint8List(0)),
+        configParser: (_) =>
+            '{"shot":"163807","columns":[[{"title":"Ip",'
+            '"signal_specs":[{"y_expr":"\\\\pcrl01","experiment":"pcs_east",'
+            '"server_ip":"202.127.204.12"}]}]]}',
+        loginWorker: (_, __, ___, ____) async =>
+            (token: 'test-token', usedSsh: false),
+        latestShotWorker: (_, __, ___) async {
+          latestShotRequests++;
+          return {'shot': 999999};
+        },
+        signalFetchWorker: (configJson, _, __) async {
+          requestedConfig = configJson;
+          return '[{"column":0,"row":0,"signal":0,"shot":"163807",'
+              '"series":{"error":"","points":[[0.0,7.0]]}}]';
+        },
+      );
+      await app.preferencesReady;
+      addTearDown(app.dispose);
 
-    await app.openFile(importedShotDecision: (_) async => true);
-    expect(app.loggedIn, isFalse);
-    expect(app.status, contains('Sign in to load shot 163807'));
+      await app.openFile(importedShotDecision: (_) async => true);
+      expect(app.loggedIn, isFalse);
+      expect(app.status, contains('Sign in to load shot 163807'));
 
-    await app.loginAndLoadLatest(
-      apiUrl: 'http://east.example/api',
-      user: 'user',
-      password: 'password',
-    );
+      await app.loginAndLoadLatest(
+        apiUrl: 'http://east.example/api',
+        user: 'user',
+        password: 'password',
+      );
 
-    expect(latestShotRequests, 0);
-    expect(app.shotText, '163807');
-    expect(app.displayedShot, '163807');
-    expect(jsonDecode(requestedConfig!)['columns'][0][0]['shot'], '163807');
-    expect(app.plots.single.series.single?.points, [
-      [0.0, 7.0]
-    ]);
-  });
+      expect(latestShotRequests, 0);
+      expect(app.shotText, '163807');
+      expect(app.displayedShot, '163807');
+      expect(jsonDecode(requestedConfig!)['columns'][0][0]['shot'], '163807');
+      expect(app.plots.single.series.single?.points, [
+        [0.0, 7.0],
+      ]);
+    },
+  );
 
   test(
-      'Manual login reloads the entered shot instead of replacing it with latest',
-      () async {
-    var latestShotRequests = 0;
-    String? requestedConfig;
-    final app = AppState(
-      loginWorker: (_, __, ___, ____) async =>
-          (token: 'test-token', usedSsh: false),
-      latestShotWorker: (_, __, ___) async {
-        latestShotRequests++;
-        return {'shot': 999999};
-      },
-      signalFetchWorker: (configJson, _, __) async {
-        requestedConfig = configJson;
-        return '[{"column":0,"row":0,"signal":0,"shot":"170123",'
-            '"series":{"error":"","points":[[0.0,7.0]]}}]';
-      },
-    );
-    await app.preferencesReady;
-    addTearDown(app.dispose);
-    app.shotText = '170123';
+    'Manual login reloads the entered shot instead of replacing it with latest',
+    () async {
+      var latestShotRequests = 0;
+      String? requestedConfig;
+      final app = AppState(
+        loginWorker: (_, __, ___, ____) async =>
+            (token: 'test-token', usedSsh: false),
+        latestShotWorker: (_, __, ___) async {
+          latestShotRequests++;
+          return {'shot': 999999};
+        },
+        signalFetchWorker: (configJson, _, __) async {
+          requestedConfig = configJson;
+          return '[{"column":0,"row":0,"signal":0,"shot":"170123",'
+              '"series":{"error":"","points":[[0.0,7.0]]}}]';
+        },
+      );
+      await app.preferencesReady;
+      addTearDown(app.dispose);
+      app.shotText = '170123';
 
-    await app.loginAndLoadLatest(
-      apiUrl: 'http://east.example/api',
-      user: 'user',
-      password: 'password',
-    );
+      await app.loginAndLoadLatest(
+        apiUrl: 'http://east.example/api',
+        user: 'user',
+        password: 'password',
+      );
 
-    expect(latestShotRequests, 0);
-    expect(app.shotText, '170123');
-    expect(app.displayedShot, '170123');
-    expect(jsonDecode(requestedConfig!)['columns'][0][0]['shot'], '170123');
-  });
+      expect(latestShotRequests, 0);
+      expect(app.shotText, '170123');
+      expect(app.displayedShot, '170123');
+      expect(jsonDecode(requestedConfig!)['columns'][0][0]['shot'], '170123');
+    },
+  );
 
-  test('Imported zero-point panels are repaired before waveform loading',
-      () async {
-    String? requestedConfig;
-    final app = AppState(
-      configOpenPicker: () async => ConfigOpenSelection(
-        name: 'iphone-config.toml',
-        bytes: Uint8List(0),
-      ),
-      configParser: (_) => '{"shot":"163870","columns":[[{"title":"Ip",'
-          '"extraction_points":0,"grid":false,'
-          '"signal_specs":[{"y_expr":"\\\\pcrl01","experiment":"pcs_east",'
-          '"server_ip":"202.127.204.12"}]}]]}',
-      signalFetchWorker: (configJson, _, __) async {
-        requestedConfig = configJson;
-        return '[{"column":0,"row":0,"signal":0,"shot":"163870",'
-            '"series":{"error":"","points":[[0.0,1.0],[1.0,2.0]]}}]';
-      },
-    );
-    await app.preferencesReady;
-    addTearDown(app.dispose);
-    app.setLoggedIn(true, 'test-token');
+  test(
+    'Imported zero-point panels are repaired before waveform loading',
+    () async {
+      String? requestedConfig;
+      final app = AppState(
+        configOpenPicker: () async => ConfigOpenSelection(
+          name: 'iphone-config.toml',
+          bytes: Uint8List(0),
+        ),
+        configParser: (_) =>
+            '{"shot":"163870","columns":[[{"title":"Ip",'
+            '"extraction_points":0,"grid":false,'
+            '"signal_specs":[{"y_expr":"\\\\pcrl01","experiment":"pcs_east",'
+            '"server_ip":"202.127.204.12"}]}]]}',
+        signalFetchWorker: (configJson, _, __) async {
+          requestedConfig = configJson;
+          return '[{"column":0,"row":0,"signal":0,"shot":"163870",'
+              '"series":{"error":"","points":[[0.0,1.0],[1.0,2.0]]}}]';
+        },
+      );
+      await app.preferencesReady;
+      addTearDown(app.dispose);
+      app.setLoggedIn(true, 'test-token');
 
-    await app.openFile(importedShotDecision: (_) async => true);
+      await app.openFile(importedShotDecision: (_) async => true);
 
-    final requestedPanel =
-        jsonDecode(requestedConfig!)['columns'][0][0] as Map<String, dynamic>;
-    expect(requestedPanel['extraction_points'], 2000);
-    expect(requestedPanel['grid'], isFalse);
-    expect(app.plots.single.series.single?.points, hasLength(2));
-  });
+      final requestedPanel =
+          jsonDecode(requestedConfig!)['columns'][0][0] as Map<String, dynamic>;
+      expect(requestedPanel['extraction_points'], 2000);
+      expect(requestedPanel['grid'], isFalse);
+      expect(app.plots.single.series.single?.points, hasLength(2));
+    },
+  );
 
-  test('Waveform decoding keeps finite samples and skips null coordinates',
-      () async {
-    final app = AppState(
-      signalFetchWorker: (_, __, ___) async =>
-          '[{"column":0,"row":0,"signal":0,"series":{"error":"","points":'
-          '[[null,1.0],[0.0,null],["bad",2.0],[1.0,3.0],[2.0,4.0]]}}]',
-    );
-    await app.preferencesReady;
-    addTearDown(app.dispose);
-    app.setLoggedIn(true, 'test-token');
-    app.shotText = '163870';
+  test(
+    'Waveform decoding keeps finite samples and skips null coordinates',
+    () async {
+      final app = AppState(
+        signalFetchWorker: (_, __, ___) async =>
+            '[{"column":0,"row":0,"signal":0,"series":{"error":"","points":'
+            '[[null,1.0],[0.0,null],["bad",2.0],[1.0,3.0],[2.0,4.0]]}}]',
+      );
+      await app.preferencesReady;
+      addTearDown(app.dispose);
+      app.setLoggedIn(true, 'test-token');
+      app.shotText = '163870';
 
-    app.startRefresh();
-    await Future<void>.delayed(Duration.zero);
+      app.startRefresh();
+      await Future<void>.delayed(Duration.zero);
 
-    expect(app.plots.first.series.first?.points, [
-      [1.0, 3.0],
-      [2.0, 4.0],
-    ]);
-    expect(app.status, isNot(contains("type 'Null'")));
-  });
+      expect(app.plots.first.series.first?.points, [
+        [1.0, 3.0],
+        [2.0, 4.0],
+      ]);
+      expect(app.status, isNot(contains("type 'Null'")));
+    },
+  );
 
-  test('Uniform high-resolution payloads preserve samples and axis metadata',
-      () async {
-    final app = AppState(
-      signalFetchWorker: (_, __, ___) async =>
-          '[{"column":0,"row":0,"signal":0,"series":{"error":"","points":[],'
-          '"uniform_y":[1.0,2.0,3.0],"uniform_start":-0.1,'
-          '"uniform_step":0.0001,"unit":"kA","x_name":"time",'
-          '"x_unit":"s"}}]',
-    );
-    await app.preferencesReady;
-    addTearDown(app.dispose);
-    app.setLoggedIn(true, 'test-token');
-    app.shotText = '163870';
+  test(
+    'Uniform high-resolution payloads preserve samples and axis metadata',
+    () async {
+      final app = AppState(
+        signalFetchWorker: (_, __, ___) async =>
+            '[{"column":0,"row":0,"signal":0,"series":{"error":"","points":[],'
+            '"uniform_y":[1.0,2.0,3.0],"uniform_start":-0.1,'
+            '"uniform_step":0.0001,"unit":"kA","x_name":"time",'
+            '"x_unit":"s"}}]',
+      );
+      await app.preferencesReady;
+      addTearDown(app.dispose);
+      app.setLoggedIn(true, 'test-token');
+      app.shotText = '163870';
 
-    app.startRefresh();
-    await Future<void>.delayed(Duration.zero);
+      app.startRefresh();
+      await Future<void>.delayed(Duration.zero);
 
-    final series = app.plots.first.series.first;
-    expect(series?.points, [
-      [-0.1, 1.0],
-      [-0.0999, 2.0],
-      [-0.0998, 3.0],
-    ]);
-    expect(series?.unit, 'kA');
-    expect(series?.xName, 'time');
-    expect(series?.xUnit, 's');
-  });
+      final series = app.plots.first.series.first;
+      expect(series?.points, [
+        [-0.1, 1.0],
+        [-0.0999, 2.0],
+        [-0.0998, 3.0],
+      ]);
+      expect(series?.unit, 'kA');
+      expect(series?.xName, 'time');
+      expect(series?.xUnit, 's');
+    },
+  );
 
-  testWidgets('Point readout never fabricates a hard-coded x axis name',
-      (tester) async {
+  testWidgets('Point readout never fabricates a hard-coded x axis name', (
+    tester,
+  ) async {
     final app = AppState();
     await app.preferencesReady;
     addTearDown(app.dispose);
     app.setLoggedIn(true, 'test-token');
     app.columns[0][0]['signal_specs'] = [
-      {
-        'y_expr': r'\IP',
-        'x_expr': '',
-        'legend': 'Ip',
-        'color_name': '#1976D2',
-      },
+      {'y_expr': r'\IP', 'x_expr': '', 'legend': 'Ip', 'color_name': '#1976D2'},
     ];
-    app.updatePlotSeriesByColRow(
-      0,
-      0,
-      0,
-      const [
-        [0.0, 1.0],
-        [1.0, 2.0],
-      ],
-      null,
-    );
+    app.updatePlotSeriesByColRow(0, 0, 0, const [
+      [0.0, 1.0],
+      [1.0, 2.0],
+    ], null);
     app.interactionMode = 1;
     app.setCrosshair(0.5, sourcePlot: 0, sourceSeries: 0);
 
@@ -1333,27 +1331,29 @@ void main() {
     expect(find.textContaining('x:'), findsNothing);
   });
 
-  test('A signal with no finite samples reports a meaningful data error',
-      () async {
-    final app = AppState(
-      signalFetchWorker: (_, __, ___) async =>
-          '[{"column":0,"row":0,"signal":0,"series":{"error":"","points":'
-          '[[null,1.0],[0.0,null]]}}]',
-    );
-    await app.preferencesReady;
-    addTearDown(app.dispose);
-    app.setLoggedIn(true, 'test-token');
-    app.shotText = '163870';
+  test(
+    'A signal with no finite samples reports a meaningful data error',
+    () async {
+      final app = AppState(
+        signalFetchWorker: (_, __, ___) async =>
+            '[{"column":0,"row":0,"signal":0,"series":{"error":"","points":'
+            '[[null,1.0],[0.0,null]]}}]',
+      );
+      await app.preferencesReady;
+      addTearDown(app.dispose);
+      app.setLoggedIn(true, 'test-token');
+      app.shotText = '163870';
 
-    app.startRefresh();
-    await Future<void>.delayed(Duration.zero);
+      app.startRefresh();
+      await Future<void>.delayed(Duration.zero);
 
-    expect(
-      app.plots.first.series.first?.error,
-      contains('no finite numeric samples'),
-    );
-    expect(app.status, contains('no finite numeric samples'));
-  });
+      expect(
+        app.plots.first.series.first?.error,
+        contains('no finite numeric samples'),
+      );
+      expect(app.status, contains('no finite numeric samples'));
+    },
+  );
 
   test('Imported layouts load every panel beyond the built-in six', () async {
     final columns = List.generate(
@@ -1389,14 +1389,9 @@ void main() {
           },
     ];
     final app = AppState(
-      configOpenPicker: () async => ConfigOpenSelection(
-        name: 'nine-panels.toml',
-        bytes: Uint8List(0),
-      ),
-      configParser: (_) => jsonEncode({
-        'shot': '163807',
-        'columns': columns,
-      }),
+      configOpenPicker: () async =>
+          ConfigOpenSelection(name: 'nine-panels.toml', bytes: Uint8List(0)),
+      configParser: (_) => jsonEncode({'shot': '163807', 'columns': columns}),
       signalFetchWorker: (_, __, ___) async => jsonEncode(loadedSignals),
     );
     await app.preferencesReady;
@@ -1414,45 +1409,48 @@ void main() {
     expect(app.status, contains('9 panels with data'));
   });
 
-  test('Cross-platform saver writes desktop paths and supplies mobile bytes',
-      () async {
-    final directory = await Directory.systemTemp.createTemp('mdsscope-test-');
-    addTearDown(() => directory.delete(recursive: true));
-    final bytes = Uint8List.fromList([1, 2, 3, 4]);
-    Uint8List? desktopDialogBytes;
-    final desktopPath = await saveBytesWithFilePicker(
-      dialogTitle: 'Save',
-      fileName: 'config.toml',
-      allowedExtensions: const ['toml'],
-      bytes: bytes,
-      mobileOverride: false,
-      saveDialog: (payload) async {
-        desktopDialogBytes = payload;
-        return '${directory.path}/desktop-config';
-      },
-    );
-    expect(desktopDialogBytes, isNull);
-    expect(desktopPath, endsWith('.toml'));
-    expect(await File(desktopPath!).readAsBytes(), bytes);
+  test(
+    'Cross-platform saver writes desktop paths and supplies mobile bytes',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('mdslens-test-');
+      addTearDown(() => directory.delete(recursive: true));
+      final bytes = Uint8List.fromList([1, 2, 3, 4]);
+      Uint8List? desktopDialogBytes;
+      final desktopPath = await saveBytesWithFilePicker(
+        dialogTitle: 'Save',
+        fileName: 'config.toml',
+        allowedExtensions: const ['toml'],
+        bytes: bytes,
+        mobileOverride: false,
+        saveDialog: (payload) async {
+          desktopDialogBytes = payload;
+          return '${directory.path}/desktop-config';
+        },
+      );
+      expect(desktopDialogBytes, isNull);
+      expect(desktopPath, endsWith('.toml'));
+      expect(await File(desktopPath!).readAsBytes(), bytes);
 
-    Uint8List? mobileDialogBytes;
-    final mobilePath = await saveBytesWithFilePicker(
-      dialogTitle: 'Save',
-      fileName: 'config.toml',
-      allowedExtensions: const ['toml'],
-      bytes: bytes,
-      mobileOverride: true,
-      saveDialog: (payload) async {
-        mobileDialogBytes = payload;
-        return 'content://documents/mobile-config.toml';
-      },
-    );
-    expect(mobileDialogBytes, bytes);
-    expect(mobilePath, 'content://documents/mobile-config.toml');
-  });
+      Uint8List? mobileDialogBytes;
+      final mobilePath = await saveBytesWithFilePicker(
+        dialogTitle: 'Save',
+        fileName: 'config.toml',
+        allowedExtensions: const ['toml'],
+        bytes: bytes,
+        mobileOverride: true,
+        saveDialog: (payload) async {
+          mobileDialogBytes = payload;
+          return 'content://documents/mobile-config.toml';
+        },
+      );
+      expect(mobileDialogBytes, bytes);
+      expect(mobilePath, 'content://documents/mobile-config.toml');
+    },
+  );
 
-  testWidgets('Open and Save toolbar buttons invoke working file flows',
-      (tester) async {
+  testWidgets('Open and Save toolbar buttons invoke working file flows', (
+    tester,
+  ) async {
     var openCalls = 0;
     var saveCalls = 0;
     final app = AppState(
@@ -1488,13 +1486,12 @@ void main() {
     expect(app.status, 'Saved to config.toml');
   });
 
-  testWidgets('Configuration import asks before applying its shot',
-      (tester) async {
+  testWidgets('Configuration import asks before applying its shot', (
+    tester,
+  ) async {
     final app = AppState(
-      configOpenPicker: () async => ConfigOpenSelection(
-        name: 'with-shot.toml',
-        path: '/with-shot.toml',
-      ),
+      configOpenPicker: () async =>
+          ConfigOpenSelection(name: 'with-shot.toml', path: '/with-shot.toml'),
       configParser: (_) =>
           '{"shot":"143850","columns":[[{"title":"Imported layout",'
           '"signal_specs":[]}]]}',
@@ -1526,8 +1523,9 @@ void main() {
     expect(app.columns.single.single['title'], 'Imported layout');
   });
 
-  testWidgets('Toolbar restores and persists the default waveform layout',
-      (tester) async {
+  testWidgets('Toolbar restores and persists the default waveform layout', (
+    tester,
+  ) async {
     final app = AppState();
     await app.preferencesReady;
     app.applyLayout(1, 1);
@@ -1554,8 +1552,14 @@ void main() {
 
     expect(app.columns, hasLength(2));
     expect(app.columns.map((column) => column.length), [3, 3]);
-    expect(app.plots.map((plot) => plot.title),
-        ['Ip', 'R', 'Z', 'Vloop', 'Ne', 'Pf1 current']);
+    expect(app.plots.map((plot) => plot.title), [
+      'Ip',
+      'R',
+      'Z',
+      'Vloop',
+      'Ne',
+      'Pf1 current',
+    ]);
 
     final restored = AppState();
     await restored.preferencesReady;
@@ -1563,118 +1567,113 @@ void main() {
     expect(restored.columns.map((column) => column.length), [3, 3]);
   });
 
-  test('Waveform loading stays interactive and discards stale results',
-      () async {
-    final pending = <Completer<String>>[];
-    final requestedConfigs = <String>[];
-    final app = AppState(
-      signalFetchWorker: (configJson, dataMode, sshSettings) {
-        requestedConfigs.add(configJson);
-        final result = Completer<String>();
-        pending.add(result);
-        return result.future;
-      },
-    );
-    await app.preferencesReady;
-    app.setLoggedIn(true, 'test-token');
-    app.updatePlotSeriesByColRow(
-        0,
-        0,
-        0,
-        [
-          [0, 10],
-          [1, 11]
-        ],
-        null);
+  test(
+    'Waveform loading stays interactive and discards stale results',
+    () async {
+      final pending = <Completer<String>>[];
+      final requestedConfigs = <String>[];
+      final app = AppState(
+        signalFetchWorker: (configJson, dataMode, sshSettings) {
+          requestedConfigs.add(configJson);
+          final result = Completer<String>();
+          pending.add(result);
+          return result.future;
+        },
+      );
+      await app.preferencesReady;
+      app.setLoggedIn(true, 'test-token');
+      app.updatePlotSeriesByColRow(0, 0, 0, [
+        [0, 10],
+        [1, 11],
+      ], null);
 
-    app.shotText = '163701';
-    app.startRefresh();
-    expect(app.fetching, isTrue);
-    expect(pending, hasLength(1));
-    expect(requestedConfigs.single, contains('163701'));
+      app.shotText = '163701';
+      app.startRefresh();
+      expect(app.fetching, isTrue);
+      expect(pending, hasLength(1));
+      expect(requestedConfigs.single, contains('163701'));
 
-    app.interactionMode = 1;
-    expect(app.interactionMode, 1);
-    expect(app.fetching, isTrue);
-    expect(app.plots[0].series[0]!.points![0][1], 10);
+      app.interactionMode = 1;
+      expect(app.interactionMode, 1);
+      expect(app.fetching, isTrue);
+      expect(app.plots[0].series[0]!.points![0][1], 10);
 
-    app.shotText = '163702';
-    expect(app.fetching, isFalse);
-    app.startRefresh();
-    expect(app.fetching, isTrue);
-    expect(
-      pending,
-      hasLength(1),
-      reason: 'the replacement must wait for the cancelled worker to finish',
-    );
+      app.shotText = '163702';
+      expect(app.fetching, isFalse);
+      app.startRefresh();
+      expect(app.fetching, isTrue);
+      expect(
+        pending,
+        hasLength(1),
+        reason: 'the replacement must wait for the cancelled worker to finish',
+      );
 
-    pending[0].complete(
-      '[{"column":0,"row":0,"signal":0,'
-      '"series":{"points":[[0,111],[1,112]],"error":""}}]',
-    );
-    await Future<void>.delayed(Duration.zero);
-    expect(pending, hasLength(2));
-    expect(requestedConfigs.last, contains('163702'));
-    expect(app.fetching, isTrue);
-    expect(app.plots[0].series[0]!.points![0][1], 10);
+      pending[0].complete(
+        '[{"column":0,"row":0,"signal":0,'
+        '"series":{"points":[[0,111],[1,112]],"error":""}}]',
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(pending, hasLength(2));
+      expect(requestedConfigs.last, contains('163702'));
+      expect(app.fetching, isTrue);
+      expect(app.plots[0].series[0]!.points![0][1], 10);
 
-    pending[1].complete(
-      '[{"column":0,"row":0,"signal":0,'
-      '"series":{"points":[[0,222],[1,223]],"error":""}}]',
-    );
-    await Future<void>.delayed(Duration.zero);
-    expect(app.fetching, isFalse);
-    expect(app.plots[0].series[0]!.points![0][1], 222);
-    expect(app.status, contains('163702'));
-  });
+      pending[1].complete(
+        '[{"column":0,"row":0,"signal":0,'
+        '"series":{"points":[[0,222],[1,223]],"error":""}}]',
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(app.fetching, isFalse);
+      expect(app.plots[0].series[0]!.points![0][1], 222);
+      expect(app.status, contains('163702'));
+    },
+  );
 
-  test('Refresh reloads the displayed shot instead of the shot input',
-      () async {
-    final requestedConfigs = <String>[];
-    final app = AppState(
-      signalFetchWorker: (configJson, dataMode, sshSettings) async {
-        requestedConfigs.add(configJson);
-        return '[{"column":0,"row":0,"signal":0,'
-            '"series":{"points":[[0,1],[1,2]],"error":""}}]';
-      },
-    );
-    await app.preferencesReady;
-    app.setLoggedIn(true, 'test-token');
+  test(
+    'Refresh reloads the displayed shot instead of the shot input',
+    () async {
+      final requestedConfigs = <String>[];
+      final app = AppState(
+        signalFetchWorker: (configJson, dataMode, sshSettings) async {
+          requestedConfigs.add(configJson);
+          return '[{"column":0,"row":0,"signal":0,'
+              '"series":{"points":[[0,1],[1,2]],"error":""}}]';
+        },
+      );
+      await app.preferencesReady;
+      app.setLoggedIn(true, 'test-token');
 
-    app.shotText = '163701';
-    app.startRefresh();
-    await Future<void>.delayed(Duration.zero);
-    expect(app.displayedShot, '163701');
+      app.shotText = '163701';
+      app.startRefresh();
+      await Future<void>.delayed(Duration.zero);
+      expect(app.displayedShot, '163701');
 
-    app.shotText = '999999';
-    app.refreshDisplayedShot();
-    await Future<void>.delayed(Duration.zero);
+      app.shotText = '999999';
+      app.refreshDisplayedShot();
+      await Future<void>.delayed(Duration.zero);
 
-    expect(requestedConfigs, hasLength(2));
-    expect(requestedConfigs.last, contains('163701'));
-    expect(requestedConfigs.last, isNot(contains('999999')));
-    expect(app.shotText, '999999');
-    expect(app.displayedShot, '163701');
-    expect(app.status, contains('163701'));
-  });
+      expect(requestedConfigs, hasLength(2));
+      expect(requestedConfigs.last, contains('163701'));
+      expect(requestedConfigs.last, isNot(contains('999999')));
+      expect(app.shotText, '999999');
+      expect(app.displayedShot, '163701');
+      expect(app.status, contains('163701'));
+    },
+  );
 
-  testWidgets('Waveform panels show Loading while keeping existing curves',
-      (tester) async {
+  testWidgets('Waveform panels show Loading while keeping existing curves', (
+    tester,
+  ) async {
     final pending = Completer<String>();
     final app = AppState(
       signalFetchWorker: (configJson, dataMode, sshSettings) => pending.future,
     );
     await app.preferencesReady;
     app.setLoggedIn(true, 'test-token');
-    app.updatePlotSeriesByColRow(
-        0,
-        0,
-        0,
-        [
-          [0, 10],
-          [1, 11],
-        ],
-        null);
+    app.updatePlotSeriesByColRow(0, 0, 0, [
+      [0, 10],
+      [1, 11],
+    ], null);
     app.shotText = '163701';
     app.startRefresh();
 
@@ -1683,8 +1682,12 @@ void main() {
         value: app,
         child: const MaterialApp(
           home: Scaffold(
-              body: SizedBox(
-                  width: 320, height: 240, child: PlotPanel(plotIdx: 0))),
+            body: SizedBox(
+              width: 320,
+              height: 240,
+              child: PlotPanel(plotIdx: 0),
+            ),
+          ),
         ),
       ),
     );
@@ -1702,8 +1705,9 @@ void main() {
     expect(find.byType(LineChart), findsOneWidget);
   });
 
-  testWidgets('Single panel reload loads only its target panel',
-      (tester) async {
+  testWidgets('Single panel reload loads only its target panel', (
+    tester,
+  ) async {
     final pending = Completer<String>();
     String? requestedConfig;
     final app = AppState(
@@ -1739,18 +1743,9 @@ void main() {
     expect(find.byKey(const ValueKey('plot-loading-1')), findsOneWidget);
     final config = jsonDecode(requestedConfig!) as Map<String, dynamic>;
     final columns = config['columns'] as List;
-    expect(
-      ((columns[0] as List)[0] as Map)['signal_specs'],
-      isEmpty,
-    );
-    expect(
-      ((columns[0] as List)[1] as Map)['signal_specs'],
-      isNotEmpty,
-    );
-    expect(
-      ((columns[1] as List)[0] as Map)['signal_specs'],
-      isEmpty,
-    );
+    expect(((columns[0] as List)[0] as Map)['signal_specs'], isEmpty);
+    expect(((columns[0] as List)[1] as Map)['signal_specs'], isNotEmpty);
+    expect(((columns[1] as List)[0] as Map)['signal_specs'], isEmpty);
 
     pending.complete(
       '[{"column":0,"row":1,"signal":0,'
@@ -1809,45 +1804,42 @@ void main() {
     expect(app.plots[1].series[0]?.points?.first.last, 20);
   });
 
-  test('Logout preserves loaded data and blocks authenticated operations',
-      () async {
-    var signalRequests = 0;
-    var latestRequests = 0;
-    final app = AppState(
-      signalFetchWorker: (configJson, dataMode, sshSettings) async {
-        signalRequests++;
-        return '[]';
-      },
-      latestShotWorker: (apiUrl, token, sshSettings) async {
-        latestRequests++;
-        return {'shot': 170100};
-      },
-    );
-    await app.preferencesReady;
-    app.setLoggedIn(true, 'valid-token');
-    app.updatePlotSeriesByColRow(
-        0,
-        0,
-        0,
-        [
-          [0, 12],
-          [1, 13],
-        ],
-        null);
+  test(
+    'Logout preserves loaded data and blocks authenticated operations',
+    () async {
+      var signalRequests = 0;
+      var latestRequests = 0;
+      final app = AppState(
+        signalFetchWorker: (configJson, dataMode, sshSettings) async {
+          signalRequests++;
+          return '[]';
+        },
+        latestShotWorker: (apiUrl, token, sshSettings) async {
+          latestRequests++;
+          return {'shot': 170100};
+        },
+      );
+      await app.preferencesReady;
+      app.setLoggedIn(true, 'valid-token');
+      app.updatePlotSeriesByColRow(0, 0, 0, [
+        [0, 12],
+        [1, 13],
+      ], null);
 
-    app.logout();
-    app.startRefresh();
-    await app.fetchLatestShot();
+      app.logout();
+      app.startRefresh();
+      await app.fetchLatestShot();
 
-    expect(app.hasActiveSession, isFalse);
-    expect(signalRequests, 0);
-    expect(latestRequests, 0);
-    expect(app.plots[0].series[0]!.points, [
-      [0, 12],
-      [1, 13],
-    ]);
-    expect(app.status, contains('Login required'));
-  });
+      expect(app.hasActiveSession, isFalse);
+      expect(signalRequests, 0);
+      expect(latestRequests, 0);
+      expect(app.plots[0].series[0]!.points, [
+        [0, 12],
+        [1, 13],
+      ]);
+      expect(app.status, contains('Login required'));
+    },
+  );
 
   test('Explicit logout suppresses automatic sign-in after restart', () async {
     SharedPreferences.setMockInitialValues({
@@ -1872,8 +1864,9 @@ void main() {
     expect(app.hasActiveSession, isFalse);
   });
 
-  testWidgets('Signed-in account button opens a login panel with real logout',
-      (tester) async {
+  testWidgets('Signed-in account button opens a login panel with real logout', (
+    tester,
+  ) async {
     final app = AppState();
     await app.preferencesReady;
     app.setLoggedIn(true, 'valid-token');
@@ -1908,8 +1901,9 @@ void main() {
     expect(find.text('Signed out'), findsOneWidget);
   });
 
-  testWidgets('Login and SSH dialogs scroll above a virtual keyboard',
-      (tester) async {
+  testWidgets('Login and SSH dialogs scroll above a virtual keyboard', (
+    tester,
+  ) async {
     final app = AppState();
     await app.preferencesReady;
     addTearDown(tester.view.reset);
@@ -1937,8 +1931,10 @@ void main() {
       tester.state<ScrollableState>(loginScroll.first).position.maxScrollExtent,
       greaterThan(0),
     );
-    expect(tester.getSize(find.byKey(const ValueKey('login-password'))).height,
-        greaterThanOrEqualTo(48));
+    expect(
+      tester.getSize(find.byKey(const ValueKey('login-password'))).height,
+      greaterThanOrEqualTo(48),
+    );
     expect(
       tester
           .getBottomRight(find.byKey(const ValueKey('login-dialog-login')))
@@ -1965,16 +1961,21 @@ void main() {
       tester.state<ScrollableState>(sshScroll.first).position.maxScrollExtent,
       greaterThan(0),
     );
-    expect(tester.getSize(find.byKey(const ValueKey('ssh-host'))).height,
-        greaterThanOrEqualTo(48));
-    expect(tester.getSize(find.byKey(const ValueKey('ssh-password'))).height,
-        greaterThanOrEqualTo(48));
+    expect(
+      tester.getSize(find.byKey(const ValueKey('ssh-host'))).height,
+      greaterThanOrEqualTo(48),
+    );
+    expect(
+      tester.getSize(find.byKey(const ValueKey('ssh-password'))).height,
+      greaterThanOrEqualTo(48),
+    );
     expect(tester.getBottomRight(find.text('Save')).dy, lessThanOrEqualTo(340));
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Credential fields keep the secure keyboard focus transition',
-      (tester) async {
+  testWidgets('Credential fields keep the secure keyboard focus transition', (
+    tester,
+  ) async {
     final app = AppState();
     await app.preferencesReady;
     await tester.pumpWidget(
@@ -2016,8 +2017,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Credential form labels have room without keyboard compression',
-      (tester) async {
+  testWidgets('Credential form labels have room without keyboard compression', (
+    tester,
+  ) async {
     final app = AppState();
     await app.preferencesReady;
     addTearDown(app.dispose);
@@ -2081,8 +2083,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('SSH dialog preserves a manually entered identity file path',
-      (tester) async {
+  testWidgets('SSH dialog preserves a manually entered identity file path', (
+    tester,
+  ) async {
     final app = AppState();
     await app.preferencesReady;
     await tester.pumpWidget(
@@ -2104,34 +2107,35 @@ void main() {
     expect(app.sshIdentity, '~/.ssh/id_ed25519');
   });
 
-  test('Identity file authorization returns the platform-authorized path',
-      () async {
-    const channel = MethodChannel('mdsscope/identity_file_access');
-    MethodCall? receivedCall;
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (call) async {
-      receivedCall = call;
-      return '/authorized/id_ed25519';
-    });
-    addTearDown(() {
+  test(
+    'Identity file authorization returns the platform-authorized path',
+    () async {
+      const channel = MethodChannel('mdslens/identity_file_access');
+      MethodCall? receivedCall;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, null);
-    });
+          .setMockMethodCallHandler(channel, (call) async {
+            receivedCall = call;
+            return '/authorized/id_ed25519';
+          });
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+      });
 
-    final path = await IdentityFileAccess.authorize(
-      '  ~/.ssh/id_ed25519  ',
-    );
+      final path = await IdentityFileAccess.authorize('  ~/.ssh/id_ed25519  ');
 
-    expect(path, '/authorized/id_ed25519');
-    expect(receivedCall?.method, 'authorizeIdentityFile');
-    expect(receivedCall?.arguments, {
-      'path': '~/.ssh/id_ed25519',
-      'promptIfNeeded': true,
-    });
-  });
+      expect(path, '/authorized/id_ed25519');
+      expect(receivedCall?.method, 'authorizeIdentityFile');
+      expect(receivedCall?.arguments, {
+        'path': '~/.ssh/id_ed25519',
+        'promptIfNeeded': true,
+      });
+    },
+  );
 
-  testWidgets('SSH button lights only while a reachable tunnel is in use',
-      (tester) async {
+  testWidgets('SSH button lights only while a reachable tunnel is in use', (
+    tester,
+  ) async {
     final app = AppState();
     await app.preferencesReady;
     await tester.pumpWidget(
@@ -2147,7 +2151,9 @@ void main() {
     expect(app.sshTunnelReachable, isTrue);
     expect(app.sshConnected, isFalse);
     expect(
-        find.byTooltip('SSH tunnel — reachable, not in use'), findsOneWidget);
+      find.byTooltip('SSH tunnel — reachable, not in use'),
+      findsOneWidget,
+    );
 
     app.recordSshUsage(true);
     await tester.pump();
@@ -2158,192 +2164,202 @@ void main() {
     await tester.pump();
     expect(app.sshConnected, isFalse);
     expect(
-        find.byTooltip('SSH tunnel — reachable, not in use'), findsOneWidget);
+      find.byTooltip('SSH tunnel — reachable, not in use'),
+      findsOneWidget,
+    );
 
     app.setSshTestResult(false);
     await tester.pump();
     expect(find.byTooltip('SSH tunnel'), findsOneWidget);
   });
 
-  test('Disabling SSH cancels loading and actively disconnects tunnels',
-      () async {
-    final fetch = Completer<String>();
-    var disconnects = 0;
-    final app = AppState(
-      signalFetchWorker: (_, __, ___) => fetch.future,
-      sshDisconnect: () => disconnects++,
-    );
-    await app.preferencesReady;
-    addTearDown(app.dispose);
-    if (app.sshMode == 0) app.sshMode = 1;
-    disconnects = 0;
-    app.setLoggedIn(true, 'test-token');
-    app.shotText = '170001';
+  test(
+    'Disabling SSH cancels loading and actively disconnects tunnels',
+    () async {
+      final fetch = Completer<String>();
+      var disconnects = 0;
+      final app = AppState(
+        signalFetchWorker: (_, __, ___) => fetch.future,
+        sshDisconnect: () => disconnects++,
+      );
+      await app.preferencesReady;
+      addTearDown(app.dispose);
+      if (app.sshMode == 0) app.sshMode = 1;
+      disconnects = 0;
+      app.setLoggedIn(true, 'test-token');
+      app.shotText = '170001';
 
-    app.startRefresh();
-    expect(app.fetching, isTrue);
+      app.startRefresh();
+      expect(app.fetching, isTrue);
 
-    app.sshMode = 0;
+      app.sshMode = 0;
 
-    expect(disconnects, 1);
-    expect(app.fetching, isFalse);
-    expect(app.sshConnected, isFalse);
-    expect(app.status, contains('Settings changed'));
+      expect(disconnects, 1);
+      expect(app.fetching, isFalse);
+      expect(app.sshConnected, isFalse);
+      expect(app.status, contains('Settings changed'));
 
-    fetch.complete('[]');
-    await Future<void>.delayed(Duration.zero);
-    expect(app.fetching, isFalse);
-  });
+      fetch.complete('[]');
+      await Future<void>.delayed(Duration.zero);
+      expect(app.fetching, isFalse);
+    },
+  );
 
-  testWidgets('SSH Test runs in the background and keeps the dialog responsive',
-      (tester) async {
-    final result = Completer<String>();
-    String? testedSettings;
-    final app = AppState(
-      sshTestWorker: (settingsJson) {
-        testedSettings = settingsJson;
-        return result.future;
-      },
-    );
-    await app.preferencesReady;
-    addTearDown(app.dispose);
-    await tester.pumpWidget(
-      ChangeNotifierProvider.value(
-        value: app,
-        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
-      ),
-    );
+  testWidgets(
+    'SSH Test runs in the background and keeps the dialog responsive',
+    (tester) async {
+      final result = Completer<String>();
+      String? testedSettings;
+      final app = AppState(
+        sshTestWorker: (settingsJson) {
+          testedSettings = settingsJson;
+          return result.future;
+        },
+      );
+      await app.preferencesReady;
+      addTearDown(app.dispose);
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: app,
+          child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+        ),
+      );
 
-    await tester.tap(find.byTooltip('SSH tunnel'));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('ssh-host')),
-      'ssh.example.com',
-    );
-    await tester.tap(find.byKey(const ValueKey('ssh-dialog-test')));
-    await tester.pump();
+      await tester.tap(find.byTooltip('SSH tunnel'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('ssh-host')),
+        'ssh.example.com',
+      );
+      await tester.tap(find.byKey(const ValueKey('ssh-dialog-test')));
+      await tester.pump();
 
-    expect(find.text('Connecting...'), findsNWidgets(2));
-    expect(find.byIcon(Icons.vpn_lock_rounded), findsWidgets);
-    expect(testedSettings, isNotNull);
+      expect(find.text('Connecting...'), findsNWidgets(2));
+      expect(find.byIcon(Icons.vpn_lock_rounded), findsWidgets);
+      expect(testedSettings, isNotNull);
 
-    await tester.enterText(
-      find.byKey(const ValueKey('ssh-user')),
-      'still-responsive',
-    );
-    expect(
-      tester
-          .widget<TextField>(find.byKey(const ValueKey('ssh-user')))
-          .controller
-          ?.text,
-      'still-responsive',
-    );
+      await tester.enterText(
+        find.byKey(const ValueKey('ssh-user')),
+        'still-responsive',
+      );
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const ValueKey('ssh-user')))
+            .controller
+            ?.text,
+        'still-responsive',
+      );
 
-    result.complete('{"ok":true}');
-    await tester.pumpAndSettle();
-    expect(find.text('Connection OK'), findsOneWidget);
-    expect(find.text('Connecting...'), findsNothing);
-  });
+      result.complete('{"ok":true}');
+      await tester.pumpAndSettle();
+      expect(find.text('Connection OK'), findsOneWidget);
+      expect(find.text('Connecting...'), findsNothing);
+    },
+  );
 
-  test('Startup signs in, fetches the latest shot, and loads its waveforms',
-      () async {
-    SharedPreferences.setMockInitialValues({
-      'rememberLogin': true,
-      'loginApiUrl': 'http://east.example/api',
-      'loginUser': 'saved-user',
-      'loginPass': 'saved-password',
-      'loggedIn': false,
-    });
-    final loginRequests = <String>[];
-    final latestRequests = <String>[];
-    final signalRequests = <String>[];
-    final app = AppState(
-      loginWorker: (apiUrl, user, password, sshSettings) async {
-        loginRequests.add('$apiUrl|$user|$password|$sshSettings');
-        return (token: 'fresh-token', usedSsh: false);
-      },
-      latestShotWorker: (apiUrl, token, sshSettings) async {
-        latestRequests.add('$apiUrl|$token|$sshSettings');
-        return {
-          'shot': 170001,
-          'ip': 502.13,
-          'pulseLength': 5.66,
-          'it': 10995,
-          'currentTime': '2026-07-23 08:00:00',
-        };
-      },
-      signalFetchWorker: (configJson, dataMode, sshSettings) async {
-        signalRequests.add(configJson);
-        return '[{"column":0,"row":0,"signal":0,'
-            '"series":{"points":[[0,12],[1,13]],"error":""}}]';
-      },
-    );
+  test(
+    'Startup signs in, fetches the latest shot, and loads its waveforms',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'rememberLogin': true,
+        'loginApiUrl': 'http://east.example/api',
+        'loginUser': 'saved-user',
+        'loginPass': 'saved-password',
+        'loggedIn': false,
+      });
+      final loginRequests = <String>[];
+      final latestRequests = <String>[];
+      final signalRequests = <String>[];
+      final app = AppState(
+        loginWorker: (apiUrl, user, password, sshSettings) async {
+          loginRequests.add('$apiUrl|$user|$password|$sshSettings');
+          return (token: 'fresh-token', usedSsh: false);
+        },
+        latestShotWorker: (apiUrl, token, sshSettings) async {
+          latestRequests.add('$apiUrl|$token|$sshSettings');
+          return {
+            'shot': 170001,
+            'ip': 502.13,
+            'pulseLength': 5.66,
+            'it': 10995,
+            'currentTime': '2026-07-23 08:00:00',
+          };
+        },
+        signalFetchWorker: (configJson, dataMode, sshSettings) async {
+          signalRequests.add(configJson);
+          return '[{"column":0,"row":0,"signal":0,'
+              '"series":{"points":[[0,12],[1,13]],"error":""}}]';
+        },
+      );
 
-    await app.initializeStartupSession();
-    await Future<void>.delayed(Duration.zero);
+      await app.initializeStartupSession();
+      await Future<void>.delayed(Duration.zero);
 
-    expect(loginRequests, [
-      'http://east.example/api|saved-user|saved-password|',
-    ]);
-    expect(latestRequests, [
-      'http://east.example/api|fresh-token|',
-    ]);
-    expect(signalRequests.single, contains('170001'));
-    expect(app.loggedIn, isTrue);
-    expect(app.authToken, 'fresh-token');
-    expect(app.shotText, '170001');
-    expect(app.shotInfoIp, '502.13');
-    expect(app.plots[0].series[0]!.points![0], [0, 12]);
-    expect(app.status, contains('170001'));
-  });
+      expect(loginRequests, [
+        'http://east.example/api|saved-user|saved-password|',
+      ]);
+      expect(latestRequests, ['http://east.example/api|fresh-token|']);
+      expect(signalRequests.single, contains('170001'));
+      expect(app.loggedIn, isTrue);
+      expect(app.authToken, 'fresh-token');
+      expect(app.shotText, '170001');
+      expect(app.shotInfoIp, '502.13');
+      expect(app.plots[0].series[0]!.points![0], [0, 12]);
+      expect(app.status, contains('170001'));
+    },
+  );
 
-  test('Automatic login falls back from direct access to an SSH tunnel',
-      () async {
-    SharedPreferences.setMockInitialValues({
-      'rememberLogin': true,
-      'loginApiUrl': 'http://east.example/api',
-      'loginUser': 'saved-user',
-      'loginPass': 'saved-password',
-      'loggedIn': false,
-      'sshMode': 1,
-      'sshHost': 'gateway.example',
-      'sshUser': 'ssh-user',
-    });
-    final loginSettings = <String>[];
-    final laterSettings = <String>[];
-    final app = AppState(
-      loginWorker: (apiUrl, user, password, sshSettings) async {
-        loginSettings.add(sshSettings);
-        if (sshSettings.isEmpty) throw 'direct route unavailable';
-        final settings = jsonDecode(sshSettings) as Map<String, dynamic>;
-        expect(settings['mode'], 2);
-        return (token: 'ssh-token', usedSsh: true);
-      },
-      latestShotWorker: (apiUrl, token, sshSettings) async {
-        laterSettings.add(sshSettings);
-        return {'shot': 170002};
-      },
-      signalFetchWorker: (configJson, dataMode, sshSettings) async {
-        laterSettings.add(sshSettings);
-        return '[{"column":0,"row":0,"signal":0,'
-            '"series":{"points":[[0,1],[1,2]],"error":""}}]';
-      },
-    );
+  test(
+    'Automatic login falls back from direct access to an SSH tunnel',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'rememberLogin': true,
+        'loginApiUrl': 'http://east.example/api',
+        'loginUser': 'saved-user',
+        'loginPass': 'saved-password',
+        'loggedIn': false,
+        'sshMode': 1,
+        'sshHost': 'gateway.example',
+        'sshUser': 'ssh-user',
+      });
+      final loginSettings = <String>[];
+      final laterSettings = <String>[];
+      final app = AppState(
+        loginWorker: (apiUrl, user, password, sshSettings) async {
+          loginSettings.add(sshSettings);
+          if (sshSettings.isEmpty) throw 'direct route unavailable';
+          final settings = jsonDecode(sshSettings) as Map<String, dynamic>;
+          expect(settings['mode'], 2);
+          return (token: 'ssh-token', usedSsh: true);
+        },
+        latestShotWorker: (apiUrl, token, sshSettings) async {
+          laterSettings.add(sshSettings);
+          return {'shot': 170002};
+        },
+        signalFetchWorker: (configJson, dataMode, sshSettings) async {
+          laterSettings.add(sshSettings);
+          return '[{"column":0,"row":0,"signal":0,'
+              '"series":{"points":[[0,1],[1,2]],"error":""}}]';
+        },
+      );
 
-    await app.initializeStartupSession();
-    await Future<void>.delayed(Duration.zero);
+      await app.initializeStartupSession();
+      await Future<void>.delayed(Duration.zero);
 
-    expect(loginSettings, hasLength(2));
-    expect(loginSettings.first, isEmpty);
-    expect(jsonDecode(loginSettings.last)['mode'], 2);
-    expect(laterSettings, hasLength(2));
-    expect(
-        laterSettings.every((value) => jsonDecode(value)['mode'] == 2), isTrue);
-    expect(app.hasActiveSession, isTrue);
-    expect(app.sshConnected, isTrue);
-    expect(app.authToken, 'ssh-token');
-    expect(app.displayedShot, '170002');
-  });
+      expect(loginSettings, hasLength(2));
+      expect(loginSettings.first, isEmpty);
+      expect(jsonDecode(loginSettings.last)['mode'], 2);
+      expect(laterSettings, hasLength(2));
+      expect(
+        laterSettings.every((value) => jsonDecode(value)['mode'] == 2),
+        isTrue,
+      );
+      expect(app.hasActiveSession, isTrue);
+      expect(app.sshConnected, isTrue);
+      expect(app.authToken, 'ssh-token');
+      expect(app.displayedShot, '170002');
+    },
+  );
 
   test('Responsive plot columns preserve order across screen sizes', () {
     final phone = buildResponsivePlotColumns([2, 1, 2], 390);
@@ -2364,71 +2380,67 @@ void main() {
     expect(desktop.map((column) => column.length), [2, 1, 2]);
   });
 
-  test('External web URLs are normalized before cross-platform launch',
-      () async {
-    Uri? launchedUri;
-    final opened = await openExternalWebUrl(
-      '10.0.0.8/internal/status',
-      opener: (uri) async {
-        launchedUri = uri;
-        return true;
-      },
-    );
+  test(
+    'External web URLs are normalized before cross-platform launch',
+    () async {
+      Uri? launchedUri;
+      final opened = await openExternalWebUrl(
+        '10.0.0.8/internal/status',
+        opener: (uri) async {
+          launchedUri = uri;
+          return true;
+        },
+      );
 
-    expect(opened, isTrue);
-    expect(launchedUri, Uri.parse('http://10.0.0.8/internal/status'));
-    expect(normalizeExternalWebUrl('ftp://10.0.0.8/file'), isNull);
-  });
+      expect(opened, isTrue);
+      expect(launchedUri, Uri.parse('http://10.0.0.8/internal/status'));
+      expect(normalizeExternalWebUrl('ftp://10.0.0.8/file'), isNull);
+    },
+  );
 
   testWidgets(
-      'Point mode draws a synchronized horizontal crosshair in every plot',
-      (tester) async {
-    final app = AppState();
-    app.updatePlotSeriesByColRow(
-        0,
-        0,
-        0,
-        [
-          [0, 10],
-          [1, 12],
-          [2, 14]
-        ],
-        null);
-    app.updatePlotSeriesByColRow(
-        0,
-        1,
-        0,
-        [
-          [0, 20],
-          [1, 22],
-          [2, 24]
-        ],
-        null);
-    app.interactionMode = 1;
-    app.setCrosshair(1, sourcePlot: 0, sourceSeries: 0);
+    'Point mode draws a synchronized horizontal crosshair in every plot',
+    (tester) async {
+      final app = AppState();
+      app.updatePlotSeriesByColRow(0, 0, 0, [
+        [0, 10],
+        [1, 12],
+        [2, 14],
+      ], null);
+      app.updatePlotSeriesByColRow(0, 1, 0, [
+        [0, 20],
+        [1, 22],
+        [2, 24],
+      ], null);
+      app.interactionMode = 1;
+      app.setCrosshair(1, sourcePlot: 0, sourceSeries: 0);
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider.value(
-        value: app,
-        child: const MaterialApp(
-          home: Scaffold(
-              body: SizedBox(width: 900, height: 700, child: PlotGrid())),
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: app,
+          child: const MaterialApp(
+            home: Scaffold(
+              body: SizedBox(width: 900, height: 700, child: PlotGrid()),
+            ),
+          ),
         ),
-      ),
-    );
+      );
 
-    final charts =
-        tester.widgetList<LineChart>(find.byType(LineChart)).toList();
-    expect(charts, hasLength(2));
-    expect(charts.every((chart) => chart.duration == Duration.zero), isTrue);
-    expect(charts[0].data.extraLinesData.horizontalLines.single.y, 12);
-    expect(charts[1].data.extraLinesData.horizontalLines.single.y, 22);
-    expect(find.byKey(const ValueKey('plot-point-marker-0')), findsOneWidget);
-    expect(find.byKey(const ValueKey('plot-point-marker-1')), findsOneWidget);
-  });
+      final charts = tester
+          .widgetList<LineChart>(find.byType(LineChart))
+          .toList();
+      expect(charts, hasLength(2));
+      expect(charts.every((chart) => chart.duration == Duration.zero), isTrue);
+      expect(charts[0].data.extraLinesData.horizontalLines.single.y, 12);
+      expect(charts[1].data.extraLinesData.horizontalLines.single.y, 22);
+      expect(find.byKey(const ValueKey('plot-point-marker-0')), findsOneWidget);
+      expect(find.byKey(const ValueKey('plot-point-marker-1')), findsOneWidget);
+    },
+  );
 
-  testWidgets('Plot legend uses signal names and supports custom labels',
-      (tester) async {
+  testWidgets('Plot legend uses signal names and supports custom labels', (
+    tester,
+  ) async {
     expect(signalLegendLabel({'y_expr': r'\PCRL01'}), 'PCRL01');
     expect(
       signalLegendLabel({'y_expr': r'\DFSDEV', 'legend': 'Density'}),
@@ -2439,36 +2451,17 @@ void main() {
     await app.preferencesReady;
     addTearDown(app.dispose);
     app.columns[0][0]['signal_specs'] = [
-      {
-        'y_expr': r'\PCRL01',
-        'color_name': '#123456',
-      },
-      {
-        'y_expr': r'\DFSDEV',
-        'legend': 'Density',
-        'color_name': '#654321',
-      },
+      {'y_expr': r'\PCRL01', 'color_name': '#123456'},
+      {'y_expr': r'\DFSDEV', 'legend': 'Density', 'color_name': '#654321'},
     ];
-    app.updatePlotSeriesByColRow(
-      0,
-      0,
-      0,
-      [
-        [0, 1],
-        [1, 2],
-      ],
-      null,
-    );
-    app.updatePlotSeriesByColRow(
-      0,
-      0,
-      1,
-      [
-        [0, 2],
-        [1, 3],
-      ],
-      null,
-    );
+    app.updatePlotSeriesByColRow(0, 0, 0, [
+      [0, 1],
+      [1, 2],
+    ], null);
+    app.updatePlotSeriesByColRow(0, 0, 1, [
+      [0, 2],
+      [1, 3],
+    ], null);
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -2492,19 +2485,15 @@ void main() {
     expect(find.text(r'\PCRL01'), findsNothing);
   });
 
-  testWidgets('Point mode continuously follows a held touch drag',
-      (tester) async {
+  testWidgets('Point mode continuously follows a held touch drag', (
+    tester,
+  ) async {
     final app = AppState();
-    app.updatePlotSeriesByColRow(
-        0,
-        0,
-        0,
-        [
-          [0, 0],
-          [5, 5],
-          [10, 10]
-        ],
-        null);
+    app.updatePlotSeriesByColRow(0, 0, 0, [
+      [0, 0],
+      [5, 5],
+      [10, 10],
+    ], null);
     app.interactionMode = 1;
 
     await tester.pumpWidget(
@@ -2537,20 +2526,16 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Escape locks Point mode globally and a plot click unlocks it',
-      (tester) async {
+  testWidgets('Escape locks Point mode globally and a plot click unlocks it', (
+    tester,
+  ) async {
     final app = AppState();
     await app.preferencesReady;
-    app.updatePlotSeriesByColRow(
-        0,
-        0,
-        0,
-        [
-          [0, 0],
-          [1, 1],
-          [2, 2],
-        ],
-        null);
+    app.updatePlotSeriesByColRow(0, 0, 0, [
+      [0, 0],
+      [1, 1],
+      [2, 2],
+    ], null);
     app.interactionMode = 1;
     app.setCrosshair(0.5, sourcePlot: 0);
     addTearDown(tester.view.reset);
@@ -2558,10 +2543,7 @@ void main() {
     tester.view.physicalSize = const Size(1000, 800);
 
     await tester.pumpWidget(
-      ChangeNotifierProvider.value(
-        value: app,
-        child: const MdsScopeApp(),
-      ),
+      ChangeNotifierProvider.value(value: app, child: const MDSLensApp()),
     );
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
@@ -2573,32 +2555,31 @@ void main() {
     expect(app.crosshairX, isNotNull);
   });
 
-  testWidgets('Plot title, axes, and units use customized fonts',
-      (tester) async {
+  testWidgets('Plot title, axes, and units use customized fonts', (
+    tester,
+  ) async {
     final app = AppState();
     app.applyFontSettings('Courier New', 17, 14, 13, 16);
-    app.updatePlotSeriesByColRow(
-        0,
-        0,
-        0,
-        [
-          [0, 10],
-          [1, 12],
-          [2, 14]
-        ],
-        null);
+    app.updatePlotSeriesByColRow(0, 0, 0, [
+      [0, 10],
+      [1, 12],
+      [2, 14],
+    ], null);
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
         value: app,
         child: MaterialApp(
-          theme: MdsScopeTheme.light(
+          theme: MDSLensTheme.light(
             fontFamily: app.effectiveFontFamily,
             uiFontSize: app.fontUiSize.toDouble(),
           ),
           home: const Scaffold(
-            body:
-                SizedBox(width: 500, height: 400, child: PlotPanel(plotIdx: 0)),
+            body: SizedBox(
+              width: 500,
+              height: 400,
+              child: PlotPanel(plotIdx: 0),
+            ),
           ),
         ),
       ),
@@ -2615,19 +2596,15 @@ void main() {
     expect(plotTexts.any((text) => text.style?.fontSize == 14), isTrue);
   });
 
-  testWidgets('Two-finger gestures pan and zoom a plot in Zoom/Move mode',
-      (tester) async {
+  testWidgets('Two-finger gestures pan and zoom a plot in Zoom/Move mode', (
+    tester,
+  ) async {
     final app = AppState();
-    app.updatePlotSeriesByColRow(
-        0,
-        0,
-        0,
-        [
-          [0, 0],
-          [5, 5],
-          [10, 10]
-        ],
-        null);
+    app.updatePlotSeriesByColRow(0, 0, 0, [
+      [0, 0],
+      [5, 5],
+      [10, 10],
+    ], null);
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -2636,7 +2613,10 @@ void main() {
           home: Scaffold(
             body: Center(
               child: SizedBox(
-                  width: 500, height: 400, child: PlotPanel(plotIdx: 0)),
+                width: 500,
+                height: 400,
+                child: PlotPanel(plotIdx: 0),
+              ),
             ),
           ),
         ),
@@ -2648,8 +2628,10 @@ void main() {
     final initialCenter = (chart().data.minX + chart().data.maxX) / 2;
 
     final first = await tester.startGesture(const Offset(220, 200), pointer: 1);
-    final second =
-        await tester.startGesture(const Offset(280, 200), pointer: 2);
+    final second = await tester.startGesture(
+      const Offset(280, 200),
+      pointer: 2,
+    );
     await tester.pump();
     await first.moveTo(const Offset(200, 200));
     await second.moveTo(const Offset(340, 200));
@@ -2664,10 +2646,14 @@ void main() {
     expect((zoomedCenter - initialCenter).abs(), greaterThan(0.01));
 
     final centerBeforePan = (chart().data.minX + chart().data.maxX) / 2;
-    final panFirst =
-        await tester.startGesture(const Offset(220, 200), pointer: 3);
-    final panSecond =
-        await tester.startGesture(const Offset(280, 200), pointer: 4);
+    final panFirst = await tester.startGesture(
+      const Offset(220, 200),
+      pointer: 3,
+    );
+    final panSecond = await tester.startGesture(
+      const Offset(280, 200),
+      pointer: 4,
+    );
     await tester.pump();
     await panFirst.moveBy(const Offset(40, 0));
     await panSecond.moveBy(const Offset(40, 0));
@@ -2680,19 +2666,15 @@ void main() {
     expect(centerAfterPan, lessThan(centerBeforePan));
   });
 
-  testWidgets('Trackpad pan/zoom events pan and zoom a plot together',
-      (tester) async {
+  testWidgets('Trackpad pan/zoom events pan and zoom a plot together', (
+    tester,
+  ) async {
     final app = AppState();
-    app.updatePlotSeriesByColRow(
-        0,
-        0,
-        0,
-        [
-          [0, 0],
-          [5, 5],
-          [10, 10]
-        ],
-        null);
+    app.updatePlotSeriesByColRow(0, 0, 0, [
+      [0, 0],
+      [5, 5],
+      [10, 10],
+    ], null);
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -2742,19 +2724,15 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('One-finger touch drag pans a plot in Zoom/Move mode',
-      (tester) async {
+  testWidgets('One-finger touch drag pans a plot in Zoom/Move mode', (
+    tester,
+  ) async {
     final app = AppState();
-    app.updatePlotSeriesByColRow(
-        0,
-        0,
-        0,
-        [
-          [0, 0],
-          [5, 5],
-          [10, 10]
-        ],
-        null);
+    app.updatePlotSeriesByColRow(0, 0, 0, [
+      [0, 0],
+      [5, 5],
+      [10, 10],
+    ], null);
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -2791,16 +2769,11 @@ void main() {
   testWidgets('Stylus write tip pans in Zoom/Move mode', (tester) async {
     final app = AppState();
     addTearDown(app.dispose);
-    app.updatePlotSeriesByColRow(
-        0,
-        0,
-        0,
-        [
-          [0, 0],
-          [5, 5],
-          [10, 10]
-        ],
-        null);
+    app.updatePlotSeriesByColRow(0, 0, 0, [
+      [0, 0],
+      [5, 5],
+      [10, 10],
+    ], null);
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -2835,27 +2808,20 @@ void main() {
     final centerAfter = (chart().data.minX + chart().data.maxX) / 2;
     expect(centerAfter, lessThan(centerBefore));
     expect(widthAfter, closeTo(widthBefore, 0.0001));
-    expect(
-      find.byKey(const ValueKey('plot-rubber-band-0')),
-      findsNothing,
-    );
+    expect(find.byKey(const ValueKey('plot-rubber-band-0')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Stylus erase mode draws rubber-band and inverted tip points',
-      (tester) async {
+  testWidgets('Stylus erase mode draws rubber-band and inverted tip points', (
+    tester,
+  ) async {
     final app = AppState();
     addTearDown(app.dispose);
-    app.updatePlotSeriesByColRow(
-        0,
-        0,
-        0,
-        [
-          [0, 0],
-          [5, 5],
-          [10, 10]
-        ],
-        null);
+    app.updatePlotSeriesByColRow(0, 0, 0, [
+      [0, 0],
+      [5, 5],
+      [10, 10],
+    ], null);
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -2904,20 +2870,16 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('A standard stylus button temporarily selects rubber-band zoom',
-      (tester) async {
+  testWidgets('A standard stylus button temporarily selects rubber-band zoom', (
+    tester,
+  ) async {
     final app = AppState();
     addTearDown(app.dispose);
-    app.updatePlotSeriesByColRow(
-        0,
-        0,
-        0,
-        [
-          [0, 0],
-          [5, 5],
-          [10, 10]
-        ],
-        null);
+    app.updatePlotSeriesByColRow(0, 0, 0, [
+      [0, 0],
+      [5, 5],
+      [10, 10],
+    ], null);
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -2948,20 +2910,16 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Stylus long press tolerates jitter and opens context menu',
-      (tester) async {
+  testWidgets('Stylus long press tolerates jitter and opens context menu', (
+    tester,
+  ) async {
     final app = AppState();
     addTearDown(app.dispose);
-    app.updatePlotSeriesByColRow(
-        0,
-        0,
-        0,
-        [
-          [0, 0],
-          [5, 5],
-          [10, 10]
-        ],
-        null);
+    app.updatePlotSeriesByColRow(0, 0, 0, [
+      [0, 0],
+      [5, 5],
+      [10, 10],
+    ], null);
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -2997,140 +2955,132 @@ void main() {
   });
 
   testWidgets(
-      'Closing a stylus context menu releases the plot for finger gestures',
-      (tester) async {
-    final app = AppState();
-    addTearDown(app.dispose);
-    app.updatePlotSeriesByColRow(
-        0,
-        0,
-        0,
-        [
-          [0, 0],
-          [5, 5],
-          [10, 10]
-        ],
-        null);
+    'Closing a stylus context menu releases the plot for finger gestures',
+    (tester) async {
+      final app = AppState();
+      addTearDown(app.dispose);
+      app.updatePlotSeriesByColRow(0, 0, 0, [
+        [0, 0],
+        [5, 5],
+        [10, 10],
+      ], null);
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider.value(
-        value: app,
-        child: const MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 500,
-              height: 400,
-              child: PlotPanel(plotIdx: 0),
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: app,
+          child: const MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: 500,
+                height: 400,
+                child: PlotPanel(plotIdx: 0),
+              ),
             ),
           ),
+        ),
+      );
+
+      LineChart chart() => tester.widget<LineChart>(find.byType(LineChart));
+      final stylus = await tester.startGesture(
+        const Offset(240, 200),
+        pointer: 41,
+        kind: PointerDeviceKind.stylus,
+      );
+      await stylus.moveBy(const Offset(4, 3));
+      await tester.pump(const Duration(milliseconds: 550));
+      expect(
+        find.byKey(const ValueKey('plot-context-menu-maximize')),
+        findsOneWidget,
+      );
+
+      // Reproduce iPadOS consuming the Pencil-up event: dismiss the popup while
+      // the original test pointer is still down.
+      await tester.tapAt(const Offset(5, 5), pointer: 42);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('plot-context-menu-maximize')),
+        findsNothing,
+      );
+
+      final centerBefore = (chart().data.minX + chart().data.maxX) / 2;
+      final finger = await tester.startGesture(
+        const Offset(180, 180),
+        pointer: 43,
+        kind: PointerDeviceKind.touch,
+      );
+      await finger.moveTo(const Offset(330, 250));
+      await tester.pump();
+      await finger.up();
+      await tester.pumpAndSettle();
+      final centerAfter = (chart().data.minX + chart().data.maxX) / 2;
+
+      expect(centerAfter, lessThan(centerBefore));
+
+      final widthBeforePinch = chart().data.maxX - chart().data.minX;
+      final firstFinger = await tester.startGesture(
+        const Offset(220, 200),
+        pointer: 44,
+        kind: PointerDeviceKind.touch,
+      );
+      final secondFinger = await tester.startGesture(
+        const Offset(280, 200),
+        pointer: 45,
+        kind: PointerDeviceKind.touch,
+      );
+      await tester.pump();
+      await firstFinger.moveTo(const Offset(190, 200));
+      await secondFinger.moveTo(const Offset(340, 200));
+      await tester.pump();
+      await firstFinger.up();
+      await secondFinger.up();
+      await tester.pump();
+      final widthAfterPinch = chart().data.maxX - chart().data.minX;
+      expect(widthAfterPinch, lessThan(widthBeforePinch));
+
+      final longPressFinger = await tester.startGesture(
+        const Offset(220, 180),
+        pointer: 46,
+        kind: PointerDeviceKind.touch,
+      );
+      await tester.pump(const Duration(milliseconds: 550));
+      expect(
+        find.byKey(const ValueKey('plot-context-menu-maximize')),
+        findsOneWidget,
+      );
+      await tester.tapAt(const Offset(5, 5), pointer: 47);
+      await tester.pumpAndSettle();
+      await longPressFinger.up();
+      await stylus.up();
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('Plot view survives panel disposal and reconstruction', (
+    tester,
+  ) async {
+    final app = AppState();
+    app.updatePlotSeriesByColRow(0, 0, 0, [
+      [0, 0],
+      [5, 5],
+      [10, 10],
+    ], null);
+
+    Widget panelApp(Widget child) => ChangeNotifierProvider.value(
+      value: app,
+      child: MaterialApp(
+        home: Scaffold(
+          body: Center(child: SizedBox(width: 500, height: 400, child: child)),
         ),
       ),
     );
 
-    LineChart chart() => tester.widget<LineChart>(find.byType(LineChart));
-    final stylus = await tester.startGesture(
-      const Offset(240, 200),
-      pointer: 41,
-      kind: PointerDeviceKind.stylus,
-    );
-    await stylus.moveBy(const Offset(4, 3));
-    await tester.pump(const Duration(milliseconds: 550));
-    expect(
-      find.byKey(const ValueKey('plot-context-menu-maximize')),
-      findsOneWidget,
-    );
-
-    // Reproduce iPadOS consuming the Pencil-up event: dismiss the popup while
-    // the original test pointer is still down.
-    await tester.tapAt(const Offset(5, 5), pointer: 42);
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const ValueKey('plot-context-menu-maximize')),
-      findsNothing,
-    );
-
-    final centerBefore = (chart().data.minX + chart().data.maxX) / 2;
-    final finger = await tester.startGesture(
-      const Offset(180, 180),
-      pointer: 43,
-      kind: PointerDeviceKind.touch,
-    );
-    await finger.moveTo(const Offset(330, 250));
-    await tester.pump();
-    await finger.up();
-    await tester.pumpAndSettle();
-    final centerAfter = (chart().data.minX + chart().data.maxX) / 2;
-
-    expect(centerAfter, lessThan(centerBefore));
-
-    final widthBeforePinch = chart().data.maxX - chart().data.minX;
-    final firstFinger = await tester.startGesture(
-      const Offset(220, 200),
-      pointer: 44,
-      kind: PointerDeviceKind.touch,
-    );
-    final secondFinger = await tester.startGesture(
-      const Offset(280, 200),
-      pointer: 45,
-      kind: PointerDeviceKind.touch,
-    );
-    await tester.pump();
-    await firstFinger.moveTo(const Offset(190, 200));
-    await secondFinger.moveTo(const Offset(340, 200));
-    await tester.pump();
-    await firstFinger.up();
-    await secondFinger.up();
-    await tester.pump();
-    final widthAfterPinch = chart().data.maxX - chart().data.minX;
-    expect(widthAfterPinch, lessThan(widthBeforePinch));
-
-    final longPressFinger = await tester.startGesture(
-      const Offset(220, 180),
-      pointer: 46,
-      kind: PointerDeviceKind.touch,
-    );
-    await tester.pump(const Duration(milliseconds: 550));
-    expect(
-      find.byKey(const ValueKey('plot-context-menu-maximize')),
-      findsOneWidget,
-    );
-    await tester.tapAt(const Offset(5, 5), pointer: 47);
-    await tester.pumpAndSettle();
-    await longPressFinger.up();
-    await stylus.up();
-    await tester.pump();
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('Plot view survives panel disposal and reconstruction',
-      (tester) async {
-    final app = AppState();
-    app.updatePlotSeriesByColRow(
-        0,
-        0,
-        0,
-        [
-          [0, 0],
-          [5, 5],
-          [10, 10]
-        ],
-        null);
-
-    Widget panelApp(Widget child) => ChangeNotifierProvider.value(
-          value: app,
-          child: MaterialApp(
-            home: Scaffold(
-              body: Center(
-                child: SizedBox(width: 500, height: 400, child: child),
-              ),
-            ),
-          ),
-        );
-
     await tester.pumpWidget(panelApp(const PlotPanel(plotIdx: 0)));
     final first = await tester.startGesture(const Offset(220, 200), pointer: 1);
-    final second =
-        await tester.startGesture(const Offset(280, 200), pointer: 2);
+    final second = await tester.startGesture(
+      const Offset(280, 200),
+      pointer: 2,
+    );
     await tester.pump();
     await first.moveTo(const Offset(180, 200));
     await second.moveTo(const Offset(320, 200));
@@ -3157,22 +3107,18 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Phone overview keeps every plot visible without scrolling',
-      (tester) async {
+  testWidgets('Phone overview keeps every plot visible without scrolling', (
+    tester,
+  ) async {
     final app = AppState();
     app.applyLayoutList([2, 2]);
     for (var column = 0; column < 2; column++) {
       for (var row = 0; row < 2; row++) {
-        app.updatePlotSeriesByColRow(
-            column,
-            row,
-            0,
-            [
-              [0, column * 20 + row * 10],
-              [5, column * 20 + row * 10 + 5],
-              [10, column * 20 + row * 10 + 10]
-            ],
-            null);
+        app.updatePlotSeriesByColRow(column, row, 0, [
+          [0, column * 20 + row * 10],
+          [5, column * 20 + row * 10 + 5],
+          [10, column * 20 + row * 10 + 10],
+        ], null);
       }
     }
     app.interactionMode = 1;
@@ -3198,8 +3144,9 @@ void main() {
       expect(rect.right, lessThanOrEqualTo(390));
       expect(rect.bottom, lessThanOrEqualTo(600));
     }
-    final charts =
-        tester.widgetList<LineChart>(find.byType(LineChart)).toList();
+    final charts = tester
+        .widgetList<LineChart>(find.byType(LineChart))
+        .toList();
     expect(charts, hasLength(4));
     expect(
       charts.map((chart) => chart.data.extraLinesData.horizontalLines.single.y),
@@ -3228,13 +3175,16 @@ void main() {
     await second.up();
     await tester.pumpAndSettle();
 
-    expect(firstChart().data.maxX - firstChart().data.minX,
-        lessThan(initialWidth));
+    expect(
+      firstChart().data.maxX - firstChart().data.minX,
+      lessThan(initialWidth),
+    );
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Toolbar keeps ordered groups across responsive screen widths',
-      (tester) async {
+  testWidgets('Toolbar keeps ordered groups across responsive screen widths', (
+    tester,
+  ) async {
     final app = AppState();
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -3262,7 +3212,9 @@ void main() {
       expect(tester.getSize(toolbar).width, width);
       expect(
         find.descendant(
-            of: toolbar, matching: find.byType(SingleChildScrollView)),
+          of: toolbar,
+          matching: find.byType(SingleChildScrollView),
+        ),
         findsNothing,
       );
       final themeCenter = tester
@@ -3280,8 +3232,9 @@ void main() {
     }
   });
 
-  testWidgets('Phone toolbar button groups are aligned and equally sized',
-      (tester) async {
+  testWidgets('Phone toolbar button groups are aligned and equally sized', (
+    tester,
+  ) async {
     final app = AppState();
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -3296,11 +3249,14 @@ void main() {
     );
 
     void expectEqualRow(
-        Finder group, Finder Function(Finder) buttonFinder, int count) {
+      Finder group,
+      Finder Function(Finder) buttonFinder,
+      int count,
+    ) {
       final buttons = buttonFinder(group);
       expect(buttons, findsNWidgets(count));
       final rects = [
-        for (var i = 0; i < count; i++) tester.getRect(buttons.at(i))
+        for (var i = 0; i < count; i++) tester.getRect(buttons.at(i)),
       ];
       for (final rect in rects.skip(1)) {
         expect(rect.top, closeTo(rects.first.top, 0.01));
@@ -3341,8 +3297,10 @@ void main() {
     expect(find.byTooltip('Latest shot'), findsOneWidget);
     expect(find.byTooltip('Zoom and move mode'), findsOneWidget);
     expect(find.byTooltip('Point mode'), findsOneWidget);
-    expect(tester.getSize(find.byTooltip('Open configuration')).height,
-        greaterThanOrEqualTo(44));
+    expect(
+      tester.getSize(find.byTooltip('Open configuration')).height,
+      greaterThanOrEqualTo(44),
+    );
 
     final autoTheme = tester.widget<Semantics>(
       find.byKey(const ValueKey('theme-mode-auto')),
@@ -3370,8 +3328,9 @@ void main() {
           matching: find.byType(CustomPaint),
         ),
       );
-      final thumbCenter =
-          tester.getCenter(find.byKey(const ValueKey('theme-mode-thumb')));
+      final thumbCenter = tester.getCenter(
+        find.byKey(const ValueKey('theme-mode-thumb')),
+      );
       expect(glyphCenter.dx, closeTo(segmentCenter.dx, 0.01));
       expect(glyphCenter.dy, closeTo(segmentCenter.dy, 0.01));
       expect(thumbCenter.dx, closeTo(glyphCenter.dx, 0.01));
@@ -3389,15 +3348,20 @@ void main() {
     for (var i = 1; i < tops.length; i++) {
       expect(tops[i], greaterThan(tops[i - 1]));
     }
-    expect(tester.getCenter(appActions).dy,
-        closeTo(tester.getCenter(themes).dy, 0.01));
-    expect(tester.getTopLeft(modes).dy,
-        closeTo(tester.getTopLeft(navigation).dy, 0.01));
+    expect(
+      tester.getCenter(appActions).dy,
+      closeTo(tester.getCenter(themes).dy, 0.01),
+    );
+    expect(
+      tester.getTopLeft(modes).dy,
+      closeTo(tester.getTopLeft(navigation).dy, 0.01),
+    );
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Dropdown and popup menu choices have visible separators',
-      (tester) async {
+  testWidgets('Dropdown and popup menu choices have visible separators', (
+    tester,
+  ) async {
     final app = AppState();
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -3432,8 +3396,9 @@ void main() {
     expect(find.byType(PopupMenuDivider), findsNWidgets(3));
   });
 
-  testWidgets('Shot history uses the polished compact dropdown',
-      (tester) async {
+  testWidgets('Shot history uses the polished compact dropdown', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues({
       'shotHistory': '["163702","163701"]',
       'shot': '163703',
@@ -3482,171 +3447,166 @@ void main() {
     expect(find.text('163701'), findsOneWidget);
   });
 
-  testWidgets('Shot history uses one selectable list with nested confirmation',
-      (tester) async {
-    SharedPreferences.setMockInitialValues({
-      'shotHistory': '["163703","163702","163701"]',
-      'shot': '163704',
-    });
-    final app = AppState();
-    await app.preferencesReady;
-    addTearDown(app.dispose);
-    await tester.pumpWidget(
-      ChangeNotifierProvider.value(
-        value: app,
-        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
-      ),
-    );
+  testWidgets(
+    'Shot history uses one selectable list with nested confirmation',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'shotHistory': '["163703","163702","163701"]',
+        'shot': '163704',
+      });
+      final app = AppState();
+      await app.preferencesReady;
+      addTearDown(app.dispose);
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: app,
+          child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+        ),
+      );
 
-    await tester.tap(
-      find.byKey(const ValueKey('toolbar-shot-history-dropdown')),
-    );
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(
-        const ValueKey('toolbar-shot-history-menu-action'),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(
-        const ValueKey('toolbar-shot-history-action-divider'),
-      ),
-      findsOneWidget,
-    );
+      await tester.tap(
+        find.byKey(const ValueKey('toolbar-shot-history-dropdown')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('toolbar-shot-history-menu-action')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('toolbar-shot-history-action-divider')),
+        findsOneWidget,
+      );
 
-    await tester.tap(
-      find.byKey(
-        const ValueKey('toolbar-shot-history-menu-action'),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Manage Shot History'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('shot-history-selection-list')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('shot-history-select-all')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('shot-history-retention-enabled')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('shot-history-retention-limit')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('shot-history-retention-restore-default')),
-      findsOneWidget,
-    );
+      await tester.tap(
+        find.byKey(const ValueKey('toolbar-shot-history-menu-action')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Manage Shot History'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('shot-history-selection-list')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('shot-history-select-all')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('shot-history-retention-enabled')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('shot-history-retention-limit')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('shot-history-retention-restore-default')),
+        findsOneWidget,
+      );
 
-    final retentionToggle =
-        find.byKey(const ValueKey('shot-history-retention-enabled'));
-    await tester.tap(retentionToggle);
-    await tester.pump();
-    expect(app.limitShotHistory, isFalse);
-    await tester.tap(retentionToggle);
-    await tester.pump();
-    expect(app.limitShotHistory, isTrue);
+      final retentionToggle = find.byKey(
+        const ValueKey('shot-history-retention-enabled'),
+      );
+      await tester.tap(retentionToggle);
+      await tester.pump();
+      expect(app.limitShotHistory, isFalse);
+      await tester.tap(retentionToggle);
+      await tester.pump();
+      expect(app.limitShotHistory, isTrue);
 
-    final retentionLimit =
-        find.byKey(const ValueKey('shot-history-retention-limit'));
-    await tester.tap(retentionLimit);
-    await tester.enterText(retentionLimit, '75');
-    await tester.pump();
-    expect(app.shotHistoryLimit, 75);
-    await tester.tap(
-      find.byKey(const ValueKey('shot-history-retention-restore-default')),
-    );
-    await tester.pump();
-    expect(app.shotHistoryLimit, AppState.defaultShotHistoryLimit);
-    expect(
-      tester.widget<TextField>(retentionLimit).controller?.text,
-      '${AppState.defaultShotHistoryLimit}',
-    );
-    tester.testTextInput.hide();
-    await tester.pumpAndSettle();
+      final retentionLimit = find.byKey(
+        const ValueKey('shot-history-retention-limit'),
+      );
+      await tester.tap(retentionLimit);
+      await tester.enterText(retentionLimit, '75');
+      await tester.pump();
+      expect(app.shotHistoryLimit, 75);
+      await tester.tap(
+        find.byKey(const ValueKey('shot-history-retention-restore-default')),
+      );
+      await tester.pump();
+      expect(app.shotHistoryLimit, AppState.defaultShotHistoryLimit);
+      expect(
+        tester.widget<TextField>(retentionLimit).controller?.text,
+        '${AppState.defaultShotHistoryLimit}',
+      );
+      tester.testTextInput.hide();
+      await tester.pumpAndSettle();
 
-    final selectedShot =
-        find.byKey(const ValueKey('shot-history-select-163702'));
-    await tester.ensureVisible(selectedShot);
-    await tester.pumpAndSettle();
-    await tester.tap(selectedShot);
-    await tester.pump();
-    await tester.tap(
-      find.byKey(const ValueKey('shot-history-delete-selected')),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Delete selected shot history?'), findsOneWidget);
-    await tester.tap(
-      find.byKey(const ValueKey('shot-history-confirm-cancel')),
-    );
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const ValueKey('shot-history-selection-list')),
-      findsOneWidget,
-    );
-    expect(app.shotHistory, ['163703', '163702', '163701']);
+      final selectedShot = find.byKey(
+        const ValueKey('shot-history-select-163702'),
+      );
+      await tester.ensureVisible(selectedShot);
+      await tester.pumpAndSettle();
+      await tester.tap(selectedShot);
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey('shot-history-delete-selected')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Delete selected shot history?'), findsOneWidget);
+      await tester.tap(
+        find.byKey(const ValueKey('shot-history-confirm-cancel')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('shot-history-selection-list')),
+        findsOneWidget,
+      );
+      expect(app.shotHistory, ['163703', '163702', '163701']);
 
-    await tester.tap(
-      find.byKey(const ValueKey('shot-history-delete-selected')),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const ValueKey('shot-history-confirm-selected')),
-    );
-    await tester.pumpAndSettle();
-    expect(app.shotHistory, ['163703', '163701']);
-    expect(
-      find.byKey(const ValueKey('shot-history-selection-list')),
-      findsOneWidget,
-    );
+      await tester.tap(
+        find.byKey(const ValueKey('shot-history-delete-selected')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('shot-history-confirm-selected')),
+      );
+      await tester.pumpAndSettle();
+      expect(app.shotHistory, ['163703', '163701']);
+      expect(
+        find.byKey(const ValueKey('shot-history-selection-list')),
+        findsOneWidget,
+      );
 
-    final selectAll = find.byKey(const ValueKey('shot-history-select-all'));
-    await tester.ensureVisible(selectAll);
-    await tester.pumpAndSettle();
-    await tester.tap(selectAll);
-    await tester.pump();
-    await tester.tap(
-      find.byKey(const ValueKey('shot-history-delete-selected')),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Delete selected shot history?'), findsOneWidget);
-    await tester.tap(
-      find.byKey(const ValueKey('shot-history-confirm-selected')),
-    );
-    await tester.pumpAndSettle();
+      final selectAll = find.byKey(const ValueKey('shot-history-select-all'));
+      await tester.ensureVisible(selectAll);
+      await tester.pumpAndSettle();
+      await tester.tap(selectAll);
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey('shot-history-delete-selected')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Delete selected shot history?'), findsOneWidget);
+      await tester.tap(
+        find.byKey(const ValueKey('shot-history-confirm-selected')),
+      );
+      await tester.pumpAndSettle();
 
-    expect(app.shotHistory, isEmpty);
-    expect(find.text('Shot history is empty'), findsOneWidget);
-    expect(find.text('Manage Shot History'), findsOneWidget);
-    await tester.tap(
-      find.byKey(const ValueKey('shot-history-manager-close')),
-    );
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const ValueKey('toolbar-shot-history-dropdown')),
-      findsNothing,
-    );
-  });
+      expect(app.shotHistory, isEmpty);
+      expect(find.text('Shot history is empty'), findsOneWidget);
+      expect(find.text('Manage Shot History'), findsOneWidget);
+      await tester.tap(
+        find.byKey(const ValueKey('shot-history-manager-close')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('toolbar-shot-history-dropdown')),
+        findsNothing,
+      );
+    },
+  );
 
-  testWidgets('Waveform context menu is polished, grouped, and actionable',
-      (tester) async {
+  testWidgets('Waveform context menu is polished, grouped, and actionable', (
+    tester,
+  ) async {
     final app = AppState();
     addTearDown(app.dispose);
     var exportDialogCalls = 0;
-    app.updatePlotSeriesByColRow(
-        0,
-        0,
-        0,
-        [
-          [0, 1],
-          [1, 2],
-        ],
-        null);
+    app.updatePlotSeriesByColRow(0, 0, 0, [
+      [0, 1],
+      [1, 2],
+    ], null);
     addTearDown(tester.view.reset);
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(900, 700);
@@ -3655,7 +3615,7 @@ void main() {
       ChangeNotifierProvider.value(
         value: app,
         child: MaterialApp(
-          theme: MdsScopeTheme.light(),
+          theme: MDSLensTheme.light(),
           home: Scaffold(
             body: Center(
               child: SizedBox(
@@ -3696,9 +3656,7 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(
-      find.byKey(const ValueKey('plot-context-menu-maximize')),
-    );
+    await tester.tap(find.byKey(const ValueKey('plot-context-menu-maximize')));
     await tester.pumpAndSettle();
     expect(app.maximizedPlot, 0);
 
@@ -3707,17 +3665,16 @@ void main() {
       buttons: kSecondaryMouseButton,
     );
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const ValueKey('plot-context-menu-export')),
-    );
+    await tester.tap(find.byKey(const ValueKey('plot-context-menu-export')));
     await tester.pumpAndSettle();
     expect(exportDialogCalls, 1);
     expect(app.status, 'Export cancelled');
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Empty data source fields expose every available suggestion',
-      (tester) async {
+  testWidgets('Empty data source fields expose every available suggestion', (
+    tester,
+  ) async {
     final app = AppState();
     await app.preferencesReady;
     addTearDown(app.dispose);
@@ -3729,7 +3686,7 @@ void main() {
       ChangeNotifierProvider.value(
         value: app,
         child: MaterialApp(
-          theme: MdsScopeTheme.light(),
+          theme: MDSLensTheme.light(),
           home: const Scaffold(
             body: Center(
               child: SizedBox(
@@ -3759,8 +3716,10 @@ void main() {
 
     final signalField = find.byKey(const ValueKey('data-signal-0'));
     await tester.ensureVisible(signalField);
-    final signalTextField =
-        find.descendant(of: signalField, matching: find.byType(TextField));
+    final signalTextField = find.descendant(
+      of: signalField,
+      matching: find.byType(TextField),
+    );
     await tester.tap(signalTextField);
     await tester.enterText(signalTextField, '');
     final signalMenu = find.byKey(const ValueKey('autocomplete-signal-menu'));
@@ -3773,8 +3732,10 @@ void main() {
 
     final treeField = find.byKey(const ValueKey('data-tree-0'));
     await tester.ensureVisible(treeField);
-    final treeTextField =
-        find.descendant(of: treeField, matching: find.byType(TextField));
+    final treeTextField = find.descendant(
+      of: treeField,
+      matching: find.byType(TextField),
+    );
     await tester.tap(treeTextField);
     await tester.enterText(treeTextField, '');
     await tester.pumpAndSettle();
@@ -3813,7 +3774,9 @@ void main() {
     await tester.sendEventToBinding(mouse.down(treeOptionCenter));
     await tester.pump();
     expect(
-        tester.widget<TextField>(treeTextField).controller?.text, 'pcs_east');
+      tester.widget<TextField>(treeTextField).controller?.text,
+      'pcs_east',
+    );
     await tester.sendEventToBinding(mouse.up());
 
     await tester.tap(signalTextField);
@@ -3833,149 +3796,138 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Data source Shot inherits the loaded shot when config is empty',
-      (tester) async {
-    expect(
-      resolveDataSourceShot(
-        signalShot: '',
-        panelShot: '  ',
-        displayedShot: '163888',
-        inputShot: '163999',
-      ),
-      '163888',
-    );
+  testWidgets(
+    'Data source Shot inherits the loaded shot when config is empty',
+    (tester) async {
+      expect(
+        resolveDataSourceShot(
+          signalShot: '',
+          panelShot: '  ',
+          displayedShot: '163888',
+          inputShot: '163999',
+        ),
+        '163888',
+      );
 
-    final signals = <Map<String, dynamic>>[
-      {
-        'shot': '',
-        'experiment': 'pcs_east',
-        'y_expr': r'\PCRL01',
-      },
-    ];
-    final app = AppState();
-    await app.preferencesReady;
-    addTearDown(app.dispose);
-    await tester.pumpWidget(
-      ChangeNotifierProvider.value(
-        value: app,
-        child: MaterialApp(
-          home: Builder(
-            builder: (context) => TextButton(
-              onPressed: () => showDataSourceSetupEditor(
-                context,
-                signals: signals,
-                defaultShot: '163888',
+      final signals = <Map<String, dynamic>>[
+        {'shot': '', 'experiment': 'pcs_east', 'y_expr': r'\PCRL01'},
+      ];
+      final app = AppState();
+      await app.preferencesReady;
+      addTearDown(app.dispose);
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: app,
+          child: MaterialApp(
+            home: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => showDataSourceSetupEditor(
+                  context,
+                  signals: signals,
+                  defaultShot: '163888',
+                ),
+                child: const Text('Open data source'),
               ),
-              child: const Text('Open data source'),
             ),
           ),
         ),
-      ),
-    );
+      );
 
-    await tester.tap(find.text('Open data source'));
-    await tester.pumpAndSettle();
-    final scrollbarHost = find.byKey(
-      const ValueKey('data-source-horizontal-scrollbar'),
-    );
-    final dataSourceScrollbar = tester.widget<Scrollbar>(
-      find.descendant(
-        of: scrollbarHost,
-        matching: find.byType(Scrollbar),
-      ),
-    );
-    expect(dataSourceScrollbar.thumbVisibility, isTrue);
-    expect(dataSourceScrollbar.trackVisibility, isTrue);
-    expect(dataSourceScrollbar.interactive, isTrue);
-    expect(dataSourceScrollbar.thickness, 5);
-    expect(
-      dataSourceScrollbar.controller?.position.maxScrollExtent,
-      greaterThan(0),
-    );
-    final initialScrollbarRevision = dataSourceScrollbar.key;
-    final horizontalController = dataSourceScrollbar.controller!;
-    horizontalController.jumpTo(
-      horizontalController.position.maxScrollExtent / 2,
-    );
-    await tester.pump();
-    await tester.tap(find.byTooltip('Add Curve'));
-    await tester.pumpAndSettle();
-    final rebuiltScrollbar = tester.widget<Scrollbar>(
-      find.descendant(
-        of: scrollbarHost,
-        matching: find.byType(Scrollbar),
-      ),
-    );
-    expect(rebuiltScrollbar.thumbVisibility, isTrue);
-    expect(rebuiltScrollbar.trackVisibility, isTrue);
-    expect(rebuiltScrollbar.key, isNot(initialScrollbarRevision));
-    expect(rebuiltScrollbar.controller, same(horizontalController));
-    expect(rebuiltScrollbar.controller?.hasClients, isTrue);
-    expect(
-      rebuiltScrollbar.controller?.position.maxScrollExtent,
-      greaterThan(0),
-    );
-    rebuiltScrollbar.controller?.jumpTo(
-      rebuiltScrollbar.controller!.position.maxScrollExtent / 2,
-    );
-    await tester.pump();
-    expect(rebuiltScrollbar.controller?.offset, greaterThan(0));
-    final scrollbarRect = tester.getRect(
-      find.byKey(const ValueKey('data-source-horizontal-scrollbar')),
-    );
-    final horizontalViewportRect = tester.getRect(
-      find.byKey(const ValueKey('data-source-horizontal-scroll')),
-    );
-    expect(
-      scrollbarRect.bottom - horizontalViewportRect.bottom,
-      greaterThanOrEqualTo(9),
-    );
-    horizontalController.jumpTo(0);
-    await tester.pump();
-    final shotField = tester.widget<TextField>(
-      find.byKey(const ValueKey('data-shot-0')),
-    );
-    expect(shotField.controller?.text, '163888');
-    await tester.tap(find.byKey(const ValueKey('data-shot-0')));
-    await tester.pump();
-    final focusedShot = FocusManager.instance.primaryFocus;
-    expect(focusedShot?.hasFocus, isTrue);
-    final surfaceRect = tester.getRect(
-      find.byKey(const ValueKey('data-source-dialog-surface')),
-    );
-    await tester.tapAt(Offset(surfaceRect.left + 4, surfaceRect.center.dy));
-    await tester.pump();
-    expect(focusedShot?.hasFocus, isFalse);
-    await tester.enterText(
-      find.byKey(const ValueKey('data-legend-0')),
-      'Primary current',
-    );
-    expect(
-      find.byKey(const ValueKey('data-hide-mode-dropdown-0')),
-      findsOneWidget,
-    );
-    expect(find.byType(Checkbox), findsNothing);
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('data-hide-mode-dropdown-0')),
-    );
-    await tester.tap(
-      find.byKey(const ValueKey('data-hide-mode-dropdown-0')),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const ValueKey('data-hide-mode-0-option-1')),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('OK'));
-    await tester.pumpAndSettle();
-    expect(signals.single['legend'], 'Primary current');
-    expect(signals.single['shot'], '163888');
-    expect(signals.single['hide_mode'], signalHideModeTemporary);
-    expect(signals.single['hidden'], isTrue);
-  });
+      await tester.tap(find.text('Open data source'));
+      await tester.pumpAndSettle();
+      final scrollbarHost = find.byKey(
+        const ValueKey('data-source-horizontal-scrollbar'),
+      );
+      final dataSourceScrollbar = tester.widget<Scrollbar>(
+        find.descendant(of: scrollbarHost, matching: find.byType(Scrollbar)),
+      );
+      expect(dataSourceScrollbar.thumbVisibility, isTrue);
+      expect(dataSourceScrollbar.trackVisibility, isTrue);
+      expect(dataSourceScrollbar.interactive, isTrue);
+      expect(dataSourceScrollbar.thickness, 5);
+      expect(
+        dataSourceScrollbar.controller?.position.maxScrollExtent,
+        greaterThan(0),
+      );
+      final initialScrollbarRevision = dataSourceScrollbar.key;
+      final horizontalController = dataSourceScrollbar.controller!;
+      horizontalController.jumpTo(
+        horizontalController.position.maxScrollExtent / 2,
+      );
+      await tester.pump();
+      await tester.tap(find.byTooltip('Add Curve'));
+      await tester.pumpAndSettle();
+      final rebuiltScrollbar = tester.widget<Scrollbar>(
+        find.descendant(of: scrollbarHost, matching: find.byType(Scrollbar)),
+      );
+      expect(rebuiltScrollbar.thumbVisibility, isTrue);
+      expect(rebuiltScrollbar.trackVisibility, isTrue);
+      expect(rebuiltScrollbar.key, isNot(initialScrollbarRevision));
+      expect(rebuiltScrollbar.controller, same(horizontalController));
+      expect(rebuiltScrollbar.controller?.hasClients, isTrue);
+      expect(
+        rebuiltScrollbar.controller?.position.maxScrollExtent,
+        greaterThan(0),
+      );
+      rebuiltScrollbar.controller?.jumpTo(
+        rebuiltScrollbar.controller!.position.maxScrollExtent / 2,
+      );
+      await tester.pump();
+      expect(rebuiltScrollbar.controller?.offset, greaterThan(0));
+      final scrollbarRect = tester.getRect(
+        find.byKey(const ValueKey('data-source-horizontal-scrollbar')),
+      );
+      final horizontalViewportRect = tester.getRect(
+        find.byKey(const ValueKey('data-source-horizontal-scroll')),
+      );
+      expect(
+        scrollbarRect.bottom - horizontalViewportRect.bottom,
+        greaterThanOrEqualTo(9),
+      );
+      horizontalController.jumpTo(0);
+      await tester.pump();
+      final shotField = tester.widget<TextField>(
+        find.byKey(const ValueKey('data-shot-0')),
+      );
+      expect(shotField.controller?.text, '163888');
+      await tester.tap(find.byKey(const ValueKey('data-shot-0')));
+      await tester.pump();
+      final focusedShot = FocusManager.instance.primaryFocus;
+      expect(focusedShot?.hasFocus, isTrue);
+      final surfaceRect = tester.getRect(
+        find.byKey(const ValueKey('data-source-dialog-surface')),
+      );
+      await tester.tapAt(Offset(surfaceRect.left + 4, surfaceRect.center.dy));
+      await tester.pump();
+      expect(focusedShot?.hasFocus, isFalse);
+      await tester.enterText(
+        find.byKey(const ValueKey('data-legend-0')),
+        'Primary current',
+      );
+      expect(
+        find.byKey(const ValueKey('data-hide-mode-dropdown-0')),
+        findsOneWidget,
+      );
+      expect(find.byType(Checkbox), findsNothing);
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('data-hide-mode-dropdown-0')),
+      );
+      await tester.tap(find.byKey(const ValueKey('data-hide-mode-dropdown-0')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('data-hide-mode-0-option-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(signals.single['legend'], 'Primary current');
+      expect(signals.single['shot'], '163888');
+      expect(signals.single['hide_mode'], signalHideModeTemporary);
+      expect(signals.single['hidden'], isTrue);
+    },
+  );
 
-  testWidgets('SSH mode and font family use polished dropdown menus',
-      (tester) async {
+  testWidgets('SSH mode and font family use polished dropdown menus', (
+    tester,
+  ) async {
     final app = AppState();
     await app.preferencesReady;
     await tester.pumpWidget(
@@ -4022,9 +3974,7 @@ void main() {
       final optionLabel = tester.widget<Text>(
         find
             .descendant(
-              of: find.byKey(
-                ValueKey('font-family-option-${index + 1}'),
-              ),
+              of: find.byKey(ValueKey('font-family-option-${index + 1}')),
               matching: find.text(family),
             )
             .last,
@@ -4034,8 +3984,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('About appears only in the icon-decorated settings menu',
-      (tester) async {
+  testWidgets('About appears only in the icon-decorated settings menu', (
+    tester,
+  ) async {
     final app = AppState();
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -4044,18 +3995,19 @@ void main() {
       ),
     );
 
-    expect(find.byTooltip('About MdsScope'), findsNothing);
+    expect(find.byTooltip('About MDSLens'), findsNothing);
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    expect(find.text('About MdsScope'), findsOneWidget);
+    expect(find.text('About MDSLens'), findsOneWidget);
     expect(find.byIcon(Icons.language_rounded), findsOneWidget);
     expect(find.byIcon(Icons.dashboard_customize_rounded), findsOneWidget);
     expect(find.byIcon(Icons.font_download_outlined), findsOneWidget);
     expect(find.byIcon(Icons.info_outline_rounded), findsOneWidget);
   });
 
-  testWidgets('Internal web pages use separated polished list items',
-      (tester) async {
+  testWidgets('Internal web pages use separated polished list items', (
+    tester,
+  ) async {
     final app = AppState();
     await app.preferencesReady;
     addTearDown(app.dispose);
@@ -4077,14 +4029,8 @@ void main() {
       find.byKey(const ValueKey('internal-web-pages-list')),
       findsOneWidget,
     );
-    expect(
-      find.byKey(const ValueKey('internal-web-page-0')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('internal-web-page-1')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('internal-web-page-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('internal-web-page-1')), findsOneWidget);
     expect(
       find.byKey(const ValueKey('internal-web-page-divider-0')),
       findsOneWidget,
@@ -4097,9 +4043,7 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(
-      find.byKey(const ValueKey('internal-web-page-edit-0')),
-    );
+    await tester.tap(find.byKey(const ValueKey('internal-web-page-edit-0')));
     await tester.pumpAndSettle();
     expect(find.text('Edit Web Page'), findsOneWidget);
     await tester.enterText(
@@ -4122,96 +4066,79 @@ void main() {
   });
 
   testWidgets(
-      'Bookmark removal supports selection, select all, and confirmation',
-      (tester) async {
-    final app = AppState();
-    await app.preferencesReady;
-    addTearDown(app.dispose);
-    app.addWebBookmark('Diagnostics', 'http://10.0.0.8/diagnostics');
-    app.addWebBookmark('Archive', 'http://10.0.0.8/archive');
-    app.addWebBookmark('Status', 'http://10.0.0.8/status');
-    await tester.pumpWidget(
-      ChangeNotifierProvider.value(
-        value: app,
-        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
-      ),
-    );
+    'Bookmark removal supports selection, select all, and confirmation',
+    (tester) async {
+      final app = AppState();
+      await app.preferencesReady;
+      addTearDown(app.dispose);
+      app.addWebBookmark('Diagnostics', 'http://10.0.0.8/diagnostics');
+      app.addWebBookmark('Archive', 'http://10.0.0.8/archive');
+      app.addWebBookmark('Status', 'http://10.0.0.8/status');
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: app,
+          child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+        ),
+      );
 
-    await tester.tap(find.byTooltip('Settings'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Internal web pages'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Remove...'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Internal web pages'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Remove...'));
+      await tester.pumpAndSettle();
 
-    expect(
-      find.byKey(const ValueKey('bookmark-removal-selection-list')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('bookmark-select-all')),
-      findsOneWidget,
-    );
-    await tester.tap(
-      find.byKey(const ValueKey('bookmark-remove-1')),
-    );
-    await tester.pump();
-    await tester.tap(
-      find.byKey(const ValueKey('bookmark-delete-selected')),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Remove selected bookmarks?'), findsOneWidget);
-    await tester.tap(
-      find.byKey(const ValueKey('bookmark-removal-confirm-cancel')),
-    );
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const ValueKey('bookmark-removal-selection-list')),
-      findsOneWidget,
-    );
-    expect(app.webBookmarks, hasLength(3));
+      expect(
+        find.byKey(const ValueKey('bookmark-removal-selection-list')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('bookmark-select-all')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('bookmark-remove-1')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('bookmark-delete-selected')));
+      await tester.pumpAndSettle();
+      expect(find.text('Remove selected bookmarks?'), findsOneWidget);
+      await tester.tap(
+        find.byKey(const ValueKey('bookmark-removal-confirm-cancel')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('bookmark-removal-selection-list')),
+        findsOneWidget,
+      );
+      expect(app.webBookmarks, hasLength(3));
 
-    await tester.tap(
-      find.byKey(const ValueKey('bookmark-delete-selected')),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const ValueKey('bookmark-removal-confirm')),
-    );
-    await tester.pumpAndSettle();
-    expect(app.webBookmarks.map((item) => item.keys.first), [
-      'Diagnostics',
-      'Status',
-    ]);
-    expect(
-      find.byKey(const ValueKey('bookmark-removal-selection-list')),
-      findsOneWidget,
-    );
+      await tester.tap(find.byKey(const ValueKey('bookmark-delete-selected')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('bookmark-removal-confirm')));
+      await tester.pumpAndSettle();
+      expect(app.webBookmarks.map((item) => item.keys.first), [
+        'Diagnostics',
+        'Status',
+      ]);
+      expect(
+        find.byKey(const ValueKey('bookmark-removal-selection-list')),
+        findsOneWidget,
+      );
 
-    await tester.tap(
-      find.byKey(const ValueKey('bookmark-select-all')),
-    );
-    await tester.pump();
-    await tester.tap(
-      find.byKey(const ValueKey('bookmark-delete-selected')),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const ValueKey('bookmark-removal-confirm')),
-    );
-    await tester.pumpAndSettle();
-    expect(app.webBookmarks, isEmpty);
-    expect(find.text('No bookmarks remain'), findsWidgets);
+      await tester.tap(find.byKey(const ValueKey('bookmark-select-all')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('bookmark-delete-selected')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('bookmark-removal-confirm')));
+      await tester.pumpAndSettle();
+      expect(app.webBookmarks, isEmpty);
+      expect(find.text('No bookmarks remain'), findsWidgets);
 
-    await tester.tap(
-      find.byKey(const ValueKey('bookmark-removal-close')),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('No Saved Web Addresses'), findsOneWidget);
-  });
+      await tester.tap(find.byKey(const ValueKey('bookmark-removal-close')));
+      await tester.pumpAndSettle();
+      expect(find.text('No Saved Web Addresses'), findsOneWidget);
+    },
+  );
 
-  testWidgets('Toolbar remains bounded with enlarged customized UI fonts',
-      (tester) async {
+  testWidgets('Toolbar remains bounded with enlarged customized UI fonts', (
+    tester,
+  ) async {
     final app = AppState();
     app.applyFontSettings('System', 20, 20, 20, 24);
     addTearDown(tester.view.resetPhysicalSize);
@@ -4227,14 +4154,17 @@ void main() {
         ),
       );
 
-      expect(tester.getSize(find.byKey(const ValueKey('toolbar-root'))).width,
-          width);
+      expect(
+        tester.getSize(find.byKey(const ValueKey('toolbar-root'))).width,
+        width,
+      );
       expect(tester.takeException(), isNull);
     }
   });
 
-  testWidgets('Small screens can collapse controls without covering plots',
-      (tester) async {
+  testWidgets('Small screens can collapse controls without covering plots', (
+    tester,
+  ) async {
     final app = AppState();
     await app.preferencesReady;
     addTearDown(tester.view.resetPhysicalSize);
@@ -4253,26 +4183,33 @@ void main() {
     expect(collapse, findsOneWidget);
     expect(find.byKey(const ValueKey('toolbar-root')), findsOneWidget);
     final expandedPlotTop = tester.getTopLeft(find.byType(PlotGrid)).dy;
-    expect(tester.getRect(collapse).bottom,
-        lessThanOrEqualTo(expandedPlotTop + 0.01));
+    expect(
+      tester.getRect(collapse).bottom,
+      lessThanOrEqualTo(expandedPlotTop + 0.01),
+    );
 
     await tester.tap(collapse);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('toolbar-root')), findsNothing);
-    expect(find.byKey(const ValueKey('toolbar-collapsed-summary')),
-        findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('toolbar-collapsed-summary')),
+      findsOneWidget,
+    );
     final collapsedPlotTop = tester.getTopLeft(find.byType(PlotGrid)).dy;
     expect(collapsedPlotTop, lessThan(expandedPlotTop));
-    expect(tester.getRect(collapse).bottom,
-        lessThanOrEqualTo(collapsedPlotTop + 0.01));
+    expect(
+      tester.getRect(collapse).bottom,
+      lessThanOrEqualTo(collapsedPlotTop + 0.01),
+    );
 
     await tester.tap(collapse);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('toolbar-root')), findsOneWidget);
   });
 
-  testWidgets('Extremely small screens scroll controls but not the plot area',
-      (tester) async {
+  testWidgets('Extremely small screens scroll controls but not the plot area', (
+    tester,
+  ) async {
     final app = AppState();
     await app.preferencesReady;
     addTearDown(app.dispose);
@@ -4311,8 +4248,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Settings dialogs gain two-axis scrolling on tiny screens',
-      (tester) async {
+  testWidgets('Settings dialogs gain two-axis scrolling on tiny screens', (
+    tester,
+  ) async {
     final app = AppState();
     await app.preferencesReady;
     addTearDown(app.dispose);
@@ -4354,8 +4292,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Collapsed toolbar keeps controls fixed and scrolls metadata',
-      (tester) async {
+  testWidgets('Collapsed toolbar keeps controls fixed and scrolls metadata', (
+    tester,
+  ) async {
     final app = AppState();
     await app.preferencesReady;
     app.shotText = '163714';
@@ -4366,9 +4305,7 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
         value: app,
-        child: const MaterialApp(
-          home: Scaffold(body: ResponsiveToolbar()),
-        ),
+        child: const MaterialApp(home: Scaffold(body: ResponsiveToolbar())),
       ),
     );
 
@@ -4385,8 +4322,9 @@ void main() {
     expect(metadataScrollbar.thumbVisibility, isTrue);
     expect(metadataScrollbar.interactive, isTrue);
     expect(metadataScrollbar.thickness, 2);
-    final summaryFinder =
-        find.byKey(const ValueKey('toolbar-collapsed-summary'));
+    final summaryFinder = find.byKey(
+      const ValueKey('toolbar-collapsed-summary'),
+    );
     final summary = tester.widget<Text>(summaryFinder).data!;
     expect(summary, contains('Shot: 163714'));
     expect(summary, contains('Ip: --'));
@@ -4396,15 +4334,17 @@ void main() {
     expect(RegExp('Shot:').allMatches(summary), hasLength(1));
     expect(summary, isNot(contains(app.status)));
 
-    final metadataScroll =
-        find.byKey(const ValueKey('toolbar-collapsed-metadata-scroll'));
+    final metadataScroll = find.byKey(
+      const ValueKey('toolbar-collapsed-metadata-scroll'),
+    );
     final horizontalScrollable = find.descendant(
       of: metadataScroll,
       matching: find.byType(Scrollable),
     );
     expect(horizontalScrollable, findsOneWidget);
-    final scrollState =
-        tester.state<ScrollableState>(horizontalScrollable.first);
+    final scrollState = tester.state<ScrollableState>(
+      horizontalScrollable.first,
+    );
     expect(scrollState.position.maxScrollExtent, greaterThan(0));
     final fixedLeft = tester.getTopLeft(find.text('Expand controls'));
     await tester.drag(metadataScroll, const Offset(-180, 0));
@@ -4414,8 +4354,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Comfortable screens do not show the collapse control',
-      (tester) async {
+  testWidgets('Comfortable screens do not show the collapse control', (
+    tester,
+  ) async {
     final app = AppState();
     await app.preferencesReady;
     addTearDown(tester.view.resetPhysicalSize);
@@ -4431,12 +4372,15 @@ void main() {
     );
 
     expect(
-        find.byKey(const ValueKey('toolbar-collapse-control')), findsNothing);
+      find.byKey(const ValueKey('toolbar-collapse-control')),
+      findsNothing,
+    );
     expect(find.byKey(const ValueKey('toolbar-root')), findsOneWidget);
   });
 
-  testWidgets('Layout Setup preview matches phone and tablet plot columns',
-      (tester) async {
+  testWidgets('Layout Setup preview matches phone and tablet plot columns', (
+    tester,
+  ) async {
     final app = AppState();
     app.applyLayoutList([2, 1, 2]);
     addTearDown(tester.view.resetPhysicalSize);
@@ -4485,10 +4429,13 @@ void main() {
       [panel('Column 5')],
     ];
     expect(reorderLayoutColumn(columns, 4, 2), isTrue);
-    expect(
-      columns.map((column) => column.single['title']).toList(),
-      ['Column 1', 'Column 2', 'Column 5', 'Column 3', 'Column 4'],
-    );
+    expect(columns.map((column) => column.single['title']).toList(), [
+      'Column 1',
+      'Column 2',
+      'Column 5',
+      'Column 3',
+      'Column 4',
+    ]);
 
     final panels = [
       [panel('1-1'), panel('1-2'), panel('1-3'), panel('1-4')],
@@ -4505,10 +4452,13 @@ void main() {
       ),
       isTrue,
     );
-    expect(
-      panels[0].map((item) => item['title']).toList(),
-      ['1-1', '1-2', '1-3', '3-2', '1-4'],
-    );
+    expect(panels[0].map((item) => item['title']).toList(), [
+      '1-1',
+      '1-2',
+      '1-3',
+      '3-2',
+      '1-4',
+    ]);
     expect(panels[2].map((item) => item['title']).toList(), ['3-1']);
 
     expect(
@@ -4549,8 +4499,9 @@ void main() {
     );
   });
 
-  testWidgets('Layout Setup selects and deletes columns with icon actions',
-      (tester) async {
+  testWidgets('Layout Setup selects and deletes columns with icon actions', (
+    tester,
+  ) async {
     final app = AppState();
     await app.preferencesReady;
     addTearDown(app.dispose);
@@ -4570,94 +4521,66 @@ void main() {
     await tester.tap(find.text('Layout setup'));
     await tester.pumpAndSettle();
     expect(
-      tester.widget(
-        find.byKey(const ValueKey('layout-column-drag-1')),
-      ),
+      tester.widget(find.byKey(const ValueKey('layout-column-drag-1'))),
       isA<LongPressDraggable>(),
     );
     expect(
-      tester.widget(
-        find.byKey(const ValueKey('layout-panel-drag-1')),
-      ),
+      tester.widget(find.byKey(const ValueKey('layout-panel-drag-1'))),
       isA<LongPressDraggable>(),
     );
     expect(
-      tester.widget(
-        find.byKey(const ValueKey('layout-column-drag-handle-1')),
-      ),
+      tester.widget(find.byKey(const ValueKey('layout-column-drag-handle-1'))),
       isA<Draggable>(),
     );
     expect(
-      tester.widget(
-        find.byKey(const ValueKey('layout-panel-drag-handle-1')),
-      ),
+      tester.widget(find.byKey(const ValueKey('layout-panel-drag-handle-1'))),
       isA<Draggable>(),
     );
-    expect(
-      find.byKey(const ValueKey('layout-column-drop-1')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('layout-panel-drop-0-1')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('layout-column-drop-1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('layout-panel-drop-0-1')), findsOneWidget);
     final dragPreview = await tester.startGesture(
-      tester.getCenter(
-        find.byKey(const ValueKey('layout-column-header-1')),
-      ),
+      tester.getCenter(find.byKey(const ValueKey('layout-column-header-1'))),
     );
     await tester.pump(const Duration(milliseconds: 350));
     expect(find.text('1 panels'), findsOneWidget);
     await dragPreview.cancel();
     await tester.pumpAndSettle();
 
-    await tester.tap(
-      find.byKey(const ValueKey('layout-column-header-2')),
-    );
+    await tester.tap(find.byKey(const ValueKey('layout-column-header-2')));
     await tester.pump();
     final deleteColumn = find.byKey(const ValueKey('layout-delete-column-2'));
     expect(deleteColumn, findsOneWidget);
     expect(tester.widget(deleteColumn), isA<IconButton>());
 
-    await tester.tap(
-      find.byKey(const ValueKey('layout-setup-blank-area')),
-    );
+    await tester.tap(find.byKey(const ValueKey('layout-setup-blank-area')));
     await tester.pump();
     expect(deleteColumn, findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('layout-preview-panel-0')));
     await tester.pump();
     expect(
-      tester.widget(
-        find.byKey(const ValueKey('layout-edit-panel-1')),
-      ),
+      tester.widget(find.byKey(const ValueKey('layout-edit-panel-1'))),
       isA<IconButton>(),
     );
     expect(
-      tester.widget(
-        find.byKey(const ValueKey('layout-delete-panel-1')),
-      ),
+      tester.widget(find.byKey(const ValueKey('layout-delete-panel-1'))),
       isA<IconButton>(),
     );
 
-    await tester.tap(
-      find.byKey(const ValueKey('layout-column-header-2')),
-    );
+    await tester.tap(find.byKey(const ValueKey('layout-column-header-2')));
     await tester.pump();
     await tester.tap(deleteColumn);
     await tester.pump();
-    expect(
-      find.byKey(const ValueKey('layout-preview-column-1')),
-      findsNothing,
-    );
+    expect(find.byKey(const ValueKey('layout-preview-column-1')), findsNothing);
 
     await tester.tap(find.widgetWithText(TextButton, 'Apply'));
     await tester.pumpAndSettle();
     expect(app.columns, hasLength(1));
   });
 
-  testWidgets('A panel drag handle can create a column between columns',
-      (tester) async {
+  testWidgets('A panel drag handle can create a column between columns', (
+    tester,
+  ) async {
     final app = AppState();
     await app.preferencesReady;
     addTearDown(app.dispose);
@@ -4694,8 +4617,9 @@ void main() {
     expect(app.columns.map((column) => column.length), [1, 1, 1]);
   });
 
-  testWidgets('Layout Setup scrolls wide columns and tall panel lists',
-      (tester) async {
+  testWidgets('Layout Setup scrolls wide columns and tall panel lists', (
+    tester,
+  ) async {
     final app = AppState();
     await app.preferencesReady;
     addTearDown(app.dispose);
@@ -4743,11 +4667,10 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Layout Setup shows metadata and supports draft panel actions',
-      (tester) async {
-    final app = AppState(
-      signalFetchWorker: (_, __, ___) async => '[]',
-    );
+  testWidgets('Layout Setup shows metadata and supports draft panel actions', (
+    tester,
+  ) async {
+    final app = AppState(signalFetchWorker: (_, __, ___) async => '[]');
     await app.preferencesReady;
     app.applyLayoutList([2]);
     app.columns[0][0]
@@ -4824,8 +4747,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Data Source Setup'), findsOneWidget);
     expect(find.byKey(const ValueKey('data-mode-dropdown-0')), findsOneWidget);
-    await tester
-        .ensureVisible(find.byKey(const ValueKey('data-mode-dropdown-0')));
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('data-mode-dropdown-0')),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('data-mode-dropdown-0')));
     await tester.pumpAndSettle();
@@ -4852,116 +4776,118 @@ void main() {
   });
 
   testWidgets(
-      'Panel Setup follows actual plot metadata until the user overrides it',
-      (tester) async {
-    final panel = <String, dynamic>{
-      'title': 'Configured title',
-      'x_label': 's',
-      'y_label': 'a.u.',
-      'extraction_points': 2000,
-      'grid': true,
-    };
-    final actual = ValueNotifier<PanelSetupValues>(
-      const PanelSetupValues(
-        title: 'Loaded title',
-        xLabel: 'ms',
-        yLabel: 'kA',
-        extractionPoints: 4096,
-      ),
-    );
-    addTearDown(actual.dispose);
+    'Panel Setup follows actual plot metadata until the user overrides it',
+    (tester) async {
+      final panel = <String, dynamic>{
+        'title': 'Configured title',
+        'x_label': 's',
+        'y_label': 'a.u.',
+        'extraction_points': 2000,
+        'grid': true,
+      };
+      final actual = ValueNotifier<PanelSetupValues>(
+        const PanelSetupValues(
+          title: 'Loaded title',
+          xLabel: 'ms',
+          yLabel: 'kA',
+          extractionPoints: 4096,
+        ),
+      );
+      addTearDown(actual.dispose);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder: (context) => TextButton(
-            onPressed: () => showPanelSetupEditor(
-              context,
-              panel,
-              actualValues: () => actual.value,
-              actualChanges: actual,
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showPanelSetupEditor(
+                context,
+                panel,
+                actualValues: () => actual.value,
+                actualChanges: actual,
+              ),
+              child: const Text('Edit'),
             ),
-            child: const Text('Edit'),
           ),
         ),
-      ),
-    );
-    await tester.tap(find.text('Edit'));
-    await tester.pumpAndSettle();
+      );
+      await tester.tap(find.text('Edit'));
+      await tester.pumpAndSettle();
 
-    TextField field(Key key) => tester.widget<TextField>(find.byKey(key));
-    expect(
-      field(const ValueKey('panel-setup-title')).controller!.text,
-      'Loaded title',
-    );
-    expect(
-      field(const ValueKey('panel-setup-x-label')).controller!.text,
-      'ms',
-    );
-    expect(
-      field(const ValueKey('panel-setup-y-label')).controller!.text,
-      'kA',
-    );
-    expect(
-      field(const ValueKey('panel-setup-extraction-points')).controller!.text,
-      '4096',
-    );
+      TextField field(Key key) => tester.widget<TextField>(find.byKey(key));
+      expect(
+        field(const ValueKey('panel-setup-title')).controller!.text,
+        'Loaded title',
+      );
+      expect(
+        field(const ValueKey('panel-setup-x-label')).controller!.text,
+        'ms',
+      );
+      expect(
+        field(const ValueKey('panel-setup-y-label')).controller!.text,
+        'kA',
+      );
+      expect(
+        field(const ValueKey('panel-setup-extraction-points')).controller!.text,
+        '4096',
+      );
 
-    actual.value = const PanelSetupValues(
-      title: 'New loaded title',
-      xLabel: 'µs',
-      yLabel: 'V',
-      extractionPoints: 8192,
-    );
-    await tester.pump();
-    expect(
-      field(const ValueKey('panel-setup-title')).controller!.text,
-      'New loaded title',
-    );
-    expect(
-      field(const ValueKey('panel-setup-x-label')).controller!.text,
-      'µs',
-    );
+      actual.value = const PanelSetupValues(
+        title: 'New loaded title',
+        xLabel: 'µs',
+        yLabel: 'V',
+        extractionPoints: 8192,
+      );
+      await tester.pump();
+      expect(
+        field(const ValueKey('panel-setup-title')).controller!.text,
+        'New loaded title',
+      );
+      expect(
+        field(const ValueKey('panel-setup-x-label')).controller!.text,
+        'µs',
+      );
 
-    await tester.enterText(
-      find.byKey(const ValueKey('panel-setup-title')),
-      'User title',
-    );
-    actual.value = const PanelSetupValues(
-      title: 'Later server title',
-      xLabel: 'ns',
-      yLabel: 'mV',
-      extractionPoints: 16384,
-    );
-    await tester.pump();
-    expect(
-      field(const ValueKey('panel-setup-title')).controller!.text,
-      'User title',
-    );
-    expect(
-      field(const ValueKey('panel-setup-x-label')).controller!.text,
-      'ns',
-    );
+      await tester.enterText(
+        find.byKey(const ValueKey('panel-setup-title')),
+        'User title',
+      );
+      actual.value = const PanelSetupValues(
+        title: 'Later server title',
+        xLabel: 'ns',
+        yLabel: 'mV',
+        extractionPoints: 16384,
+      );
+      await tester.pump();
+      expect(
+        field(const ValueKey('panel-setup-title')).controller!.text,
+        'User title',
+      );
+      expect(
+        field(const ValueKey('panel-setup-x-label')).controller!.text,
+        'ns',
+      );
 
-    await tester.enterText(
-      find.byKey(const ValueKey('panel-setup-y-label')),
-      'tesla',
-    );
-    await tester.enterText(
-      find.byKey(const ValueKey('panel-setup-extraction-points')),
-      '12000',
-    );
-    await tester.tap(find.widgetWithText(TextButton, 'Save'));
-    await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('panel-setup-y-label')),
+        'tesla',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('panel-setup-extraction-points')),
+        '12000',
+      );
+      await tester.tap(find.widgetWithText(TextButton, 'Save'));
+      await tester.pumpAndSettle();
 
-    expect(panel['title'], 'User title');
-    expect(panel['x_label'], 's');
-    expect(panel['y_label'], 'tesla');
-    expect(panel['extraction_points'], 12000);
-  });
+      expect(panel['title'], 'User title');
+      expect(panel['x_label'], 's');
+      expect(panel['y_label'], 'tesla');
+      expect(panel['extraction_points'], 12000);
+    },
+  );
 
-  testWidgets('About dialog reflows and opens links on a phone',
-      (tester) async {
+  testWidgets('About dialog reflows and opens links on a phone', (
+    tester,
+  ) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     tester.view.devicePixelRatio = 1;
@@ -4976,8 +4902,8 @@ void main() {
             version: '18.5',
             architecture: 'arm64',
           ),
-          versionLoader: () async => '7.0',
-          gitVersionLoader: () async => '7.0.r42.g123456789',
+          versionLoader: () async => '0.0.1',
+          gitVersionLoader: () async => '0.0.1.r42.g123456789',
           urlOpener: (uri) async {
             openedUrls.add(uri);
             return true;
@@ -4985,28 +4911,28 @@ void main() {
           updateChecker: () async => const ReleaseUpdate(
             latestVersion: 'v99.0.0',
             releaseUrl:
-                'https://github.com/Wu-Kuan-Yee/MdsScope/releases/tag/v99.0.0',
+                'https://github.com/Wu-Kuan-Yee/MDSLens/releases/tag/v99.0.0',
             updateAvailable: true,
           ),
         ),
       ),
     );
     await tester.pump();
-    expect(find.text('7.0.r42.g123456789'), findsOneWidget);
+    expect(find.text('0.0.1.r42.g123456789'), findsOneWidget);
     expect(find.text('iOS (18.5) (arm64)'), findsOneWidget);
 
     final narrowVersionRow = find.byKey(
-      const ValueKey('about-row-narrow-MdsScope Version'),
+      const ValueKey('about-row-narrow-MDSLens Version'),
     );
     expect(narrowVersionRow, findsOneWidget);
     expect(
       tester.widget<Column>(narrowVersionRow).crossAxisAlignment,
       CrossAxisAlignment.center,
     );
-    await tester.ensureVisible(find.text('MdsScope Version'));
+    await tester.ensureVisible(find.text('MDSLens Version'));
     expect(
-      tester.getCenter(find.text('MdsScope Version')).dx,
-      closeTo(tester.getCenter(find.text('7.0')).dx, 0.5),
+      tester.getCenter(find.text('MDSLens Version')).dx,
+      closeTo(tester.getCenter(find.text('0.0.1')).dx, 0.5),
     );
 
     await tester.ensureVisible(find.text('MdsScope project'));
@@ -5017,12 +4943,12 @@ void main() {
     await tester.ensureVisible(find.text('Pingzhong Wu'));
     await tester.tap(find.text('Pingzhong Wu'));
     await tester.pump();
-    expect(openedUrls.last, Uri.parse(mdsScopeMaintainerUrl));
+    expect(openedUrls.last, Uri.parse(mdsLensMaintainerUrl));
 
     await tester.ensureVisible(find.text('GitHub'));
     await tester.tap(find.text('GitHub'));
     await tester.pump();
-    expect(openedUrls.last, Uri.parse(mdsScopeSourceUrl));
+    expect(openedUrls.last, Uri.parse(mdsLensSourceUrl));
 
     await tester.ensureVisible(find.text('Update'));
     await tester.tap(find.text('Update'));
@@ -5033,9 +4959,7 @@ void main() {
 
     expect(
       openedUrls.last,
-      Uri.parse(
-        'https://github.com/Wu-Kuan-Yee/MdsScope/releases/tag/v99.0.0',
-      ),
+      Uri.parse('https://github.com/Wu-Kuan-Yee/MDSLens/releases/tag/v99.0.0'),
     );
     expect(tester.takeException(), isNull);
   });

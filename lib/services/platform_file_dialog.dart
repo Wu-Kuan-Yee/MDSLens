@@ -15,16 +15,17 @@ Future<String?> saveBytesWithFilePicker({
   PlatformSaveDialog? saveDialog,
 }) async {
   final mobile = mobileOverride ?? (Platform.isAndroid || Platform.isIOS);
-  final dialog = saveDialog ??
+  final dialog =
+      saveDialog ??
       (Uint8List? payload) => FilePicker.platform.saveFile(
-            dialogTitle: dialogTitle,
-            fileName: fileName,
-            type: Platform.isAndroid ? FileType.any : FileType.custom,
-            allowedExtensions: Platform.isAndroid ? null : allowedExtensions,
-            bytes: payload,
-            initialDirectory: initialDirectory,
-            lockParentWindow: !mobile,
-          );
+        dialogTitle: dialogTitle,
+        fileName: fileName,
+        type: Platform.isAndroid ? FileType.any : FileType.custom,
+        allowedExtensions: Platform.isAndroid ? null : allowedExtensions,
+        bytes: payload,
+        initialDirectory: initialDirectory,
+        lockParentWindow: !mobile,
+      );
   var path = await dialog(mobile ? bytes : null);
   if (path == null || path.trim().isEmpty) return null;
 

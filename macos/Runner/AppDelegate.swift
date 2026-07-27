@@ -46,7 +46,7 @@ class AppDelegate: FlutterAppDelegate {
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
     guard let controller = mainFlutterWindow?.contentViewController as? FlutterViewController else { return }
-    let channel = FlutterMethodChannel(name: "mdsscope/theme", binaryMessenger: controller.engine.binaryMessenger)
+    let channel = FlutterMethodChannel(name: "mdslens/theme", binaryMessenger: controller.engine.binaryMessenger)
     themeChannel = channel
     channel.setMethodCallHandler { [weak self] (call, result) in
       if call.method == "isDark" {
@@ -56,7 +56,7 @@ class AppDelegate: FlutterAppDelegate {
       }
     }
     let systemChannel = FlutterMethodChannel(
-      name: "mdsscope/system_info",
+      name: "mdslens/system_info",
       binaryMessenger: controller.engine.binaryMessenger
     )
     systemInfoChannel = systemChannel
@@ -82,7 +82,7 @@ class AppDelegate: FlutterAppDelegate {
       ])
     }
     let fontsChannel = FlutterMethodChannel(
-      name: "mdsscope/system_fonts",
+      name: "mdslens/system_fonts",
       binaryMessenger: controller.engine.binaryMessenger
     )
     systemFontsChannel = fontsChannel
@@ -96,7 +96,7 @@ class AppDelegate: FlutterAppDelegate {
       })
     }
     let openChannel = FlutterMethodChannel(
-      name: "mdsscope/open_requests",
+      name: "mdslens/open_requests",
       binaryMessenger: controller.engine.binaryMessenger
     )
     openRequestsChannel = openChannel
@@ -110,7 +110,7 @@ class AppDelegate: FlutterAppDelegate {
       result(pending)
     }
     let identityChannel = FlutterMethodChannel(
-      name: "mdsscope/identity_file_access",
+      name: "mdslens/identity_file_access",
       binaryMessenger: controller.engine.binaryMessenger
     )
     identityFileChannel = identityChannel
@@ -131,7 +131,7 @@ class AppDelegate: FlutterAppDelegate {
     }
     restoreIdentityFileBookmarks()
     let permissionChannel = FlutterMethodChannel(
-      name: "mdsscope/permissions",
+      name: "mdslens/permissions",
       binaryMessenger: controller.engine.binaryMessenger
     )
     permissionsChannel = permissionChannel
@@ -220,7 +220,7 @@ class AppDelegate: FlutterAppDelegate {
     get {
       let query: [String: Any] = [
         kSecClass as String: kSecClassGenericPassword,
-        kSecAttrService as String: "com.mdsscope.app.identity-bookmarks",
+        kSecAttrService as String: "com.mdslens.app.identity-bookmarks",
         kSecAttrAccount as String: "bookmarks",
         kSecReturnData as String: true,
         kSecMatchLimit as String: kSecMatchLimitOne,
@@ -240,13 +240,13 @@ class AppDelegate: FlutterAppDelegate {
 
       // One-time migration from the former plaintext UserDefaults entry.
       let legacy = UserDefaults.standard.dictionary(
-        forKey: "MdsScopeIdentityFileBookmarks"
+        forKey: "MDSLensIdentityFileBookmarks"
       ) as? [String: Data] ?? [:]
       if !legacy.isEmpty {
         identityFileBookmarks = legacy
       }
       UserDefaults.standard.removeObject(
-        forKey: "MdsScopeIdentityFileBookmarks"
+        forKey: "MDSLensIdentityFileBookmarks"
       )
       return legacy
     }
@@ -260,7 +260,7 @@ class AppDelegate: FlutterAppDelegate {
       }
       let identity: [String: Any] = [
         kSecClass as String: kSecClassGenericPassword,
-        kSecAttrService as String: "com.mdsscope.app.identity-bookmarks",
+        kSecAttrService as String: "com.mdslens.app.identity-bookmarks",
         kSecAttrAccount as String: "bookmarks",
       ]
       SecItemDelete(identity as CFDictionary)
@@ -270,7 +270,7 @@ class AppDelegate: FlutterAppDelegate {
         kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
       SecItemAdd(item as CFDictionary, nil)
       UserDefaults.standard.removeObject(
-        forKey: "MdsScopeIdentityFileBookmarks"
+        forKey: "MDSLensIdentityFileBookmarks"
       )
     }
   }
@@ -331,7 +331,7 @@ class AppDelegate: FlutterAppDelegate {
 
     let panel = NSOpenPanel()
     panel.title = "Authorize SSH Identity File"
-    panel.message = "MdsScope needs permission to read this private key."
+    panel.message = "MDSLens needs permission to read this private key."
     panel.prompt = "Authorize"
     panel.canChooseFiles = true
     panel.canChooseDirectories = false

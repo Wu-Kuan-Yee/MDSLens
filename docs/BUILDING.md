@@ -1,4 +1,4 @@
-# Build, Package, and Sign MdsScope
+# Build, Package, and Sign MDSLens
 
 The supported entry point is `build_app.py`. It builds the Flutter application,
 automatically builds the Rust bridge, checks the host toolchain, and packages
@@ -94,7 +94,7 @@ missing Visual Studio C++ tools, Perl, or NASM. After changing those tools, use
 
 Windows x64 and ARM64 packages must be built on native x64 and ARM64 hosts.
 The portable output is a complete directory archive containing the executable,
-Flutter DLLs, plugins, and data; `mdsscope.exe` alone is not portable.
+Flutter DLLs, plugins, and data; `mdslens.exe` alone is not portable.
 
 ## macOS
 
@@ -161,7 +161,7 @@ not general cross-compilation targets.
 ZIP and TAR outputs are portable application bundles, not copies of the raw
 Flutter build directory. They carry the Flutter engine, plugins, Rust bridge,
 application data and other application-owned libraries. Extract the archive
-and run `./mdsscope-linux-<arch>/mdsscope`. This file is the native ELF
+and run `./mdslens-linux-<arch>/mdslens`. This file is the native ELF
 executable itself; packaging writes relocatable `$ORIGIN` runpaths into it and
 the bundled libraries, so no launcher script or fixed extraction path is
 needed. The AppImage is assembled from the same runtime.
@@ -187,7 +187,7 @@ The same ABI/dependency/startup check can be run locally with:
 
 ```sh
 python3 scripts/verify_linux_portable.py \
-  build/dist/mdsscope-linux-x64.zip --max-glibc 2.31 --launch
+  build/dist/mdslens-linux-x64.zip --max-glibc 2.31 --launch
 ```
 
 ## Android
@@ -216,10 +216,10 @@ keystore and is suitable for testing, not store publication.
 For production signing, set:
 
 ```sh
-export MDSSCOPE_ANDROID_KEYSTORE=/absolute/path/release.jks
-export MDSSCOPE_ANDROID_STORE_PASSWORD='...'
-export MDSSCOPE_ANDROID_KEY_ALIAS='...'
-export MDSSCOPE_ANDROID_KEY_PASSWORD='...'
+export MDSLENS_ANDROID_KEYSTORE=/absolute/path/release.jks
+export MDSLENS_ANDROID_STORE_PASSWORD='...'
+export MDSLENS_ANDROID_KEY_ALIAS='...'
+export MDSLENS_ANDROID_KEY_PASSWORD='...'
 python build_app.py -p android -f apk aab apks
 ```
 
@@ -238,7 +238,7 @@ python3 build_app.py -p ios -p ipados \
 
 One universal Apple mobile binary supports both iPhone and iPad device
 families. The script publishes iOS and iPadOS filename aliases. The unsigned
-IPA has the standard `Payload/MdsScope.app` structure, but a normal Apple
+IPA has the standard `Payload/MDSLens.app` structure, but a normal Apple
 mobile device still requires the user to re-sign it with a certificate,
 provisioning profile, matching bundle identifier and entitlements. Follow the
 self-signing workflow in [INSTALLING.md](INSTALLING.md).
@@ -268,16 +268,16 @@ On Windows, macOS, and Linux, private application state is stored below the
 user's home directory:
 
 ```text
-~/.mdsscope/settings.json
-~/.mdsscope/configurations/
-~/.mdsscope/cache/
+~/.mdslens/settings.json
+~/.mdslens/configurations/
+~/.mdslens/cache/
 ```
 
 Windows resolves `~` through `USERPROFILE`. Android, iOS, and iPadOS place the
-same `.mdsscope` structure in the application-support sandbox. Open/Save dialogs
-use `configurations/` as their desktop default. Existing settings from earlier
-builds are migrated once; the unrelated `~/.config/mdsscope/` tree is never
-used as a migration source or an import location, even when selected manually.
+same `.mdslens` structure in the application-support sandbox. Open/Save dialogs
+use `configurations/` as their desktop default. MDSLens does not automatically
+read settings from `~/.mdsscope/` or `~/.config/mdsscope/`; those legacy
+MdsScope directories are also rejected as configuration import locations.
 
 Passwords and session tokens are stored only in the operating system's secure
 credential vault: Apple Keychain, Android Keystore-backed encrypted storage,

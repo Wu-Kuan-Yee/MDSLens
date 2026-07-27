@@ -1,8 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.mdsscope.app">
+    package="com.mdslens.app">
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="MdsScope"
+        android:label="MDSLens"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round">
@@ -26,20 +26,20 @@
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="mdsscope"/>
+                <data android:scheme="mdslens"/>
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.OPENABLE"/>
-                <data android:mimeType="application/x-mdsscope-configuration"/>
+                <data android:mimeType="application/x-mdslens-configuration"/>
                 <data android:mimeType="application/toml"/>
                 <data android:mimeType="text/plain"/>
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND"/>
                 <category android:name="android.intent.category.DEFAULT"/>
-                <data android:mimeType="application/x-mdsscope-configuration"/>
+                <data android:mimeType="application/x-mdslens-configuration"/>
                 <data android:mimeType="application/toml"/>
                 <data android:mimeType="text/plain"/>
             </intent-filter>

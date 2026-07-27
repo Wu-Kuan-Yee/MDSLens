@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 MdsScope Contributors
+// SPDX-FileCopyrightText: 2026 MDSLens Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! SSH tunnel manager: local TCP port forwarding through SSH.
@@ -628,9 +628,9 @@ mod tests {
 
     #[test]
     fn invalid_identity_path_returns_the_resolved_path() {
-        let error = resolve_identity_file("./definitely-missing-mdsscope-key")
+        let error = resolve_identity_file("./definitely-missing-mdslens-key")
             .expect_err("missing identity file must be rejected");
         assert!(error.contains("not found or is inaccessible"));
-        assert!(error.contains("definitely-missing-mdsscope-key"));
+        assert!(error.contains("definitely-missing-mdslens-key"));
     }
 }

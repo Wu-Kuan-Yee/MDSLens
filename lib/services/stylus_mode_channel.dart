@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 /// Receives platform-specific stylus tool changes that Flutter pointer events
 /// do not expose, notably Apple Pencil double-tap.
 class StylusModeChannel {
-  static const MethodChannel _channel = MethodChannel('mdsscope/stylus');
+  static const MethodChannel _channel = MethodChannel('mdslens/stylus');
   static void Function(bool eraser)? _onModeChanged;
   static bool _initialized = false;
 

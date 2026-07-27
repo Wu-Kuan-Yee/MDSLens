@@ -1,10 +1,10 @@
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.14)
-project(mdsscope LANGUAGES CXX)
+project(mdslens LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
-set(BINARY_NAME "mdsscope")
+set(BINARY_NAME "mdslens")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
@@ -75,7 +75,7 @@ add_custom_target(mds_bridge_native ALL
     -CargoTargetDirectory "${MDS_BRIDGE_CARGO_TARGET_DIR}"
   BYPRODUCTS "${MDS_BRIDGE_LIBRARY}"
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
-  COMMENT "Building the MdsScope Rust bridge"
+  COMMENT "Building the MDSLens Rust bridge"
   VERBATIM
 )
 add_dependencies(${BINARY_NAME} mds_bridge_native)

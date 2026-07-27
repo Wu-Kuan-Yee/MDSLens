@@ -60,14 +60,10 @@ const _filePreferenceKeys = <String>[
   'loggedIn',
 ];
 
-const _loginPasswordCredential = 'mdsscope.login.password';
-const _authTokenCredential = 'mdsscope.login.token';
-const _sshPasswordCredential = 'mdsscope.ssh.password';
-const _plaintextCredentialKeys = <String>[
-  'loginPass',
-  'authToken',
-  'sshPass',
-];
+const _loginPasswordCredential = 'mdslens.login.password';
+const _authTokenCredential = 'mdslens.login.token';
+const _sshPasswordCredential = 'mdslens.ssh.password';
+const _plaintextCredentialKeys = <String>['loginPass', 'authToken', 'sshPass'];
 
 int signalHideModeOf(Map<dynamic, dynamic> signal) {
   final raw = signal['hide_mode'];
@@ -97,11 +93,7 @@ void normalizeSignalHideSettings(Map<dynamic, dynamic> signal) {
 }
 
 class ConfigOpenSelection {
-  const ConfigOpenSelection({
-    required this.name,
-    this.path,
-    this.bytes,
-  });
+  const ConfigOpenSelection({required this.name, this.path, this.bytes});
 
   final String name;
   final String? path;
@@ -109,10 +101,8 @@ class ConfigOpenSelection {
 }
 
 typedef ConfigOpenPicker = Future<ConfigOpenSelection?> Function();
-typedef ConfigSavePicker = Future<String?> Function(
-  String suggestedName,
-  Uint8List bytes,
-);
+typedef ConfigSavePicker =
+    Future<String?> Function(String suggestedName, Uint8List bytes);
 typedef ConfigParser = String Function(String path);
 typedef ConfigEncoder = Future<Uint8List> Function(String configJson);
 typedef ImportedShotDecision = Future<bool> Function(String importedShot);
@@ -123,32 +113,35 @@ typedef SshDisconnect = void Function();
 /// out of it prevents an old installation from silently becoming a source of
 /// state for this application as well.
 bool isLegacyMdsScopeConfigurationPath(String path) {
-  final normalized =
-      path.replaceAll('\\', '/').replaceAll(RegExp(r'/+'), '/').toLowerCase();
-  return normalized.endsWith('/.config/mdsscope') ||
+  final normalized = path
+      .replaceAll('\\', '/')
+      .replaceAll(RegExp(r'/+'), '/')
+      .toLowerCase();
+  return normalized.endsWith('/.mdsscope') ||
+      normalized.contains('/.mdsscope/') ||
+      normalized.endsWith('/.config/mdsscope') ||
       normalized.contains('/.config/mdsscope/');
 }
 
-typedef SignalFetchWorker = Future<String> Function(
-  String configJson,
-  String dataMode,
-  String sshSettingsJson,
-);
+typedef SignalFetchWorker =
+    Future<String> Function(
+      String configJson,
+      String dataMode,
+      String sshSettingsJson,
+    );
 
-typedef SignalPrewarmWorker = Future<void> Function(
-  String configJson,
-  String sshSettingsJson,
-);
+typedef SignalPrewarmWorker =
+    Future<void> Function(String configJson, String sshSettingsJson);
 
 enum _WaveformFetchKind { global, panel }
 
 class _WaveformFetchRequest {
   _WaveformFetchRequest.global(this.shot)
-      : kind = _WaveformFetchKind.global,
-        plotIndex = null;
+    : kind = _WaveformFetchKind.global,
+      plotIndex = null;
 
   _WaveformFetchRequest.panel(this.shot, this.plotIndex)
-      : kind = _WaveformFetchKind.panel;
+    : kind = _WaveformFetchKind.panel;
 
   final _WaveformFetchKind kind;
   final String shot;
@@ -158,31 +151,31 @@ class _WaveformFetchRequest {
   String key(int dataMode) => '${kind.name}|$shot|$plotIndex|$dataMode';
 }
 
-typedef ShotInfoFetchWorker = Future<String> Function(
-  String apiUrl,
-  String token,
-  String shot,
-);
+typedef ShotInfoFetchWorker =
+    Future<String> Function(String apiUrl, String token, String shot);
 
-typedef LoginWorker = Future<({String token, bool usedSsh})> Function(
-  String apiUrl,
-  String user,
-  String password,
-  String sshSettingsJson,
-);
+typedef LoginWorker =
+    Future<({String token, bool usedSsh})> Function(
+      String apiUrl,
+      String user,
+      String password,
+      String sshSettingsJson,
+    );
 
-typedef LatestShotWorker = Future<dynamic> Function(
-  String apiUrl,
-  String token,
-  String sshSettingsJson,
-);
+typedef LatestShotWorker =
+    Future<dynamic> Function(
+      String apiUrl,
+      String token,
+      String sshSettingsJson,
+    );
 
 Future<ConfigOpenSelection?> _pickConfigurationFile() async {
   final mobile = Platform.isAndroid || Platform.isIOS;
-  final privateDirectory =
-      mobile ? null : await UserDataStore().configurationDirectory();
+  final privateDirectory = mobile
+      ? null
+      : await UserDataStore().configurationDirectory();
   final result = await FilePicker.platform.pickFiles(
-    dialogTitle: 'Open MdsScope configuration',
+    dialogTitle: 'Open MDSLens configuration',
     // iOS/iPadOS document providers do not consistently map the non-standard
     // TOML extension to a UTI, which makes valid files appear disabled.
     // Validate the selected filename ourselves on mobile instead.
@@ -197,7 +190,7 @@ Future<ConfigOpenSelection?> _pickConfigurationFile() async {
   final lowerName = file.name.toLowerCase();
   if (!lowerName.endsWith('.toml') && !lowerName.endsWith('.webscp')) {
     throw const FormatException(
-      'Please choose an MdsScope .toml or .webscp configuration file.',
+      'Please choose an MDSLens .toml or .webscp configuration file.',
     );
   }
   return ConfigOpenSelection(
@@ -214,10 +207,11 @@ Future<String?> _saveConfigurationFile(
   Uint8List bytes,
 ) async {
   final mobile = Platform.isAndroid || Platform.isIOS;
-  final privateDirectory =
-      mobile ? null : await UserDataStore().configurationDirectory();
+  final privateDirectory = mobile
+      ? null
+      : await UserDataStore().configurationDirectory();
   return saveBytesWithFilePicker(
-    dialogTitle: 'Save MdsScope configuration',
+    dialogTitle: 'Save MDSLens configuration',
     fileName: suggestedName,
     allowedExtensions: const ['toml'],
     bytes: bytes,
@@ -242,11 +236,8 @@ Future<String> _fetchSignalsInBackground(
   String sshSettingsJson,
 ) {
   return Isolate.run(
-    () => RustBridge.instance.fetchSigSsh(
-      configJson,
-      dataMode,
-      sshSettingsJson,
-    ),
+    () =>
+        RustBridge.instance.fetchSigSsh(configJson, dataMode, sshSettingsJson),
   );
 }
 
@@ -270,9 +261,7 @@ Future<String> _fetchShotInfoInBackground(
   String token,
   String shot,
 ) {
-  return Isolate.run(
-    () => RustBridge.instance.fetchSInfo(apiUrl, token, shot),
-  );
+  return Isolate.run(() => RustBridge.instance.fetchSInfo(apiUrl, token, shot));
 }
 
 Future<({String url, bool usedSsh})> _prepareApiUrl(
@@ -307,7 +296,7 @@ Future<({String token, bool usedSsh})> _loginToApi(
     );
     request.headers
       ..set('Content-Type', 'application/json; charset=utf-8')
-      ..set('User-Agent', 'MdsScope/7.0');
+      ..set('User-Agent', 'MDSLens/0.0.1');
     request.contentLength = payload.length;
     request.add(payload);
     final response = await request.close();
@@ -358,8 +347,9 @@ String decodeLoginToken(
   try {
     decoded = jsonDecode(trimmed);
   } on FormatException {
-    final preview =
-        trimmed.length > 160 ? '${trimmed.substring(0, 160)}...' : trimmed;
+    final preview = trimmed.length > 160
+        ? '${trimmed.substring(0, 160)}...'
+        : trimmed;
     final status = httpStatus == null ? '' : ' (HTTP $httpStatus)';
     throw 'Login server returned invalid JSON$status: $preview';
   }
@@ -404,7 +394,7 @@ Future<dynamic> _fetchLatestShotFromApi(
     request.headers
       ..set('Content-Type', 'application/json; charset=utf-8')
       ..set('Authorization', 'Bearer $token')
-      ..set('User-Agent', 'MdsScope/7.0');
+      ..set('User-Agent', 'MDSLens/0.0.1');
     request.contentLength = payload.length;
     request.add(payload);
     final response = await request.close();
@@ -436,8 +426,9 @@ dynamic decodeLatestShotResponse(
   try {
     decoded = jsonDecode(trimmed);
   } on FormatException {
-    final preview =
-        trimmed.length > 160 ? '${trimmed.substring(0, 160)}...' : trimmed;
+    final preview = trimmed.length > 160
+        ? '${trimmed.substring(0, 160)}...'
+        : trimmed;
     final status = httpStatus == null ? '' : ' (HTTP $httpStatus)';
     throw 'Latest-shot server returned invalid JSON$status: $preview';
   }
@@ -621,24 +612,24 @@ class AppState extends ChangeNotifier {
     SshTestWorker? sshTestWorker,
     UserDataStore? userDataStore,
     CredentialStore? credentialStore,
-  })  : _signalFetchWorker = signalFetchWorker ?? _fetchSignalsInBackground,
-        _signalPrewarmWorker = signalPrewarmWorker ??
-            (signalFetchWorker == null
-                ? _prewarmSignalsInBackground
-                : _skipSignalPrewarm),
-        _sshDisconnect =
-            sshDisconnect ?? (() => RustBridge.instance.disconnectSsh()),
-        _shotInfoFetchWorker =
-            shotInfoFetchWorker ?? _fetchShotInfoInBackground,
-        _loginWorker = loginWorker ?? _loginToApi,
-        _latestShotWorker = latestShotWorker ?? _fetchLatestShotFromApi,
-        _configOpenPicker = configOpenPicker ?? _pickConfigurationFile,
-        _configSavePicker = configSavePicker ?? _saveConfigurationFile,
-        _configParser = configParser ?? _parseConfiguration,
-        _configEncoder = configEncoder ?? _encodeConfiguration,
-        _sshTestWorker = sshTestWorker ?? _testSshInBackground,
-        _userDataStore = userDataStore ?? UserDataStore(),
-        _credentialStore = credentialStore ?? PlatformCredentialStore() {
+  }) : _signalFetchWorker = signalFetchWorker ?? _fetchSignalsInBackground,
+       _signalPrewarmWorker =
+           signalPrewarmWorker ??
+           (signalFetchWorker == null
+               ? _prewarmSignalsInBackground
+               : _skipSignalPrewarm),
+       _sshDisconnect =
+           sshDisconnect ?? (() => RustBridge.instance.disconnectSsh()),
+       _shotInfoFetchWorker = shotInfoFetchWorker ?? _fetchShotInfoInBackground,
+       _loginWorker = loginWorker ?? _loginToApi,
+       _latestShotWorker = latestShotWorker ?? _fetchLatestShotFromApi,
+       _configOpenPicker = configOpenPicker ?? _pickConfigurationFile,
+       _configSavePicker = configSavePicker ?? _saveConfigurationFile,
+       _configParser = configParser ?? _parseConfiguration,
+       _configEncoder = configEncoder ?? _encodeConfiguration,
+       _sshTestWorker = sshTestWorker ?? _testSshInBackground,
+       _userDataStore = userDataStore ?? UserDataStore(),
+       _credentialStore = credentialStore ?? PlatformCredentialStore() {
     _shotCtrl.addListener(() {
       if (_shotCtrl.text != _shotText) {
         _invalidateFetchForSettingsChange();
@@ -754,7 +745,12 @@ class AppState extends ChangeNotifier {
   int get fontUnitSize => _fontUnitSize;
   int get fontUiSize => _fontUiSize;
   void applyFontSettings(
-      String family, int legend, int axis, int unit, int ui) {
+    String family,
+    int legend,
+    int axis,
+    int unit,
+    int ui,
+  ) {
     _fontFamily = family;
     _fontLegendSize = legend;
     _fontAxisSize = axis;
@@ -792,11 +788,12 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> removeWebBookmarks(Iterable<int> indexes) async {
-    final valid = indexes
-        .where((index) => index >= 0 && index < _webBookmarks.length)
-        .toSet()
-        .toList()
-      ..sort((a, b) => b.compareTo(a));
+    final valid =
+        indexes
+            .where((index) => index >= 0 && index < _webBookmarks.length)
+            .toSet()
+            .toList()
+          ..sort((a, b) => b.compareTo(a));
     if (valid.isEmpty) return;
     for (final index in valid) {
       _webBookmarks.removeAt(index);
@@ -823,7 +820,7 @@ class AppState extends ChangeNotifier {
             'x_label': 's',
             'y_label': 'a.u.',
             'grid': true,
-            'signal_specs': []
+            'signal_specs': [],
           });
         }
       }
@@ -852,11 +849,14 @@ class AppState extends ChangeNotifier {
     for (final col in _columns) {
       for (final p in col) {
         final sc = (p['signal_specs'] as List?)?.length ?? 1;
-        _plots.add(PlotData(
+        _plots.add(
+          PlotData(
             title: p['title']?.toString() ?? '',
             xLabel: p['x_label']?.toString() ?? 's',
             yLabel: p['y_label']?.toString() ?? 'a.u.',
-            series: List.filled(sc > 0 ? sc : 1, null, growable: true)));
+            series: List.filled(sc > 0 ? sc : 1, null, growable: true),
+          ),
+        );
       }
     }
   }
@@ -1099,7 +1099,8 @@ class AppState extends ChangeNotifier {
   Duration _nextFullShotDebounceDelay() {
     final now = DateTime.now();
     final previous = _lastFullShotScheduleAt;
-    final isRapid = previous != null &&
+    final isRapid =
+        previous != null &&
         now.difference(previous) <= const Duration(milliseconds: 450);
     _lastFullShotScheduleAt = now;
     if (!isRapid) {
@@ -1318,13 +1319,14 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       if (preparedNetworkAccess == null) {
-        networkAccess =
-            await NetworkPermissionService.prepareNetworkAccess(apiUrl);
+        networkAccess = await NetworkPermissionService.prepareNetworkAccess(
+          apiUrl,
+        );
       }
       if (_disposed || generation != _sessionGeneration) return;
       if (networkAccess == NetworkAccessPreparation.deniedDuringRequest ||
           networkAccess == NetworkAccessPreparation.deniedPreviously) {
-        throw 'Cellular data access was denied for MdsScope.';
+        throw 'Cellular data access was denied for MDSLens.';
       }
       late ({String token, bool usedSsh}) result;
       if (_sshMode == 1 && _sshHost.trim().isNotEmpty) {
@@ -1386,13 +1388,14 @@ class AppState extends ChangeNotifier {
       if (_disposed || generation != _sessionGeneration) return;
       _loggedIn = false;
       _authToken = '';
-      _status =
-          automatic ? 'Automatic login failed: $error' : 'Login failed: $error';
+      _status = automatic
+          ? 'Automatic login failed: $error'
+          : 'Login failed: $error';
       await savePreferences();
       if (!_disposed) notifyListeners();
       final shouldOfferSettings =
           networkAccess == NetworkAccessPreparation.deniedPreviously ||
-              NetworkPermissionService.isConfirmedPermissionFailure(error);
+          NetworkPermissionService.isConfirmedPermissionFailure(error);
       if (shouldOfferSettings &&
           networkAccess != NetworkAccessPreparation.deniedDuringRequest) {
         reportNetworkPermissionFailure(
@@ -1456,28 +1459,32 @@ class AppState extends ChangeNotifier {
       _loginApiUrl = setting('loginApiUrl')?.toString() ?? _loginApiUrl;
       _loginUser = setting('loginUser')?.toString() ?? _loginUser;
       if (_rememberLogin) {
-        _loginPass = await _readCredentialWithPlaintextMigration(
+        _loginPass =
+            await _readCredentialWithPlaintextMigration(
               prefs,
               secureKey: _loginPasswordCredential,
               plaintextKey: 'loginPass',
             ) ??
             _loginPass;
-        _authToken = await _readCredentialWithPlaintextMigration(
+        _authToken =
+            await _readCredentialWithPlaintextMigration(
               prefs,
               secureKey: _authTokenCredential,
               plaintextKey: 'authToken',
             ) ??
             _authToken;
       }
-      _loggedIn =
-          setting('loggedIn') is bool ? setting('loggedIn') as bool : _loggedIn;
+      _loggedIn = setting('loggedIn') is bool
+          ? setting('loggedIn') as bool
+          : _loggedIn;
       if (_authToken.isEmpty) _loggedIn = false;
       _sshHost = setting('sshHost')?.toString() ?? _sshHost;
       _sshPort = setting('sshPort') is num
           ? (setting('sshPort') as num).toInt()
           : _sshPort;
       _sshUser = setting('sshUser')?.toString() ?? _sshUser;
-      _sshPass = await _readCredentialWithPlaintextMigration(
+      _sshPass =
+          await _readCredentialWithPlaintextMigration(
             prefs,
             secureKey: _sshPasswordCredential,
             plaintextKey: 'sshPass',
@@ -1487,18 +1494,21 @@ class AppState extends ChangeNotifier {
       _sshMode = setting('sshMode') is num
           ? (setting('sshMode') as num).toInt()
           : _sshMode;
-      _dataMode = (setting('dataMode') is num
-              ? (setting('dataMode') as num).toInt()
-              : _dataMode)
-          .clamp(0, 2);
-      _interactionMode = (setting('interactionMode') is num
-              ? (setting('interactionMode') as num).toInt()
-              : _interactionMode)
-          .clamp(0, 1);
-      _themeMode = (setting('themeMode') is num
-              ? (setting('themeMode') as num).toInt()
-              : _themeMode)
-          .clamp(0, 2);
+      _dataMode =
+          (setting('dataMode') is num
+                  ? (setting('dataMode') as num).toInt()
+                  : _dataMode)
+              .clamp(0, 2);
+      _interactionMode =
+          (setting('interactionMode') is num
+                  ? (setting('interactionMode') as num).toInt()
+                  : _interactionMode)
+              .clamp(0, 1);
+      _themeMode =
+          (setting('themeMode') is num
+                  ? (setting('themeMode') as num).toInt()
+                  : _themeMode)
+              .clamp(0, 2);
       _toolbarCollapsed = setting('toolbarCollapsed') is bool
           ? setting('toolbarCollapsed') as bool
           : _toolbarCollapsed;
@@ -1518,10 +1528,11 @@ class AppState extends ChangeNotifier {
       _limitShotHistory = setting('limitShotHistory') is bool
           ? setting('limitShotHistory') as bool
           : _limitShotHistory;
-      _shotHistoryLimit = (setting('shotHistoryLimit') is num
-              ? (setting('shotHistoryLimit') as num).toInt()
-              : defaultShotHistoryLimit)
-          .clamp(1, maximumShotHistoryLimit);
+      _shotHistoryLimit =
+          (setting('shotHistoryLimit') is num
+                  ? (setting('shotHistoryLimit') as num).toInt()
+                  : defaultShotHistoryLimit)
+              .clamp(1, maximumShotHistoryLimit);
 
       final bookmarksJson = setting('webBookmarks')?.toString();
       if (bookmarksJson != null) {
@@ -1540,9 +1551,11 @@ class AppState extends ChangeNotifier {
         if (list is List) {
           _shotHistory
             ..clear()
-            ..addAll(list.map((item) => item.toString()).where(
-                  (item) => item.isNotEmpty,
-                ));
+            ..addAll(
+              list
+                  .map((item) => item.toString())
+                  .where((item) => item.isNotEmpty),
+            );
           _trimShotHistory();
         }
       }
@@ -1568,10 +1581,7 @@ class AppState extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       if (_rememberLogin) {
-        await _writeOrDeleteCredential(
-          _loginPasswordCredential,
-          _loginPass,
-        );
+        await _writeOrDeleteCredential(_loginPasswordCredential, _loginPass);
         await _writeOrDeleteCredential(_authTokenCredential, _authToken);
       } else {
         await _writeOrDeleteCredential(_loginPasswordCredential, '');
@@ -1611,8 +1621,9 @@ class AppState extends ChangeNotifier {
         'sourceIndexMemory': jsonEncode(sourceIndexMemory.toJson()),
         'lastConfigJson': configJson,
       };
-      final storedInPrivateDirectory =
-          await _userDataStore.writeSettings(fileSettings);
+      final storedInPrivateDirectory = await _userDataStore.writeSettings(
+        fileSettings,
+      );
       if (storedInPrivateDirectory) {
         for (final key in _filePreferenceKeys) {
           await prefs.remove(key);
@@ -1739,9 +1750,7 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  void _removeConfigurationShots(
-    List<List<Map<String, dynamic>>> columns,
-  ) {
+  void _removeConfigurationShots(List<List<Map<String, dynamic>>> columns) {
     for (final column in columns) {
       for (final panel in column) {
         panel.remove('shot');
@@ -1775,8 +1784,8 @@ class AppState extends ChangeNotifier {
                 : int.tryParse(rawMode?.toString() ?? '');
             final mode =
                 parsedMode != null && parsedMode >= 0 && parsedMode <= 2
-                    ? parsedMode
-                    : _dataMode;
+                ? parsedMode
+                : _dataMode;
             final hideMode = signalHideModeOf(signal);
             return <String, dynamic>{
               ...signal,
@@ -1788,9 +1797,10 @@ class AppState extends ChangeNotifier {
               'server_ip': signal['server_ip']?.toString() ?? '',
               'color_name': color.isNotEmpty
                   ? color
-                  : _configurationSignalColors[
-                      index % _configurationSignalColors.length],
-              'manual_color': signal['manual_color'] == true ||
+                  : _configurationSignalColors[index %
+                        _configurationSignalColors.length],
+              'manual_color':
+                  signal['manual_color'] == true ||
                   (color.isNotEmpty && signal['manual_color'] != false),
               'hide_mode': hideMode,
               'hidden': hideMode != signalHideModeVisible,
@@ -1819,13 +1829,18 @@ class AppState extends ChangeNotifier {
       for (final col in _columns) {
         for (final panel in col) {
           final sigCount = (panel['signal_specs'] as List?)?.length ?? 1;
-          _plots.add(PlotData(
-            title: panel['title']?.toString() ?? '',
-            xLabel: panel['x_label']?.toString() ?? 's',
-            yLabel: panel['y_label']?.toString() ?? 'a.u.',
-            series:
-                List.filled(sigCount > 0 ? sigCount : 1, null, growable: true),
-          ));
+          _plots.add(
+            PlotData(
+              title: panel['title']?.toString() ?? '',
+              xLabel: panel['x_label']?.toString() ?? 's',
+              yLabel: panel['y_label']?.toString() ?? 'a.u.',
+              series: List.filled(
+                sigCount > 0 ? sigCount : 1,
+                null,
+                growable: true,
+              ),
+            ),
+          );
         }
       }
       if (initialShot.isNotEmpty) {
@@ -1836,7 +1851,7 @@ class AppState extends ChangeNotifier {
   }
 
   void loadDefaultConfig() {
-    // Match the original MdsScope init.toml — 2 columns × 3 rows
+    // Match the original MDSLens init.toml — 2 columns × 3 rows
     final panels = [
       // Column 1
       ('Ip', r'\pcrl01'), ('R', r'\lmsr'), ('Z', r'\lmsz'),
@@ -1855,17 +1870,24 @@ class AppState extends ChangeNotifier {
         'extraction_points': 2000,
         'grid': true,
         'signal_specs': [
-          {'y_expr': y, 'experiment': 'pcs_east', 'server_ip': '202.127.204.12'}
+          {
+            'y_expr': y,
+            'experiment': 'pcs_east',
+            'server_ip': '202.127.204.12',
+          },
         ],
       });
     }
     for (final col in _columns) {
       for (final panel in col) {
-        _plots.add(PlotData(
+        _plots.add(
+          PlotData(
             title: panel['title']?.toString() ?? '',
             xLabel: 's',
             yLabel: 'a.u.',
-            series: List.filled(1, null, growable: true)));
+            series: List.filled(1, null, growable: true),
+          ),
+        );
       }
     }
     _status = 'Default config loaded. Login + Refresh to fetch data.';
@@ -1912,13 +1934,15 @@ class AppState extends ChangeNotifier {
 
       var path = selection.path;
       if ((path == null || path.isEmpty) && selection.bytes != null) {
-        temporaryDirectory =
-            await Directory.systemTemp.createTemp('mdsscope-open-');
+        temporaryDirectory = await Directory.systemTemp.createTemp(
+          'mdslens-open-',
+        );
         final safeName = selection.name.replaceAll(
           RegExp(r'[^A-Za-z0-9._-]'),
           '_',
         );
-        path = '${temporaryDirectory.path}${Platform.pathSeparator}'
+        path =
+            '${temporaryDirectory.path}${Platform.pathSeparator}'
             '${safeName.isEmpty ? "config.toml" : safeName}';
         await File(path).writeAsBytes(selection.bytes!, flush: true);
       }
@@ -1926,7 +1950,7 @@ class AppState extends ChangeNotifier {
         throw 'The selected file did not provide a readable path or bytes.';
       }
       if (isLegacyMdsScopeConfigurationPath(path)) {
-        throw 'Configurations in ~/.config/mdsscope belong to the legacy '
+        throw 'Configurations in legacy MdsScope directories belong to the legacy '
             'application and are intentionally not imported. Use a copy '
             'outside that directory instead.';
       }
@@ -1959,7 +1983,8 @@ class AppState extends ChangeNotifier {
       }
       _invalidateFetchForSettingsChange();
       final fileShot = _configurationInitialShot(json, cols);
-      final useFileShot = fileShot.isNotEmpty &&
+      final useFileShot =
+          fileShot.isNotEmpty &&
           (await importedShotDecision?.call(fileShot) ?? false);
       if (useFileShot) {
         _makeConfigurationShotInheritable(cols, fileShot);
@@ -1974,13 +1999,18 @@ class AppState extends ChangeNotifier {
       for (final col in _columns) {
         for (final panel in col) {
           final sigCount = (panel['signal_specs'] as List?)?.length ?? 1;
-          _plots.add(PlotData(
-            title: panel['title']?.toString() ?? '',
-            xLabel: panel['x_label']?.toString() ?? 's',
-            yLabel: panel['y_label']?.toString() ?? 'a.u.',
-            series:
-                List.filled(sigCount > 0 ? sigCount : 1, null, growable: true),
-          ));
+          _plots.add(
+            PlotData(
+              title: panel['title']?.toString() ?? '',
+              xLabel: panel['x_label']?.toString() ?? 's',
+              yLabel: panel['y_label']?.toString() ?? 'a.u.',
+              series: List.filled(
+                sigCount > 0 ? sigCount : 1,
+                null,
+                growable: true,
+              ),
+            ),
+          );
         }
       }
       _status =
@@ -2026,28 +2056,29 @@ class AppState extends ChangeNotifier {
       _status = 'Preparing configuration...';
       notifyListeners();
       final cols = _columns
-          .map((col) => col.map((panel) {
-                final m = Map<String, dynamic>.from(panel);
-                m['signal_specs'] = _configurationSignalsFor(m);
-                m.remove('shot');
-                _normalizePanelDefaults(m);
-                if (m['custom_x_range'] != true) {
-                  m
-                    ..remove('xmin')
-                    ..remove('xmax');
-                }
-                if (m['custom_y_range'] != true) {
-                  m
-                    ..remove('ymin')
-                    ..remove('ymax');
-                }
-                return m;
-              }).toList())
+          .map(
+            (col) => col.map((panel) {
+              final m = Map<String, dynamic>.from(panel);
+              m['signal_specs'] = _configurationSignalsFor(m);
+              m.remove('shot');
+              _normalizePanelDefaults(m);
+              if (m['custom_x_range'] != true) {
+                m
+                  ..remove('xmin')
+                  ..remove('xmax');
+              }
+              if (m['custom_y_range'] != true) {
+                m
+                  ..remove('ymin')
+                  ..remove('ymax');
+              }
+              return m;
+            }).toList(),
+          )
           .toList();
-      final configJson = jsonEncode(_jsonSafeValue({
-        'shot': _shotText.trim(),
-        'columns': cols,
-      }));
+      final configJson = jsonEncode(
+        _jsonSafeValue({'shot': _shotText.trim(), 'columns': cols}),
+      );
       final bytes = await _configEncoder(configJson);
       _status = 'Choose where to save the configuration...';
       notifyListeners();
@@ -2145,9 +2176,11 @@ class AppState extends ChangeNotifier {
     _viewResetId++;
     await _doFetch(shot: shot);
     if (_displayedShot == shot &&
-        _plots.any((plot) => plot.series.any(
-              (series) => series?.points != null && series!.points!.isNotEmpty,
-            ))) {
+        _plots.any(
+          (plot) => plot.series.any(
+            (series) => series?.points != null && series!.points!.isNotEmpty,
+          ),
+        )) {
       _pendingImportedShot = null;
     }
   }
@@ -2199,28 +2232,30 @@ class AppState extends ChangeNotifier {
 
   String _buildSignalConfigJson(String shot, int requestId) {
     final cols = _columns
-        .map((col) => col.map((p) {
-              final panel = Map<String, dynamic>.from(p);
-              panel['shot'] = shot;
-              final signals = p['signal_specs'];
-              if (signals is List) {
-                panel['signal_specs'] = [
-                  for (final rawSignal in signals)
-                    if (rawSignal is Map)
-                      () {
-                        final signal = Map<String, dynamic>.from(rawSignal);
-                        final hideMode = signalHideModeOf(signal);
-                        signal['shot'] = shot;
-                        signal['read_mode'] = _dataMode;
-                        signal['hide_mode'] = hideMode;
-                        signal['hidden'] = hideMode != signalHideModeVisible;
-                        return signal;
-                      }(),
-                ];
-              }
-              _normalizePanelDefaults(panel);
-              return panel;
-            }).toList())
+        .map(
+          (col) => col.map((p) {
+            final panel = Map<String, dynamic>.from(p);
+            panel['shot'] = shot;
+            final signals = p['signal_specs'];
+            if (signals is List) {
+              panel['signal_specs'] = [
+                for (final rawSignal in signals)
+                  if (rawSignal is Map)
+                    () {
+                      final signal = Map<String, dynamic>.from(rawSignal);
+                      final hideMode = signalHideModeOf(signal);
+                      signal['shot'] = shot;
+                      signal['read_mode'] = _dataMode;
+                      signal['hide_mode'] = hideMode;
+                      signal['hidden'] = hideMode != signalHideModeVisible;
+                      return signal;
+                    }(),
+              ];
+            }
+            _normalizePanelDefaults(panel);
+            return panel;
+          }).toList(),
+        )
         .toList();
     return jsonEncode({'request_id': requestId, 'columns': cols});
   }
@@ -2279,7 +2314,8 @@ class AppState extends ChangeNotifier {
     String unit,
     String xName,
     String xUnit,
-  }) _decodeLoadedSeries(dynamic rawSeries) {
+  })
+  _decodeLoadedSeries(dynamic rawSeries) {
     if (rawSeries is! Map) {
       return (
         points: null,
@@ -2471,8 +2507,10 @@ class AppState extends ChangeNotifier {
       _displayedShot = requestShot;
       _fetching = false;
       final loaded = _plots
-          .where((p) =>
-              p.series.any((s) => s?.points != null && s!.points!.isNotEmpty))
+          .where(
+            (p) =>
+                p.series.any((s) => s?.points != null && s!.points!.isNotEmpty),
+          )
           .length;
       _status = 'Shot $requestShot: ${firstErr ?? "$loaded panels with data"}';
       if (firstErr != null) {
@@ -2538,7 +2576,11 @@ class AppState extends ChangeNotifier {
         ? _displayedShot.trim()
         : _shotText.trim();
     final configJson = _buildSinglePanelSignalConfigJson(
-        shot, targetCol, targetRow, generation);
+      shot,
+      targetCol,
+      targetRow,
+      generation,
+    );
     final dataMode = _dataMode.toString();
     final sshSettings = _buildSshSettingsJson();
     _fetchingPlotIndex = plotIdx;
@@ -2599,10 +2641,7 @@ class AppState extends ChangeNotifier {
       _fetching = false;
       _fetchingPlotIndex = null;
       _status = 'Error: $e';
-      reportNetworkPermissionFailure(
-        e,
-        retry: () => fetchSinglePanel(plotIdx),
-      );
+      reportNetworkPermissionFailure(e, retry: () => fetchSinglePanel(plotIdx));
     }
     if (_isCurrentFetch(generation)) notifyListeners();
   }
@@ -2681,8 +2720,9 @@ class AppState extends ChangeNotifier {
       }
       if (!_isCurrentFetch(generation)) return;
       recordSshUsage(sshSettings.isNotEmpty);
-      final shot =
-          data is Map ? (data['shot'] ?? _findShot(data)) : _findShot(data);
+      final shot = data is Map
+          ? (data['shot'] ?? _findShot(data))
+          : _findShot(data);
       if (shot != null) {
         setShotFromApi(shot.toString());
         if (data is Map) {
@@ -2746,8 +2786,15 @@ class AppState extends ChangeNotifier {
   }
 
   void updatePlotSeriesByColRow(
-      int col, int row, int sigIdx, List<List<double>>? pts, String? err,
-      {String unit = '', String xName = '', String xUnit = ''}) {
+    int col,
+    int row,
+    int sigIdx,
+    List<List<double>>? pts,
+    String? err, {
+    String unit = '',
+    String xName = '',
+    String xUnit = '',
+  }) {
     var pi = 0;
     for (var c = 0; c < _columns.length; c++) {
       if (c == col) break;
@@ -2787,16 +2834,17 @@ class PlotData {
   double? crosshairX;
   double? viewMinX, viewMaxX, viewMinY, viewMaxY;
   List<SeriesData?> series;
-  PlotData(
-      {required this.title,
-      required this.xLabel,
-      required this.yLabel,
-      required this.series,
-      this.crosshairX,
-      this.viewMinX,
-      this.viewMaxX,
-      this.viewMinY,
-      this.viewMaxY});
+  PlotData({
+    required this.title,
+    required this.xLabel,
+    required this.yLabel,
+    required this.series,
+    this.crosshairX,
+    this.viewMinX,
+    this.viewMaxX,
+    this.viewMinY,
+    this.viewMaxY,
+  });
 
   void setViewRange(double minX, double maxX, double minY, double maxY) {
     viewMinX = minX.isFinite ? minX : null;

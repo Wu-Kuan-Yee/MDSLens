@@ -1,11 +1,13 @@
-# MdsScope
+# MDSLens
 
-MdsScope is an MDSplus experimental signal waveform viewer, comparison, and
-configuration tool for desktop, tablet, and mobile devices.
+MDSLens is an MDSplus experimental signal waveform viewer, comparison, and
+configuration tool for desktop, tablet, and mobile devices. It is an independent
+cross-platform application built with Flutter and Rust, based on the original
+[MdsScope project](https://github.com/wwktz/MdsScope).
 
 The independently maintained source is the
-[flutter-rewrite branch](https://github.com/Wu-Kuan-Yee/MdsScope/tree/flutter-rewrite)
-of the Wu-Kuan-Yee/MdsScope repository. Releases and update checks come from
+[main branch](https://github.com/Wu-Kuan-Yee/MDSLens)
+of the Wu-Kuan-Yee/MDSLens repository. Releases and update checks come from
 that repository.
 
 ## Features
@@ -22,7 +24,7 @@ that repository.
 
 Point readouts use the horizontal coordinate name reported by MDSplus. Many
 MDSplus dimensions are anonymous arrays rather than named nodes; in that case
-MdsScope displays the actual coordinate expression, such as `dim_of(\IP)`,
+MDSLens displays the actual coordinate expression, such as `dim_of(\IP)`,
 instead of inventing a variable name.
 
 ## Quick Start
@@ -78,15 +80,15 @@ python build_app.py -p windows -a x64 -f exe msi msix zip 7z
   -f unsigned-ipa unsigned-app xcarchive zip 7z
 ```
 
-Output lands in `build/dist/` with filenames following `mdsscope-<platform>-<arch>.<format>`. Pushing a `v*` tag triggers GitHub Actions to build the release matrix on each native system in parallel.
-Use a numeric release tag such as `v7.0.1`. The application derives
-`MdsScope Version` from that tag without the leading `v`, while `Git Version`
+Output lands in `build/dist/` with filenames following `mdslens-<platform>-<arch>.<format>`. Pushing a `v*` tag triggers GitHub Actions to build the release matrix on each native system in parallel.
+Use a numeric release tag such as `v0.0.2`. The application derives
+`MDSLens Version` from that tag without the leading `v`, while `Git Version`
 is generated as `<version>.r<commits-after-tag>.g<commit>`. Build-only labels
-such as `v7.0-build.1` are deliberately ignored as public versions.
+such as `v0.0.1-build.1` are deliberately ignored as public versions.
 The complete output list and unsupported-target boundary are documented in
 [Release Artifact Matrix](docs/RELEASE_ARTIFACTS.md).
 
-On Windows, the portable distribution must be a complete ZIP/tar archive containing the EXE, Flutter DLLs, plugins, and data directory; copying `mdsscope.exe` alone is not sufficient. On macOS, `.app` is likewise a directory-based application bundle.
+On Windows, the portable distribution must be a complete ZIP/tar archive containing the EXE, Flutter DLLs, plugins, and data directory; copying `mdslens.exe` alone is not sufficient. On macOS, `.app` is likewise a directory-based application bundle.
 
 ## Verification
 
@@ -101,19 +103,19 @@ The icon check validates the Apple Asset Catalog, iOS opaque background, Android
 
 ## Application Data and Configuration
 
-Desktop builds keep their private state under `~/.mdsscope/`:
+Desktop builds keep their private state under `~/.mdslens/`:
 
 ```text
-~/.mdsscope/
+~/.mdslens/
 ├── settings.json
 ├── configurations/
 └── cache/
 ```
 
 Open and Save dialogs default to `configurations/`, but users may select any
-accessible location. Android, iOS, and iPadOS use the same `.mdsscope` layout
-inside the application-support sandbox. MdsScope does not read or overwrite the
-separate `~/.config/mdsscope/` data used by other installations. Files in that
+accessible location. Android, iOS, and iPadOS use the same `.mdslens` layout
+inside the application-support sandbox. MDSLens does not read or overwrite the
+separate `~/.mdsscope/` and `~/.config/mdsscope/` data used by MdsScope installations. Files in that
 legacy directory are intentionally not imported, including when selected
 manually; copy a file elsewhere first if it must be inspected independently.
 
@@ -124,6 +126,10 @@ tokens are not written to `settings.json`; they use Apple Keychain, Android
 Keystore-backed encryption, Windows protected credential storage, or Linux
 Secret Service. No plaintext fallback is used when a secure vault is
 unavailable.
+
+## License
+
+MDSLens is licensed under [GPL-3.0-or-later](LICENSE).
 
 ## Documentation
 

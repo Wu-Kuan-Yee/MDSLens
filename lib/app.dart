@@ -6,17 +6,17 @@ import 'package:provider/provider.dart';
 import 'models/app_state.dart';
 import 'services/stylus_mode_channel.dart';
 import 'services/theme_channel.dart';
-import 'theme/mdsscope_theme.dart';
+import 'theme/mdslens_theme.dart';
 import 'pages/main_page.dart';
 import 'widgets/network_permission_gate.dart';
 
-class MdsScopeApp extends StatefulWidget {
-  const MdsScopeApp({super.key});
+class MDSLensApp extends StatefulWidget {
+  const MDSLensApp({super.key});
   @override
-  State<MdsScopeApp> createState() => _MdsScopeAppState();
+  State<MDSLensApp> createState() => _MDSLensAppState();
 }
 
-class _MdsScopeAppState extends State<MdsScopeApp> with WidgetsBindingObserver {
+class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
   bool _sysDark = false;
   int _themeEventRevision = 0;
   Timer? _themeCalibrationTimer;
@@ -26,7 +26,8 @@ class _MdsScopeAppState extends State<MdsScopeApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _sysDark = WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+    _sysDark =
+        WidgetsBinding.instance.platformDispatcher.platformBrightness ==
         Brightness.dark;
     ThemeChannel.init();
     StylusModeChannel.init(
@@ -61,14 +62,16 @@ class _MdsScopeAppState extends State<MdsScopeApp> with WidgetsBindingObserver {
         setState(() => _sysDark = true);
       }
 
-      _themeCalibrationTimer =
-          Timer(const Duration(milliseconds: 180), () async {
-        final settledNativeDark = await ThemeChannel.isDark();
-        if (!mounted || revision != _themeEventRevision) return;
-        if (settledNativeDark != null && settledNativeDark != _sysDark) {
-          setState(() => _sysDark = settledNativeDark);
-        }
-      });
+      _themeCalibrationTimer = Timer(
+        const Duration(milliseconds: 180),
+        () async {
+          final settledNativeDark = await ThemeChannel.isDark();
+          if (!mounted || revision != _themeEventRevision) return;
+          if (settledNativeDark != null && settledNativeDark != _sysDark) {
+            setState(() => _sysDark = settledNativeDark);
+          }
+        },
+      );
     });
   }
 
@@ -91,7 +94,7 @@ class _MdsScopeAppState extends State<MdsScopeApp> with WidgetsBindingObserver {
     _themeEventRevision++;
     final isDark =
         WidgetsBinding.instance.platformDispatcher.platformBrightness ==
-            Brightness.dark;
+        Brightness.dark;
     if (isDark != _sysDark) setState(() => _sysDark = isDark);
   }
 
@@ -118,16 +121,16 @@ class _MdsScopeAppState extends State<MdsScopeApp> with WidgetsBindingObserver {
     final isDark = app.themeMode == 0
         ? false
         : app.themeMode == 1
-            ? true
-            : _sysDark;
+        ? true
+        : _sysDark;
     return MaterialApp(
-      title: 'MdsScope',
+      title: 'MDSLens',
       debugShowCheckedModeBanner: false,
-      theme: MdsScopeTheme.light(
+      theme: MDSLensTheme.light(
         fontFamily: app.effectiveFontFamily,
         uiFontSize: app.fontUiSize.toDouble(),
       ),
-      darkTheme: MdsScopeTheme.dark(
+      darkTheme: MDSLensTheme.dark(
         fontFamily: app.effectiveFontFamily,
         uiFontSize: app.fontUiSize.toDouble(),
       ),

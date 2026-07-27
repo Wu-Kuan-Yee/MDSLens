@@ -15,10 +15,7 @@ class PolishedPopupMenuOption<T> {
 }
 
 class PolishedPopupMenuGroup<T> {
-  const PolishedPopupMenuGroup({
-    required this.label,
-    required this.options,
-  });
+  const PolishedPopupMenuGroup({required this.label, required this.options});
 
   final String label;
   final List<PolishedPopupMenuOption<T>> options;
@@ -69,15 +66,15 @@ Future<T?> showPolishedPopupMenu<T>({
         ),
       ),
     );
-    for (var optionIndex = 0;
-        optionIndex < group.options.length;
-        optionIndex++) {
+    for (
+      var optionIndex = 0;
+      optionIndex < group.options.length;
+      optionIndex++
+    ) {
       if (optionIndex > 0) {
         entries.add(
           PopupMenuDivider(
-            key: ValueKey(
-              '$id-option-divider-$groupIndex-$optionIndex',
-            ),
+            key: ValueKey('$id-option-divider-$groupIndex-$optionIndex'),
             height: 1,
           ),
         );

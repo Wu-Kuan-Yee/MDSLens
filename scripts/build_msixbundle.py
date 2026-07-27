@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Combine MdsScope architecture MSIX packages into one unsigned bundle."""
+"""Combine MDSLens architecture MSIX packages into one unsigned bundle."""
 
 from __future__ import annotations
 
@@ -38,10 +38,10 @@ def main() -> None:
     parser.add_argument("--makeappx", default="makeappx")
     args = parser.parse_args()
 
-    packages = sorted(args.packages.glob("mdsscope-windows-*.msix"))
+    packages = sorted(args.packages.glob("mdslens-windows-*.msix"))
     if {path.stem.rsplit("-", 1)[-1] for path in packages} != {"x64", "arm64"}:
         raise SystemExit(
-            "Expected exactly the x64 and arm64 MdsScope MSIX packages in "
+            "Expected exactly the x64 and arm64 MDSLens MSIX packages in "
             f"{args.packages}"
         )
     executable = find_makeappx(args.makeappx)
@@ -49,7 +49,7 @@ def main() -> None:
         raise SystemExit(f"MakeAppx was not found: {args.makeappx}")
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="mdsscope-msixbundle-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="mdslens-msixbundle-") as temporary:
         staging = Path(temporary)
         for package in packages:
             shutil.copy2(package, staging / package.name)

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 MdsScope Contributors
+// SPDX-FileCopyrightText: 2026 MDSLens Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Demo: parse a real EAST config file and print its structure.
@@ -11,7 +11,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         let default = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../MdsScope/resources/environment/init.toml");
+            .join("../../../MDSLens/resources/environment/init.toml");
         eprintln!("Usage: {} <config.toml|config.webscp>", args[0]);
         eprintln!("  Default: {:?}", default);
         std::process::exit(1);

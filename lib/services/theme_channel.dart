@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 
 class ThemeChannel {
-  static final _channel = MethodChannel('mdsscope/theme');
+  static final _channel = MethodChannel('mdslens/theme');
   static final _controller = StreamController<bool>.broadcast();
   static Stream<bool> get onThemeChanged => _controller.stream;
 

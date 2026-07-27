@@ -36,8 +36,9 @@ bool reorderLayoutColumn(
     return false;
   }
   final column = columns.removeAt(sourceColumn);
-  final adjusted =
-      insertionIndex > sourceColumn ? insertionIndex - 1 : insertionIndex;
+  final adjusted = insertionIndex > sourceColumn
+      ? insertionIndex - 1
+      : insertionIndex;
   columns.insert(adjusted.clamp(0, columns.length), column);
   return adjusted != sourceColumn;
 }
@@ -117,7 +118,7 @@ List<(String, String)> _shotMetadata(AppState app) {
       'Shot',
       app.displayedShot.isNotEmpty
           ? app.displayedShot
-          : (app.shotText.isEmpty ? '--' : app.shotText)
+          : (app.shotText.isEmpty ? '--' : app.shotText),
     ),
     ('Ip', valueWithUnit(app.shotInfoIp, 'kA')),
     ('Pulse', valueWithUnit(app.shotInfoPulse, 's')),
@@ -126,7 +127,7 @@ List<(String, String)> _shotMetadata(AppState app) {
       'Time',
       app.shotInfoTime.isEmpty
           ? (app.fetching ? '...' : '--')
-          : app.shotInfoTime
+          : app.shotInfoTime,
     ),
   ];
 }
@@ -147,8 +148,10 @@ class ResponsiveToolbar extends StatelessWidget {
         final tinyWidth = constraints.maxWidth < 320;
         final tinyHeight = screenHeight < 520;
         final tinyScreen = tinyWidth || tinyHeight;
-        final collapseControlWidth =
-            math.min(170.0, constraints.maxWidth * 0.75);
+        final collapseControlWidth = math.min(
+          170.0,
+          constraints.maxWidth * 0.75,
+        );
         final expandedToolbar = tinyScreen
             ? SizedBox(
                 height: (screenHeight * 0.42).clamp(80.0, 260.0),
@@ -166,9 +169,9 @@ class ResponsiveToolbar extends StatelessWidget {
                 ),
               )
             : const ToolbarWidget();
-        final metadata = _shotMetadata(app)
-            .map((entry) => '${entry.$1}: ${entry.$2}')
-            .join('   •   ');
+        final metadata = _shotMetadata(
+          app,
+        ).map((entry) => '${entry.$1}: ${entry.$2}').join('   •   ');
         final collapseBar = app.toolbarCollapsed
             ? SizedBox(
                 height: 40,
@@ -375,43 +378,50 @@ class ToolbarWidget extends StatelessWidget {
         ),
       ],
     );
-    final rateSelector = Row(key: const ValueKey('toolbar-rate'), children: [
-      Text('Rate:',
-          style:
-              TextStyle(fontSize: uiSize, color: theme.colorScheme.onSurface)),
-      const SizedBox(width: 6),
-      Expanded(
-        child: PolishedDropdown<int>(
-          key: const ValueKey('toolbar-rate-dropdown'),
-          id: 'toolbar-rate',
-          value: app.dataMode,
-          leadingIcon: Icons.speed_rounded,
-          fontSize: uiSize,
-          minimumMenuWidth: 190,
-          options: const [
-            PolishedDropdownOption(
-              value: 0,
-              label: 'Thin',
-              icon: Icons.compress_rounded,
-            ),
-            PolishedDropdownOption(
-              value: 1,
-              label: 'Medium',
-              icon: Icons.format_line_spacing_rounded,
-            ),
-            PolishedDropdownOption(
-              value: 2,
-              label: 'Full',
-              icon: Icons.stacked_line_chart_rounded,
-            ),
-          ],
-          onChanged: (value) {
-            app.dataMode = value;
-            app.startRateRefresh();
-          },
+    final rateSelector = Row(
+      key: const ValueKey('toolbar-rate'),
+      children: [
+        Text(
+          'Rate:',
+          style: TextStyle(
+            fontSize: uiSize,
+            color: theme.colorScheme.onSurface,
+          ),
         ),
-      ),
-    ]);
+        const SizedBox(width: 6),
+        Expanded(
+          child: PolishedDropdown<int>(
+            key: const ValueKey('toolbar-rate-dropdown'),
+            id: 'toolbar-rate',
+            value: app.dataMode,
+            leadingIcon: Icons.speed_rounded,
+            fontSize: uiSize,
+            minimumMenuWidth: 190,
+            options: const [
+              PolishedDropdownOption(
+                value: 0,
+                label: 'Thin',
+                icon: Icons.compress_rounded,
+              ),
+              PolishedDropdownOption(
+                value: 1,
+                label: 'Medium',
+                icon: Icons.format_line_spacing_rounded,
+              ),
+              PolishedDropdownOption(
+                value: 2,
+                label: 'Full',
+                icon: Icons.stacked_line_chart_rounded,
+              ),
+            ],
+            onChanged: (value) {
+              app.dataMode = value;
+              app.startRateRefresh();
+            },
+          ),
+        ),
+      ],
+    );
     final appActions = _equalActionRow(
       key: const ValueKey('toolbar-app-actions'),
       spacing: 6,
@@ -428,96 +438,114 @@ class ToolbarWidget extends StatelessWidget {
         _sshBtn(context, app),
       ],
     );
-    final shotEntry = Row(key: const ValueKey('toolbar-shot-entry'), children: [
-      Text('Shot:',
-          style:
-              TextStyle(fontSize: uiSize, color: theme.colorScheme.onSurface)),
-      if (app.shotHistory.isNotEmpty) ...[
-        const SizedBox(width: 6),
-        PolishedDropdown<String>(
-          key: const ValueKey('toolbar-shot-history-dropdown'),
-          id: 'toolbar-shot-history',
-          value: app.shotText,
-          leadingIcon: Icons.history_rounded,
-          height: 40,
-          fontSize: uiSize,
-          minimumMenuWidth: 180,
-          menuMaxHeight: 320,
-          iconOnly: true,
-          tooltip: 'Shot history',
-          menuAction: PolishedDropdownAction(
-            label: 'Manage shot history',
-            icon: Icons.manage_history_rounded,
-            onPressed: () => _showShotHistoryManager(context, app),
+    final shotEntry = Row(
+      key: const ValueKey('toolbar-shot-entry'),
+      children: [
+        Text(
+          'Shot:',
+          style: TextStyle(
+            fontSize: uiSize,
+            color: theme.colorScheme.onSurface,
           ),
-          options: app.shotHistory
-              .map(
-                (shot) => PolishedDropdownOption(
-                  value: shot,
-                  label: shot,
-                  icon: Icons.history_rounded,
-                ),
-              )
-              .toList(),
-          onChanged: (v) {
-            app.shotText = v;
-            app.startRefresh();
-          },
+        ),
+        if (app.shotHistory.isNotEmpty) ...[
+          const SizedBox(width: 6),
+          PolishedDropdown<String>(
+            key: const ValueKey('toolbar-shot-history-dropdown'),
+            id: 'toolbar-shot-history',
+            value: app.shotText,
+            leadingIcon: Icons.history_rounded,
+            height: 40,
+            fontSize: uiSize,
+            minimumMenuWidth: 180,
+            menuMaxHeight: 320,
+            iconOnly: true,
+            tooltip: 'Shot history',
+            menuAction: PolishedDropdownAction(
+              label: 'Manage shot history',
+              icon: Icons.manage_history_rounded,
+              onPressed: () => _showShotHistoryManager(context, app),
+            ),
+            options: app.shotHistory
+                .map(
+                  (shot) => PolishedDropdownOption(
+                    value: shot,
+                    label: shot,
+                    icon: Icons.history_rounded,
+                  ),
+                )
+                .toList(),
+            onChanged: (v) {
+              app.shotText = v;
+              app.startRefresh();
+            },
+          ),
+        ],
+        const SizedBox(width: 6),
+        Expanded(
+          flex: 3,
+          child: TextField(
+            controller: app.shotCtrl,
+            style: TextStyle(fontSize: uiSize),
+            decoration: InputDecoration(
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 10,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+              ),
+            ),
+            onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+            onSubmitted: (_) => app.startRefresh(),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          flex: 2,
+          child: _toolbarIconButton(
+            context,
+            icon: Icons.play_arrow_rounded,
+            tooltip: 'Load shot',
+            onPressed: () => app.startRefresh(),
+          ),
         ),
       ],
-      const SizedBox(width: 6),
-      Expanded(
-        flex: 3,
-        child: TextField(
-          controller: app.shotCtrl,
-          style: TextStyle(fontSize: uiSize),
-          decoration: InputDecoration(
-              isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(6))),
-          onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-          onSubmitted: (_) => app.startRefresh(),
-        ),
-      ),
-      const SizedBox(width: 6),
-      Expanded(
-        flex: 2,
-        child: _toolbarIconButton(
-          context,
-          icon: Icons.play_arrow_rounded,
-          tooltip: 'Load shot',
-          onPressed: () => app.startRefresh(),
-        ),
-      ),
-    ]);
+    );
     final shotNavigation = _equalActionRow(
       key: const ValueKey('toolbar-shot-navigation'),
       children: [
-        _toolbarIconButton(context,
-            icon: Icons.skip_previous_rounded,
-            tooltip: 'Previous shot', onPressed: () {
-          final cur = app.shotCtrl.text.trim().isNotEmpty
-              ? app.shotCtrl.text.trim()
-              : app.shotText;
-          final s = int.tryParse(cur);
-          if (s != null) {
-            app.shotText = (s - 1).toString();
-            app.startRefresh();
-          }
-        }),
-        _toolbarIconButton(context,
-            icon: Icons.skip_next_rounded, tooltip: 'Next shot', onPressed: () {
-          final cur = app.shotCtrl.text.trim().isNotEmpty
-              ? app.shotCtrl.text.trim()
-              : app.shotText;
-          final s = int.tryParse(cur);
-          if (s != null) {
-            app.shotText = (s + 1).toString();
-            app.startRefresh();
-          }
-        }),
+        _toolbarIconButton(
+          context,
+          icon: Icons.skip_previous_rounded,
+          tooltip: 'Previous shot',
+          onPressed: () {
+            final cur = app.shotCtrl.text.trim().isNotEmpty
+                ? app.shotCtrl.text.trim()
+                : app.shotText;
+            final s = int.tryParse(cur);
+            if (s != null) {
+              app.shotText = (s - 1).toString();
+              app.startRefresh();
+            }
+          },
+        ),
+        _toolbarIconButton(
+          context,
+          icon: Icons.skip_next_rounded,
+          tooltip: 'Next shot',
+          onPressed: () {
+            final cur = app.shotCtrl.text.trim().isNotEmpty
+                ? app.shotCtrl.text.trim()
+                : app.shotText;
+            final s = int.tryParse(cur);
+            if (s != null) {
+              app.shotText = (s + 1).toString();
+              app.startRefresh();
+            }
+          },
+        ),
         _toolbarIconButton(
           context,
           icon: Icons.last_page_rounded,
@@ -555,115 +583,140 @@ class ToolbarWidget extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       color: theme.colorScheme.surfaceContainerHighest,
-      child: LayoutBuilder(builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final compact = width < 560;
-        final wide = width >= 940;
-        final rateSelectorWidth =
-            (190 + (uiSize - 12).clamp(0, 16) * 2).clamp(190, 222).toDouble();
-        final shotInfo = _shotInfoPanel(
-          context,
-          compact: compact,
-          entries: shotMetadata,
-          labelStyle: infoLabelStyle,
-          valueStyle: infoValueStyle,
-        );
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          final compact = width < 560;
+          final wide = width >= 940;
+          final rateSelectorWidth = (190 + (uiSize - 12).clamp(0, 16) * 2)
+              .clamp(190, 222)
+              .toDouble();
+          final shotInfo = _shotInfoPanel(
+            context,
+            compact: compact,
+            entries: shotMetadata,
+            labelStyle: infoLabelStyle,
+            valueStyle: infoValueStyle,
+          );
 
-        Widget topActions;
-        if (compact) {
-          topActions = Column(children: [
-            Row(children: [
-              SizedBox(width: 108, child: themeActions),
-              const SizedBox(width: 8),
-              Expanded(child: appActions),
-            ]),
-            const SizedBox(height: 8),
-            if (width < rateSelectorWidth + 152) ...[
-              SizedBox(width: double.infinity, child: fileActions),
-              const SizedBox(height: 8),
-              SizedBox(width: double.infinity, child: rateSelector),
-            ] else
-              Row(children: [
-                Expanded(child: fileActions),
+          Widget topActions;
+          if (compact) {
+            topActions = Column(
+              children: [
+                Row(
+                  children: [
+                    SizedBox(width: 108, child: themeActions),
+                    const SizedBox(width: 8),
+                    Expanded(child: appActions),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (width < rateSelectorWidth + 152) ...[
+                  SizedBox(width: double.infinity, child: fileActions),
+                  const SizedBox(height: 8),
+                  SizedBox(width: double.infinity, child: rateSelector),
+                ] else
+                  Row(
+                    children: [
+                      Expanded(child: fileActions),
+                      const SizedBox(width: 8),
+                      SizedBox(width: rateSelectorWidth, child: rateSelector),
+                    ],
+                  ),
+              ],
+            );
+          } else if (wide) {
+            topActions = Row(
+              children: [
+                SizedBox(width: 280, child: fileActions),
                 const SizedBox(width: 8),
                 SizedBox(width: rateSelectorWidth, child: rateSelector),
-              ]),
-          ]);
-        } else if (wide) {
-          topActions = Row(children: [
-            SizedBox(width: 280, child: fileActions),
-            const SizedBox(width: 8),
-            SizedBox(width: rateSelectorWidth, child: rateSelector),
-            const Spacer(),
-            SizedBox(width: 108, child: themeActions),
-            const SizedBox(width: 8),
-            SizedBox(width: 190, child: appActions),
-          ]);
-        } else {
-          final fileWidth = (width * 0.56).clamp(250.0, 320.0);
-          final appWidth = (width * 0.46).clamp(230.0, 300.0);
-          topActions = Column(children: [
-            Row(children: [
-              SizedBox(width: 108, child: themeActions),
-              const Spacer(),
-              SizedBox(width: appWidth, child: appActions),
-            ]),
-            const SizedBox(height: 8),
-            Row(children: [
-              SizedBox(width: fileWidth, child: fileActions),
-              const Spacer(),
-              SizedBox(width: rateSelectorWidth, child: rateSelector),
-            ]),
-          ]);
-        }
+                const Spacer(),
+                SizedBox(width: 108, child: themeActions),
+                const SizedBox(width: 8),
+                SizedBox(width: 190, child: appActions),
+              ],
+            );
+          } else {
+            final fileWidth = (width * 0.56).clamp(250.0, 320.0);
+            final appWidth = (width * 0.46).clamp(230.0, 300.0);
+            topActions = Column(
+              children: [
+                Row(
+                  children: [
+                    SizedBox(width: 108, child: themeActions),
+                    const Spacer(),
+                    SizedBox(width: appWidth, child: appActions),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    SizedBox(width: fileWidth, child: fileActions),
+                    const Spacer(),
+                    SizedBox(width: rateSelectorWidth, child: rateSelector),
+                  ],
+                ),
+              ],
+            );
+          }
 
-        Widget shotControls;
-        if (compact) {
-          shotControls = Column(children: [
-            SizedBox(width: double.infinity, child: shotEntry),
-            const SizedBox(height: 8),
-            if (width >= 340)
-              Row(children: [
+          Widget shotControls;
+          if (compact) {
+            shotControls = Column(
+              children: [
+                SizedBox(width: double.infinity, child: shotEntry),
+                const SizedBox(height: 8),
+                if (width >= 340)
+                  Row(
+                    children: [
+                      Expanded(flex: 3, child: shotNavigation),
+                      const SizedBox(width: 8),
+                      Expanded(flex: 2, child: modeActions),
+                    ],
+                  )
+                else ...[
+                  SizedBox(width: double.infinity, child: shotNavigation),
+                  const SizedBox(height: 8),
+                  SizedBox(width: double.infinity, child: modeActions),
+                ],
+              ],
+            );
+          } else if (wide) {
+            shotControls = Row(
+              children: [
+                SizedBox(width: 300, child: shotEntry),
+                const SizedBox(width: 8),
+                SizedBox(width: 260, child: shotNavigation),
+                const SizedBox(width: 8),
+                SizedBox(width: 220, child: modeActions),
+                const Spacer(),
+              ],
+            );
+          } else {
+            shotControls = Row(
+              children: [
+                Expanded(flex: 4, child: shotEntry),
+                const SizedBox(width: 8),
                 Expanded(flex: 3, child: shotNavigation),
                 const SizedBox(width: 8),
-                Expanded(flex: 2, child: modeActions),
-              ])
-            else ...[
-              SizedBox(width: double.infinity, child: shotNavigation),
-              const SizedBox(height: 8),
-              SizedBox(width: double.infinity, child: modeActions),
-            ],
-          ]);
-        } else if (wide) {
-          shotControls = Row(children: [
-            SizedBox(width: 300, child: shotEntry),
-            const SizedBox(width: 8),
-            SizedBox(width: 260, child: shotNavigation),
-            const SizedBox(width: 8),
-            SizedBox(width: 220, child: modeActions),
-            const Spacer(),
-          ]);
-        } else {
-          shotControls = Row(children: [
-            Expanded(flex: 4, child: shotEntry),
-            const SizedBox(width: 8),
-            Expanded(flex: 3, child: shotNavigation),
-            const SizedBox(width: 8),
-            Expanded(flex: 3, child: modeActions),
-          ]);
-        }
+                Expanded(flex: 3, child: modeActions),
+              ],
+            );
+          }
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            topActions,
-            Divider(height: 17, color: theme.dividerColor),
-            shotControls,
-            const SizedBox(height: 8),
-            shotInfo,
-          ],
-        );
-      }),
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              topActions,
+              Divider(height: 17, color: theme.dividerColor),
+              shotControls,
+              const SizedBox(height: 8),
+              shotInfo,
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -693,12 +746,8 @@ class ToolbarWidget extends StatelessWidget {
     final theme = Theme.of(context);
     final divider = theme.dividerColor.withValues(alpha: 0.65);
 
-    Widget infoCell(int index) => _infoCell(
-          entries[index].$1,
-          entries[index].$2,
-          labelStyle,
-          valueStyle,
-        );
+    Widget infoCell(int index) =>
+        _infoCell(entries[index].$1, entries[index].$2, labelStyle, valueStyle);
 
     Widget compactRow(List<int> indices, {int lastFlex = 1}) {
       return IntrinsicHeight(
@@ -725,19 +774,23 @@ class ToolbarWidget extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
       ),
       child: compact
-          ? Column(children: [
-              compactRow([0, 1, 2]),
-              Divider(height: 1, thickness: 1, color: divider),
-              compactRow([3, 4], lastFlex: 2),
-            ])
+          ? Column(
+              children: [
+                compactRow([0, 1, 2]),
+                Divider(height: 1, thickness: 1, color: divider),
+                compactRow([3, 4], lastFlex: 2),
+              ],
+            )
           : IntrinsicHeight(
-              child: Row(children: [
-                for (var i = 0; i < entries.length; i++) ...[
-                  if (i > 0)
-                    VerticalDivider(width: 1, thickness: 1, color: divider),
-                  Expanded(flex: i == 4 ? 2 : 1, child: infoCell(i)),
+              child: Row(
+                children: [
+                  for (var i = 0; i < entries.length; i++) ...[
+                    if (i > 0)
+                      VerticalDivider(width: 1, thickness: 1, color: divider),
+                    Expanded(flex: i == 4 ? 2 : 1, child: infoCell(i)),
+                  ],
                 ],
-              ]),
+              ),
             ),
     );
   }
@@ -754,10 +807,12 @@ class ToolbarWidget extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         child: Text.rich(
-          TextSpan(children: [
-            TextSpan(text: '$label: ', style: labelStyle),
-            TextSpan(text: value, style: valueStyle),
-          ]),
+          TextSpan(
+            children: [
+              TextSpan(text: '$label: ', style: labelStyle),
+              TextSpan(text: value, style: valueStyle),
+            ],
+          ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
@@ -777,8 +832,11 @@ class ToolbarWidget extends StatelessWidget {
           border: Border.all(color: Theme.of(ctx).colorScheme.outline),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Icon(Icons.settings,
-            size: 22, color: Theme.of(ctx).colorScheme.onSurface),
+        child: Icon(
+          Icons.settings,
+          size: 22,
+          color: Theme.of(ctx).colorScheme.onSurface,
+        ),
       ),
       onSelected: (v) {
         switch (v) {
@@ -815,7 +873,7 @@ class ToolbarWidget extends StatelessWidget {
         _settingsMenuItem(
           value: 'about',
           icon: Icons.info_outline_rounded,
-          label: 'About MdsScope',
+          label: 'About MDSLens',
         ),
       ]),
     );
@@ -843,156 +901,162 @@ class ToolbarWidget extends StatelessWidget {
     showDialog(
       context: ctx,
       builder: (ctx) => StatefulBuilder(
-          builder: (ctx, setState) => KeyboardSafeDialog(
-                maxWidth: 460,
-                title: const Text('Internal Web Pages'),
-                content: SizedBox(
-                  width: 400,
-                  height: 300,
-                  child: bookmarks.isEmpty
-                      ? const Center(
-                          child: Text('No Saved Web Addresses',
-                              style: TextStyle(color: Colors.grey)))
-                      : ListView.separated(
-                          key: const ValueKey('internal-web-pages-list'),
-                          itemCount: bookmarks.length,
-                          separatorBuilder: (_, i) => Divider(
-                            key: ValueKey('internal-web-page-divider-$i'),
-                            height: 12,
-                            thickness: 1,
-                            indent: 14,
-                            endIndent: 14,
-                          ),
-                          itemBuilder: (_, i) => Material(
-                            key: ValueKey('internal-web-page-$i'),
-                            color:
-                                Theme.of(ctx).colorScheme.surfaceContainerLow,
-                            shape: RoundedRectangleBorder(
-                              side: BorderSide(
-                                color: Theme.of(ctx).colorScheme.outlineVariant,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            clipBehavior: Clip.antiAlias,
-                            child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 5,
-                              ),
-                              leading: CircleAvatar(
-                                radius: 18,
-                                backgroundColor:
-                                    Theme.of(ctx).colorScheme.primaryContainer,
-                                foregroundColor:
-                                    Theme.of(ctx).colorScheme.primary,
-                                child: const Icon(Icons.language_rounded,
-                                    size: 19),
-                              ),
-                              title: Text(
-                                bookmarks[i].keys.first,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w600),
-                              ),
-                              subtitle: Padding(
-                                padding: const EdgeInsets.only(top: 3),
-                                child: Text(
-                                  bookmarks[i].values.first,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Theme.of(ctx)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                  ),
-                                ),
-                              ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    key: ValueKey('internal-web-page-edit-$i'),
-                                    tooltip: 'Edit web page',
-                                    visualDensity: VisualDensity.compact,
-                                    onPressed: () => _editBookmark(
-                                      ctx,
-                                      app,
-                                      setState,
-                                      i,
-                                    ),
-                                    icon: const Icon(
-                                      Icons.edit_rounded,
-                                      size: 19,
-                                    ),
-                                  ),
-                                  Icon(
-                                    Icons.open_in_new_rounded,
-                                    size: 19,
-                                    color: Theme.of(ctx).colorScheme.primary,
-                                  ),
-                                ],
-                              ),
-                              onTap: () {
-                                Navigator.pop(ctx);
-                                _openUrl(bookmarks[i].values.first, app);
-                              },
+        builder: (ctx, setState) => KeyboardSafeDialog(
+          maxWidth: 460,
+          title: const Text('Internal Web Pages'),
+          content: SizedBox(
+            width: 400,
+            height: 300,
+            child: bookmarks.isEmpty
+                ? const Center(
+                    child: Text(
+                      'No Saved Web Addresses',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  )
+                : ListView.separated(
+                    key: const ValueKey('internal-web-pages-list'),
+                    itemCount: bookmarks.length,
+                    separatorBuilder: (_, i) => Divider(
+                      key: ValueKey('internal-web-page-divider-$i'),
+                      height: 12,
+                      thickness: 1,
+                      indent: 14,
+                      endIndent: 14,
+                    ),
+                    itemBuilder: (_, i) => Material(
+                      key: ValueKey('internal-web-page-$i'),
+                      color: Theme.of(ctx).colorScheme.surfaceContainerLow,
+                      shape: RoundedRectangleBorder(
+                        side: BorderSide(
+                          color: Theme.of(ctx).colorScheme.outlineVariant,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 5,
+                        ),
+                        leading: CircleAvatar(
+                          radius: 18,
+                          backgroundColor: Theme.of(
+                            ctx,
+                          ).colorScheme.primaryContainer,
+                          foregroundColor: Theme.of(ctx).colorScheme.primary,
+                          child: const Icon(Icons.language_rounded, size: 19),
+                        ),
+                        title: Text(
+                          bookmarks[i].keys.first,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 3),
+                          child: Text(
+                            bookmarks[i].values.first,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Theme.of(ctx).colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ),
-                ),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Close')),
-                  TextButton.icon(
-                      onPressed: () {
-                        _addBookmark(ctx, app, setState);
-                      },
-                      icon: const Icon(Icons.add_link_rounded, size: 18),
-                      label: const Text('Add...')),
-                  if (bookmarks.isNotEmpty)
-                    TextButton.icon(
-                        onPressed: () {
-                          _removeBookmark(ctx, app, setState);
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              key: ValueKey('internal-web-page-edit-$i'),
+                              tooltip: 'Edit web page',
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () =>
+                                  _editBookmark(ctx, app, setState, i),
+                              icon: const Icon(Icons.edit_rounded, size: 19),
+                            ),
+                            Icon(
+                              Icons.open_in_new_rounded,
+                              size: 19,
+                              color: Theme.of(ctx).colorScheme.primary,
+                            ),
+                          ],
+                        ),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _openUrl(bookmarks[i].values.first, app);
                         },
-                        icon: const Icon(Icons.link_off_rounded, size: 18),
-                        label: const Text('Remove...')),
-                ],
-              )),
+                      ),
+                    ),
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close'),
+            ),
+            TextButton.icon(
+              onPressed: () {
+                _addBookmark(ctx, app, setState);
+              },
+              icon: const Icon(Icons.add_link_rounded, size: 18),
+              label: const Text('Add...'),
+            ),
+            if (bookmarks.isNotEmpty)
+              TextButton.icon(
+                onPressed: () {
+                  _removeBookmark(ctx, app, setState);
+                },
+                icon: const Icon(Icons.link_off_rounded, size: 18),
+                label: const Text('Remove...'),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
   void _addBookmark(
-      BuildContext ctx, AppState app, void Function(VoidCallback) setState) {
+    BuildContext ctx,
+    AppState app,
+    void Function(VoidCallback) setState,
+  ) {
     final aliasCtrl = TextEditingController();
     final urlCtrl = TextEditingController();
     showDialog(
       context: ctx,
       builder: (ctx) => KeyboardSafeDialog(
         title: const Text('Add Web Bookmark'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
               controller: aliasCtrl,
-              decoration: const InputDecoration(labelText: 'Alias')),
-          const SizedBox(height: 8),
-          TextField(
+              decoration: const InputDecoration(labelText: 'Alias'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
               controller: urlCtrl,
-              decoration: const InputDecoration(labelText: 'URL')),
-        ]),
+              decoration: const InputDecoration(labelText: 'URL'),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           TextButton(
-              onPressed: () {
-                final alias = aliasCtrl.text.trim();
-                final url = urlCtrl.text.trim();
-                if (alias.isNotEmpty && url.isNotEmpty) {
-                  app.addWebBookmark(alias, url);
-                  Navigator.pop(ctx);
-                  setState(() {});
-                }
-              },
-              child: const Text('Add')),
+            onPressed: () {
+              final alias = aliasCtrl.text.trim();
+              final url = urlCtrl.text.trim();
+              if (alias.isNotEmpty && url.isNotEmpty) {
+                app.addWebBookmark(alias, url);
+                Navigator.pop(ctx);
+                setState(() {});
+              }
+            },
+            child: const Text('Add'),
+          ),
         ],
       ),
     );
@@ -1074,11 +1138,7 @@ class ToolbarWidget extends StatelessWidget {
             key: const ValueKey('edit-web-page-save'),
             onPressed: () async {
               if (formKey.currentState?.validate() != true) return;
-              await app.updateWebBookmark(
-                index,
-                aliasCtrl.text,
-                urlCtrl.text,
-              );
+              await app.updateWebBookmark(index, aliasCtrl.text, urlCtrl.text);
               if (dialogContext.mounted) Navigator.pop(dialogContext);
               refreshParent(() {});
             },
@@ -1091,7 +1151,10 @@ class ToolbarWidget extends StatelessWidget {
   }
 
   void _removeBookmark(
-      BuildContext ctx, AppState app, void Function(VoidCallback) setState) {
+    BuildContext ctx,
+    AppState app,
+    void Function(VoidCallback) setState,
+  ) {
     final bookmarks = app.webBookmarks
         .asMap()
         .entries
@@ -1137,14 +1200,14 @@ class ToolbarWidget extends StatelessWidget {
                   onChanged: bookmarks.isEmpty
                       ? null
                       : (checked) => setDialogState(() {
-                            if (checked == true) {
-                              selected.addAll(
-                                bookmarks.map((bookmark) => bookmark.index),
-                              );
-                            } else {
-                              selected.clear();
-                            }
-                          }),
+                          if (checked == true) {
+                            selected.addAll(
+                              bookmarks.map((bookmark) => bookmark.index),
+                            );
+                          } else {
+                            selected.clear();
+                          }
+                        }),
                 ),
                 const Divider(height: 1),
                 const SizedBox(height: 10),
@@ -1179,12 +1242,14 @@ class ToolbarWidget extends StatelessWidget {
                             interactive: true,
                             child: ListView.separated(
                               key: const ValueKey(
-                                  'bookmark-removal-selection-list'),
+                                'bookmark-removal-selection-list',
+                              ),
                               controller: scrollController,
                               itemCount: bookmarks.length,
                               separatorBuilder: (_, index) => Divider(
-                                key:
-                                    ValueKey('bookmark-removal-divider-$index'),
+                                key: ValueKey(
+                                  'bookmark-removal-divider-$index',
+                                ),
                                 height: 1,
                                 indent: 16,
                                 endIndent: 16,
@@ -1195,7 +1260,8 @@ class ToolbarWidget extends StatelessWidget {
                                 final url = bookmark.value.values.first;
                                 return CheckboxListTile(
                                   key: ValueKey(
-                                      'bookmark-remove-${bookmark.index}'),
+                                    'bookmark-remove-${bookmark.index}',
+                                  ),
                                   value: selected.contains(bookmark.index),
                                   controlAffinity:
                                       ListTileControlAffinity.leading,
@@ -1203,7 +1269,8 @@ class ToolbarWidget extends StatelessWidget {
                                   title: Text(
                                     alias,
                                     style: const TextStyle(
-                                        fontWeight: FontWeight.w600),
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                   subtitle: Text(
                                     url,
@@ -1242,7 +1309,8 @@ class ToolbarWidget extends StatelessWidget {
                         final pending = Set<int>.of(selected);
                         final aliases = bookmarks
                             .where(
-                                (bookmark) => pending.contains(bookmark.index))
+                              (bookmark) => pending.contains(bookmark.index),
+                            )
                             .map((bookmark) => bookmark.value.keys.first)
                             .toList();
                         final preview = aliases.take(5).join(', ');
@@ -1258,9 +1326,8 @@ class ToolbarWidget extends StatelessWidget {
                           ..clear()
                           ..addAll(
                             app.webBookmarks.asMap().entries.map(
-                                  (entry) =>
-                                      (index: entry.key, value: entry.value),
-                                ),
+                              (entry) => (index: entry.key, value: entry.value),
+                            ),
                           );
                         selected.clear();
                         if (dialogContext.mounted) {
@@ -1306,9 +1373,7 @@ class ToolbarWidget extends StatelessWidget {
             decoration: BoxDecoration(
               color: colors.errorContainer.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: colors.error.withValues(alpha: 0.32),
-              ),
+              border: Border.all(color: colors.error.withValues(alpha: 0.32)),
             ),
             child: Text(
               'Remove $count selected bookmark${count == 1 ? '' : 's'} '
@@ -1360,9 +1425,11 @@ class ToolbarWidget extends StatelessWidget {
     }
     app.recordSshUsage(usedSsh);
     final opened = await openExternalWebUrl(finalUrl);
-    app.setStatus(opened
-        ? 'Opened internal web page'
-        : 'Could not open the default browser');
+    app.setStatus(
+      opened
+          ? 'Opened internal web page'
+          : 'Could not open the default browser',
+    );
   }
 
   void _showLayoutSetup(BuildContext ctx, AppState app) {
@@ -1374,35 +1441,36 @@ class ToolbarWidget extends StatelessWidget {
 
     final dialogFuture = showDialog<void>(
       context: ctx,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setState) {
-        final screenSize = MediaQuery.sizeOf(ctx);
-        final displayColumns = buildResponsivePlotColumns(
-          draftColumns.map((column) => column.length).toList(),
-          screenSize.width,
-        );
-        final contentWidth = (screenSize.width - 64).clamp(240.0, 700.0);
-        final contentHeight = (screenSize.height * 0.58).clamp(260.0, 540.0);
-        final layoutWidth = math.max(
-          contentWidth,
-          displayColumns.length * 156.0 + (displayColumns.length + 1) * 8.0,
-        );
-        final needsHorizontalScroll = layoutWidth > contentWidth + 0.5;
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) {
+          final screenSize = MediaQuery.sizeOf(ctx);
+          final displayColumns = buildResponsivePlotColumns(
+            draftColumns.map((column) => column.length).toList(),
+            screenSize.width,
+          );
+          final contentWidth = (screenSize.width - 64).clamp(240.0, 700.0);
+          final contentHeight = (screenSize.height * 0.58).clamp(260.0, 540.0);
+          final layoutWidth = math.max(
+            contentWidth,
+            displayColumns.length * 156.0 + (displayColumns.length + 1) * 8.0,
+          );
+          final needsHorizontalScroll = layoutWidth > contentWidth + 0.5;
 
-        return GestureDetector(
-          key: const ValueKey('layout-setup-surface'),
-          behavior: HitTestBehavior.translucent,
-          onTap: () => setState(() {
-            selectedCol = -1;
-            selectedRow = -1;
-          }),
-          child: KeyboardSafeDialog(
-            maxWidth: 760,
-            maxHeight: 720,
-            title: const Text('Layout Setup'),
-            content: SizedBox(
-              width: contentWidth,
-              height: contentHeight,
-              child: Column(
+          return GestureDetector(
+            key: const ValueKey('layout-setup-surface'),
+            behavior: HitTestBehavior.translucent,
+            onTap: () => setState(() {
+              selectedCol = -1;
+              selectedRow = -1;
+            }),
+            child: KeyboardSafeDialog(
+              maxWidth: 760,
+              maxHeight: 720,
+              title: const Text('Layout Setup'),
+              content: SizedBox(
+                width: contentWidth,
+                height: contentHeight,
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     GestureDetector(
@@ -1436,9 +1504,11 @@ class ToolbarWidget extends StatelessWidget {
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                for (var displayColumn = 0;
-                                    displayColumn < displayColumns.length;
-                                    displayColumn++) ...[
+                                for (
+                                  var displayColumn = 0;
+                                  displayColumn < displayColumns.length;
+                                  displayColumn++
+                                ) ...[
                                   _layoutColumnDropTarget(
                                     context: ctx,
                                     columns: draftColumns,
@@ -1452,9 +1522,11 @@ class ToolbarWidget extends StatelessWidget {
                                   Expanded(
                                     child: LongPressDraggable<_LayoutDragData>(
                                       key: ValueKey(
-                                          'layout-column-drag-${displayColumn + 1}'),
-                                      data:
-                                          _LayoutDragData.column(displayColumn),
+                                        'layout-column-drag-${displayColumn + 1}',
+                                      ),
+                                      data: _LayoutDragData.column(
+                                        displayColumn,
+                                      ),
                                       delay: const Duration(milliseconds: 320),
                                       hapticFeedbackOnStart: true,
                                       feedback: _layoutDragFeedback(
@@ -1471,8 +1543,9 @@ class ToolbarWidget extends StatelessWidget {
                                             border: Border.all(
                                               color: Theme.of(ctx).dividerColor,
                                             ),
-                                            borderRadius:
-                                                BorderRadius.circular(8),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -1484,293 +1557,304 @@ class ToolbarWidget extends StatelessWidget {
                                         }),
                                         child: Container(
                                           key: ValueKey(
-                                              'layout-preview-column-$displayColumn'),
+                                            'layout-preview-column-$displayColumn',
+                                          ),
                                           decoration: BoxDecoration(
                                             border: Border.all(
-                                              color: selectedCol ==
+                                              color:
+                                                  selectedCol ==
                                                           displayColumn &&
                                                       selectedRow < 0
-                                                  ? Theme.of(ctx)
-                                                      .colorScheme
-                                                      .primary
+                                                  ? Theme.of(
+                                                      ctx,
+                                                    ).colorScheme.primary
                                                   : Theme.of(ctx).dividerColor,
-                                              width: selectedCol ==
+                                              width:
+                                                  selectedCol ==
                                                           displayColumn &&
                                                       selectedRow < 0
                                                   ? 2
                                                   : 1,
                                             ),
-                                            borderRadius:
-                                                BorderRadius.circular(8),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
                                           ),
-                                          child: Column(children: [
-                                            GestureDetector(
-                                              key: ValueKey(
-                                                  'layout-column-header-${displayColumn + 1}'),
-                                              behavior: HitTestBehavior.opaque,
-                                              onTap: () => setState(() {
-                                                selectedCol = displayColumn;
-                                                selectedRow = -1;
-                                              }),
-                                              child: SizedBox(
-                                                height: 32,
-                                                child: Row(
-                                                  children: [
-                                                    Padding(
-                                                      padding:
-                                                          const EdgeInsets.only(
-                                                              left: 3),
-                                                      child: _layoutDragHandle(
-                                                        context: ctx,
-                                                        key: ValueKey(
-                                                            'layout-column-drag-handle-${displayColumn + 1}'),
-                                                        data: _LayoutDragData
-                                                            .column(
-                                                          displayColumn,
-                                                        ),
-                                                        tooltip:
-                                                            'Drag column ${displayColumn + 1}',
-                                                        feedback:
-                                                            _layoutDragFeedback(
-                                                          ctx,
-                                                          icon: Icons
-                                                              .view_column_rounded,
-                                                          label:
-                                                              'Column ${displayColumn + 1}',
-                                                          subtitle:
-                                                              '${draftColumns[displayColumn].length} panels',
+                                          child: Column(
+                                            children: [
+                                              GestureDetector(
+                                                key: ValueKey(
+                                                  'layout-column-header-${displayColumn + 1}',
+                                                ),
+                                                behavior:
+                                                    HitTestBehavior.opaque,
+                                                onTap: () => setState(() {
+                                                  selectedCol = displayColumn;
+                                                  selectedRow = -1;
+                                                }),
+                                                child: SizedBox(
+                                                  height: 32,
+                                                  child: Row(
+                                                    children: [
+                                                      Padding(
+                                                        padding:
+                                                            const EdgeInsets.only(
+                                                              left: 3,
+                                                            ),
+                                                        child: _layoutDragHandle(
+                                                          context: ctx,
+                                                          key: ValueKey(
+                                                            'layout-column-drag-handle-${displayColumn + 1}',
+                                                          ),
+                                                          data:
+                                                              _LayoutDragData.column(
+                                                                displayColumn,
+                                                              ),
+                                                          tooltip:
+                                                              'Drag column ${displayColumn + 1}',
+                                                          feedback: _layoutDragFeedback(
+                                                            ctx,
+                                                            icon: Icons
+                                                                .view_column_rounded,
+                                                            label:
+                                                                'Column ${displayColumn + 1}',
+                                                            subtitle:
+                                                                '${draftColumns[displayColumn].length} panels',
+                                                          ),
                                                         ),
                                                       ),
-                                                    ),
-                                                    Expanded(
-                                                      child: Center(
-                                                        child: FittedBox(
-                                                          fit: BoxFit.scaleDown,
-                                                          child: Text(
-                                                            'Column ${displayColumn + 1}',
-                                                            style:
-                                                                const TextStyle(
-                                                              fontSize: 10,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .bold,
+                                                      Expanded(
+                                                        child: Center(
+                                                          child: FittedBox(
+                                                            fit: BoxFit
+                                                                .scaleDown,
+                                                            child: Text(
+                                                              'Column ${displayColumn + 1}',
+                                                              style: const TextStyle(
+                                                                fontSize: 10,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold,
+                                                              ),
                                                             ),
                                                           ),
                                                         ),
                                                       ),
-                                                    ),
-                                                    if (selectedCol ==
-                                                            displayColumn &&
-                                                        selectedRow < 0)
-                                                      Padding(
-                                                        padding:
-                                                            const EdgeInsets
-                                                                .only(right: 3),
-                                                        child:
-                                                            _layoutIconButton(
-                                                          context: ctx,
-                                                          key: ValueKey(
-                                                              'layout-delete-column-${displayColumn + 1}'),
-                                                          icon: Icons
-                                                              .delete_outline_rounded,
-                                                          tooltip: draftColumns
-                                                                      .length >
-                                                                  1
-                                                              ? 'Delete column'
-                                                              : 'At least one column is required',
-                                                          destructive: true,
-                                                          onPressed: draftColumns
-                                                                      .length >
-                                                                  1
-                                                              ? () {
-                                                                  draftColumns
-                                                                      .removeAt(
-                                                                          displayColumn);
-                                                                  selectedCol =
-                                                                      -1;
-                                                                  selectedRow =
-                                                                      -1;
-                                                                  setState(
-                                                                      () {});
-                                                                }
-                                                              : null,
-                                                        ),
-                                                      ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                            Expanded(
-                                              child: LayoutBuilder(
-                                                builder:
-                                                    (context, constraints) {
-                                                  final panelCount =
-                                                      displayColumns[
-                                                              displayColumn]
-                                                          .length;
-                                                  final requiredHeight =
-                                                      panelCount * 112.0 +
-                                                          (panelCount + 1) *
-                                                              7.0;
-                                                  final needsVerticalScroll =
-                                                      requiredHeight >
-                                                          constraints
-                                                                  .maxHeight +
-                                                              0.5;
-                                                  final controller =
-                                                      verticalControllers
-                                                          .putIfAbsent(
-                                                    displayColumn,
-                                                    ScrollController.new,
-                                                  );
-                                                  return Scrollbar(
-                                                    key: ValueKey(
-                                                        'layout-column-scrollbar-$displayColumn'),
-                                                    controller: controller,
-                                                    thumbVisibility:
-                                                        needsVerticalScroll,
-                                                    interactive: true,
-                                                    child:
-                                                        SingleChildScrollView(
-                                                      key: ValueKey(
-                                                          'layout-column-scroll-$displayColumn'),
-                                                      controller: controller,
-                                                      child: SizedBox(
-                                                        height: math.max(
-                                                          constraints.maxHeight,
-                                                          requiredHeight,
-                                                        ),
-                                                        child: Column(
-                                                          children: [
-                                                            _layoutPanelDropTarget(
-                                                              context: ctx,
-                                                              columns:
-                                                                  draftColumns,
-                                                              targetColumn:
-                                                                  displayColumn,
-                                                              insertionRow: 0,
-                                                              setState:
-                                                                  setState,
-                                                              clearSelection:
-                                                                  () {
-                                                                selectedCol =
-                                                                    -1;
-                                                                selectedRow =
-                                                                    -1;
-                                                              },
+                                                      if (selectedCol ==
+                                                              displayColumn &&
+                                                          selectedRow < 0)
+                                                        Padding(
+                                                          padding:
+                                                              const EdgeInsets.only(
+                                                                right: 3,
+                                                              ),
+                                                          child: _layoutIconButton(
+                                                            context: ctx,
+                                                            key: ValueKey(
+                                                              'layout-delete-column-${displayColumn + 1}',
                                                             ),
-                                                            for (final cell
-                                                                in displayColumns[
-                                                                    displayColumn]) ...[
-                                                              _buildDraggableLayoutPanel(
-                                                                ctx,
-                                                                panel: draftColumns[
-                                                                    cell
-                                                                        .sourceColumn][cell
-                                                                    .sourceRow],
-                                                                sourceColumn: cell
-                                                                    .sourceColumn,
-                                                                sourceRow: cell
-                                                                    .sourceRow,
-                                                                panelNumber:
-                                                                    cell.plotIndex +
-                                                                        1,
-                                                                selected: selectedCol ==
-                                                                        cell
-                                                                            .sourceColumn &&
-                                                                    selectedRow ==
-                                                                        cell.sourceRow,
-                                                                onSelect: () =>
-                                                                    setState(
-                                                                        () {
-                                                                  selectedCol =
-                                                                      cell.sourceColumn;
-                                                                  selectedRow =
-                                                                      cell.sourceRow;
-                                                                }),
-                                                                onEdit:
-                                                                    () async {
-                                                                  final panel =
-                                                                      draftColumns[
-                                                                          cell
-                                                                              .sourceColumn][cell
-                                                                          .sourceRow];
-                                                                  final changed =
-                                                                      await _editLayoutPanel(
-                                                                    ctx,
-                                                                    app,
-                                                                    panel,
-                                                                    cell.plotIndex +
-                                                                        1,
-                                                                  );
-                                                                  if (changed &&
-                                                                      ctx.mounted) {
-                                                                    setState(
-                                                                        () {});
-                                                                  }
-                                                                },
-                                                                onDelete: () {
-                                                                  final panelCount =
-                                                                      draftColumns
-                                                                          .fold(
-                                                                    0,
-                                                                    (count, column) =>
-                                                                        count +
-                                                                        column
-                                                                            .length,
-                                                                  );
-                                                                  if (panelCount <=
-                                                                      1) {
-                                                                    return;
-                                                                  }
-                                                                  draftColumns[cell
-                                                                          .sourceColumn]
-                                                                      .removeAt(
-                                                                          cell.sourceRow);
-                                                                  if (draftColumns[
-                                                                          cell.sourceColumn]
-                                                                      .isEmpty) {
+                                                            icon: Icons
+                                                                .delete_outline_rounded,
+                                                            tooltip:
+                                                                draftColumns
+                                                                        .length >
+                                                                    1
+                                                                ? 'Delete column'
+                                                                : 'At least one column is required',
+                                                            destructive: true,
+                                                            onPressed:
+                                                                draftColumns
+                                                                        .length >
+                                                                    1
+                                                                ? () {
                                                                     draftColumns
                                                                         .removeAt(
-                                                                            cell.sourceColumn);
+                                                                          displayColumn,
+                                                                        );
+                                                                    selectedCol =
+                                                                        -1;
+                                                                    selectedRow =
+                                                                        -1;
+                                                                    setState(
+                                                                      () {},
+                                                                    );
                                                                   }
-                                                                  selectedCol =
-                                                                      -1;
-                                                                  selectedRow =
-                                                                      -1;
-                                                                  setState(
-                                                                      () {});
-                                                                },
-                                                              ),
+                                                                : null,
+                                                          ),
+                                                        ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                              Expanded(
+                                                child: LayoutBuilder(
+                                                  builder: (context, constraints) {
+                                                    final panelCount =
+                                                        displayColumns[displayColumn]
+                                                            .length;
+                                                    final requiredHeight =
+                                                        panelCount * 112.0 +
+                                                        (panelCount + 1) * 7.0;
+                                                    final needsVerticalScroll =
+                                                        requiredHeight >
+                                                        constraints.maxHeight +
+                                                            0.5;
+                                                    final controller =
+                                                        verticalControllers
+                                                            .putIfAbsent(
+                                                              displayColumn,
+                                                              ScrollController
+                                                                  .new,
+                                                            );
+                                                    return Scrollbar(
+                                                      key: ValueKey(
+                                                        'layout-column-scrollbar-$displayColumn',
+                                                      ),
+                                                      controller: controller,
+                                                      thumbVisibility:
+                                                          needsVerticalScroll,
+                                                      interactive: true,
+                                                      child: SingleChildScrollView(
+                                                        key: ValueKey(
+                                                          'layout-column-scroll-$displayColumn',
+                                                        ),
+                                                        controller: controller,
+                                                        child: SizedBox(
+                                                          height: math.max(
+                                                            constraints
+                                                                .maxHeight,
+                                                            requiredHeight,
+                                                          ),
+                                                          child: Column(
+                                                            children: [
                                                               _layoutPanelDropTarget(
                                                                 context: ctx,
                                                                 columns:
                                                                     draftColumns,
                                                                 targetColumn:
                                                                     displayColumn,
-                                                                insertionRow:
-                                                                    cell.sourceRow +
-                                                                        1,
+                                                                insertionRow: 0,
                                                                 setState:
                                                                     setState,
-                                                                clearSelection:
-                                                                    () {
+                                                                clearSelection: () {
                                                                   selectedCol =
                                                                       -1;
                                                                   selectedRow =
                                                                       -1;
                                                                 },
                                                               ),
+                                                              for (final cell
+                                                                  in displayColumns[displayColumn]) ...[
+                                                                _buildDraggableLayoutPanel(
+                                                                  ctx,
+                                                                  panel:
+                                                                      draftColumns[cell
+                                                                          .sourceColumn][cell
+                                                                          .sourceRow],
+                                                                  sourceColumn:
+                                                                      cell.sourceColumn,
+                                                                  sourceRow: cell
+                                                                      .sourceRow,
+                                                                  panelNumber:
+                                                                      cell.plotIndex +
+                                                                      1,
+                                                                  selected:
+                                                                      selectedCol ==
+                                                                          cell.sourceColumn &&
+                                                                      selectedRow ==
+                                                                          cell.sourceRow,
+                                                                  onSelect: () => setState(() {
+                                                                    selectedCol =
+                                                                        cell.sourceColumn;
+                                                                    selectedRow =
+                                                                        cell.sourceRow;
+                                                                  }),
+                                                                  onEdit: () async {
+                                                                    final panel =
+                                                                        draftColumns[cell
+                                                                            .sourceColumn][cell
+                                                                            .sourceRow];
+                                                                    final changed =
+                                                                        await _editLayoutPanel(
+                                                                          ctx,
+                                                                          app,
+                                                                          panel,
+                                                                          cell.plotIndex +
+                                                                              1,
+                                                                        );
+                                                                    if (changed &&
+                                                                        ctx.mounted) {
+                                                                      setState(
+                                                                        () {},
+                                                                      );
+                                                                    }
+                                                                  },
+                                                                  onDelete: () {
+                                                                    final panelCount = draftColumns.fold(
+                                                                      0,
+                                                                      (
+                                                                        count,
+                                                                        column,
+                                                                      ) =>
+                                                                          count +
+                                                                          column
+                                                                              .length,
+                                                                    );
+                                                                    if (panelCount <=
+                                                                        1) {
+                                                                      return;
+                                                                    }
+                                                                    draftColumns[cell
+                                                                            .sourceColumn]
+                                                                        .removeAt(
+                                                                          cell.sourceRow,
+                                                                        );
+                                                                    if (draftColumns[cell
+                                                                            .sourceColumn]
+                                                                        .isEmpty) {
+                                                                      draftColumns
+                                                                          .removeAt(
+                                                                            cell.sourceColumn,
+                                                                          );
+                                                                    }
+                                                                    selectedCol =
+                                                                        -1;
+                                                                    selectedRow =
+                                                                        -1;
+                                                                    setState(
+                                                                      () {},
+                                                                    );
+                                                                  },
+                                                                ),
+                                                                _layoutPanelDropTarget(
+                                                                  context: ctx,
+                                                                  columns:
+                                                                      draftColumns,
+                                                                  targetColumn:
+                                                                      displayColumn,
+                                                                  insertionRow:
+                                                                      cell.sourceRow +
+                                                                      1,
+                                                                  setState:
+                                                                      setState,
+                                                                  clearSelection: () {
+                                                                    selectedCol =
+                                                                        -1;
+                                                                    selectedRow =
+                                                                        -1;
+                                                                  },
+                                                                ),
+                                                              ],
                                                             ],
-                                                          ],
+                                                          ),
                                                         ),
                                                       ),
-                                                    ),
-                                                  );
-                                                },
+                                                    );
+                                                  },
+                                                ),
                                               ),
-                                            ),
-                                          ]),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -1793,48 +1877,59 @@ class ToolbarWidget extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Wrap(spacing: 8, runSpacing: 4, children: [
-                      TextButton.icon(
-                        onPressed: () {
-                          final targetColumn = selectedCol >= 0 &&
-                                  selectedCol < draftColumns.length
-                              ? selectedCol
-                              : draftColumns.length - 1;
-                          draftColumns[targetColumn].add(_emptyPanelConfig());
-                          setState(() {});
-                        },
-                        icon: const Icon(Icons.add, size: 16),
-                        label: const Text('Add panel'),
-                      ),
-                      TextButton.icon(
-                        onPressed: () {
-                          draftColumns.add([_emptyPanelConfig()]);
-                          setState(() {});
-                        },
-                        icon: const Icon(Icons.view_column_outlined, size: 16),
-                        label: const Text('Add column'),
-                      ),
-                    ]),
-                  ]),
-            ),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancel')),
-              TextButton(
-                onPressed: () {
-                  if (draftColumns.isNotEmpty) {
-                    app.applyLayoutColumns(draftColumns);
-                    app.startRefresh();
-                  }
-                  Navigator.pop(ctx);
-                },
-                child: const Text('Apply'),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        TextButton.icon(
+                          onPressed: () {
+                            final targetColumn =
+                                selectedCol >= 0 &&
+                                    selectedCol < draftColumns.length
+                                ? selectedCol
+                                : draftColumns.length - 1;
+                            draftColumns[targetColumn].add(_emptyPanelConfig());
+                            setState(() {});
+                          },
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text('Add panel'),
+                        ),
+                        TextButton.icon(
+                          onPressed: () {
+                            draftColumns.add([_emptyPanelConfig()]);
+                            setState(() {});
+                          },
+                          icon: const Icon(
+                            Icons.view_column_outlined,
+                            size: 16,
+                          ),
+                          label: const Text('Add column'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
-        );
-      }),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    if (draftColumns.isNotEmpty) {
+                      app.applyLayoutColumns(draftColumns);
+                      app.startRefresh();
+                    }
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('Apply'),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
     dialogFuture.whenComplete(() {
       horizontalController.dispose();
@@ -1851,9 +1946,8 @@ class ToolbarWidget extends StatelessWidget {
         .map(
           (column) => column
               .map(
-                (panel) => Map<String, dynamic>.from(
-                  _cloneLayoutValue(panel) as Map,
-                ),
+                (panel) =>
+                    Map<String, dynamic>.from(_cloneLayoutValue(panel) as Map),
               )
               .toList(),
         )
@@ -1871,13 +1965,13 @@ class ToolbarWidget extends StatelessWidget {
   }
 
   Map<String, dynamic> _emptyPanelConfig() => {
-        'title': '',
-        'x_label': 's',
-        'y_label': 'a.u.',
-        'extraction_points': 2000,
-        'grid': true,
-        'signal_specs': <Map<String, dynamic>>[],
-      };
+    'title': '',
+    'x_label': 's',
+    'y_label': 'a.u.',
+    'extraction_points': 2000,
+    'grid': true,
+    'signal_specs': <Map<String, dynamic>>[],
+  };
 
   Widget _layoutIconButton({
     required BuildContext context,
@@ -1902,10 +1996,12 @@ class ToolbarWidget extends StatelessWidget {
       style: IconButton.styleFrom(
         foregroundColor: foreground,
         backgroundColor: background,
-        disabledForegroundColor:
-            colors.onSurfaceVariant.withValues(alpha: 0.35),
-        disabledBackgroundColor:
-            colors.surfaceContainerHighest.withValues(alpha: 0.5),
+        disabledForegroundColor: colors.onSurfaceVariant.withValues(
+          alpha: 0.35,
+        ),
+        disabledBackgroundColor: colors.surfaceContainerHighest.withValues(
+          alpha: 0.5,
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       icon: Icon(icon, size: 15),
@@ -1924,11 +2020,7 @@ class ToolbarWidget extends StatelessWidget {
       onWillAcceptWithDetails: (_) => true,
       onAcceptWithDetails: (details) {
         final changed = details.data.isColumn
-            ? reorderLayoutColumn(
-                columns,
-                details.data.column,
-                insertionIndex,
-              )
+            ? reorderLayoutColumn(columns, details.data.column, insertionIndex)
             : moveLayoutPanelToNewColumn(
                 columns,
                 sourceColumn: details.data.column,
@@ -1941,8 +2033,9 @@ class ToolbarWidget extends StatelessWidget {
         }
       },
       builder: (context, candidates, rejected) {
-        final isPanel =
-            candidates.any((data) => data != null && !data.isColumn);
+        final isPanel = candidates.any(
+          (data) => data != null && !data.isColumn,
+        );
         final active = candidates.isNotEmpty;
         return Tooltip(
           message: 'Drop a panel here to create a new column',
@@ -1952,10 +2045,9 @@ class ToolbarWidget extends StatelessWidget {
             margin: const EdgeInsets.symmetric(vertical: 6),
             decoration: BoxDecoration(
               color: active
-                  ? Theme.of(context)
-                      .colorScheme
-                      .primaryContainer
-                      .withValues(alpha: 0.9)
+                  ? Theme.of(
+                      context,
+                    ).colorScheme.primaryContainer.withValues(alpha: 0.9)
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(10),
               border: active
@@ -1967,10 +2059,9 @@ class ToolbarWidget extends StatelessWidget {
               boxShadow: active
                   ? [
                       BoxShadow(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .primary
-                            .withValues(alpha: 0.35),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.35),
                         blurRadius: 8,
                       ),
                     ]
@@ -2063,10 +2154,9 @@ class ToolbarWidget extends StatelessWidget {
               ? null
               : [
                   BoxShadow(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .primary
-                        .withValues(alpha: 0.35),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.35),
                     blurRadius: 8,
                   ),
                 ],
@@ -2226,11 +2316,13 @@ class ToolbarWidget extends StatelessWidget {
     ];
     final title = panel['title']?.toString().trim() ?? '';
     if (title.isNotEmpty) {
-      details.add(Text(
-        'Title: $title',
-        key: ValueKey('layout-panel-title-$panelNumber'),
-        style: TextStyle(fontSize: 9, color: textColor),
-      ));
+      details.add(
+        Text(
+          'Title: $title',
+          key: ValueKey('layout-panel-title-$panelNumber'),
+          style: TextStyle(fontSize: 9, color: textColor),
+        ),
+      );
     }
     final signals = panel['signal_specs'] as List? ?? const [];
     for (var signalIndex = 0; signalIndex < signals.length; signalIndex++) {
@@ -2239,20 +2331,26 @@ class ToolbarWidget extends StatelessWidget {
       final tree = rawSignal['experiment']?.toString().trim() ?? '';
       final signal = rawSignal['y_expr']?.toString().trim() ?? '';
       if (tree.isNotEmpty) {
-        details.add(Text(
-          'Curve ${signalIndex + 1} Tree: $tree',
-          key: ValueKey(
-              'layout-panel-$panelNumber-curve-${signalIndex + 1}-tree'),
-          style: TextStyle(fontSize: 8, color: textColor),
-        ));
+        details.add(
+          Text(
+            'Curve ${signalIndex + 1} Tree: $tree',
+            key: ValueKey(
+              'layout-panel-$panelNumber-curve-${signalIndex + 1}-tree',
+            ),
+            style: TextStyle(fontSize: 8, color: textColor),
+          ),
+        );
       }
       if (signal.isNotEmpty) {
-        details.add(Text(
-          'Curve ${signalIndex + 1} Signal: $signal',
-          key: ValueKey(
-              'layout-panel-$panelNumber-curve-${signalIndex + 1}-signal'),
-          style: TextStyle(fontSize: 8, color: textColor),
-        ));
+        details.add(
+          Text(
+            'Curve ${signalIndex + 1} Signal: $signal',
+            key: ValueKey(
+              'layout-panel-$panelNumber-curve-${signalIndex + 1}-signal',
+            ),
+            style: TextStyle(fontSize: 8, color: textColor),
+          ),
+        );
       }
     }
 
@@ -2334,16 +2432,13 @@ class ToolbarWidget extends StatelessWidget {
     }
 
     final signals = List<Map<String, dynamic>>.from(
-      (panel['signal_specs'] as List?)
-              ?.whereType<Map>()
-              .map((signal) => Map<String, dynamic>.from(signal)) ??
+      (panel['signal_specs'] as List?)?.whereType<Map>().map(
+            (signal) => Map<String, dynamic>.from(signal),
+          ) ??
           const [],
     );
     if (signals.isEmpty) {
-      signals.add({
-        'experiment': 'pcs_east',
-        'server_ip': '202.127.204.12',
-      });
+      signals.add({'experiment': 'pcs_east', 'server_ip': '202.127.204.12'});
     }
     final saved = await showDataSourceSetupEditor(
       context,
@@ -2364,90 +2459,117 @@ class ToolbarWidget extends StatelessWidget {
     var axisSize = app.fontAxisSize;
     var unitSize = app.fontUnitSize;
     var uiSize = app.fontUiSize;
-    var families = <String>[
-      'System',
-      ...SystemFontService.fallbackFamilies,
-    ];
+    var families = <String>['System', ...SystemFontService.fallbackFamilies];
     var fontLoadScheduled = false;
     showDialog<void>(
       context: ctx,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setState) {
-        if (!fontLoadScheduled) {
-          fontLoadScheduled = true;
-          SystemFontService.loadFamilies().then((discovered) {
-            if (!ctx.mounted) return;
-            setState(() {
-              families = ['System', ...discovered];
-              if (!families.contains(fontFamily)) fontFamily = 'System';
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) {
+          if (!fontLoadScheduled) {
+            fontLoadScheduled = true;
+            SystemFontService.loadFamilies().then((discovered) {
+              if (!ctx.mounted) return;
+              setState(() {
+                families = ['System', ...discovered];
+                if (!families.contains(fontFamily)) fontFamily = 'System';
+              });
             });
-          });
-        }
-        return KeyboardSafeDialog(
-          title: const Text('Customize Fonts'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            Row(children: [
-              const SizedBox(width: 100, child: Text('Font')),
-              Expanded(
-                child: PolishedDropdown<String>(
-                  key: const ValueKey('font-family-dropdown'),
-                  id: 'font-family',
-                  value: families.contains(fontFamily) ? fontFamily : 'System',
-                  leadingIcon: Icons.font_download_outlined,
-                  fontSize: 12,
-                  minimumMenuWidth: 220,
-                  menuMaxHeight: 360,
-                  options: [
-                    for (final family in families)
-                      PolishedDropdownOption(
-                        value: family,
-                        label: family,
-                        fontFamily: family == 'System' ? null : family,
-                        icon: family == 'System'
-                            ? Icons.devices_rounded
-                            : Icons.text_fields_rounded,
+          }
+          return KeyboardSafeDialog(
+            title: const Text('Customize Fonts'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    const SizedBox(width: 100, child: Text('Font')),
+                    Expanded(
+                      child: PolishedDropdown<String>(
+                        key: const ValueKey('font-family-dropdown'),
+                        id: 'font-family',
+                        value: families.contains(fontFamily)
+                            ? fontFamily
+                            : 'System',
+                        leadingIcon: Icons.font_download_outlined,
+                        fontSize: 12,
+                        minimumMenuWidth: 220,
+                        menuMaxHeight: 360,
+                        options: [
+                          for (final family in families)
+                            PolishedDropdownOption(
+                              value: family,
+                              label: family,
+                              fontFamily: family == 'System' ? null : family,
+                              icon: family == 'System'
+                                  ? Icons.devices_rounded
+                                  : Icons.text_fields_rounded,
+                            ),
+                        ],
+                        onChanged: (value) =>
+                            setState(() => fontFamily = value),
                       ),
+                    ),
                   ],
-                  onChanged: (value) => setState(() => fontFamily = value),
                 ),
-              ),
-            ]),
-            const SizedBox(height: 8),
-            _fontRow('Legend size', legendSize,
-                (v) => setState(() => legendSize = v)),
-            _fontRow(
-                'Axis size', axisSize, (v) => setState(() => axisSize = v)),
-            _fontRow(
-                'Unit size', unitSize, (v) => setState(() => unitSize = v)),
-            _fontRow('UI size', uiSize, (v) => setState(() => uiSize = v)),
-          ]),
-          actions: [
-            TextButton(
+                const SizedBox(height: 8),
+                _fontRow(
+                  'Legend size',
+                  legendSize,
+                  (v) => setState(() => legendSize = v),
+                ),
+                _fontRow(
+                  'Axis size',
+                  axisSize,
+                  (v) => setState(() => axisSize = v),
+                ),
+                _fontRow(
+                  'Unit size',
+                  unitSize,
+                  (v) => setState(() => unitSize = v),
+                ),
+                _fontRow('UI size', uiSize, (v) => setState(() => uiSize = v)),
+              ],
+            ),
+            actions: [
+              TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel')),
-            TextButton(
+                child: const Text('Cancel'),
+              ),
+              TextButton(
                 onPressed: () {
                   app.applyFontSettings(
-                      fontFamily, legendSize, axisSize, unitSize, uiSize);
+                    fontFamily,
+                    legendSize,
+                    axisSize,
+                    unitSize,
+                    uiSize,
+                  );
                   Navigator.pop(ctx);
                 },
-                child: const Text('OK')),
-          ],
-        );
-      }),
+                child: const Text('OK'),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
   Widget _fontRow(String label, int value, void Function(int) onChanged) {
-    return Row(children: [
-      SizedBox(width: 100, child: Text(label)),
-      IconButton(
+    return Row(
+      children: [
+        SizedBox(width: 100, child: Text(label)),
+        IconButton(
           icon: const Icon(Icons.remove, size: 16),
-          onPressed: value > 6 ? () => onChanged(value - 1) : null),
-      SizedBox(width: 30, child: Text('$value', textAlign: TextAlign.center)),
-      IconButton(
+          onPressed: value > 6 ? () => onChanged(value - 1) : null,
+        ),
+        SizedBox(width: 30, child: Text('$value', textAlign: TextAlign.center)),
+        IconButton(
           icon: const Icon(Icons.add, size: 16),
-          onPressed: value < 28 ? () => onChanged(value + 1) : null),
-    ]);
+          onPressed: value < 28 ? () => onChanged(value + 1) : null,
+        ),
+      ],
+    );
   }
 
   Future<void> _showShotHistoryManager(
@@ -2504,17 +2626,19 @@ class ToolbarWidget extends StatelessWidget {
                         children: [
                           SwitchListTile(
                             key: const ValueKey(
-                                'shot-history-retention-enabled'),
+                              'shot-history-retention-enabled',
+                            ),
                             value: app.limitShotHistory,
                             controlAffinity: ListTileControlAffinity.leading,
                             secondary: const Icon(Icons.auto_delete_outlined),
                             title: Text(
                               app.limitShotHistory
                                   ? 'Keep only the most recent '
-                                      '${app.shotHistoryLimit} shots'
+                                        '${app.shotHistoryLimit} shots'
                                   : 'Keep all shot history',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w700),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                             subtitle: Text(
                               app.limitShotHistory
@@ -2533,7 +2657,8 @@ class ToolbarWidget extends StatelessWidget {
                               Expanded(
                                 child: TextField(
                                   key: const ValueKey(
-                                      'shot-history-retention-limit'),
+                                    'shot-history-retention-limit',
+                                  ),
                                   controller: limitController,
                                   enabled: app.limitShotHistory,
                                   keyboardType: TextInputType.number,
@@ -2564,8 +2689,10 @@ class ToolbarWidget extends StatelessWidget {
                               const SizedBox(width: 8),
                               IconButton.filledTonal(
                                 key: const ValueKey(
-                                    'shot-history-retention-restore-default'),
-                                tooltip: 'Restore the default limit '
+                                  'shot-history-retention-restore-default',
+                                ),
+                                tooltip:
+                                    'Restore the default limit '
                                     '(${AppState.defaultShotHistoryLimit})',
                                 onPressed: () {
                                   app.restoreDefaultShotHistoryLimit();
@@ -2574,8 +2701,8 @@ class ToolbarWidget extends StatelessWidget {
                                       .toString();
                                   limitController.selection =
                                       TextSelection.collapsed(
-                                    offset: limitController.text.length,
-                                  );
+                                        offset: limitController.text.length,
+                                      );
                                   syncHistory();
                                   setState(() => limitError = null);
                                 },
@@ -2605,12 +2732,12 @@ class ToolbarWidget extends StatelessWidget {
                     onChanged: history.isEmpty
                         ? null
                         : (checked) => setState(() {
-                              if (checked == true) {
-                                selected.addAll(history);
-                              } else {
-                                selected.clear();
-                              }
-                            }),
+                            if (checked == true) {
+                              selected.addAll(history);
+                            } else {
+                              selected.clear();
+                            }
+                          }),
                   ),
                   const Divider(height: 1),
                   const SizedBox(height: 10),
@@ -2635,9 +2762,7 @@ class ToolbarWidget extends StatelessWidget {
                             color: colors.surfaceContainerLow,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
-                              side: BorderSide(
-                                color: colors.outlineVariant,
-                              ),
+                              side: BorderSide(color: colors.outlineVariant),
                             ),
                             clipBehavior: Clip.antiAlias,
                             child: Scrollbar(
@@ -2646,12 +2771,14 @@ class ToolbarWidget extends StatelessWidget {
                               interactive: true,
                               child: ListView.separated(
                                 key: const ValueKey(
-                                    'shot-history-selection-list'),
+                                  'shot-history-selection-list',
+                                ),
                                 controller: scrollController,
                                 itemCount: history.length,
                                 separatorBuilder: (_, index) => Divider(
                                   key: ValueKey(
-                                      'shot-history-selection-divider-$index'),
+                                    'shot-history-selection-divider-$index',
+                                  ),
                                   height: 1,
                                   indent: 16,
                                   endIndent: 16,
@@ -2663,12 +2790,14 @@ class ToolbarWidget extends StatelessWidget {
                                     value: selected.contains(shot),
                                     controlAffinity:
                                         ListTileControlAffinity.leading,
-                                    secondary:
-                                        const Icon(Icons.show_chart_rounded),
+                                    secondary: const Icon(
+                                      Icons.show_chart_rounded,
+                                    ),
                                     title: Text(
                                       shot,
                                       style: const TextStyle(
-                                          fontWeight: FontWeight.w600),
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                     onChanged: (checked) => setState(() {
                                       checked == true
@@ -2710,8 +2839,9 @@ class ToolbarWidget extends StatelessWidget {
                                 '${pending.length == 1 ? '' : 's'} '
                                 '($preview$suffix)? This action cannot be undone.',
                             confirmLabel: 'Delete',
-                            confirmKey:
-                                const ValueKey('shot-history-confirm-selected'),
+                            confirmKey: const ValueKey(
+                              'shot-history-confirm-selected',
+                            ),
                           );
                           if (!confirmed || !dialogContext.mounted) return;
                           await app.removeShotHistory(pending);
@@ -2765,9 +2895,7 @@ class ToolbarWidget extends StatelessWidget {
             decoration: BoxDecoration(
               color: colors.errorContainer.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: colors.error.withValues(alpha: 0.32),
-              ),
+              border: Border.all(color: colors.error.withValues(alpha: 0.32)),
             ),
             child: Text(message),
           ),
@@ -2816,9 +2944,7 @@ class ToolbarWidget extends StatelessWidget {
             decoration: BoxDecoration(
               color: colors.errorContainer.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: colors.error.withValues(alpha: 0.32),
-              ),
+              border: Border.all(color: colors.error.withValues(alpha: 0.32)),
             ),
             child: const Text(
               'This will discard the current waveform layout and panel '
@@ -2851,10 +2977,7 @@ class ToolbarWidget extends StatelessWidget {
     }
   }
 
-  Future<void> _openConfiguration(
-    BuildContext context,
-    AppState app,
-  ) {
+  Future<void> _openConfiguration(BuildContext context, AppState app) {
     return app.openFile(
       importedShotDecision: (shot) =>
           _confirmUseImportedConfigurationShot(context, shot),
@@ -2887,7 +3010,7 @@ class ToolbarWidget extends StatelessWidget {
               border: Border.all(color: colors.outlineVariant),
             ),
             child: Text(
-              'This configuration contains shot $shot. By default, MdsScope '
+              'This configuration contains shot $shot. By default, MDSLens '
               'keeps the currently selected shot and imports only the other '
               'settings. You can instead use $shot as the initial shot.',
             ),
@@ -2949,14 +3072,17 @@ class ToolbarWidget extends StatelessWidget {
               padding: EdgeInsets.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
+                borderRadius: BorderRadius.circular(10),
+              ),
               side: BorderSide(
                 color: active ? highlight : colors.outlineVariant,
                 width: active ? 1.5 : 1,
               ),
               backgroundColor: active
                   ? Color.alphaBlend(
-                      highlight.withValues(alpha: 0.18), colors.surface)
+                      highlight.withValues(alpha: 0.18),
+                      colors.surface,
+                    )
                   : null,
               foregroundColor: active ? highlight : colors.onSurface,
             ),
@@ -2971,8 +3097,8 @@ class ToolbarWidget extends StatelessWidget {
     final tooltip = app.sshConnected
         ? 'SSH tunnel — in use'
         : app.sshTunnelReachable
-            ? 'SSH tunnel — reachable, not in use'
-            : 'SSH tunnel';
+        ? 'SSH tunnel — reachable, not in use'
+        : 'SSH tunnel';
     return _toolbarIconButton(
       ctx,
       icon: Icons.terminal_rounded,
@@ -3030,7 +3156,8 @@ class ToolbarWidget extends StatelessWidget {
                 key: const ValueKey('theme-mode-thumb'),
                 duration: const Duration(milliseconds: 150),
                 curve: Curves.easeOutCubic,
-                left: selectedIndex * segmentWidth +
+                left:
+                    selectedIndex * segmentWidth +
                     (segmentWidth - thumbSize) / 2,
                 top: (trackContentHeight - thumbSize) / 2,
                 child: Container(

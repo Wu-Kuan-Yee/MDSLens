@@ -25,7 +25,7 @@ render_opaque() {
   local size="$1"
   local output="$2"
   local temporary_dir temporary
-  temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/mdsscope-icon.XXXXXX")"
+  temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/mdslens-icon.XXXXXX")"
   temporary="$temporary_dir/icon.png"
   render "$SOURCE_ICON" "$size" "$temporary"
   magick "$temporary" -background '#0b1120' -alpha remove -alpha off "$output"
@@ -81,7 +81,7 @@ xxxhdpi 192 432
 ANDROID_ICONS
 
 # Windows embeds one ICO containing every commonly displayed size.
-temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/mdsscope-ico.XXXXXX")"
+temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/mdslens-ico.XXXXXX")"
 ico_inputs=()
 for size in 16 24 32 48 64 128 256; do
   icon="$temporary_dir/icon-${size}.png"
@@ -99,4 +99,4 @@ render "$SOURCE_ICON" 150 \
 render "$SOURCE_ICON" 50 \
   "$ROOT_DIR/windows/runner/resources/msix/StoreLogo.png"
 
-echo "MdsScope platform icons regenerated from assets/app_icon.svg"
+echo "MDSLens platform icons regenerated from assets/app_icon.svg"

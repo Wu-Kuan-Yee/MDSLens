@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=MDSLens
+Comment=View and compare MDSplus signal waveforms
+Exec=mdslens %U
+Icon=com.mdslens.app
+Terminal=false
+Categories=Science;DataVisualization;
+StartupNotify=true
+StartupWMClass=com.mdslens.app
+MimeType=application/x-mdslens-configuration;application/toml;text/x-toml;x-scheme-handler/mdslens;

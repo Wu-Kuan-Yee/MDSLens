@@ -2,8 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
-const MethodChannel _systemFontsChannel =
-    MethodChannel('mdsscope/system_fonts');
+const MethodChannel _systemFontsChannel = MethodChannel('mdslens/system_fonts');
 
 class SystemFontService {
   SystemFontService._();
@@ -27,8 +26,9 @@ class SystemFontService {
       return fallbackFamilies;
     }
     try {
-      final raw =
-          await _systemFontsChannel.invokeListMethod<String>('listFamilies');
+      final raw = await _systemFontsChannel.invokeListMethod<String>(
+        'listFamilies',
+      );
       final seen = <String>{};
       final families = <String>[];
       for (final value in raw ?? const <String>[]) {

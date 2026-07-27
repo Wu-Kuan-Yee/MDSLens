@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 MdsScope Contributors
+// SPDX-FileCopyrightText: 2026 MDSLens Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Environment file I/O: TOML and WebScope (.webscp) format parsing and writing.
@@ -716,7 +716,7 @@ tree = "pcs_east"
 server = "202.127.204.12"
 y = "\\pcrl01"
 "#;
-        let tmp = std::env::temp_dir().join("mdsscope_zero_points.toml");
+        let tmp = std::env::temp_dir().join("mdslens_zero_points.toml");
         std::fs::write(&tmp, content).unwrap();
         let config = parse_toml_environment(tmp.to_str().unwrap());
         std::fs::remove_file(&tmp).ok();

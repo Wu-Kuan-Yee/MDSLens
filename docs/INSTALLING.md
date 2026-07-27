@@ -1,12 +1,12 @@
 # Download, Install, and First Launch
 
-This guide is for people installing a packaged MdsScope build. To compile or
+This guide is for people installing a packaged MDSLens build. To compile or
 publish packages, see [BUILDING.md](BUILDING.md).
 
 Only download artifacts from a release or build that you trust. A security
 warning is not proof that an application is malicious, but it must not be
 bypassed for a file whose source and integrity are uncertain. Do not disable an
-operating system's security protections globally just to run MdsScope.
+operating system's security protections globally just to run MDSLens.
 
 ## Choose the Correct Artifact
 
@@ -20,10 +20,10 @@ operating system's security protections globally just to run MdsScope.
 
 ## Runtime Dependency Summary
 
-The packaged application includes the Flutter engine, MdsScope assets and
+The packaged application includes the Flutter engine, MDSLens assets and
 plugins, and the Rust bridge. OpenSSL, libssh2, and zlib are linked into the
 bridge, so users must not install MDSplus, OpenSSL, libssh2, Rust, Flutter, or a
-JDK merely to run MdsScope.
+JDK merely to run MDSLens.
 
 The remaining system or optional installation dependencies are:
 
@@ -42,23 +42,23 @@ additional toolchains listed in [BUILDING.md](BUILDING.md).
 
 ### Normal installation
 
-1. Open the DMG and drag `MdsScope.app` to `/Applications`. For a ZIP, extract
+1. Open the DMG and drag `MDSLens.app` to `/Applications`. For a ZIP, extract
    the complete app bundle first and then move it to `/Applications`.
-2. Open MdsScope from Applications.
+2. Open MDSLens from Applications.
 3. Repository releases are not Developer ID signed or notarized, so continue
    with the per-application Gatekeeper procedure below.
 
 An `.app` is a directory bundle. Do not copy only the executable inside
-`MdsScope.app/Contents/MacOS/`.
+`MDSLens.app/Contents/MacOS/`.
 
 ### If Gatekeeper blocks an ad-hoc-signed local build
 
 Local packages produced without the project's Developer ID variables have an
 ad-hoc signature. If you trust the exact download:
 
-1. Try to open MdsScope once so macOS records the block.
+1. Try to open MDSLens once so macOS records the block.
 2. Open **System Settings > Privacy & Security**.
-3. Find the MdsScope message under Security and select **Open Anyway**.
+3. Find the MDSLens message under Security and select **Open Anyway**.
 4. Confirm **Open** when macOS asks again.
 
 macOS then records an exception for that application. Apple documents this
@@ -71,8 +71,8 @@ For a trusted local development bundle when the graphical override is
 unavailable, inspect it before changing anything:
 
 ```sh
-codesign --verify --deep --strict --verbose=2 /Applications/MdsScope.app
-spctl --assess --type execute --verbose=4 /Applications/MdsScope.app
+codesign --verify --deep --strict --verbose=2 /Applications/MDSLens.app
+spctl --assess --type execute --verbose=4 /Applications/MDSLens.app
 ```
 
 If an archive tool damaged or removed the local ad-hoc signature, recreate only
@@ -80,9 +80,9 @@ that bundle's ad-hoc signature and remove only that bundle's download
 quarantine:
 
 ```sh
-codesign --force --deep --sign - /Applications/MdsScope.app
-xattr -dr com.apple.quarantine /Applications/MdsScope.app
-open /Applications/MdsScope.app
+codesign --force --deep --sign - /Applications/MDSLens.app
+xattr -dr com.apple.quarantine /Applications/MDSLens.app
+open /Applications/MDSLens.app
 ```
 
 This is a local self-signing workaround, not Apple notarization and not a safe
@@ -101,9 +101,9 @@ artifact.
 
 A normal, non-jailbroken iPhone or iPad does not run an unsigned application.
 There is no supported "bypass signing" switch. The repository publishes
-standard `mdsscope-ios-arm64-unsigned.ipa` and
-`mdsscope-ipados-arm64-unsigned.ipa` archives with
-`Payload/MdsScope.app`; they are intended for user re-signing but cannot be
+standard `mdslens-ios-arm64-unsigned.ipa` and
+`mdslens-ipados-arm64-unsigned.ipa` archives with
+`Payload/MDSLens.app`; they are intended for user re-signing but cannot be
 installed before that step.
 
 Use one of these supported routes:
@@ -123,12 +123,12 @@ Xcode creates a matching certificate, App ID, provisioning profile and
 entitlements together. Users who already have those four items can instead
 re-sign the downloaded IPA on macOS:
 
-1. Extract the IPA and confirm that it contains `Payload/MdsScope.app`.
+1. Extract the IPA and confirm that it contains `Payload/MDSLens.app`.
 2. Change `CFBundleIdentifier` in the application `Info.plist` if the
    provisioning profile uses a different App ID.
-3. Copy the profile to `Payload/MdsScope.app/embedded.mobileprovision`.
+3. Copy the profile to `Payload/MDSLens.app/embedded.mobileprovision`.
 4. Decode the profile's `Entitlements` dictionary.
-5. Sign every nested framework/dylib first, then sign `MdsScope.app` with the
+5. Sign every nested framework/dylib first, then sign `MDSLens.app` with the
    decoded entitlements.
 6. Recreate the IPA with `Payload` as its top-level directory.
 
@@ -137,22 +137,22 @@ belonging to the same Apple team:
 
 ```sh
 work=$(mktemp -d)
-ditto -x -k mdsscope-ios-arm64-unsigned.ipa "$work"
+ditto -x -k mdslens-ios-arm64-unsigned.ipa "$work"
 cp /absolute/path/profile.mobileprovision \
-  "$work/Payload/MdsScope.app/embedded.mobileprovision"
+  "$work/Payload/MDSLens.app/embedded.mobileprovision"
 security cms -D -i /absolute/path/profile.mobileprovision > "$work/profile.plist"
 /usr/libexec/PlistBuddy -x -c 'Print :Entitlements' \
   "$work/profile.plist" > "$work/entitlements.plist"
 
-find "$work/Payload/MdsScope.app/Frameworks" \
+find "$work/Payload/MDSLens.app/Frameworks" \
   \( -name '*.framework' -o -name '*.dylib' \) -print0 |
   while IFS= read -r -d '' item; do
     codesign --force --sign 'Apple Development: Your Name (TEAMID)' "$item"
   done
 
 codesign --force --sign 'Apple Development: Your Name (TEAMID)' \
-  --entitlements "$work/entitlements.plist" "$work/Payload/MdsScope.app"
-ditto -c -k --keepParent "$work/Payload" mdsscope-ios-arm64-resigned.ipa
+  --entitlements "$work/entitlements.plist" "$work/Payload/MDSLens.app"
+ditto -c -k --keepParent "$work/Payload" mdslens-ios-arm64-resigned.ipa
 ```
 
 The profile's App ID, certificate/team, device UDID and entitlements must
@@ -175,7 +175,7 @@ pre-signed IPA:
 5. Select the **Runner** target, open **Signing & Capabilities**, enable
    **Automatically manage signing**, and select your own Team. A free account
    appears as a Personal Team. If the bundle identifier is already registered
-   to another team, replace `com.mdsscope.app` with a unique reverse-domain
+   to another team, replace `com.mdslens.app` with a unique reverse-domain
    identifier for this local installation.
 6. Select the connected device as the run destination and run the Runner
    scheme once. Xcode registers the device and creates a development
@@ -249,7 +249,7 @@ connect the unlocked device, and accept its computer-authorization prompt:
 
 ```sh
 adb devices
-adb install -r /absolute/path/mdsscope-android-universal.apk
+adb install -r /absolute/path/mdslens-android-universal.apk
 ```
 
 An APKS archive contains split APKs for all supported device configurations.
@@ -257,7 +257,7 @@ Install it with the same pinned bundletool used to create it:
 
 ```sh
 java -jar bundletool-all-1.18.3.jar install-apks \
-  --apks=/absolute/path/mdsscope-android.apks
+  --apks=/absolute/path/mdslens-android.apks
 ```
 
 When several devices are connected, add `-s <device-id>`. See the official
@@ -271,11 +271,11 @@ application data.
 ## Windows
 
 Use the installer EXE/MSI, or extract the complete portable ZIP before running
-`mdsscope.exe`. Do not copy the EXE away from its DLL and `data` directories.
+`mdslens.exe`. Do not copy the EXE away from its DLL and `data` directories.
 
 The release MSIX and MSIXBundle are unsigned store/sideloading source
 packages. Windows will not install them until they are signed with a
-certificate whose subject matches the manifest publisher (`CN=MdsScope`) and
+certificate whose subject matches the manifest publisher (`CN=MDSLens`) and
 that certificate is trusted on the device. Organizations can sign with
 SignTool and deploy through their normal certificate/MDM policy. Ordinary
 users should prefer the installer EXE, MSI, or portable archive.
@@ -328,7 +328,7 @@ fail with `Couldn't find the executable zenity in the path`.
 
 Persistent passwords and tokens additionally need a running Secret Service
 provider, commonly GNOME Keyring, KWallet with Secret Service support, or
-KeePassXC with Secret Service integration. Without one, MdsScope keeps
+KeePassXC with Secret Service integration. Without one, MDSLens keeps
 credentials only for the current process and asks for them again after restart.
 
 Typical runtime installations are:
@@ -365,30 +365,30 @@ display server.
 For a portable archive:
 
 ```sh
-unzip mdsscope-linux-x64.zip
-cd mdsscope-linux-x64
-chmod +x mdsscope
-./mdsscope
+unzip mdslens-linux-x64.zip
+cd mdslens-linux-x64
+chmod +x mdslens
+./mdslens
 ```
 
-Use the ARM64 archive on ARM64. The `mdsscope` file is the native executable,
+Use the ARM64 archive on ARM64. The `mdslens` file is the native executable,
 not a launcher script. Keep its adjacent `lib` and `data` directories.
 
 For AppImage:
 
 ```sh
-chmod +x mdsscope-linux-x64.AppImage
-./mdsscope-linux-x64.AppImage
+chmod +x mdslens-linux-x64.AppImage
+./mdslens-linux-x64.AppImage
 ```
 
 For Flatpak or Snap sideloading:
 
 ```sh
-flatpak install --user ./mdsscope-linux-x64.flatpak
-flatpak run com.mdsscope.app
+flatpak install --user ./mdslens-linux-x64.flatpak
+flatpak run com.mdslens.app
 
-sudo snap install ./mdsscope-linux-x64.snap --dangerous --classic
-mdsscope
+sudo snap install ./mdslens-linux-x64.snap --dangerous --classic
+mdslens
 ```
 
 `--dangerous` means the locally downloaded Snap has no Snap Store assertion;
@@ -403,7 +403,7 @@ command.
 
 ## First-Launch Checklist
 
-After MdsScope opens:
+After MDSLens opens:
 
 1. Grant the network permissions requested by the operating system.
 2. Open the account panel and sign in.

@@ -1,9 +1,9 @@
-// SPDX-FileCopyrightText: 2026 MdsScope Contributors
+// SPDX-FileCopyrightText: 2026 MDSLens Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Core data types for MdsScope.
+//! Core data types for MDSLens.
 //!
-//! Ported from `src/mdsscope_app.hpp` and `src/core/mdsscope_internal.hpp`.
+//! Ported from `src/mdslens_app.hpp` and `src/core/mdslens_internal.hpp`.
 
 /// Data read mode controlling sampling quality vs speed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

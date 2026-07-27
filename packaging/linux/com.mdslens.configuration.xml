@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
-  <mime-type type="application/x-mdsscope-configuration">
-    <comment>MdsScope configuration</comment>
+  <mime-type type="application/x-mdslens-configuration">
+    <comment>MDSLens configuration</comment>
     <glob pattern="*.webscp"/>
   </mime-type>
   <mime-type type="application/toml">

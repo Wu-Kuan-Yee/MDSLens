@@ -6,14 +6,14 @@ import 'package:flutter/services.dart';
 
 /// Private persistence owned by this application.
 ///
-/// Desktop builds intentionally use ~/.mdsscope rather than the legacy
-/// ~/.config/mdsscope tree. Sandboxed mobile platforms use an equally isolated
-/// .mdsscope directory below their application-support container.
+/// Desktop builds use ~/.mdslens and never read the legacy ~/.mdsscope
+/// or ~/.config/mdsscope trees. Sandboxed mobile platforms use an equally isolated
+/// .mdslens directory below their application-support container.
 class UserDataStore {
   UserDataStore({Directory? rootOverride}) : _rootOverride = rootOverride;
 
   static bool disableFileStorageForTests = false;
-  static const _directoryChannel = MethodChannel('mdsscope/user_data');
+  static const _directoryChannel = MethodChannel('mdslens/user_data');
 
   final Directory? _rootOverride;
   Future<void> _writeTail = Future<void>.value();
@@ -27,12 +27,13 @@ class UserDataStore {
             ? Platform.environment['USERPROFILE']
             : Platform.environment['HOME'];
         if (home == null || home.trim().isEmpty) return null;
-        return Directory(_join(home, '.mdsscope'));
+        return Directory(_join(home, '.mdslens'));
       }
-      final support =
-          await _directoryChannel.invokeMethod<String>('supportDirectory');
+      final support = await _directoryChannel.invokeMethod<String>(
+        'supportDirectory',
+      );
       if (support == null || support.trim().isEmpty) return null;
-      return Directory(_join(support, '.mdsscope'));
+      return Directory(_join(support, '.mdslens'));
     } catch (_) {
       return null;
     }

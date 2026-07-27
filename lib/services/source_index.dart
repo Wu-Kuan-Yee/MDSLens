@@ -46,8 +46,10 @@ class SourceIndexMemory {
         _signalsByTree.length >= maximumTrees) {
       return false;
     }
-    final signals =
-        _signalsByTree.putIfAbsent(normalizedTree, () => <String>{});
+    final signals = _signalsByTree.putIfAbsent(
+      normalizedTree,
+      () => <String>{},
+    );
     var changed = false;
     for (final node in nodes) {
       if (signals.length >= maximumSignalsPerTree) break;
@@ -57,8 +59,8 @@ class SourceIndexMemory {
   }
 
   List<String> signalsForTree(String tree) => List<String>.unmodifiable(
-        _signalsByTree[tree.trim().toLowerCase()] ?? const <String>{},
-      );
+    _signalsByTree[tree.trim().toLowerCase()] ?? const <String>{},
+  );
 
   Set<String> get trees => Set<String>.unmodifiable(_signalsByTree.keys);
 

@@ -1,12 +1,12 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mdsscope/services/stylus_mode_channel.dart';
+import 'package:mdslens/services/stylus_mode_channel.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('Native stylus mode changes are delivered to Dart', () async {
-    const channel = MethodChannel('mdsscope/stylus');
+    const channel = MethodChannel('mdslens/stylus');
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     addTearDown(StylusModeChannel.dispose);

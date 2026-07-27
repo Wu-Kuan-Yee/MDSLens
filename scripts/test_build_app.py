@@ -69,17 +69,17 @@ class BuildAppTests(unittest.TestCase):
     def test_macos_application_is_ad_hoc_signed_without_credentials(self) -> None:
         with mock.patch.dict(build_app.os.environ, {}, clear=True):
             with mock.patch.object(build_app, "run") as run:
-                build_app.prepare_macos_application(Path("/tmp/MdsScope.app"))
+                build_app.prepare_macos_application(Path("/tmp/MDSLens.app"))
         self.assertEqual(
             run.call_args_list,
             [
                 mock.call(
                     "codesign", "--force", "--deep", "--sign", "-",
-                    "/tmp/MdsScope.app",
+                    "/tmp/MDSLens.app",
                 ),
                 mock.call(
                     "codesign", "--verify", "--deep", "--strict",
-                    "/tmp/MdsScope.app",
+                    "/tmp/MDSLens.app",
                 ),
             ],
         )
@@ -89,13 +89,13 @@ class BuildAppTests(unittest.TestCase):
             root = Path(temporary)
             bundle = root / "bundle"
             bundle.mkdir()
-            (bundle / "mdsscope.exe").write_bytes(b"MZ")
+            (bundle / "mdslens.exe").write_bytes(b"MZ")
             with mock.patch.object(build_app, "project_version", return_value="7.0"):
                 build_app.stage_windows_msix(bundle, root / "stage", "arm64")
             manifest = (root / "stage/AppxManifest.xml").read_text()
             self.assertIn('ProcessorArchitecture="arm64"', manifest)
             self.assertIn('Version="7.0.0.0"', manifest)
-            self.assertIn('Executable="mdsscope.exe"', manifest)
+            self.assertIn('Executable="mdslens.exe"', manifest)
 
     def test_msixbundle_finds_versioned_windows_sdk_makeappx(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -144,7 +144,7 @@ class BuildAppTests(unittest.TestCase):
             command = run.call_args.args
             self.assertIn("build-apks", command)
             self.assertIn(f"--bundle={bundle}", command)
-            self.assertIn(f"--output={dist / 'mdsscope-android.apks'}", command)
+            self.assertIn(f"--output={dist / 'mdslens-android.apks'}", command)
 
     def test_linux_portable_keeps_base_and_display_abis_on_target_system(
         self,
@@ -200,7 +200,7 @@ class BuildAppTests(unittest.TestCase):
                 /lib64/ld-linux-x86-64.so.2 (0x5678)
                 linux-vdso.so.1 (0x9999)
                 """,
-                Path("/tmp/mdsscope"),
+                Path("/tmp/mdslens"),
             ),
             [
                 Path("/usr/lib/libgtk-3.so.0"),
@@ -212,7 +212,7 @@ class BuildAppTests(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "Unresolved Linux dependency"):
             build_app.parse_linux_ldd(
                 "libmissing.so => not found",
-                Path("/tmp/mdsscope"),
+                Path("/tmp/mdslens"),
             )
 
     def test_linux_needed_parser_only_returns_direct_dependencies(self) -> None:
@@ -230,7 +230,7 @@ class BuildAppTests(unittest.TestCase):
     def test_linux_runtime_paths_are_relative_to_each_elf(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            executable = root / "mdsscope"
+            executable = root / "mdslens"
             plugin = root / "lib/plugins/plugin.so"
             plugin.parent.mkdir(parents=True)
             executable.write_bytes(b"\x7fELF")
@@ -259,7 +259,7 @@ class BuildAppTests(unittest.TestCase):
     def test_flatpak_exports_png_icon_without_optional_svg_loader(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            output = root / "mdsscope-linux-x64.flatpak"
+            output = root / "mdslens-linux-x64.flatpak"
             with mock.patch.object(
                 build_app, "format_tool", return_value="/usr/bin/flatpak"
             ):
@@ -276,7 +276,7 @@ class BuildAppTests(unittest.TestCase):
         self.assertEqual(len(icon_calls), 1)
         self.assertEqual(
             Path(icon_calls[0].args[1]).name,
-            "com.mdsscope.app.png",
+            "com.mdslens.app.png",
         )
         self.assertIn(
             "hicolor/256x256/apps",
@@ -286,14 +286,14 @@ class BuildAppTests(unittest.TestCase):
     def test_portable_zip_extraction_restores_unix_executable_mode(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            bundle = root / "mdsscope-linux-x64"
+            bundle = root / "mdslens-linux-x64"
             bundle.mkdir()
-            executable = bundle / "mdsscope"
+            executable = bundle / "mdslens"
             executable.write_bytes(b"\x7fELF")
             executable.chmod(0o755)
             archive = Path(
                 shutil.make_archive(
-                    str(root / "mdsscope-linux-x64"),
+                    str(root / "mdslens-linux-x64"),
                     "zip",
                     root_dir=root,
                     base_dir=bundle.name,
@@ -302,7 +302,7 @@ class BuildAppTests(unittest.TestCase):
 
             extracted = verify_linux_portable.extract(archive, root / "output")
 
-            self.assertTrue(os.access(extracted / "mdsscope", os.X_OK))
+            self.assertTrue(os.access(extracted / "mdslens", os.X_OK))
 
 
 if __name__ == "__main__":

@@ -34,7 +34,7 @@ import CoreTelephony
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     let channel = FlutterMethodChannel(
-      name: "mdsscope/permissions",
+      name: "mdslens/permissions",
       binaryMessenger: engineBridge.applicationRegistrar.messenger()
     )
     permissionsChannel = channel
@@ -62,7 +62,7 @@ import CoreTelephony
     }
 
     stylusChannel = FlutterMethodChannel(
-      name: "mdsscope/stylus",
+      name: "mdslens/stylus",
       binaryMessenger: engineBridge.applicationRegistrar.messenger()
     )
     stylusChannel?.setMethodCallHandler { [weak self] call, result in
@@ -73,7 +73,7 @@ import CoreTelephony
       result(self?.pencilUsesEraser ?? false)
     }
     systemInfoChannel = FlutterMethodChannel(
-      name: "mdsscope/system_info",
+      name: "mdslens/system_info",
       binaryMessenger: engineBridge.applicationRegistrar.messenger()
     )
     systemInfoChannel?.setMethodCallHandler { call, result in
@@ -95,7 +95,7 @@ import CoreTelephony
       ])
     }
     systemFontsChannel = FlutterMethodChannel(
-      name: "mdsscope/system_fonts",
+      name: "mdslens/system_fonts",
       binaryMessenger: engineBridge.applicationRegistrar.messenger()
     )
     systemFontsChannel?.setMethodCallHandler { call, result in
@@ -108,7 +108,7 @@ import CoreTelephony
       })
     }
     userDataChannel = FlutterMethodChannel(
-      name: "mdsscope/user_data",
+      name: "mdslens/user_data",
       binaryMessenger: engineBridge.applicationRegistrar.messenger()
     )
     userDataChannel?.setMethodCallHandler { call, result in
@@ -123,7 +123,7 @@ import CoreTelephony
       result(directory?.path)
     }
     openRequestsChannel = FlutterMethodChannel(
-      name: "mdsscope/open_requests",
+      name: "mdslens/open_requests",
       binaryMessenger: engineBridge.applicationRegistrar.messenger()
     )
     openRequestsChannel?.setMethodCallHandler { [weak self] call, result in
@@ -148,7 +148,7 @@ import CoreTelephony
         if scoped { url.stopAccessingSecurityScopedResource() }
       }
       let directory = FileManager.default.temporaryDirectory
-        .appendingPathComponent("mdsscope-open", isDirectory: true)
+        .appendingPathComponent("mdslens-open", isDirectory: true)
       try? FileManager.default.createDirectory(
         at: directory,
         withIntermediateDirectories: true

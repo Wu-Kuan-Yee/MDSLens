@@ -32,7 +32,7 @@ A single source asset at `assets/app_icon.svg` feeds `scripts/generate_icons.sh`
 - macOS 16–1024-pixel Asset Catalog for APP, Dock, Finder, and application menus;
 - iPhone/iPad 20–1024-pixel all required slots, with transparency removed;
 - Android legacy, round, adaptive, and Android 13+ monochrome themed icons;
-- Linux 512-pixel window icon, scalable SVG, and `com.mdsscope.app.desktop` menu metadata.
+- Linux 512-pixel window icon, scalable SVG, and `com.mdslens.app.desktop` menu metadata.
 
 `scripts/verify_icons.py` automatically validates all slots and dimensions and runs on every CI commit. It proves resource structure completeness, but "visually identical on every third-party launcher, Linux theme, and vendor ROM" cannot be statically guaranteed by a single project; different systems may recompose icons with their own masks, corner radii, drop shadows, or theme colors. Android follows [Adaptive icons](https://developer.android.com/develop/ui/compose/system/icon_design_adaptive); Apple icons follow [App icons](https://developer.apple.com/design/human-interface-guidelines/app-icons/).
 

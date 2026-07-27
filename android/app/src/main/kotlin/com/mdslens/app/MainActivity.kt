@@ -1,4 +1,4 @@
-package com.mdsscope.app
+package com.mdslens.app
 
 import android.content.Intent
 import android.net.Uri
@@ -21,7 +21,7 @@ class MainActivity: FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
-            "mdsscope/permissions"
+            "mdslens/permissions"
         ).setMethodCallHandler { call, result ->
             if (call.method != "openAppSettings") {
                 result.notImplemented()
@@ -40,7 +40,7 @@ class MainActivity: FlutterActivity() {
         }
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
-            "mdsscope/system_info"
+            "mdslens/system_info"
         ).setMethodCallHandler { call, result ->
             if (call.method != "get") {
                 result.notImplemented()
@@ -56,7 +56,7 @@ class MainActivity: FlutterActivity() {
         }
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
-            "mdsscope/system_fonts"
+            "mdslens/system_fonts"
         ).setMethodCallHandler { call, result ->
             if (call.method != "listFamilies") {
                 result.notImplemented()
@@ -66,7 +66,7 @@ class MainActivity: FlutterActivity() {
         }
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
-            "mdsscope/user_data"
+            "mdslens/user_data"
         ).setMethodCallHandler { call, result ->
             if (call.method != "supportDirectory") {
                 result.notImplemented()
@@ -76,7 +76,7 @@ class MainActivity: FlutterActivity() {
         }
         openRequestsChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
-            "mdsscope/open_requests"
+            "mdslens/open_requests"
         )
         openRequestsChannel?.setMethodCallHandler { call, result ->
             if (call.method != "takePending") {
@@ -111,7 +111,7 @@ class MainActivity: FlutterActivity() {
             else -> null
         } ?: return
 
-        val request = if (uri.scheme.equals("mdsscope", ignoreCase = true)) {
+        val request = if (uri.scheme.equals("mdslens", ignoreCase = true)) {
             uri.toString()
         } else {
             copyIncomingConfiguration(uri) ?: return

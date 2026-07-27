@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>MdsScope</string>
+	<string>MDSLens</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,15 +15,15 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>MdsScope</string>
+	<string>MDSLens</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.mdsscope.app</string>
+			<string>com.mdslens.app</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>mdsscope</string>
+				<string>mdslens</string>
 			</array>
 		</dict>
 	</array>
@@ -31,14 +31,14 @@
 	<array>
 		<dict>
 			<key>CFBundleTypeName</key>
-			<string>MdsScope configuration</string>
+			<string>MDSLens configuration</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
 			<string>Alternate</string>
 			<key>LSItemContentTypes</key>
 			<array>
-				<string>com.mdsscope.configuration</string>
+				<string>com.mdslens.configuration</string>
 			</array>
 		</dict>
 	</array>
@@ -50,9 +50,9 @@
 				<string>public.text</string>
 			</array>
 			<key>UTTypeDescription</key>
-			<string>MdsScope configuration</string>
+			<string>MDSLens configuration</string>
 			<key>UTTypeIdentifier</key>
-			<string>com.mdsscope.configuration</string>
+			<string>com.mdslens.configuration</string>
 			<key>UTTypeTagSpecification</key>
 			<dict>
 				<key>public.filename-extension</key>
@@ -61,7 +61,7 @@
 					<string>webscp</string>
 				</array>
 				<key>public.mime-type</key>
-				<string>application/x-mdsscope-configuration</string>
+				<string>application/x-mdslens-configuration</string>
 			</dict>
 		</dict>
 	</array>
@@ -127,6 +127,6 @@
 		<true/>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>MdsScope needs local network access to connect to the MDSplus and SSH servers you choose.</string>
+	<string>MDSLens needs local network access to connect to the MDSplus and SSH servers you choose.</string>
 </dict>
 </plist>

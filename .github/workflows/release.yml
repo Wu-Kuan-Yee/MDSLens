@@ -43,7 +43,7 @@ jobs:
           -f exe msi msix zip 7z tar.gz tar.xz tar.bz2
       - uses: actions/upload-artifact@v4
         with:
-          name: mdsscope-windows-${{ matrix.arch }}
+          name: mdslens-windows-${{ matrix.arch }}
           path: build/dist/*
           if-no-files-found: error
 
@@ -55,17 +55,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          pattern: mdsscope-windows-*
+          pattern: mdslens-windows-*
           path: msix-input
           merge-multiple: true
       - name: Build the unsigned multi-architecture bundle
         run: >-
           python scripts/build_msixbundle.py msix-input
-          build/dist/mdsscope-windows.msixbundle
+          build/dist/mdslens-windows.msixbundle
       - uses: actions/upload-artifact@v4
         with:
-          name: mdsscope-windows-msixbundle
-          path: build/dist/mdsscope-windows.msixbundle
+          name: mdslens-windows-msixbundle
+          path: build/dist/mdslens-windows.msixbundle
           if-no-files-found: error
 
   macos:
@@ -87,12 +87,12 @@ jobs:
           -f app dmg pkg xcarchive zip 7z tar.gz tar.xz tar.bz2
       - name: Verify the application bundle
         run: |
-          codesign --verify --deep --strict build/dist/mdsscope-macos-arm64-unsigned.app
-          codesign --verify --deep --strict build/dist/mdsscope-macos-x64-unsigned.app
-          codesign --verify --deep --strict build/dist/mdsscope-macos-universal-unsigned.app
+          codesign --verify --deep --strict build/dist/mdslens-macos-arm64-unsigned.app
+          codesign --verify --deep --strict build/dist/mdslens-macos-x64-unsigned.app
+          codesign --verify --deep --strict build/dist/mdslens-macos-universal-unsigned.app
       - uses: actions/upload-artifact@v4
         with:
-          name: mdsscope-macos-all
+          name: mdslens-macos-all
           path: build/dist/*
           if-no-files-found: error
 
@@ -148,7 +148,7 @@ jobs:
           zip 7z tar.gz tar.xz tar.bz2
       - uses: actions/upload-artifact@v4
         with:
-          name: mdsscope-linux-${{ matrix.arch }}
+          name: mdslens-linux-${{ matrix.arch }}
           path: build/dist/*
           if-no-files-found: error
 
@@ -185,7 +185,7 @@ jobs:
         run: python3 build_app.py -p linux -a ${{ matrix.arch }} -f flatpak
       - uses: actions/upload-artifact@v4
         with:
-          name: mdsscope-linux-flatpak-${{ matrix.arch }}
+          name: mdslens-linux-flatpak-${{ matrix.arch }}
           path: build/dist/*.flatpak
           if-no-files-found: error
 
@@ -246,12 +246,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: mdsscope-linux-${{ matrix.arch }}
+          name: mdslens-linux-${{ matrix.arch }}
           path: build/dist
       - name: Verify portable dependency closure
         run: >-
           python3 scripts/verify_linux_portable.py
-          build/dist/mdsscope-linux-${{ matrix.arch }}.zip
+          build/dist/mdslens-linux-${{ matrix.arch }}.zip
           --max-glibc 2.31
       - name: Smoke-launch portable application
         if: matrix.launch
@@ -259,7 +259,7 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: "1"
         run: >-
           python3 scripts/verify_linux_portable.py
-          build/dist/mdsscope-linux-${{ matrix.arch }}.zip
+          build/dist/mdslens-linux-${{ matrix.arch }}.zip
           --max-glibc 2.31 --launch
 
   android:
@@ -267,9 +267,9 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-      MDSSCOPE_ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-      MDSSCOPE_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-      MDSSCOPE_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      MDSLENS_ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      MDSLENS_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      MDSLENS_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -293,9 +293,9 @@ jobs:
         shell: bash
         run: |
           if [[ -n "$ANDROID_KEYSTORE_BASE64" ]]; then
-            keystore="$RUNNER_TEMP/mdsscope-release.jks"
+            keystore="$RUNNER_TEMP/mdslens-release.jks"
             printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
-            echo "MDSSCOPE_ANDROID_KEYSTORE=$keystore" >> "$GITHUB_ENV"
+            echo "MDSLENS_ANDROID_KEYSTORE=$keystore" >> "$GITHUB_ENV"
           else
             echo "::warning::Android signing secrets are absent; APKs will use the local test identity."
           fi
@@ -303,7 +303,7 @@ jobs:
         run: python3 build_app.py -p android -f apk aab apks
       - uses: actions/upload-artifact@v4
         with:
-          name: mdsscope-android
+          name: mdslens-android
           path: build/dist/*
           if-no-files-found: error
 
@@ -326,7 +326,7 @@ jobs:
           -f unsigned-ipa unsigned-app xcarchive zip 7z tar.gz tar.xz tar.bz2
       - uses: actions/upload-artifact@v4
         with:
-          name: mdsscope-apple-mobile
+          name: mdslens-apple-mobile
           path: build/dist/*
           if-no-files-found: error
 
