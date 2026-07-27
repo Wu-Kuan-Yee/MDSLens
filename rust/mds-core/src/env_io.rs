@@ -240,9 +240,11 @@ pub fn parse_webscp_environment(path: &str) -> LayoutConfig {
 
             if plot.custom_x_range {
                 plot.xmin = parse_f64(map.get(&format!("{}xmin_custom", prefix)).map(|s| s.as_str()).unwrap_or(""));
+                plot.xmax = parse_f64(map.get(&format!("{}xmax_custom", prefix)).map(|s| s.as_str()).unwrap_or(""));
             }
             if plot.custom_y_range {
                 plot.ymin = parse_f64(map.get(&format!("{}ymin_custom", prefix)).map(|s| s.as_str()).unwrap_or(""));
+                plot.ymax = parse_f64(map.get(&format!("{}ymax_custom", prefix)).map(|s| s.as_str()).unwrap_or(""));
             }
 
             let signal_count = parse_usize(&map, &format!("{}num_sig", prefix), 1).max(1);
@@ -255,6 +257,7 @@ pub fn parse_webscp_environment(path: &str) -> LayoutConfig {
                 sig.x_expr = trim_quotes(map.get(&format!("{}x_expr_{}", prefix, s)).map(|v| v.as_str()).unwrap_or(""));
                 sig.experiment = trim_quotes(map.get(&format!("{}experiment_{}", prefix, s)).map(|v| v.as_str()).unwrap_or(""));
                 sig.server_ip = trim_quotes(map.get(&format!("{}server_ip_{}", prefix, s)).map(|v| v.as_str()).unwrap_or(""));
+                sig.legend = trim_quotes(map.get(&format!("{}legend_name_{}", prefix, s)).map(|v| v.as_str()).unwrap_or(""));
 
                 let color_name = trim_quotes(map.get(&format!("{}color_name_{}", prefix, s)).map(|v| v.as_str()).unwrap_or(""));
                 sig.manual_color = parse_i32(&map, &format!("{}color_manual_{}", prefix, s), 0) != 0;
@@ -263,6 +266,27 @@ pub fn parse_webscp_environment(path: &str) -> LayoutConfig {
                 } else {
                     sig.color_name = crate::colors::color_for_index(s - 1);
                 }
+                let legacy_hidden = parse_i32(&map, &format!("{}hidden_{}", prefix, s), 0) != 0;
+                sig.hide_mode = match map.get(&format!("{}hide_mode_{}", prefix, s))
+                    .map(|value| value.trim().to_ascii_lowercase())
+                    .as_deref()
+                {
+                    Some("temporary" | "current_shot" | "current-shot") => SignalHideMode::Temporary,
+                    Some("persistent" | "always") => SignalHideMode::Persistent,
+                    Some("visible" | "none" | "not_hidden" | "not-hidden") => SignalHideMode::Visible,
+                    _ if legacy_hidden => SignalHideMode::Persistent,
+                    _ => SignalHideMode::Visible,
+                };
+                sig.hidden = sig.hide_mode != SignalHideMode::Visible;
+                sig.read_mode = match map.get(&format!("{}read_mode_{}", prefix, s))
+                    .map(|value| value.trim().to_ascii_lowercase())
+                    .as_deref()
+                {
+                    Some("full") => Some(crate::types::DataReadMode::Full),
+                    Some("medium") => Some(crate::types::DataReadMode::Medium),
+                    Some("thin") => Some(crate::types::DataReadMode::Thin),
+                    _ => None,
+                };
 
                 if !sig.y_expr.is_empty() {
                     plot.signal_specs.push(sig);
@@ -274,6 +298,108 @@ pub fn parse_webscp_environment(path: &str) -> LayoutConfig {
     }
 
     config
+}
+
+/// Encode a LayoutConfig as a WebScope-compatible flat key-value file.
+///
+/// Fields understood by the original WebScope format are emitted using their
+/// traditional names. MDSLens-specific per-signal settings use additional
+/// names that older readers safely ignore and MDSLens restores on re-import.
+pub fn encode_environment_webscp(config: &LayoutConfig) -> String {
+    use std::fmt::Write;
+
+    fn value(input: &str) -> String {
+        input.replace(['\r', '\n'], " ")
+    }
+
+    let default_shot = if !config.shot.trim().is_empty() {
+        config.shot.trim()
+    } else {
+        config.columns.iter()
+            .flat_map(|column| column.iter())
+            .map(|plot| plot.shot.trim())
+            .find(|shot| !shot.is_empty())
+            .unwrap_or("")
+    };
+    let mut out = String::new();
+    out.push_str("Title_Font: java.awt.Font[family=Times New Roman,name=Times New Roman,style=plain,size=16]\n");
+    out.push_str("Measurement_Units: java.awt.Font[family=Times New Roman,name=Times New Roman,style=plain,size=14]\n");
+    out.push_str("Coordinate_Axis: java.awt.Font[family=Times New Roman,name=Times New Roman,style=plain,size=12]\n");
+    out.push_str("Grid_Mode:1\nX_Lines:5\nY_Lines:5\nExtraction_points:2000\n");
+    out.push_str("Vertical_offset:0\nHorizontal_offset:0\n");
+    writeln!(out, "shot_txt:{}", value(default_shot)).unwrap();
+    writeln!(out, "cols:{}", config.columns.len().max(1)).unwrap();
+
+    for (column_index, column) in config.columns.iter().enumerate() {
+        writeln!(out, "{}.rows:{}", column_index + 1, column.len()).unwrap();
+        for (row_index, plot) in column.iter().enumerate() {
+            let prefix = format!("{}_{}.", column_index + 1, row_index + 1);
+            let panel_shot = if plot.shot.trim().is_empty() {
+                default_shot
+            } else {
+                plot.shot.trim()
+            };
+            writeln!(out, "{}shot_txt:{}", prefix, value(panel_shot)).unwrap();
+            writeln!(out, "{}num_shot:1", prefix).unwrap();
+            writeln!(out, "{}num_sig:{}", prefix, plot.signal_specs.len()).unwrap();
+            writeln!(out, "{}title_position:0", prefix).unwrap();
+            writeln!(out, "{}y_log:0", prefix).unwrap();
+            writeln!(out, "{}legend:1", prefix).unwrap();
+            writeln!(out, "{}legend_position:", prefix).unwrap();
+            writeln!(out, "{}xseting_mode:{}", prefix, if plot.custom_x_range { 0 } else { 1 }).unwrap();
+            writeln!(out, "{}yseting_mode:{}", prefix, if plot.custom_y_range { 0 } else { 1 }).unwrap();
+            writeln!(out, "{}x_line_num:5", prefix).unwrap();
+            writeln!(out, "{}y_line_num:5", prefix).unwrap();
+            writeln!(out, "{}extraction_points:{}", prefix, plot.extraction_points.max(2)).unwrap();
+            writeln!(out, "{}vertical_offset:0", prefix).unwrap();
+            writeln!(out, "{}horizontal_offset:0", prefix).unwrap();
+            writeln!(out, "{}grid_mode:{}", prefix, i32::from(plot.grid)).unwrap();
+            writeln!(out, "{}xmin_custom:{}", prefix, if plot.custom_x_range && plot.xmin.is_finite() { plot.xmin.to_string() } else { String::new() }).unwrap();
+            writeln!(out, "{}xmax_custom:{}", prefix, if plot.custom_x_range && plot.xmax.is_finite() { plot.xmax.to_string() } else { String::new() }).unwrap();
+            writeln!(out, "{}ymin_custom:{}", prefix, if plot.custom_y_range && plot.ymin.is_finite() { plot.ymin.to_string() } else { String::new() }).unwrap();
+            writeln!(out, "{}ymax_custom:{}", prefix, if plot.custom_y_range && plot.ymax.is_finite() { plot.ymax.to_string() } else { String::new() }).unwrap();
+            writeln!(out, "{}title:{}", prefix, value(&plot.title)).unwrap();
+            writeln!(out, "{}xlabel:{}", prefix, value(&plot.x_label)).unwrap();
+            writeln!(out, "{}ylabel:{}", prefix, value(&plot.y_label)).unwrap();
+
+            for (signal_index, signal) in plot.signal_specs.iter().enumerate() {
+                let number = signal_index + 1;
+                let signal_shot = if signal.shot.trim().is_empty() {
+                    panel_shot
+                } else {
+                    signal.shot.trim()
+                };
+                writeln!(out, "{}shot_{}:{}", prefix, number, value(signal_shot)).unwrap();
+                writeln!(out, "{}color_{}_{}:{}", prefix, row_index + 1, number, signal_index % 16).unwrap();
+                writeln!(out, "{}markers_{}_{}:0", prefix, row_index + 1, number).unwrap();
+                writeln!(out, "{}interpolate_{}_{}:1", prefix, row_index + 1, number).unwrap();
+                writeln!(out, "{}y_expr_{}:{}", prefix, number, value(&signal.y_expr)).unwrap();
+                writeln!(out, "{}x_expr_{}:{}", prefix, number, value(&signal.x_expr)).unwrap();
+                writeln!(out, "{}experiment_{}:{}", prefix, number, value(&signal.experiment)).unwrap();
+                writeln!(out, "{}server_ip_{}:{}", prefix, number, value(&signal.server_ip)).unwrap();
+                writeln!(out, "{}legend_name_{}:{}", prefix, number, value(&signal.legend)).unwrap();
+                writeln!(out, "{}color_name_{}:{}", prefix, number, value(&signal.color_name)).unwrap();
+                writeln!(out, "{}color_manual_{}:{}", prefix, number, i32::from(signal.manual_color)).unwrap();
+                let hide_mode = if signal.hide_mode == SignalHideMode::Visible && signal.hidden {
+                    SignalHideMode::Persistent
+                } else {
+                    signal.hide_mode
+                };
+                writeln!(out, "{}hidden_{}:{}", prefix, number, i32::from(hide_mode != SignalHideMode::Visible)).unwrap();
+                writeln!(out, "{}hide_mode_{}:{}", prefix, number, match hide_mode {
+                    SignalHideMode::Temporary => "temporary",
+                    SignalHideMode::Persistent => "persistent",
+                    SignalHideMode::Visible => "visible",
+                }).unwrap();
+                writeln!(out, "{}read_mode_{}:{}", prefix, number, match signal.read_mode {
+                    Some(crate::types::DataReadMode::Full) => "full",
+                    Some(crate::types::DataReadMode::Medium) => "medium",
+                    _ => "thin",
+                }).unwrap();
+            }
+        }
+    }
+    out
 }
 
 /// Encode a LayoutConfig as TOML without touching the filesystem.
@@ -393,6 +519,12 @@ pub fn encode_environment_toml(config: &LayoutConfig) -> String {
 /// Write a LayoutConfig as TOML.
 pub fn write_environment_toml(config: &LayoutConfig, path: &str) -> Result<(), String> {
     let out = encode_environment_toml(config);
+    std::fs::write(path, &out).map_err(|e| format!("Cannot write {}: {}", path, e))
+}
+
+/// Write a LayoutConfig as WebScope.
+pub fn write_environment_webscp(config: &LayoutConfig, path: &str) -> Result<(), String> {
+    let out = encode_environment_webscp(config);
     std::fs::write(path, &out).map_err(|e| format!("Cannot write {}: {}", path, e))
 }
 
@@ -692,6 +824,70 @@ y = "\\pcrl01"
         assert_eq!(config.columns.iter().map(Vec::len).sum::<usize>(), 9);
         assert_eq!(config.columns[2][2].title, "Panel 9");
         assert_eq!(config.columns[2][2].signal_specs[0].y_expr, "\\signal_8");
+    }
+
+    #[test]
+    fn test_webscp_roundtrip_preserves_supported_panel_and_signal_settings() {
+        let config = LayoutConfig {
+            shot: "163999".into(),
+            columns: vec![vec![crate::types::PlotSpec {
+                shot: "163999".into(),
+                title: "Plasma current".into(),
+                x_label: "s".into(),
+                y_label: "kA".into(),
+                extraction_points: 4096,
+                grid: false,
+                custom_x_range: true,
+                custom_y_range: true,
+                xmin: -1.5,
+                xmax: 8.25,
+                ymin: -10.0,
+                ymax: 600.0,
+                signal_specs: vec![crate::types::SignalSpec {
+                    shot: "164000".into(),
+                    y_expr: "\\pcrl01".into(),
+                    x_expr: "dim_of(\\pcrl01)".into(),
+                    legend: "Ip".into(),
+                    experiment: "pcs_east".into(),
+                    server_ip: "202.127.204.12:8000".into(),
+                    color_name: "#123456".into(),
+                    manual_color: true,
+                    hidden: true,
+                    hide_mode: SignalHideMode::Persistent,
+                    read_mode: Some(crate::types::DataReadMode::Full),
+                }],
+            }]],
+            ..Default::default()
+        };
+
+        let encoded = encode_environment_webscp(&config);
+        assert!(encoded.contains("cols:1"));
+        assert!(encoded.contains("1_1.xmax_custom:8.25"));
+        assert!(encoded.contains("1_1.ymax_custom:600"));
+        assert!(encoded.contains("1_1.legend_name_1:Ip"));
+        assert!(encoded.contains("1_1.read_mode_1:full"));
+
+        let tmp = std::env::temp_dir().join("mdslens_complete.webscp");
+        std::fs::write(&tmp, encoded).unwrap();
+        let decoded = parse_webscp_environment(tmp.to_str().unwrap());
+        std::fs::remove_file(&tmp).ok();
+
+        let panel = &decoded.columns[0][0];
+        assert_eq!(panel.title, "Plasma current");
+        assert_eq!(panel.x_label, "s");
+        assert_eq!(panel.y_label, "kA");
+        assert_eq!(panel.extraction_points, 4096);
+        assert!(!panel.grid);
+        assert_eq!((panel.xmin, panel.xmax), (-1.5, 8.25));
+        assert_eq!((panel.ymin, panel.ymax), (-10.0, 600.0));
+        let signal = &panel.signal_specs[0];
+        assert_eq!(signal.shot, "164000");
+        assert_eq!(signal.legend, "Ip");
+        assert_eq!(signal.color_name, "#123456");
+        assert!(signal.manual_color);
+        assert!(signal.hidden);
+        assert_eq!(signal.hide_mode, SignalHideMode::Persistent);
+        assert_eq!(signal.read_mode, Some(crate::types::DataReadMode::Full));
     }
 
     #[test]

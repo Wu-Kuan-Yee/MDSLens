@@ -750,6 +750,33 @@ void main() {
     },
   );
 
+  test('Configuration save can encode and export WebScope files', () async {
+    String? encodedJson;
+    String? suggestedName;
+    Uint8List? savedBytes;
+    final expectedBytes = Uint8List.fromList(utf8.encode('cols:1\n1.rows:1\n'));
+    final app = AppState(
+      webscpConfigEncoder: (configJson) async {
+        encodedJson = configJson;
+        return expectedBytes;
+      },
+      configSavePicker: (name, bytes) async {
+        suggestedName = name;
+        savedBytes = bytes;
+        return '/saved/config.webscp';
+      },
+    );
+    await app.preferencesReady;
+    app.shotText = '163999';
+
+    await app.saveFile(format: ConfigurationFileFormat.webscp);
+
+    expect(suggestedName, 'config.webscp');
+    expect(savedBytes, expectedBytes);
+    expect(jsonDecode(encodedJson!)['shot'], '163999');
+    expect(app.status, 'Saved to config.webscp');
+  });
+
   test(
     'Configuration save materializes every per-curve data source field',
     () async {
@@ -1481,6 +1508,11 @@ void main() {
     expect(app.columns[0][0]['title'], 'Toolbar open');
 
     await tester.tap(find.byTooltip('Save configuration'));
+    await tester.pumpAndSettle();
+    expect(find.text('Save configuration as'), findsOneWidget);
+    expect(find.byKey(const ValueKey('save-format-toml')), findsOneWidget);
+    expect(find.byKey(const ValueKey('save-format-webscp')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('save-format-toml')));
     await tester.pumpAndSettle();
     expect(saveCalls, 1);
     expect(app.status, 'Saved to config.toml');

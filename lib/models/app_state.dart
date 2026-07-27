@@ -109,6 +109,16 @@ typedef ImportedShotDecision = Future<bool> Function(String importedShot);
 typedef SshTestWorker = Future<String> Function(String settingsJson);
 typedef SshDisconnect = void Function();
 
+enum ConfigurationFileFormat {
+  toml('TOML', 'toml'),
+  webscp('WebScope', 'webscp');
+
+  const ConfigurationFileFormat(this.label, this.extension);
+
+  final String label;
+  final String extension;
+}
+
 /// The Qt-era application used this shared user directory.  Keeping imports
 /// out of it prevents an old installation from silently becoming a source of
 /// state for this application as well.
@@ -207,13 +217,16 @@ Future<String?> _saveConfigurationFile(
   Uint8List bytes,
 ) async {
   final mobile = Platform.isAndroid || Platform.isIOS;
+  final extension = suggestedName.toLowerCase().endsWith('.webscp')
+      ? 'webscp'
+      : 'toml';
   final privateDirectory = mobile
       ? null
       : await UserDataStore().configurationDirectory();
   return saveBytesWithFilePicker(
     dialogTitle: 'Save MDSLens configuration',
     fileName: suggestedName,
-    allowedExtensions: const ['toml'],
+    allowedExtensions: [extension],
     bytes: bytes,
     initialDirectory: privateDirectory?.path,
   );
@@ -224,6 +237,11 @@ String _parseConfiguration(String path) => RustBridge.instance.parseEnv(path);
 Future<Uint8List> _encodeConfiguration(String configJson) async {
   final toml = RustBridge.instance.encodeEnv(configJson);
   return Uint8List.fromList(utf8.encode(toml));
+}
+
+Future<Uint8List> _encodeWebscpConfiguration(String configJson) async {
+  final webscp = RustBridge.instance.encodeEnvWebscp(configJson);
+  return Uint8List.fromList(utf8.encode(webscp));
 }
 
 Future<String> _testSshInBackground(String settingsJson) {
@@ -470,6 +488,7 @@ class AppState extends ChangeNotifier {
   final ConfigSavePicker _configSavePicker;
   final ConfigParser _configParser;
   final ConfigEncoder _configEncoder;
+  final ConfigEncoder _webscpConfigEncoder;
   final SshTestWorker _sshTestWorker;
   bool _disposed = false;
 
@@ -609,6 +628,7 @@ class AppState extends ChangeNotifier {
     ConfigSavePicker? configSavePicker,
     ConfigParser? configParser,
     ConfigEncoder? configEncoder,
+    ConfigEncoder? webscpConfigEncoder,
     SshTestWorker? sshTestWorker,
     UserDataStore? userDataStore,
     CredentialStore? credentialStore,
@@ -627,6 +647,7 @@ class AppState extends ChangeNotifier {
        _configSavePicker = configSavePicker ?? _saveConfigurationFile,
        _configParser = configParser ?? _parseConfiguration,
        _configEncoder = configEncoder ?? _encodeConfiguration,
+       _webscpConfigEncoder = webscpConfigEncoder ?? _encodeWebscpConfiguration,
        _sshTestWorker = sshTestWorker ?? _testSshInBackground,
        _userDataStore = userDataStore ?? UserDataStore(),
        _credentialStore = credentialStore ?? PlatformCredentialStore() {
@@ -2051,7 +2072,9 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  Future<void> saveFile() async {
+  Future<void> saveFile({
+    ConfigurationFileFormat format = ConfigurationFileFormat.toml,
+  }) async {
     try {
       _status = 'Preparing configuration...';
       notifyListeners();
@@ -2079,10 +2102,16 @@ class AppState extends ChangeNotifier {
       final configJson = jsonEncode(
         _jsonSafeValue({'shot': _shotText.trim(), 'columns': cols}),
       );
-      final bytes = await _configEncoder(configJson);
+      final bytes = await switch (format) {
+        ConfigurationFileFormat.toml => _configEncoder(configJson),
+        ConfigurationFileFormat.webscp => _webscpConfigEncoder(configJson),
+      };
       _status = 'Choose where to save the configuration...';
       notifyListeners();
-      final destination = await _configSavePicker('config.toml', bytes);
+      final destination = await _configSavePicker(
+        'config.${format.extension}',
+        bytes,
+      );
       if (destination == null || destination.trim().isEmpty) {
         _status = 'Save cancelled';
         notifyListeners();

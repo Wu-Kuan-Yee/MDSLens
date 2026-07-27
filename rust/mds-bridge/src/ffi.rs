@@ -12,7 +12,7 @@ use crate::api as a;
 
 static API_TUNNEL_MANAGER: OnceLock<Mutex<mds_ssh::tunnel::SshTunnelManager>> = OnceLock::new();
 static API_TUNNEL_EPOCH: AtomicU64 = AtomicU64::new(0);
-const MDS_BRIDGE_ABI_VERSION: u32 = 5;
+const MDS_BRIDGE_ABI_VERSION: u32 = 6;
 
 macro_rules! ffi_string {
     ($s:expr) => { CString::new($s).unwrap_or_default().into_raw() };
@@ -66,6 +66,12 @@ pub extern "C" fn mds_write_environment(config_json: *const c_char, path: *const
 pub extern "C" fn mds_encode_environment(config_json: *const c_char) -> *mut c_char {
     let config: a::FrbLayoutConfig = serde_json::from_str(&to_rust(config_json)).unwrap_or_default();
     ffi_string!(a::encode_environment(config))
+}
+
+#[no_mangle]
+pub extern "C" fn mds_encode_environment_webscp(config_json: *const c_char) -> *mut c_char {
+    let config: a::FrbLayoutConfig = serde_json::from_str(&to_rust(config_json)).unwrap_or_default();
+    ffi_string!(a::encode_environment_webscp(config))
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────

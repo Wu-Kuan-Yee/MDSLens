@@ -360,7 +360,7 @@ class ToolbarWidget extends StatelessWidget {
           context,
           icon: Icons.save_rounded,
           tooltip: 'Save configuration',
-          onPressed: () => app.saveFile(),
+          onPressed: () => _chooseConfigurationSaveFormat(context, app),
         ),
         _toolbarIconButton(
           context,
@@ -2982,6 +2982,106 @@ class ToolbarWidget extends StatelessWidget {
       importedShotDecision: (shot) =>
           _confirmUseImportedConfigurationShot(context, shot),
     );
+  }
+
+  Future<void> _chooseConfigurationSaveFormat(
+    BuildContext context,
+    AppState app,
+  ) async {
+    final format = await showDialog<ConfigurationFileFormat>(
+      context: context,
+      builder: (dialogContext) {
+        final colors = Theme.of(dialogContext).colorScheme;
+        Widget formatCard({
+          required ConfigurationFileFormat format,
+          required IconData icon,
+          required String description,
+        }) {
+          return Card(
+            margin: const EdgeInsets.only(bottom: 10),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              key: ValueKey('save-format-${format.extension}'),
+              onTap: () => Navigator.pop(dialogContext, format),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: colors.primaryContainer,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(icon, color: colors.onPrimaryContainer),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            format.label,
+                            style: Theme.of(dialogContext).textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            description,
+                            style: Theme.of(dialogContext).textTheme.bodySmall
+                                ?.copyWith(color: colors.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.chevron_right_rounded),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        return KeyboardSafeDialog(
+          maxWidth: 520,
+          title: const Row(
+            children: [
+              Icon(Icons.save_as_rounded),
+              SizedBox(width: 10),
+              Flexible(child: Text('Save configuration as')),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              formatCard(
+                format: ConfigurationFileFormat.toml,
+                icon: Icons.data_object_rounded,
+                description:
+                    'Recommended. Preserves every MDSLens configuration setting.',
+              ),
+              formatCard(
+                format: ConfigurationFileFormat.webscp,
+                icon: Icons.swap_horiz_rounded,
+                description:
+                    'Compatible with WebScope; MDSLens settings are retained as safe extension fields.',
+              ),
+            ],
+          ),
+          actions: [
+            TextButton.icon(
+              onPressed: () => Navigator.pop(dialogContext),
+              icon: const Icon(Icons.close_rounded),
+              label: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+    if (format != null) {
+      await app.saveFile(format: format);
+    }
   }
 
   Future<bool> _confirmUseImportedConfigurationShot(

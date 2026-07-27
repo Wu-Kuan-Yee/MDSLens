@@ -3,12 +3,13 @@ import 'dart:io';
 import 'package:ffi/ffi.dart';
 
 class RustBridge {
-  static const int _expectedAbiVersion = 5;
+  static const int _expectedAbiVersion = 6;
   static RustBridge? _i;
   // ignore: unused_field
   final DynamicLibrary _lib;
   final String Function(String) parseEnv;
   final String Function(String) encodeEnv;
+  final String Function(String) encodeEnvWebscp;
   final String Function(String, String) writeEnv;
   final String Function(String, String, String) reqLogin;
   final String Function(String, String) fetchS;
@@ -24,6 +25,7 @@ class RustBridge {
   RustBridge._(this._lib)
     : parseEnv = _wrap1(_lib, 'mds_parse_environment'),
       encodeEnv = _wrap1(_lib, 'mds_encode_environment'),
+      encodeEnvWebscp = _wrap1(_lib, 'mds_encode_environment_webscp'),
       writeEnv = _wrap2(_lib, 'mds_write_environment'),
       reqLogin = _wrap3(_lib, 'mds_request_login'),
       fetchS = _wrap2(_lib, 'mds_fetch_shot'),

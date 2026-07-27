@@ -259,6 +259,11 @@ pub fn encode_environment(config: FrbLayoutConfig) -> String {
     mds_core::env_io::encode_environment_toml(&rust)
 }
 
+pub fn encode_environment_webscp(config: FrbLayoutConfig) -> String {
+    let rust = config.into_rust();
+    mds_core::env_io::encode_environment_webscp(&rust)
+}
+
 // ── API Auth ───────────────────────────────────────────────────────────
 
 
