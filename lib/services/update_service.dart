@@ -2,7 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 const currentMdsScopeVersion = '7.0';
-const mdsScopeReleasesUrl = 'https://github.com/wwktz/MdsScope/releases';
+const mdsScopeRepositoryUrl = 'https://github.com/Wu-Kuan-Yee/MdsScope';
+const mdsScopeSourceUrl =
+    'https://github.com/Wu-Kuan-Yee/MdsScope/tree/flutter-rewrite';
+const mdsScopeReleasesUrl = 'https://github.com/Wu-Kuan-Yee/MdsScope/releases';
+const mdsScopeLatestReleaseApiUrl =
+    'https://api.github.com/repos/Wu-Kuan-Yee/MdsScope/releases/latest';
 
 class ReleaseUpdate {
   final String latestVersion;
@@ -20,7 +25,7 @@ Future<ReleaseUpdate> checkLatestMdsScopeRelease() async {
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
   try {
     final request = await client.getUrl(
-      Uri.parse('https://api.github.com/repos/wwktz/MdsScope/releases/latest'),
+      Uri.parse(mdsScopeLatestReleaseApiUrl),
     );
     request.headers.set(HttpHeaders.userAgentHeader, 'MdsScope');
     request.headers

@@ -335,7 +335,9 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
                             Text('Copyright (C) 2026',
                                 style: _valueStyle(context)),
                             _buildLink(
-                                'Weikang Wang', 'https://github.com/wwktz'),
+                              'MdsScope Fork Contributors',
+                              mdsScopeRepositoryUrl,
+                            ),
                           ],
                         ),
                       ),
@@ -346,8 +348,7 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
                       ),
                       _buildRow(
                         'Source',
-                        _buildLink(
-                            'GitHub', 'https://github.com/wwktz/MdsScope'),
+                        _buildLink('flutter-rewrite', mdsScopeSourceUrl),
                         showBorder: false,
                       ),
                     ]),

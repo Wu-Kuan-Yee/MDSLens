@@ -4909,7 +4909,7 @@ void main() {
           updateChecker: () async => const ReleaseUpdate(
             latestVersion: 'v99.0.0',
             releaseUrl:
-                'https://github.com/wwktz/MdsScope/releases/tag/v99.0.0',
+                'https://github.com/Wu-Kuan-Yee/MdsScope/releases/tag/v99.0.0',
             updateAvailable: true,
           ),
         ),
@@ -4933,10 +4933,10 @@ void main() {
       closeTo(tester.getCenter(find.text(currentMdsScopeVersion)).dx, 0.5),
     );
 
-    await tester.ensureVisible(find.text('GitHub'));
-    await tester.tap(find.text('GitHub'));
+    await tester.ensureVisible(find.text('flutter-rewrite'));
+    await tester.tap(find.text('flutter-rewrite'));
     await tester.pump();
-    expect(openedUrls.single, Uri.parse('https://github.com/wwktz/MdsScope'));
+    expect(openedUrls.single, Uri.parse(mdsScopeSourceUrl));
 
     await tester.ensureVisible(find.text('Update'));
     await tester.tap(find.text('Update'));
@@ -4947,7 +4947,9 @@ void main() {
 
     expect(
       openedUrls.last,
-      Uri.parse('https://github.com/wwktz/MdsScope/releases/tag/v99.0.0'),
+      Uri.parse(
+        'https://github.com/Wu-Kuan-Yee/MdsScope/releases/tag/v99.0.0',
+      ),
     );
     expect(tester.takeException(), isNull);
   });

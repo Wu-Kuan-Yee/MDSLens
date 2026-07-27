@@ -3,6 +3,11 @@
 MdsScope is an MDSplus experimental signal waveform viewer, comparison, and
 configuration tool for desktop, tablet, and mobile devices.
 
+The independently maintained source is the
+[flutter-rewrite branch](https://github.com/Wu-Kuan-Yee/MdsScope/tree/flutter-rewrite)
+of the Wu-Kuan-Yee/MdsScope repository. Releases and update checks come from
+that repository.
+
 ## Features
 
 - Open, edit, save, and restore TOML or WebScope waveform layouts.
