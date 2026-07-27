@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
-const currentMdsScopeVersion = '7.0';
 const mdsScopeRepositoryUrl = 'https://github.com/Wu-Kuan-Yee/MdsScope';
 const mdsScopeSourceUrl =
     'https://github.com/Wu-Kuan-Yee/MdsScope/tree/flutter-rewrite';
+const mdsScopeMaintainerUrl = 'https://github.com/Wu-Kuan-Yee';
+const originalMdsScopeRepositoryUrl = 'https://github.com/wwktz/MdsScope';
 const mdsScopeReleasesUrl = 'https://github.com/Wu-Kuan-Yee/MdsScope/releases';
 const mdsScopeLatestReleaseApiUrl =
     'https://api.github.com/repos/Wu-Kuan-Yee/MdsScope/releases/latest';
@@ -21,7 +22,7 @@ class ReleaseUpdate {
   });
 }
 
-Future<ReleaseUpdate> checkLatestMdsScopeRelease() async {
+Future<ReleaseUpdate> checkLatestMdsScopeRelease(String currentVersion) async {
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
   try {
     final request = await client.getUrl(
@@ -52,7 +53,7 @@ Future<ReleaseUpdate> checkLatestMdsScopeRelease() async {
       releaseUrl: releaseUrl == null || releaseUrl.isEmpty
           ? mdsScopeReleasesUrl
           : releaseUrl,
-      updateAvailable: compareVersions(latest, currentMdsScopeVersion) > 0,
+      updateAvailable: compareVersions(latest, currentVersion) > 0,
     );
   } finally {
     client.close(force: true);

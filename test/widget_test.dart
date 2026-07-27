@@ -232,7 +232,6 @@ void main() {
   });
 
   test('Release versions are compared semantically', () {
-    expect(currentMdsScopeVersion, '7.0');
     expect(compareVersions('v7.1.0', '7.0.9'), greaterThan(0));
     expect(compareVersions('7.0', '7.0.0'), 0);
     expect(compareVersions('6.9.9', '7.0.0'), lessThan(0));
@@ -4902,6 +4901,7 @@ void main() {
             version: '18.5',
             architecture: 'arm64',
           ),
+          versionLoader: () async => '7.0',
           gitVersionLoader: () async => '7.0.r42.g123456789',
           urlOpener: (uri) async {
             openedUrls.add(uri);
@@ -4931,13 +4931,23 @@ void main() {
     await tester.ensureVisible(find.text('MdsScope Version'));
     expect(
       tester.getCenter(find.text('MdsScope Version')).dx,
-      closeTo(tester.getCenter(find.text(currentMdsScopeVersion)).dx, 0.5),
+      closeTo(tester.getCenter(find.text('7.0')).dx, 0.5),
     );
 
-    await tester.ensureVisible(find.text('flutter-rewrite'));
-    await tester.tap(find.text('flutter-rewrite'));
+    await tester.ensureVisible(find.text('MdsScope project'));
+    await tester.tap(find.text('MdsScope project'));
     await tester.pump();
-    expect(openedUrls.single, Uri.parse(mdsScopeSourceUrl));
+    expect(openedUrls.single, Uri.parse(originalMdsScopeRepositoryUrl));
+
+    await tester.ensureVisible(find.text('Pingzhong Wu'));
+    await tester.tap(find.text('Pingzhong Wu'));
+    await tester.pump();
+    expect(openedUrls.last, Uri.parse(mdsScopeMaintainerUrl));
+
+    await tester.ensureVisible(find.text('GitHub'));
+    await tester.tap(find.text('GitHub'));
+    await tester.pump();
+    expect(openedUrls.last, Uri.parse(mdsScopeSourceUrl));
 
     await tester.ensureVisible(find.text('Update'));
     await tester.tap(find.text('Update'));

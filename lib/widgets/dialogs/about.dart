@@ -11,6 +11,7 @@ class AboutDialogWidget extends StatefulWidget {
   final ExternalUriOpener? urlOpener;
   final ReleaseUpdateChecker? updateChecker;
   final RuntimeSystemInfoLoader? systemInfoLoader;
+  final AppVersionLoader? versionLoader;
   final GitVersionLoader? gitVersionLoader;
 
   const AboutDialogWidget({
@@ -18,6 +19,7 @@ class AboutDialogWidget extends StatefulWidget {
     this.urlOpener,
     this.updateChecker,
     this.systemInfoLoader,
+    this.versionLoader,
     this.gitVersionLoader,
   });
 
@@ -36,6 +38,7 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
   String _updateStatus = '';
   bool _checkingUpdate = false;
   late RuntimeSystemInfo _systemInfo;
+  String _mdsScopeVersion = 'Loading...';
   String _gitVersion = 'Loading...';
 
   @override
@@ -48,12 +51,14 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
   Future<void> _loadBuildInformation() async {
     final values = await Future.wait<Object>([
       (widget.systemInfoLoader ?? loadRuntimeSystemInfo)(),
+      (widget.versionLoader ?? loadMdsScopeVersion)(),
       (widget.gitVersionLoader ?? loadMdsScopeGitVersion)(),
     ]);
     if (!mounted) return;
     setState(() {
       _systemInfo = values[0] as RuntimeSystemInfo;
-      _gitVersion = values[1] as String;
+      _mdsScopeVersion = values[1] as String;
+      _gitVersion = values[2] as String;
     });
   }
 
@@ -72,13 +77,14 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
       _updateStatus = 'Checking for updates...';
     });
     try {
-      final result =
-          await (widget.updateChecker ?? checkLatestMdsScopeRelease)();
+      final result = await (widget.updateChecker != null
+          ? widget.updateChecker!()
+          : checkLatestMdsScopeRelease(_mdsScopeVersion));
       if (!mounted) return;
       if (!result.updateAvailable) {
         setState(() {
           _checkingUpdate = false;
-          _updateStatus = 'MdsScope $currentMdsScopeVersion is up to date';
+          _updateStatus = 'MdsScope $_mdsScopeVersion is up to date';
         });
         return;
       }
@@ -286,6 +292,24 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
                               ),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 3,
+                                runSpacing: 3,
+                                children: [
+                                  Text(
+                                    'Independent fork rebuilt with Flutter and Rust from the original',
+                                    softWrap: true,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                  _buildLink(
+                                    'MdsScope project',
+                                    originalMdsScopeRepositoryUrl,
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
                         ),
@@ -303,8 +327,7 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
                     child: Column(children: [
                       _buildRow(
                         'MdsScope Version',
-                        Text(currentMdsScopeVersion,
-                            style: _valueStyle(context)),
+                        Text(_mdsScopeVersion, style: _valueStyle(context)),
                       ),
                       _buildRow(
                         'Git Version',
@@ -335,8 +358,8 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
                             Text('Copyright (C) 2026',
                                 style: _valueStyle(context)),
                             _buildLink(
-                              'MdsScope Fork Contributors',
-                              mdsScopeRepositoryUrl,
+                              'Pingzhong Wu',
+                              mdsScopeMaintainerUrl,
                             ),
                           ],
                         ),
@@ -348,7 +371,7 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
                       ),
                       _buildRow(
                         'Source',
-                        _buildLink('flutter-rewrite', mdsScopeSourceUrl),
+                        _buildLink('GitHub', mdsScopeSourceUrl),
                         showBorder: false,
                       ),
                     ]),

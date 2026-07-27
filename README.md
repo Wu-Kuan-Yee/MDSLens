@@ -79,6 +79,10 @@ python build_app.py -p windows -a x64 -f exe msi msix zip 7z
 ```
 
 Output lands in `build/dist/` with filenames following `mdsscope-<platform>-<arch>.<format>`. Pushing a `v*` tag triggers GitHub Actions to build the release matrix on each native system in parallel.
+Use a numeric release tag such as `v7.0.1`. The application derives
+`MdsScope Version` from that tag without the leading `v`, while `Git Version`
+is generated as `<version>.r<commits-after-tag>.g<commit>`. Build-only labels
+such as `v7.0-build.1` are deliberately ignored as public versions.
 The complete output list and unsupported-target boundary are documented in
 [Release Artifact Matrix](docs/RELEASE_ARTIFACTS.md).
 

@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:ffi/ffi.dart';
 
 class RustBridge {
-  static const int _expectedAbiVersion = 4;
+  static const int _expectedAbiVersion = 5;
   static RustBridge? _i;
   // ignore: unused_field
   final DynamicLibrary _lib;
@@ -147,13 +147,21 @@ class RustBridge {
   }
 
   String buildGitVersion() {
+    return _buildString('mds_git_version');
+  }
+
+  String buildVersion() {
+    return _buildString('mds_version');
+  }
+
+  String _buildString(String symbol) {
     final function =
         _lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>(
-            'mds_git_version');
+            symbol);
     final freeResult = _rustStringFree(_lib);
     final result = function();
     try {
-      return _readResult(result, 'mds_git_version');
+      return _readResult(result, symbol);
     } finally {
       if (result != nullptr) freeResult(result);
     }

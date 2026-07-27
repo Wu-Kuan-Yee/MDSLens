@@ -32,6 +32,7 @@ class RuntimeSystemInfo {
 }
 
 typedef RuntimeSystemInfoLoader = Future<RuntimeSystemInfo> Function();
+typedef AppVersionLoader = Future<String> Function();
 typedef GitVersionLoader = Future<String> Function();
 
 const _systemInfoChannel = MethodChannel('mdsscope/system_info');
@@ -164,6 +165,14 @@ RuntimeSystemInfo linuxRuntimeSystemInfo({
 Future<String> loadMdsScopeGitVersion() async {
   try {
     final version = RustBridge.instance.buildGitVersion().trim();
+    if (version.isNotEmpty) return version;
+  } catch (_) {}
+  return 'unknown';
+}
+
+Future<String> loadMdsScopeVersion() async {
+  try {
+    final version = RustBridge.instance.buildVersion().trim();
     if (version.isNotEmpty) return version;
   } catch (_) {}
   return 'unknown';

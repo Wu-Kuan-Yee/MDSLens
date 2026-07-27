@@ -4,6 +4,10 @@ Pushing a `v*` tag builds the following real application/package formats.
 Architecture names describe the executable code inside the package, not merely
 the filename.
 
+Public releases should use numeric tags such as `v7.0`, `v7.0.1`, or `v7.1.0`.
+The displayed application version and Git version are derived automatically
+from the tag, so no source-file version edit is required before releasing.
+
 ## Windows
 
 For both `x64` and `arm64`:
@@ -99,4 +103,3 @@ by the user before installation.
 No HarmonyOS NEXT HAP/APP/HAR/HSP is generated. The repository has no
 HarmonyOS application project or upstream Flutter target, and an Android APK
 cannot be converted by changing its extension.
-

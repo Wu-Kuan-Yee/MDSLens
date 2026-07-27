@@ -12,7 +12,7 @@ use crate::api as a;
 
 static API_TUNNEL_MANAGER: OnceLock<Mutex<mds_ssh::tunnel::SshTunnelManager>> = OnceLock::new();
 static API_TUNNEL_EPOCH: AtomicU64 = AtomicU64::new(0);
-const MDS_BRIDGE_ABI_VERSION: u32 = 4;
+const MDS_BRIDGE_ABI_VERSION: u32 = 5;
 
 macro_rules! ffi_string {
     ($s:expr) => { CString::new($s).unwrap_or_default().into_raw() };
@@ -39,6 +39,11 @@ pub extern "C" fn mds_bridge_abi_version() -> u32 {
 #[no_mangle]
 pub extern "C" fn mds_git_version() -> *mut c_char {
     ffi_string!(env!("MDS_SCOPE_GIT_VERSION"))
+}
+
+#[no_mangle]
+pub extern "C" fn mds_version() -> *mut c_char {
+    ffi_string!(env!("MDS_SCOPE_VERSION"))
 }
 
 #[no_mangle]
