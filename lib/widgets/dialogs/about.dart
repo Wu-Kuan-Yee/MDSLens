@@ -298,7 +298,7 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
                                 runSpacing: 3,
                                 children: [
                                   Text(
-                                    'Independent cross-platform application built with Flutter and Rust, based on the original',
+                                    'Cross-platform rewrite written with Flutter and Rust from the original',
                                     softWrap: true,
                                     style: theme.textTheme.bodySmall?.copyWith(
                                       color: theme.colorScheme.onSurfaceVariant,

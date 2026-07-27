@@ -1,14 +1,13 @@
 # MDSLens
 
 MDSLens is an MDSplus experimental signal waveform viewer, comparison, and
-configuration tool for desktop, tablet, and mobile devices. It is an independent
-cross-platform application built with Flutter and Rust, based on the original
-[MdsScope project](https://github.com/wwktz/MdsScope).
+configuration tool for desktop, tablet, and mobile devices. It is a
+cross-platform rewrite of the original
+[MdsScope project](https://github.com/wwktz/MdsScope), written with Flutter
+and Rust.
 
-The independently maintained source is the
-[main branch](https://github.com/Wu-Kuan-Yee/MDSLens)
-of the Wu-Kuan-Yee/MDSLens repository. Releases and update checks come from
-that repository.
+Source code, releases, and update checks are hosted in the
+[Wu-Kuan-Yee/MDSLens repository](https://github.com/Wu-Kuan-Yee/MDSLens).
 
 ## Features
 
