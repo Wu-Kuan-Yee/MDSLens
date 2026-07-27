@@ -243,7 +243,7 @@ class AppDelegate: FlutterAppDelegate {
         forKey: "MDSLensIdentityFileBookmarks"
       ) as? [String: Data] ?? [:]
       if !legacy.isEmpty {
-        identityFileBookmarks = legacy
+        self.identityFileBookmarks = legacy
       }
       UserDefaults.standard.removeObject(
         forKey: "MDSLensIdentityFileBookmarks"
