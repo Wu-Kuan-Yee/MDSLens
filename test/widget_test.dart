@@ -2346,6 +2346,7 @@ void main() {
     final charts =
         tester.widgetList<LineChart>(find.byType(LineChart)).toList();
     expect(charts, hasLength(2));
+    expect(charts.every((chart) => chart.duration == Duration.zero), isTrue);
     expect(charts[0].data.extraLinesData.horizontalLines.single.y, 12);
     expect(charts[1].data.extraLinesData.horizontalLines.single.y, 22);
     expect(find.byKey(const ValueKey('plot-point-marker-0')), findsOneWidget);

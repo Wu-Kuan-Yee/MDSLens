@@ -520,6 +520,11 @@ class _PlotPanelState extends State<PlotPanel> {
                 minY: yMin,
                 maxY: yMax,
               ),
+              // Point mode updates extraLinesData every pointer frame. The
+              // package default interpolates those lines for 150 ms, so the
+              // crosshair visibly trails the direct-positioned point marker.
+              // Scientific navigation should render the current state exactly.
+              duration: Duration.zero,
             ),
             // Y-axis tick marks — 3px horizontal lines (matching C++ render.cpp:251)
             for (int i = 0; i < yTicks.length; i++)
