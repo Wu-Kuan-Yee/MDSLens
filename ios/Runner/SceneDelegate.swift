@@ -18,6 +18,9 @@ class SceneDelegate: FlutterSceneDelegate {
     appDelegate.installPencilInteraction(
       on: window?.rootViewController?.view
     )
+    appDelegate.installConfigurationDropInteraction(
+      on: window?.rootViewController?.view
+    )
     connectionOptions.urlContexts.forEach {
       appDelegate.queueOpenURL($0.url)
     }

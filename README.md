@@ -11,7 +11,10 @@ Source code, releases, and update checks are hosted in the
 
 ## Features
 
-- Open, edit, save, and restore TOML or WebScope waveform layouts.
+- Open, edit, save, and restore TOML or WebScope waveform layouts, including
+  WebScope-compatible export.
+- Drop a `.toml` or `.webscp` file directly onto the waveform area, with a
+  highlighted valid drop target and confirmation before the layout changes.
 - Log in directly or through an SSH tunnel, obtain the latest shot, and load
   multiple panels without blocking the interface.
 - Thin, Medium, and Full data modes, including the 0.1 ms EAST Thin path and

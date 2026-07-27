@@ -5,7 +5,7 @@ import CoreTelephony
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate,
-  UIPencilInteractionDelegate
+  UIPencilInteractionDelegate, UIDropInteractionDelegate
 {
   private var permissionsChannel: FlutterMethodChannel?
   private var stylusChannel: FlutterMethodChannel?
@@ -13,7 +13,9 @@ import CoreTelephony
   private var systemFontsChannel: FlutterMethodChannel?
   private var userDataChannel: FlutterMethodChannel?
   private var openRequestsChannel: FlutterMethodChannel?
+  private var dropChannel: FlutterMethodChannel?
   private var pencilInteraction: UIPencilInteraction?
+  private var dropInteraction: UIDropInteraction?
   private var pencilUsesEraser = false
   private var cellularDataMonitor: CTCellularData?
   private var networkProbeSession: URLSession?
@@ -135,8 +137,13 @@ import CoreTelephony
       self?.pendingOpenRequests.removeAll()
       result(pending)
     }
+    dropChannel = FlutterMethodChannel(
+      name: "desktop_drop",
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
+    )
     DispatchQueue.main.async { [weak self] in
       self?.installPencilInteraction(on: self?.activeRootView)
+      self?.installConfigurationDropInteraction(on: self?.activeRootView)
     }
   }
 
@@ -290,6 +297,120 @@ import CoreTelephony
     interaction.isEnabled = true
     rootView.addInteraction(interaction)
     pencilInteraction = interaction
+  }
+
+  func installConfigurationDropInteraction(on rootView: UIView?) {
+    guard let rootView else { return }
+    if dropInteraction?.view === rootView {
+      return
+    }
+    if let previousInteraction = dropInteraction,
+      let previousView = previousInteraction.view
+    {
+      previousView.removeInteraction(previousInteraction)
+    }
+    let interaction = UIDropInteraction(delegate: self)
+    rootView.addInteraction(interaction)
+    dropInteraction = interaction
+  }
+
+  func dropInteraction(
+    _ interaction: UIDropInteraction,
+    canHandle session: UIDropSession
+  ) -> Bool {
+    session.items.count == 1 && session.hasItemsConforming(
+      toTypeIdentifiers: ["public.data", "public.content", "public.text"]
+    )
+  }
+
+  func dropInteraction(
+    _ interaction: UIDropInteraction,
+    sessionDidEnter session: UIDropSession
+  ) {
+    sendDropLocation("entered", session: session, interaction: interaction)
+  }
+
+  func dropInteraction(
+    _ interaction: UIDropInteraction,
+    sessionDidUpdate session: UIDropSession
+  ) -> UIDropProposal {
+    sendDropLocation("updated", session: session, interaction: interaction)
+    return UIDropProposal(operation: .copy)
+  }
+
+  func dropInteraction(
+    _ interaction: UIDropInteraction,
+    sessionDidExit session: UIDropSession
+  ) {
+    dropChannel?.invokeMethod("exited", arguments: nil)
+  }
+
+  func dropInteraction(
+    _ interaction: UIDropInteraction,
+    performDrop session: UIDropSession
+  ) {
+    guard let provider = session.items.first?.itemProvider,
+      let view = interaction.view
+    else { return }
+    let location = session.location(in: view)
+    let suggestedName = provider.suggestedName ?? "configuration"
+    guard let typeIdentifier = provider.registeredTypeIdentifiers.first else {
+      dropChannel?.invokeMethod("exited", arguments: nil)
+      return
+    }
+    provider.loadFileRepresentation(forTypeIdentifier: typeIdentifier) {
+      [weak self] sourceURL, error in
+      guard let self, let sourceURL, error == nil else {
+        DispatchQueue.main.async {
+          self?.dropChannel?.invokeMethod("exited", arguments: nil)
+        }
+        return
+      }
+      let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("mdslens-drop-\(UUID().uuidString)", isDirectory: true)
+      do {
+        try FileManager.default.createDirectory(
+          at: directory,
+          withIntermediateDirectories: true
+        )
+        let suggestedNameLower = suggestedName.lowercased()
+        let destinationName =
+          suggestedNameLower.hasSuffix(".toml") ||
+          suggestedNameLower.hasSuffix(".webscp")
+          ? suggestedName
+          : sourceURL.lastPathComponent
+        let destination = directory.appendingPathComponent(destinationName)
+        try FileManager.default.copyItem(at: sourceURL, to: destination)
+        DispatchQueue.main.async {
+          self.dropChannel?.invokeMethod(
+            "entered",
+            arguments: [location.x, location.y]
+          )
+          self.dropChannel?.invokeMethod(
+            "performOperation",
+            arguments: [destination.path]
+          )
+        }
+      } catch {
+        try? FileManager.default.removeItem(at: directory)
+        DispatchQueue.main.async {
+          self.dropChannel?.invokeMethod("exited", arguments: nil)
+        }
+      }
+    }
+  }
+
+  private func sendDropLocation(
+    _ method: String,
+    session: UIDropSession,
+    interaction: UIDropInteraction
+  ) {
+    guard let view = interaction.view else { return }
+    let location = session.location(in: view)
+    dropChannel?.invokeMethod(
+      method,
+      arguments: [location.x, location.y]
+    )
   }
 
   func pencilInteractionDidTap(_ interaction: UIPencilInteraction) {

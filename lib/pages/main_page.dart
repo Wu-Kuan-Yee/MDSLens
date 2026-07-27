@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/app_state.dart';
+import '../widgets/configuration_drop_region.dart';
 import '../widgets/toolbar.dart';
 import '../widgets/plot_grid.dart';
 
@@ -23,14 +24,12 @@ class MainPage extends StatelessWidget {
           LogicalKeyboardKey.keyZ,
           control: !Platform.isMacOS,
           meta: Platform.isMacOS,
-        ): () =>
-            app.interactionMode = 0,
+        ): () => app.interactionMode = 0,
         SingleActivator(
           LogicalKeyboardKey.keyP,
           control: !Platform.isMacOS,
           meta: Platform.isMacOS,
-        ): () =>
-            app.interactionMode = 1,
+        ): () => app.interactionMode = 1,
         SingleActivator(LogicalKeyboardKey.escape): app.handleEscapeKey,
         SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
             _stepCrosshair(app, -1),
@@ -50,16 +49,17 @@ class MainPage extends StatelessWidget {
               child: Column(
                 children: [
                   const ResponsiveToolbar(),
-                  if (app.columns.isEmpty)
-                    const Expanded(
-                      child: Center(
-                        child: SelectableText(
-                          'No environment loaded. Use Open to load a .toml or .webscp file.',
-                        ),
-                      ),
-                    )
-                  else
-                    const Expanded(child: PlotGrid()),
+                  Expanded(
+                    child: ConfigurationDropRegion(
+                      child: app.columns.isEmpty
+                          ? const Center(
+                              child: SelectableText(
+                                'No environment loaded. Use Open to load a .toml or .webscp file.',
+                              ),
+                            )
+                          : const PlotGrid(),
+                    ),
+                  ),
                   Container(
                     color: Theme.of(
                       context,

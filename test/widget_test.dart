@@ -23,6 +23,7 @@ import 'package:mdslens/services/user_data_store.dart';
 import 'package:mdslens/theme/mdslens_theme.dart';
 import 'package:mdslens/widgets/dialogs/about.dart';
 import 'package:mdslens/widgets/dialogs/login.dart';
+import 'package:mdslens/widgets/configuration_drop_region.dart';
 import 'package:mdslens/widgets/plot_panel.dart';
 import 'package:mdslens/widgets/plot_grid.dart';
 import 'package:mdslens/widgets/plot_render_cache.dart';
@@ -36,6 +37,78 @@ void main() {
     UserDataStore.disableFileStorageForTests = true;
     FlutterSecureStorage.setMockInitialValues({});
     SharedPreferences.setMockInitialValues({});
+  });
+
+  test('Configuration drop accepts only TOML and WebScope file names', () {
+    expect(isSupportedConfigurationFileName('layout.toml'), isTrue);
+    expect(isSupportedConfigurationFileName('LAYOUT.WEBSCP'), isTrue);
+    expect(isSupportedConfigurationFileName('layout.webscp.txt'), isFalse);
+    expect(isSupportedConfigurationFileName('layout.json'), isFalse);
+  });
+
+  testWidgets('Dropped configuration requires explicit confirmation', (
+    tester,
+  ) async {
+    bool? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () async {
+              result = await confirmDroppedConfigurationImport(
+                context,
+                'experiment.webscp',
+              );
+            },
+            child: const Text('Confirm drop'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Confirm drop'));
+    await tester.pumpAndSettle();
+    expect(find.text('Import dropped configuration?'), findsOneWidget);
+    expect(find.text('experiment.webscp'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('cancel-dropped-configuration')),
+    );
+    await tester.pumpAndSettle();
+    expect(result, isFalse);
+
+    await tester.tap(find.text('Confirm drop'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('import-dropped-configuration')),
+    );
+    await tester.pumpAndSettle();
+    expect(result, isTrue);
+  });
+
+  testWidgets('Only the waveform area is a configuration drop target', (
+    tester,
+  ) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: MainPage()),
+      ),
+    );
+    await tester.pump();
+
+    final dropRegion = find.byKey(
+      const ValueKey('waveform-configuration-drop-region'),
+    );
+    final toolbar = find.byType(ResponsiveToolbar);
+    expect(dropRegion, findsOneWidget);
+    expect(toolbar, findsOneWidget);
+    expect(
+      tester.getTopLeft(dropRegion).dy,
+      greaterThanOrEqualTo(tester.getBottomLeft(toolbar).dy),
+    );
   });
 
   test('Point readout interpolates ascending and descending waveforms', () {
@@ -367,12 +440,12 @@ void main() {
     var nativeBrightnessQueries = 0;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-          if (call.method == 'isDark') {
-            nativeBrightnessQueries++;
-            return nativeBrightnessQueries == 1 ? false : true;
-          }
-          return null;
-        });
+      if (call.method == 'isDark') {
+        nativeBrightnessQueries++;
+        return nativeBrightnessQueries == 1 ? false : true;
+      }
+      return null;
+    });
     addTearDown(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, null);
@@ -402,8 +475,8 @@ void main() {
     const channel = MethodChannel('mdslens/theme');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-          return call.method == 'isDark' ? true : null;
-        });
+      return call.method == 'isDark' ? true : null;
+    });
     addTearDown(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, null);
@@ -650,8 +723,7 @@ void main() {
   test(
     'Configuration open accepts desktop paths and mobile file bytes',
     () async {
-      const parsedConfig =
-          '{"columns":[[{"title":"Opened panel","x_label":"s",'
+      const parsedConfig = '{"columns":[[{"title":"Opened panel","x_label":"s",'
           '"y_label":"A","signal_specs":[{"y_expr":"\\\\ip"}]}]]}';
       String? desktopParsedPath;
       final desktop = AppState(
@@ -809,9 +881,8 @@ void main() {
 
       await app.saveFile();
 
-      final signals =
-          (jsonDecode(encodedJson!)['columns'][0][0]['signal_specs'])
-              as List<dynamic>;
+      final signals = (jsonDecode(encodedJson!)['columns'][0][0]
+          ['signal_specs']) as List<dynamic>;
       expect(signals, hasLength(2));
       expect(signals[0], {
         'shot': '163899',
@@ -849,8 +920,7 @@ void main() {
       final app = AppState(
         configOpenPicker: () async =>
             ConfigOpenSelection(name: 'portable.toml', bytes: Uint8List(0)),
-        configParser: (_) =>
-            '{"shot":"143850","columns":[[{"title":"Ip",'
+        configParser: (_) => '{"shot":"143850","columns":[[{"title":"Ip",'
             '"signal_specs":[{"y_expr":"\\\\pcrl01","experiment":"pcs_east",'
             '"server_ip":"202.127.204.12"}]}]]}',
         signalFetchWorker: (configJson, _, __) async {
@@ -1159,8 +1229,7 @@ void main() {
       final app = AppState(
         configOpenPicker: () async =>
             ConfigOpenSelection(name: 'before-login.toml', bytes: Uint8List(0)),
-        configParser: (_) =>
-            '{"shot":"163807","columns":[[{"title":"Ip",'
+        configParser: (_) => '{"shot":"163807","columns":[[{"title":"Ip",'
             '"signal_specs":[{"y_expr":"\\\\pcrl01","experiment":"pcs_east",'
             '"server_ip":"202.127.204.12"}]}]]}',
         loginWorker: (_, __, ___, ____) async =>
@@ -1242,8 +1311,7 @@ void main() {
           name: 'iphone-config.toml',
           bytes: Uint8List(0),
         ),
-        configParser: (_) =>
-            '{"shot":"163870","columns":[[{"title":"Ip",'
+        configParser: (_) => '{"shot":"163870","columns":[[{"title":"Ip",'
             '"extraction_points":0,"grid":false,'
             '"signal_specs":[{"y_expr":"\\\\pcrl01","experiment":"pcs_east",'
             '"server_ip":"202.127.204.12"}]}]]}',
@@ -1331,10 +1399,15 @@ void main() {
     app.columns[0][0]['signal_specs'] = [
       {'y_expr': r'\IP', 'x_expr': '', 'legend': 'Ip', 'color_name': '#1976D2'},
     ];
-    app.updatePlotSeriesByColRow(0, 0, 0, const [
-      [0.0, 1.0],
-      [1.0, 2.0],
-    ], null);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        const [
+          [0.0, 1.0],
+          [1.0, 2.0],
+        ],
+        null);
     app.interactionMode = 1;
     app.setCrosshair(0.5, sourcePlot: 0, sourceSeries: 0);
 
@@ -1614,10 +1687,15 @@ void main() {
       );
       await app.preferencesReady;
       app.setLoggedIn(true, 'test-token');
-      app.updatePlotSeriesByColRow(0, 0, 0, [
-        [0, 10],
-        [1, 11],
-      ], null);
+      app.updatePlotSeriesByColRow(
+          0,
+          0,
+          0,
+          [
+            [0, 10],
+            [1, 11],
+          ],
+          null);
 
       app.shotText = '163701';
       app.startRefresh();
@@ -1702,10 +1780,15 @@ void main() {
     );
     await app.preferencesReady;
     app.setLoggedIn(true, 'test-token');
-    app.updatePlotSeriesByColRow(0, 0, 0, [
-      [0, 10],
-      [1, 11],
-    ], null);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 10],
+          [1, 11],
+        ],
+        null);
     app.shotText = '163701';
     app.startRefresh();
 
@@ -1853,10 +1936,15 @@ void main() {
       );
       await app.preferencesReady;
       app.setLoggedIn(true, 'valid-token');
-      app.updatePlotSeriesByColRow(0, 0, 0, [
-        [0, 12],
-        [1, 13],
-      ], null);
+      app.updatePlotSeriesByColRow(
+          0,
+          0,
+          0,
+          [
+            [0, 12],
+            [1, 13],
+          ],
+          null);
 
       app.logout();
       app.startRefresh();
@@ -2146,9 +2234,9 @@ void main() {
       MethodCall? receivedCall;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
-            receivedCall = call;
-            return '/authorized/id_ed25519';
-          });
+        receivedCall = call;
+        return '/authorized/id_ed25519';
+      });
       addTearDown(() {
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(channel, null);
@@ -2434,16 +2522,26 @@ void main() {
     'Point mode draws a synchronized horizontal crosshair in every plot',
     (tester) async {
       final app = AppState();
-      app.updatePlotSeriesByColRow(0, 0, 0, [
-        [0, 10],
-        [1, 12],
-        [2, 14],
-      ], null);
-      app.updatePlotSeriesByColRow(0, 1, 0, [
-        [0, 20],
-        [1, 22],
-        [2, 24],
-      ], null);
+      app.updatePlotSeriesByColRow(
+          0,
+          0,
+          0,
+          [
+            [0, 10],
+            [1, 12],
+            [2, 14],
+          ],
+          null);
+      app.updatePlotSeriesByColRow(
+          0,
+          1,
+          0,
+          [
+            [0, 20],
+            [1, 22],
+            [2, 24],
+          ],
+          null);
       app.interactionMode = 1;
       app.setCrosshair(1, sourcePlot: 0, sourceSeries: 0);
 
@@ -2458,9 +2556,8 @@ void main() {
         ),
       );
 
-      final charts = tester
-          .widgetList<LineChart>(find.byType(LineChart))
-          .toList();
+      final charts =
+          tester.widgetList<LineChart>(find.byType(LineChart)).toList();
       expect(charts, hasLength(2));
       expect(charts.every((chart) => chart.duration == Duration.zero), isTrue);
       expect(charts[0].data.extraLinesData.horizontalLines.single.y, 12);
@@ -2486,14 +2583,24 @@ void main() {
       {'y_expr': r'\PCRL01', 'color_name': '#123456'},
       {'y_expr': r'\DFSDEV', 'legend': 'Density', 'color_name': '#654321'},
     ];
-    app.updatePlotSeriesByColRow(0, 0, 0, [
-      [0, 1],
-      [1, 2],
-    ], null);
-    app.updatePlotSeriesByColRow(0, 0, 1, [
-      [0, 2],
-      [1, 3],
-    ], null);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 1],
+          [1, 2],
+        ],
+        null);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        1,
+        [
+          [0, 2],
+          [1, 3],
+        ],
+        null);
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -2521,11 +2628,16 @@ void main() {
     tester,
   ) async {
     final app = AppState();
-    app.updatePlotSeriesByColRow(0, 0, 0, [
-      [0, 0],
-      [5, 5],
-      [10, 10],
-    ], null);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 0],
+          [5, 5],
+          [10, 10],
+        ],
+        null);
     app.interactionMode = 1;
 
     await tester.pumpWidget(
@@ -2563,11 +2675,16 @@ void main() {
   ) async {
     final app = AppState();
     await app.preferencesReady;
-    app.updatePlotSeriesByColRow(0, 0, 0, [
-      [0, 0],
-      [1, 1],
-      [2, 2],
-    ], null);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 0],
+          [1, 1],
+          [2, 2],
+        ],
+        null);
     app.interactionMode = 1;
     app.setCrosshair(0.5, sourcePlot: 0);
     addTearDown(tester.view.reset);
@@ -2592,11 +2709,16 @@ void main() {
   ) async {
     final app = AppState();
     app.applyFontSettings('Courier New', 17, 14, 13, 16);
-    app.updatePlotSeriesByColRow(0, 0, 0, [
-      [0, 10],
-      [1, 12],
-      [2, 14],
-    ], null);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 10],
+          [1, 12],
+          [2, 14],
+        ],
+        null);
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -2632,11 +2754,16 @@ void main() {
     tester,
   ) async {
     final app = AppState();
-    app.updatePlotSeriesByColRow(0, 0, 0, [
-      [0, 0],
-      [5, 5],
-      [10, 10],
-    ], null);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 0],
+          [5, 5],
+          [10, 10],
+        ],
+        null);
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -2702,11 +2829,16 @@ void main() {
     tester,
   ) async {
     final app = AppState();
-    app.updatePlotSeriesByColRow(0, 0, 0, [
-      [0, 0],
-      [5, 5],
-      [10, 10],
-    ], null);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 0],
+          [5, 5],
+          [10, 10],
+        ],
+        null);
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -2760,11 +2892,16 @@ void main() {
     tester,
   ) async {
     final app = AppState();
-    app.updatePlotSeriesByColRow(0, 0, 0, [
-      [0, 0],
-      [5, 5],
-      [10, 10],
-    ], null);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 0],
+          [5, 5],
+          [10, 10],
+        ],
+        null);
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -2801,11 +2938,16 @@ void main() {
   testWidgets('Stylus write tip pans in Zoom/Move mode', (tester) async {
     final app = AppState();
     addTearDown(app.dispose);
-    app.updatePlotSeriesByColRow(0, 0, 0, [
-      [0, 0],
-      [5, 5],
-      [10, 10],
-    ], null);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 0],
+          [5, 5],
+          [10, 10],
+        ],
+        null);
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -2849,11 +2991,16 @@ void main() {
   ) async {
     final app = AppState();
     addTearDown(app.dispose);
-    app.updatePlotSeriesByColRow(0, 0, 0, [
-      [0, 0],
-      [5, 5],
-      [10, 10],
-    ], null);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 0],
+          [5, 5],
+          [10, 10],
+        ],
+        null);
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -2907,11 +3054,16 @@ void main() {
   ) async {
     final app = AppState();
     addTearDown(app.dispose);
-    app.updatePlotSeriesByColRow(0, 0, 0, [
-      [0, 0],
-      [5, 5],
-      [10, 10],
-    ], null);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 0],
+          [5, 5],
+          [10, 10],
+        ],
+        null);
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -2947,11 +3099,16 @@ void main() {
   ) async {
     final app = AppState();
     addTearDown(app.dispose);
-    app.updatePlotSeriesByColRow(0, 0, 0, [
-      [0, 0],
-      [5, 5],
-      [10, 10],
-    ], null);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 0],
+          [5, 5],
+          [10, 10],
+        ],
+        null);
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -2991,11 +3148,16 @@ void main() {
     (tester) async {
       final app = AppState();
       addTearDown(app.dispose);
-      app.updatePlotSeriesByColRow(0, 0, 0, [
-        [0, 0],
-        [5, 5],
-        [10, 10],
-      ], null);
+      app.updatePlotSeriesByColRow(
+          0,
+          0,
+          0,
+          [
+            [0, 0],
+            [5, 5],
+            [10, 10],
+          ],
+          null);
 
       await tester.pumpWidget(
         ChangeNotifierProvider.value(
@@ -3092,20 +3254,26 @@ void main() {
     tester,
   ) async {
     final app = AppState();
-    app.updatePlotSeriesByColRow(0, 0, 0, [
-      [0, 0],
-      [5, 5],
-      [10, 10],
-    ], null);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 0],
+          [5, 5],
+          [10, 10],
+        ],
+        null);
 
     Widget panelApp(Widget child) => ChangeNotifierProvider.value(
-      value: app,
-      child: MaterialApp(
-        home: Scaffold(
-          body: Center(child: SizedBox(width: 500, height: 400, child: child)),
-        ),
-      ),
-    );
+          value: app,
+          child: MaterialApp(
+            home: Scaffold(
+              body: Center(
+                  child: SizedBox(width: 500, height: 400, child: child)),
+            ),
+          ),
+        );
 
     await tester.pumpWidget(panelApp(const PlotPanel(plotIdx: 0)));
     final first = await tester.startGesture(const Offset(220, 200), pointer: 1);
@@ -3146,11 +3314,16 @@ void main() {
     app.applyLayoutList([2, 2]);
     for (var column = 0; column < 2; column++) {
       for (var row = 0; row < 2; row++) {
-        app.updatePlotSeriesByColRow(column, row, 0, [
-          [0, column * 20 + row * 10],
-          [5, column * 20 + row * 10 + 5],
-          [10, column * 20 + row * 10 + 10],
-        ], null);
+        app.updatePlotSeriesByColRow(
+            column,
+            row,
+            0,
+            [
+              [0, column * 20 + row * 10],
+              [5, column * 20 + row * 10 + 5],
+              [10, column * 20 + row * 10 + 10],
+            ],
+            null);
       }
     }
     app.interactionMode = 1;
@@ -3176,9 +3349,8 @@ void main() {
       expect(rect.right, lessThanOrEqualTo(390));
       expect(rect.bottom, lessThanOrEqualTo(600));
     }
-    final charts = tester
-        .widgetList<LineChart>(find.byType(LineChart))
-        .toList();
+    final charts =
+        tester.widgetList<LineChart>(find.byType(LineChart)).toList();
     expect(charts, hasLength(4));
     expect(
       charts.map((chart) => chart.data.extraLinesData.horizontalLines.single.y),
@@ -3635,10 +3807,15 @@ void main() {
     final app = AppState();
     addTearDown(app.dispose);
     var exportDialogCalls = 0;
-    app.updatePlotSeriesByColRow(0, 0, 0, [
-      [0, 1],
-      [1, 2],
-    ], null);
+    app.updatePlotSeriesByColRow(
+        0,
+        0,
+        0,
+        [
+          [0, 1],
+          [1, 2],
+        ],
+        null);
     addTearDown(tester.view.reset);
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(900, 700);
