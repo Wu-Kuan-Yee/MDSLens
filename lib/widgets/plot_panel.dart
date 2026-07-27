@@ -89,6 +89,90 @@ double? interpolateWaveformY(List<List<double>> points, double x) {
   return y.isFinite ? y : null;
 }
 
+String formatPointXForReadout(
+  double value,
+  List<List<double>>? points,
+) {
+  final resolution = _localXResolution(points, value);
+  if (resolution == null || !resolution.isFinite || resolution <= 0) {
+    return value.toStringAsPrecision(12);
+  }
+
+  var exponent = (math.log(resolution) / math.ln10).floor();
+  var mantissa = resolution / math.pow(10, exponent);
+  // Collapse subtraction noise into a human-scale sampling step.
+  mantissa = (mantissa * 100).roundToDouble() / 100;
+  if (mantissa >= 10) {
+    mantissa /= 10;
+    exponent++;
+  }
+
+  var mantissaDecimals = 2;
+  var scale = 1.0;
+  for (var decimals = 0; decimals <= 2; decimals++) {
+    if ((mantissa * scale - (mantissa * scale).round()).abs() < 1e-7) {
+      mantissaDecimals = decimals;
+      break;
+    }
+    scale *= 10;
+  }
+  final initialDecimals = math.max(0, -exponent + mantissaDecimals);
+  const doubleEpsilon = 2.220446049250313e-16;
+  final tolerance = math.max(
+    resolution * 1e-3,
+    value.abs() * doubleEpsilon * 4,
+  );
+  for (var decimals = initialDecimals; decimals <= 15; decimals++) {
+    final formatted = value.toStringAsFixed(decimals);
+    final rounded = double.tryParse(formatted);
+    if (rounded != null && (rounded - value).abs() <= tolerance) {
+      return _trimFixedNumber(formatted);
+    }
+  }
+  return value.toStringAsPrecision(16);
+}
+
+double? _localXResolution(List<List<double>>? points, double x) {
+  if (points == null || points.length < 2 || !x.isFinite) return null;
+  final ascending = points.first[0] <= points.last[0];
+  var low = 0;
+  var high = points.length;
+  while (low < high) {
+    final middle = (low + high) ~/ 2;
+    final middleX = points[middle][0];
+    final before = ascending ? middleX < x : middleX > x;
+    if (before) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  final index = low.clamp(0, points.length - 1).toInt();
+  var resolution = double.infinity;
+  if (index > 0) {
+    final step = (points[index][0] - points[index - 1][0]).abs();
+    if (step > 0) resolution = math.min(resolution, step);
+  }
+  if (index + 1 < points.length) {
+    final step = (points[index + 1][0] - points[index][0]).abs();
+    if (step > 0) resolution = math.min(resolution, step);
+  }
+  return resolution.isFinite ? resolution : null;
+}
+
+String _trimFixedNumber(String text) {
+  if (!text.contains('.')) return text;
+  var end = text.length;
+  while (end > 0 && text.codeUnitAt(end - 1) == 0x30) {
+    end--;
+  }
+  if (end > 0 && text.codeUnitAt(end - 1) == 0x2e) {
+    end--;
+  }
+  final trimmed = text.substring(0, end);
+  return trimmed == '-0' ? '0' : trimmed;
+}
+
 Future<bool> showPanelSetupEditor(
   BuildContext context,
   Map<String, dynamic> panel, {
@@ -902,7 +986,12 @@ class _PlotPanelState extends State<PlotPanel> {
     final signals = (panel['signal_specs'] as List?)?.cast<Map>() ?? const [];
     final color = _sigColor(seriesIndex, signals);
     final xName = _effectiveXName(plot, panel, seriesIndex);
-    final lines = <String>['$xName: ${_fmtPointValue(x)}'];
+    final xPoints = seriesIndex < plot.series.length
+        ? plot.series[seriesIndex]?.points
+        : null;
+    final lines = <String>[
+      '$xName: ${formatPointXForReadout(x, xPoints)}',
+    ];
     for (var index = 0; index < plot.series.length; index++) {
       final usable = _usableSeriesIndex(plot, panel, index);
       if (usable != index) continue;

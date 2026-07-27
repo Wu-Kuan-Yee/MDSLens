@@ -71,6 +71,31 @@ void main() {
     );
   });
 
+  test('Point readout preserves the local X sampling precision', () {
+    const points = [
+      [10000.0000, 1.0],
+      [10000.0001, 2.0],
+      [10000.0002, 3.0],
+    ];
+    expect(formatPointXForReadout(10000.0001, points), '10000.0001');
+    expect(
+      formatPointXForReadout(0.0000025, const [
+        [0.0, 1.0],
+        [0.0000025, 2.0],
+        [0.0000050, 3.0],
+      ]),
+      '0.0000025',
+    );
+    expect(
+      formatPointXForReadout(2.0001, const [
+        [2.0002, 1.0],
+        [2.0001, 2.0],
+        [2.0000, 3.0],
+      ]),
+      '2.0001',
+    );
+  });
+
   test(
       'Login responses reject empty bodies without exposing JSON parser errors',
       () {
