@@ -140,6 +140,24 @@ typedef SignalPrewarmWorker = Future<void> Function(
   String sshSettingsJson,
 );
 
+enum _WaveformFetchKind { global, panel }
+
+class _WaveformFetchRequest {
+  _WaveformFetchRequest.global(this.shot)
+      : kind = _WaveformFetchKind.global,
+        plotIndex = null;
+
+  _WaveformFetchRequest.panel(this.shot, this.plotIndex)
+      : kind = _WaveformFetchKind.panel;
+
+  final _WaveformFetchKind kind;
+  final String shot;
+  final int? plotIndex;
+  final Completer<void> completion = Completer<void>();
+
+  String key(int dataMode) => '${kind.name}|$shot|$plotIndex|$dataMode';
+}
+
 typedef ShotInfoFetchWorker = Future<String> Function(
   String apiUrl,
   String token,
@@ -945,6 +963,9 @@ class AppState extends ChangeNotifier {
   String get status => _status;
   int _fetchGeneration = 0;
   int? _activeNativeFetchId;
+  _WaveformFetchRequest? _activeWaveformFetch;
+  _WaveformFetchRequest? _pendingWaveformFetch;
+  bool _drainingWaveformFetches = false;
   Timer? _fullShotDebounceTimer;
   DateTime? _lastFullShotScheduleAt;
   int _rapidFullShotChanges = 0;
@@ -979,6 +1000,7 @@ class AppState extends ChangeNotifier {
 
   void _invalidateFetchForSettingsChange() {
     _cancelPendingFullShotRefresh();
+    _discardPendingWaveformFetch();
     _cancelActiveNativeFetch();
     _fetchGeneration++;
     _fetchingPlotIndex = null;
@@ -997,6 +1019,71 @@ class AppState extends ChangeNotifier {
     } catch (_) {
       // The result-generation guard below still prevents stale data from
       // reaching the UI when a development build has an older native bridge.
+    }
+  }
+
+  void _discardPendingWaveformFetch() {
+    final pending = _pendingWaveformFetch;
+    _pendingWaveformFetch = null;
+    if (pending != null && !pending.completion.isCompleted) {
+      pending.completion.complete();
+    }
+  }
+
+  Future<void> _queueWaveformFetch(_WaveformFetchRequest request) {
+    final active = _activeWaveformFetch;
+    if (active != null && active.key(_dataMode) == request.key(_dataMode)) {
+      return active.completion.future;
+    }
+    final pending = _pendingWaveformFetch;
+    if (pending != null && pending.key(_dataMode) == request.key(_dataMode)) {
+      return pending.completion.future;
+    }
+
+    _discardPendingWaveformFetch();
+    _pendingWaveformFetch = request;
+    if (active != null) {
+      _cancelActiveNativeFetch();
+      _fetchGeneration++;
+      _fetching = true;
+      _fetchingPlotIndex = request.plotIndex;
+      _status = request.kind == _WaveformFetchKind.global
+          ? 'Waiting for the previous load to stop...'
+          : 'Waiting to reload panel ${request.plotIndex! + 1}...';
+      notifyListeners();
+    }
+    if (!_drainingWaveformFetches) {
+      unawaited(_drainWaveformFetches());
+    }
+    return request.completion.future;
+  }
+
+  Future<void> _drainWaveformFetches() async {
+    if (_drainingWaveformFetches) return;
+    _drainingWaveformFetches = true;
+    try {
+      while (!_disposed && _pendingWaveformFetch != null) {
+        final request = _pendingWaveformFetch!;
+        _pendingWaveformFetch = null;
+        _activeWaveformFetch = request;
+        try {
+          if (request.kind == _WaveformFetchKind.global) {
+            await _executeGlobalFetch(shot: request.shot);
+          } else {
+            await _executeSinglePanelFetch(request.plotIndex!);
+          }
+        } finally {
+          if (!request.completion.isCompleted) request.completion.complete();
+          if (identical(_activeWaveformFetch, request)) {
+            _activeWaveformFetch = null;
+          }
+        }
+      }
+    } finally {
+      _drainingWaveformFetches = false;
+      if (!_disposed && _pendingWaveformFetch != null) {
+        unawaited(_drainWaveformFetches());
+      }
     }
   }
 
@@ -1026,6 +1113,7 @@ class AppState extends ChangeNotifier {
 
   void _scheduleFullShotFetch(String shot) {
     _cancelPendingFullShotRefresh();
+    _discardPendingWaveformFetch();
     _cancelActiveNativeFetch();
     _fetchGeneration++;
     final delay = _nextFullShotDebounceDelay();
@@ -2299,7 +2387,11 @@ class AppState extends ChangeNotifier {
     });
   }
 
-  Future<void> _doFetch({required String shot}) async {
+  Future<void> _doFetch({required String shot}) {
+    return _queueWaveformFetch(_WaveformFetchRequest.global(shot));
+  }
+
+  Future<void> _executeGlobalFetch({required String shot}) async {
     if (!_requireActiveSession('load waveforms')) return;
     _cancelActiveNativeFetch();
     final generation = ++_fetchGeneration;
@@ -2406,6 +2498,7 @@ class AppState extends ChangeNotifier {
 
   void stopFetch() {
     _cancelPendingFullShotRefresh(resetCadence: true);
+    _discardPendingWaveformFetch();
     _cancelActiveNativeFetch();
     _fetchGeneration++;
     _fetching = false;
@@ -2414,7 +2507,14 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> fetchSinglePanel(int plotIdx) async {
+  Future<void> fetchSinglePanel(int plotIdx) {
+    final shot = _displayedShot.trim().isNotEmpty
+        ? _displayedShot.trim()
+        : _shotText.trim();
+    return _queueWaveformFetch(_WaveformFetchRequest.panel(shot, plotIdx));
+  }
+
+  Future<void> _executeSinglePanelFetch(int plotIdx) async {
     if (!_requireActiveSession('reload a panel')) return;
     if (_columns.isEmpty) return;
     var targetCol = -1, targetRow = -1;
@@ -2673,6 +2773,7 @@ class AppState extends ChangeNotifier {
     _disposed = true;
     _sessionGeneration++;
     _cancelPendingFullShotRefresh(resetCadence: true);
+    _discardPendingWaveformFetch();
     _cancelActiveNativeFetch();
     _disconnectSshTunnels();
     _fetchGeneration++;

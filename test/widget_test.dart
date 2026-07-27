@@ -1602,14 +1602,19 @@ void main() {
     expect(app.fetching, isFalse);
     app.startRefresh();
     expect(app.fetching, isTrue);
-    expect(pending, hasLength(2));
-    expect(requestedConfigs.last, contains('163702'));
+    expect(
+      pending,
+      hasLength(1),
+      reason: 'the replacement must wait for the cancelled worker to finish',
+    );
 
     pending[0].complete(
       '[{"column":0,"row":0,"signal":0,'
       '"series":{"points":[[0,111],[1,112]],"error":""}}]',
     );
     await Future<void>.delayed(Duration.zero);
+    expect(pending, hasLength(2));
+    expect(requestedConfigs.last, contains('163702'));
     expect(app.fetching, isTrue);
     expect(app.plots[0].series[0]!.points![0][1], 10);
 
@@ -1757,6 +1762,51 @@ void main() {
       [0, 20],
       [1, 21],
     ]);
+  });
+
+  test('Panel reload waits for an active global waveform worker', () async {
+    final pending = <Completer<String>>[];
+    final requestedConfigs = <String>[];
+    final app = AppState(
+      signalFetchWorker: (configJson, _, __) {
+        requestedConfigs.add(configJson);
+        final result = Completer<String>();
+        pending.add(result);
+        return result.future;
+      },
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setLoggedIn(true, 'test-token');
+    app.shotText = '163701';
+
+    app.startRefresh();
+    expect(pending, hasLength(1));
+    unawaited(app.fetchSinglePanel(1));
+    expect(
+      pending,
+      hasLength(1),
+      reason: 'global and panel workers must not overlap',
+    );
+
+    pending.first.complete(
+      '[{"column":0,"row":0,"signal":0,'
+      '"series":{"points":[[0,10],[1,11]],"error":""}}]',
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(pending, hasLength(2));
+    final config = jsonDecode(requestedConfigs.last) as Map<String, dynamic>;
+    final columns = config['columns'] as List;
+    expect(((columns[0] as List)[0] as Map)['signal_specs'], isEmpty);
+    expect(((columns[0] as List)[1] as Map)['signal_specs'], isNotEmpty);
+
+    pending.last.complete(
+      '[{"column":0,"row":1,"signal":0,'
+      '"series":{"points":[[0,20],[1,21]],"error":""}}]',
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(app.plots[1].series[0]?.points?.first.last, 20);
   });
 
   test('Logout preserves loaded data and blocks authenticated operations',
