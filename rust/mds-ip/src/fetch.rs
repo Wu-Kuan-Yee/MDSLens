@@ -7,9 +7,25 @@
 
 use crate::protocol::{self, Message};
 use mds_core::types::{DataReadMode, PlotSpec, SignalSeries, SignalSpec};
+use std::collections::HashMap;
 use std::net::TcpStream;
+use std::sync::{Mutex, OnceLock};
 
 const FIXED_TIME_RESOLUTION_SECONDS: f64 = 0.0001;
+
+#[derive(Clone)]
+struct SignalMetadata {
+    unit: String,
+    x_name: String,
+    x_unit: String,
+}
+
+static SIGNAL_METADATA_CACHE: OnceLock<Mutex<HashMap<String, SignalMetadata>>> =
+    OnceLock::new();
+
+fn signal_metadata_cache() -> &'static Mutex<HashMap<String, SignalMetadata>> {
+    SIGNAL_METADATA_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 // ── Fetch request ─────────────────────────────────────────────────────────
 
@@ -447,23 +463,54 @@ pub fn normalized_name(expr: &str) -> String {
 
 fn populate_series_metadata(socket: &mut TcpStream, request: &FetchRequest, series: &mut SignalSeries) {
     let y_expr = request.sig.y_expr.trim();
-    series.unit = query_text(socket, &format!("units_of({})", y_expr))
-        .map(|unit| scaled_si_unit(&unit, expression_numeric_scale(y_expr)))
+    let configured_x = request.sig.x_expr.trim();
+    let cache_key = format!(
+        "{}|{}|{}|{}",
+        request.sig.server_ip, request.sig.experiment, y_expr, configured_x
+    );
+    if let Some(metadata) = signal_metadata_cache()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .get(&cache_key)
+        .cloned()
+    {
+        series.unit = metadata.unit;
+        series.x_name = metadata.x_name;
+        series.x_unit = metadata.x_unit;
+        return;
+    }
+
+    let raw_unit = query_text(socket, &format!("units_of({})", y_expr));
+    series.unit = raw_unit
+        .as_ref()
+        .map(|unit| scaled_si_unit(unit, expression_numeric_scale(y_expr)))
         .unwrap_or_default();
 
-    let configured_x = request.sig.x_expr.trim();
     let x_expr = if configured_x.is_empty() {
         format!("dim_of({})", y_expr)
     } else {
         configured_x.to_string()
     };
-    series.x_unit = query_text(socket, &format!("units_of({})", x_expr)).unwrap_or_default();
+    let raw_x_unit = query_text(socket, &format!("units_of({})", x_expr));
+    series.x_unit = raw_x_unit.clone().unwrap_or_default();
     // A dimension is often an anonymous RANGE/ARRAY rather than a named tree
     // node. Prefer the name returned by MDSplus, but retain the exact source
     // expression when no name exists instead of presenting a fabricated "x".
-    series.x_name = query_text(socket, &format!("name_of({})", x_expr))
+    let raw_x_name = query_text(socket, &format!("name_of({})", x_expr));
+    series.x_name = raw_x_name.clone()
         .and_then(valid_axis_name)
         .unwrap_or_else(|| axis_expression_label(&x_expr));
+
+    if raw_unit.is_some() || raw_x_unit.is_some() || raw_x_name.is_some() {
+        signal_metadata_cache()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(cache_key, SignalMetadata {
+                unit: series.unit.clone(),
+                x_name: series.x_name.clone(),
+                x_unit: series.x_unit.clone(),
+            });
+    }
 }
 
 fn valid_axis_name(value: String) -> Option<String> {

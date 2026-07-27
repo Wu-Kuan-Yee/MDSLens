@@ -166,9 +166,11 @@ impl SshTunnelManager {
                             identity_file: ssh_key.clone(),
                         };
                         let rh2 = rh.clone();
-                        relay_via_ssh(local, &s, &rh2, rp);
-                        // If relay failed, local would be dropped causing RST.
-                        // This line is only reached if relay_via_ssh returned Ok.
+                        // MDSIP sockets remain open for reuse. Relay each one
+                        // independently so it cannot block later accepts.
+                        std::thread::spawn(move || {
+                            relay_via_ssh(local, &s, &rh2, rp);
+                        });
                     }
                     Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock
                                || e.kind() == std::io::ErrorKind::Interrupted => {

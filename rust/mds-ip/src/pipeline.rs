@@ -5,7 +5,10 @@
 //!
 //! Ported from `src/mds/mds_ip_client.cpp`.
 
-use crate::client::{with_reusable_connection, with_thread_local_pool};
+use crate::client::{
+    ensure_reusable_connections, reusable_connection_count, warm_reusable_connection,
+    with_reusable_connection,
+};
 use crate::fetch::{self, effective_read_mode, FetchRequest, FetchResult};
 use crate::protocol;
 use mds_core::types::{DataReadMode, LayoutConfig, LoadedSignal, PlotSpec, SignalSpec};
@@ -78,29 +81,31 @@ pub fn fetch_all(
         retry_transient(&requests, &results, callback, cancel);
     }
 
-    // Build final output
+    // Return the current load immediately, then grow the hot pool for later
+    // refreshes without delaying this result.
     let guard = results.lock().unwrap();
-    guard.iter()
+    let output = guard.iter()
         .filter_map(|r| r.as_ref().map(|fr| fetch_result_to_loaded(&requests, fr)))
-        .collect()
+        .collect();
+    drop(guard);
+    grow_hot_pool(&requests, &groups);
+    output
 }
 
 /// Pre-connect to all unique servers in the layout.
 pub fn warm_connections(config: &LayoutConfig, cancel: &Arc<AtomicBool>) {
-    let mut servers: Vec<&str> = config.columns.iter()
+    let mut servers: Vec<String> = config.columns.iter()
         .flat_map(|c| c.iter())
         .flat_map(|p| p.signal_specs.iter())
         .filter(|s| !s.server_ip.is_empty() && !s.is_hidden())
-        .map(|s| s.server_ip.as_str())
+        .map(|s| s.server_ip.clone())
         .collect();
     servers.sort();
     servers.dedup();
 
-    for server in &servers {
+    for server in servers {
         if cancel.load(Ordering::Relaxed) { break; }
-        with_thread_local_pool(|pool| {
-            let _ = pool.get_or_connect(server, protocol::MDS_PORT, "", "");
-        });
+        let _ = warm_reusable_connection(&server, protocol::MDS_PORT);
     }
 }
 
@@ -171,21 +176,41 @@ fn retry_transient(
 
     if to_retry.is_empty() { return; }
 
-    // The first wave deliberately opens several connections for speed, but
-    // mobile SSH relays and some MDS servers can temporarily reject that
-    // burst. Retry every no-data result serially with its own server/tree/shot.
-    for index in to_retry {
+    // Retry genuine transient failures with bounded parallelism. Missing nodes
+    // are permanent and must not delay every otherwise-complete panel.
+    const MAX_RETRY_SOCKETS: usize = 8;
+    for wave in to_retry.chunks(MAX_RETRY_SOCKETS) {
         if cancel.load(Ordering::Relaxed) { break; }
-        let Some(request) = requests.get(index) else { continue };
-        for fr in fetch_chunk_serial(std::slice::from_ref(request), cancel) {
-            let idx = fr.loaded_index;
-            let loaded = fetch_result_to_loaded(requests, &fr);
-            callback(loaded);
-            if let Ok(mut res) = results.lock() {
-                if idx < res.len() { res[idx] = Some(fr); }
+        let mut handles = Vec::with_capacity(wave.len());
+        for &index in wave {
+            let Some(request) = requests.get(index).cloned() else { continue };
+            let cancel = cancel.clone();
+            handles.push(std::thread::spawn(move || {
+                fetch_chunk_serial(std::slice::from_ref(&request), &cancel)
+            }));
+        }
+        for handle in handles {
+            if let Ok(retried) = handle.join() {
+                for fr in retried {
+                    let idx = fr.loaded_index;
+                    let loaded = fetch_result_to_loaded(requests, &fr);
+                    callback(loaded);
+                    if let Ok(mut res) = results.lock() {
+                        if idx < res.len() { res[idx] = Some(fr); }
+                    }
+                }
             }
         }
     }
+}
+
+fn is_permanent_mds_error(error: &str) -> bool {
+    let error = error.to_ascii_lowercase();
+    error.contains("node not found")
+        || error.contains("no data available")
+        || error.contains("missing server/tree/shot/signal")
+        || error.contains("%tree-w-nnf")
+        || error.contains("%tree-e-nodata")
 }
 
 fn retry_indices(
@@ -196,7 +221,10 @@ fn retry_indices(
         .filter_map(|request| {
             let needs_retry = results.get(request.loaded_index)
                 .and_then(|result| result.as_ref())
-                .is_none_or(|result| !result.series.has_data());
+                .is_none_or(|result| {
+                    !result.series.has_data()
+                        && !is_permanent_mds_error(&result.series.error)
+                });
             needs_retry.then_some(request.loaded_index)
         })
         .collect()
@@ -246,14 +274,35 @@ fn build_chunks(requests: &[FetchRequest], groups: &HashMap<String, Vec<usize>>)
     let mut chunks: Vec<Vec<usize>> = Vec::new();
     for indices in groups.values() {
         let first = &requests[indices[0]];
-        let is_east = !first.shot.is_empty() && first.sig.x_expr.trim().is_empty();
-        // Split groups for parallelism: each chunk uses 1 connection serially
-        // More chunks = more parallel connections = faster fetch
-        if indices.len() >= 2 && is_east {
-            let n = ((indices.len() + 1) / 2).min(8); // 1-2 signals per chunk, max 8 chunks
-            let size = (indices.len() + n - 1) / n;
-            for bucket in indices.chunks(size) {
-                chunks.push(bucket.to_vec());
+        let available =
+            reusable_connection_count(&first.sig.server_ip, protocol::MDS_PORT).max(1);
+        let desired = ((indices.len() + 1) / 2).clamp(1, 8);
+        let hot_bucket_count = available.min(desired);
+        let is_east = first.sig.experiment.trim().eq_ignore_ascii_case("east");
+
+        // A cold handshake and TreeOpen cost more than saved-signal reads, so
+        // a cold group starts on one socket. Reuse multiple sockets only when
+        // the background pool has already made them hot.
+        if hot_bucket_count > 1 {
+            let mut buckets = vec![Vec::new(); hot_bucket_count];
+            for (position, &index) in indices.iter().enumerate() {
+                buckets[position % hot_bucket_count].push(index);
+            }
+            chunks.extend(buckets.into_iter().filter(|bucket| !bucket.is_empty()));
+        } else if is_east && indices.len() > 16 {
+            let bucket_count = if indices.len() > 48 {
+                6
+            } else if indices.len() > 32 {
+                4
+            } else {
+                2
+            };
+            let mut buckets = vec![Vec::new(); bucket_count];
+            for (position, &index) in indices.iter().enumerate() {
+                buckets[position % bucket_count].push(index);
+            }
+            for bucket in buckets {
+                if !bucket.is_empty() { chunks.push(bucket); }
             }
         } else {
             chunks.push(indices.clone());
@@ -261,6 +310,28 @@ fn build_chunks(requests: &[FetchRequest], groups: &HashMap<String, Vec<usize>>)
     }
     chunks.sort_by_key(|c| -(c.len() as isize)); // largest first
     chunks
+}
+
+fn grow_hot_pool(requests: &[FetchRequest], groups: &HashMap<String, Vec<usize>>) {
+    let mut targets: HashMap<String, usize> = HashMap::new();
+    for indices in groups.values() {
+        let Some(first) = indices.first().and_then(|&index| requests.get(index)) else {
+            continue;
+        };
+        let desired = ((indices.len() + 1) / 2).clamp(1, 8);
+        targets
+            .entry(first.sig.server_ip.clone())
+            .and_modify(|target| *target = (*target).max(desired))
+            .or_insert(desired);
+    }
+    for (server, target) in targets {
+        if target <= reusable_connection_count(&server, protocol::MDS_PORT) {
+            continue;
+        }
+        std::thread::spawn(move || {
+            ensure_reusable_connections(&server, protocol::MDS_PORT, target);
+        });
+    }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -362,5 +433,35 @@ mod tests {
             },
         })];
         assert!(retry_indices(&requests, &loaded).is_empty());
+    }
+
+    #[test]
+    fn permanent_mds_errors_are_not_retried() {
+        let requests = build_requests(&make_test_config(), DataReadMode::Thin);
+        let missing = vec![Some(FetchResult {
+            loaded_index: 0,
+            series: mds_core::types::SignalSeries {
+                error: "%TREE-W-NNF, Node not found".into(),
+                ..Default::default()
+            },
+        })];
+        assert!(retry_indices(&requests, &missing).is_empty());
+    }
+
+    #[test]
+    fn cold_ordinary_groups_start_on_one_connection() {
+        let mut config = make_test_config();
+        config.columns[0][0].signal_specs = (0..6)
+            .map(|index| SignalSpec {
+                y_expr: format!("\\signal_{index}"),
+                experiment: "pcs_east".into(),
+                server_ip: "test-cold-group.invalid".into(),
+                ..Default::default()
+            })
+            .collect();
+        let requests = build_requests(&config, DataReadMode::Thin);
+        let chunks = build_chunks(&requests, &group_requests(&requests));
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].len(), 6);
     }
 }

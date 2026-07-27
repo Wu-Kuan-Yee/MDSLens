@@ -135,6 +135,11 @@ typedef SignalFetchWorker = Future<String> Function(
   String sshSettingsJson,
 );
 
+typedef SignalPrewarmWorker = Future<void> Function(
+  String configJson,
+  String sshSettingsJson,
+);
+
 typedef ShotInfoFetchWorker = Future<String> Function(
   String apiUrl,
   String token,
@@ -226,6 +231,21 @@ Future<String> _fetchSignalsInBackground(
     ),
   );
 }
+
+Future<void> _prewarmSignalsInBackground(
+  String configJson,
+  String sshSettingsJson,
+) async {
+  final raw = await Isolate.run(
+    () => RustBridge.instance.prewarmSig(configJson, sshSettingsJson),
+  );
+  final decoded = jsonDecode(raw);
+  if (decoded is Map && decoded['error'] != null) {
+    throw decoded['error'].toString();
+  }
+}
+
+Future<void> _skipSignalPrewarm(String _, String __) async {}
 
 Future<String> _fetchShotInfoInBackground(
   String apiUrl,
@@ -432,6 +452,7 @@ class AppState extends ChangeNotifier {
   static const int maximumShotHistoryLimit = 10000;
 
   final SignalFetchWorker _signalFetchWorker;
+  final SignalPrewarmWorker _signalPrewarmWorker;
   final SshDisconnect _sshDisconnect;
   final ShotInfoFetchWorker _shotInfoFetchWorker;
   final LoginWorker _loginWorker;
@@ -570,6 +591,7 @@ class AppState extends ChangeNotifier {
 
   AppState({
     SignalFetchWorker? signalFetchWorker,
+    SignalPrewarmWorker? signalPrewarmWorker,
     SshDisconnect? sshDisconnect,
     ShotInfoFetchWorker? shotInfoFetchWorker,
     LoginWorker? loginWorker,
@@ -582,6 +604,10 @@ class AppState extends ChangeNotifier {
     UserDataStore? userDataStore,
     CredentialStore? credentialStore,
   })  : _signalFetchWorker = signalFetchWorker ?? _fetchSignalsInBackground,
+        _signalPrewarmWorker = signalPrewarmWorker ??
+            (signalFetchWorker == null
+                ? _prewarmSignalsInBackground
+                : _skipSignalPrewarm),
         _sshDisconnect =
             sshDisconnect ?? (() => RustBridge.instance.disconnectSsh()),
         _shotInfoFetchWorker =
@@ -2540,7 +2566,19 @@ class AppState extends ChangeNotifier {
     _status = 'Fetching latest shot...';
     notifyListeners();
     try {
+      // MDSIP authentication is the dominant cold-start cost. Overlap one
+      // shared-pool handshake with the independent latest-shot HTTP request.
+      final prewarm = _signalPrewarmWorker(
+        _buildSignalConfigJson(_shotText, 0),
+        sshSettings,
+      );
       final data = await _latestShotWorker(apiUrl, token, sshSettings);
+      try {
+        await prewarm;
+      } catch (_) {
+        // The authoritative fetch below reports a useful per-signal error and
+        // can still reconnect normally if speculative warming failed.
+      }
       if (!_isCurrentFetch(generation)) return;
       recordSshUsage(sshSettings.isNotEmpty);
       final shot =

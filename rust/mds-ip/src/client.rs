@@ -244,6 +244,45 @@ where
     Ok(result)
 }
 
+/// Establish one process-wide reusable socket without opening a tree.
+pub fn warm_reusable_connection(host: &str, port: u16) -> Result<(), String> {
+    with_reusable_connection(host, port, "", "", |_| ((), true))
+}
+
+/// Number of currently idle process-wide sockets for a server.
+pub fn reusable_connection_count(host: &str, port: u16) -> usize {
+    let key = connection_key(host, port);
+    shared_connections()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .get(&key)
+        .map_or(0, Vec::len)
+}
+
+/// Grow the reusable pool without borrowing an existing connection.
+pub fn ensure_reusable_connections(host: &str, port: u16, target: usize) {
+    let target = target.min(MAX_IDLE_CONNECTIONS_PER_SERVER);
+    let missing = target.saturating_sub(reusable_connection_count(host, port));
+    let mut handles = Vec::with_capacity(missing);
+    for _ in 0..missing {
+        let host = host.to_string();
+        handles.push(std::thread::spawn(move || {
+            MdsConnection::connect(&host, port).ok()
+        }));
+    }
+    for handle in handles {
+        let Ok(Some(connection)) = handle.join() else { continue };
+        let key = connection_key(host, port);
+        let mut pool = shared_connections()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let idle = pool.entry(key).or_default();
+        if idle.len() < target {
+            idle.push(connection);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

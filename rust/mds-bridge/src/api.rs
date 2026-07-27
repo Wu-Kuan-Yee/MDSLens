@@ -365,6 +365,27 @@ pub fn fetch_signals_ssh(config_json: String, mode: i32, ssh_settings_json: Stri
     fetch_signals_inner(config_json, mode, ssh_settings)
 }
 
+/// Warm the process-wide connection pool used by waveform reads.
+pub fn prewarm_signals(config_json: String, ssh_settings_json: String) -> Result<(), String> {
+    let config: FrbLayoutConfig =
+        serde_json::from_str(&config_json).map_err(|e| format!("Config parse: {e}"))?;
+    let mut rust_config = config.into_rust();
+    if !ssh_settings_json.is_empty() {
+        let ssh: FrbSshSettings = serde_json::from_str(&ssh_settings_json)
+            .map_err(|e| format!("SSH settings parse: {e}"))?;
+        if !ssh.host.is_empty() && ssh.mode > 0 {
+            let mut manager = data_tunnel_manager()
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            manager.reload_settings(ssh.into_rust());
+            manager.prepare_layout(&mut rust_config)?;
+        }
+    }
+    let cancel = Arc::new(AtomicBool::new(false));
+    mds_ip::pipeline::warm_connections(&rust_config, &cancel);
+    Ok(())
+}
+
 fn fetch_signals_inner(config_json: String, mode: i32, ssh_settings: Option<FrbSshSettings>) -> Vec<FrbLoadedSignal> {
     let request_id = serde_json::from_str::<serde_json::Value>(&config_json)
         .ok()

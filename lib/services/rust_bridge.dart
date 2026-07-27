@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:ffi/ffi.dart';
 
 class RustBridge {
-  static const int _expectedAbiVersion = 3;
+  static const int _expectedAbiVersion = 4;
   static RustBridge? _i;
   // ignore: unused_field
   final DynamicLibrary _lib;
@@ -17,6 +17,7 @@ class RustBridge {
   final String Function(String) sshT;
   final String Function(String, String) fetchSig;
   final String Function(String, String, String) fetchSigSsh;
+  final String Function(String, String) prewarmSig;
   final bool Function(int) cancelFetch;
   final void Function() disconnectSsh;
 
@@ -31,6 +32,7 @@ class RustBridge {
         sshT = _wrap1(_lib, 'mds_ssh_test'),
         fetchSig = _wrap2(_lib, 'mds_fetch_signals'),
         fetchSigSsh = _wrap3(_lib, 'mds_fetch_signals_ssh'),
+        prewarmSig = _wrap2(_lib, 'mds_prewarm_signals'),
         cancelFetch = _wrapCancelFetch(_lib),
         disconnectSsh = _lib.lookupFunction<Void Function(), void Function()>(
             'mds_disconnect_ssh');
