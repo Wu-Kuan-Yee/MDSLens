@@ -30,7 +30,8 @@ build/dist/mdslens-web-<platform>-<x64|arm64>.tar.gz
     ├── mdslens-web-gateway
     ├── web/
     ├── README.md
-    └── LICENSE
+    ├── LICENSE
+    └── NOTO_SANS_SC_LICENSE.txt
 ```
 
 Tagged releases publish Linux x64 and ARM64 server archives. Local macOS builds

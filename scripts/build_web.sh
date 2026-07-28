@@ -54,6 +54,7 @@ cp rust/target/release/mdslens-web-gateway "$stage/"
 cp -R build/web "$stage/web"
 cp docs/WEB_DEPLOYMENT.md "$stage/README.md"
 cp LICENSE "$stage/LICENSE"
+cp assets/fonts/OFL.txt "$stage/NOTO_SANS_SC_LICENSE.txt"
 
 mkdir -p "$dist"
 tar -C "$(dirname "$stage")" -czf \
