@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 /// Private persistence owned by this application.
@@ -21,6 +22,7 @@ class UserDataStore {
   Future<Directory?> rootDirectory() async {
     if (_rootOverride != null) return _rootOverride;
     if (disableFileStorageForTests) return null;
+    if (kIsWeb) return null;
     try {
       if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
         final home = Platform.isWindows

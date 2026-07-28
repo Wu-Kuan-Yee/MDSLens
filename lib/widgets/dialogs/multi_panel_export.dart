@@ -2,9 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math' as math;
-import 'dart:typed_data';
-
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/app_state.dart';
@@ -676,7 +675,9 @@ Future<void> exportMultiplePanels(
     return;
   }
 
-  final mobile = mobileOverride ?? (Platform.isAndroid || Platform.isIOS);
+  final browser = kIsWeb;
+  final mobile =
+      mobileOverride ?? (!browser && (Platform.isAndroid || Platform.isIOS));
   try {
     app.setStatus('Choose where to export the selected panel data...');
     if (saveDialog == null && directoryDialog == null) {
@@ -700,7 +701,7 @@ Future<void> exportMultiplePanels(
       return;
     }
 
-    if (mobile || saveDialog != null) {
+    if (mobile || browser || saveDialog != null) {
       final archiveName = _archiveFileName(app);
       final archive = createStoredZip({
         for (final file in files) file.name: file.bytes,
@@ -711,6 +712,7 @@ Future<void> exportMultiplePanels(
         allowedExtensions: const ['zip'],
         bytes: archive,
         mobileOverride: mobile,
+        webOverride: browser,
         saveDialog: saveDialog,
       );
       app.setStatus(

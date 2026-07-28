@@ -1888,6 +1888,22 @@ void main() {
       );
       expect(mobileDialogBytes, bytes);
       expect(mobilePath, 'content://documents/mobile-config.toml');
+
+      Uint8List? browserDialogBytes;
+      final browserName = await saveBytesWithFilePicker(
+        dialogTitle: 'Save',
+        fileName: 'config.webscp',
+        allowedExtensions: const ['webscp'],
+        bytes: bytes,
+        mobileOverride: false,
+        webOverride: true,
+        saveDialog: (payload) async {
+          browserDialogBytes = payload;
+          return 'config.webscp';
+        },
+      );
+      expect(browserDialogBytes, bytes);
+      expect(browserName, 'config.webscp');
     },
   );
 

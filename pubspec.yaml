@@ -17,6 +17,8 @@ dependencies:
   shared_preferences: ^2.5.5
   url_launcher: ^6.3.2
   desktop_drop: ^0.7.1
+  http: ^1.5.0
+  web: ^1.1.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

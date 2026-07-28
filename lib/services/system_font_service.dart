@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 const MethodChannel _systemFontsChannel = MethodChannel('mdslens/system_fonts');
@@ -18,6 +19,7 @@ class SystemFontService {
   ];
 
   static Future<List<String>> loadFamilies() async {
+    if (kIsWeb) return fallbackFamilies;
     if (!(Platform.isAndroid ||
         Platform.isIOS ||
         Platform.isMacOS ||

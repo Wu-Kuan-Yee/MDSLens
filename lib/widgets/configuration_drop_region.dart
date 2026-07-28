@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -20,7 +21,7 @@ Future<Uint8List> readDroppedConfigurationBytes(
   bool? androidOverride,
   MethodChannel channel = _androidDropFileChannel,
 }) async {
-  final isAndroid = androidOverride ?? Platform.isAndroid;
+  final isAndroid = androidOverride ?? (!kIsWeb && Platform.isAndroid);
   if (isAndroid && file.path.toLowerCase().startsWith('content://')) {
     final bytes = await channel.invokeMethod<Uint8List>(
       'readContentUri',
@@ -164,7 +165,7 @@ class _ConfigurationDropRegionState extends State<ConfigurationDropRegion> {
     }
     try {
       final bytes = await readDroppedConfigurationBytes(file);
-      if (Platform.isIOS && file.path.contains('mdslens-drop-')) {
+      if (!kIsWeb && Platform.isIOS && file.path.contains('mdslens-drop-')) {
         await File(file.path).parent.delete(recursive: true);
       }
       if (!mounted) return;

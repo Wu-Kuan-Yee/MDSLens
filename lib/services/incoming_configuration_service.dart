@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 typedef IncomingConfigurationHandler = Future<void> Function(String path);
@@ -60,5 +61,5 @@ String? configurationPathFromOpenRequest(String request) {
   if (!extension.endsWith('.toml') && !extension.endsWith('.webscp')) {
     return null;
   }
-  return File(path).absolute.path;
+  return kIsWeb ? path : File(path).absolute.path;
 }

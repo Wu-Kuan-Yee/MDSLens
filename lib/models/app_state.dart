@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/credential_store.dart';
@@ -104,7 +104,7 @@ class ConfigOpenSelection {
 typedef ConfigOpenPicker = Future<ConfigOpenSelection?> Function();
 typedef ConfigSavePicker = Future<String?> Function(
     String suggestedName, Uint8List bytes);
-typedef ConfigParser = String Function(String path);
+typedef ConfigParser = FutureOr<String> Function(String path);
 typedef ConfigEncoder = Future<Uint8List> Function(String configJson);
 typedef ImportedShotDecision = Future<bool> Function(String importedShot);
 typedef SshTestWorker = Future<String> Function(String settingsJson);
@@ -176,7 +176,7 @@ typedef LatestShotWorker = Future<dynamic> Function(
 );
 
 Future<ConfigOpenSelection?> _pickConfigurationFile() async {
-  final mobile = Platform.isAndroid || Platform.isIOS;
+  final mobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
   final privateDirectory =
       mobile ? null : await UserDataStore().configurationDirectory();
   final result = await FilePicker.platform.pickFiles(
@@ -186,7 +186,7 @@ Future<ConfigOpenSelection?> _pickConfigurationFile() async {
     // Validate the selected filename ourselves on mobile instead.
     type: mobile ? FileType.any : FileType.custom,
     allowedExtensions: mobile ? null : const ['toml', 'webscp'],
-    withData: mobile,
+    withData: mobile || kIsWeb,
     initialDirectory: privateDirectory?.path,
     lockParentWindow: !mobile,
   );
@@ -211,7 +211,7 @@ Future<String?> _saveConfigurationFile(
   String suggestedName,
   Uint8List bytes,
 ) async {
-  final mobile = Platform.isAndroid || Platform.isIOS;
+  final mobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
   final extension =
       suggestedName.toLowerCase().endsWith('.webscp') ? 'webscp' : 'toml';
   final privateDirectory =
@@ -225,7 +225,9 @@ Future<String?> _saveConfigurationFile(
   );
 }
 
-String _parseConfiguration(String path) => RustBridge.instance.parseEnv(path);
+Future<String> _parseConfiguration(String path) {
+  return Isolate.run(() => RustBridge.instance.parseEnv(path));
+}
 
 Future<Uint8List> _encodeConfiguration(String configJson) async {
   final toml = await Isolate.run(
@@ -1630,12 +1632,49 @@ class AppState extends ChangeNotifier {
         'sourceIndexMemory': jsonEncode(sourceIndexMemory.toJson()),
         'lastConfigJson': configJson,
       };
+      if (kIsWeb) {
+        // A browser profile is not a system credential vault. Authentication
+        // and SSH identity are restored by the Gateway's HttpOnly session,
+        // never by JavaScript-readable preferences.
+        fileSettings
+          ..remove('loggedIn')
+          ..remove('loginUser')
+          ..remove('sshHost')
+          ..remove('sshUser')
+          ..remove('sshIdentity');
+      }
       final storedInPrivateDirectory = await _userDataStore.writeSettings(
         fileSettings,
       );
       if (storedInPrivateDirectory) {
         for (final key in _filePreferenceKeys) {
           await prefs.remove(key);
+        }
+      } else {
+        if (kIsWeb) {
+          for (final key in const [
+            'loggedIn',
+            'loginUser',
+            'sshHost',
+            'sshUser',
+            'sshIdentity',
+          ]) {
+            await prefs.remove(key);
+          }
+        }
+        for (final entry in fileSettings.entries) {
+          final value = entry.value;
+          if (value is bool) {
+            await prefs.setBool(entry.key, value);
+          } else if (value is int) {
+            await prefs.setInt(entry.key, value);
+          } else if (value is double) {
+            await prefs.setDouble(entry.key, value);
+          } else if (value is String) {
+            await prefs.setString(entry.key, value);
+          } else if (value is List<String>) {
+            await prefs.setStringList(entry.key, value);
+          }
         }
       }
     } catch (_) {}
@@ -1942,16 +1981,24 @@ class AppState extends ChangeNotifier {
 
       var path = selection.path;
       if ((path == null || path.isEmpty) && selection.bytes != null) {
-        temporaryDirectory = await Directory.systemTemp.createTemp(
-          'mdslens-open-',
-        );
-        final safeName = selection.name.replaceAll(
-          RegExp(r'[^A-Za-z0-9._-]'),
-          '_',
-        );
-        path = '${temporaryDirectory.path}${Platform.pathSeparator}'
-            '${safeName.isEmpty ? "config.toml" : safeName}';
-        await File(path).writeAsBytes(selection.bytes!, flush: true);
+        if (kIsWeb) {
+          path = Uri.dataFromBytes(
+            selection.bytes!,
+            mimeType: 'application/octet-stream',
+            parameters: {'name': selection.name},
+          ).toString();
+        } else {
+          temporaryDirectory = await Directory.systemTemp.createTemp(
+            'mdslens-open-',
+          );
+          final safeName = selection.name.replaceAll(
+            RegExp(r'[^A-Za-z0-9._-]'),
+            '_',
+          );
+          path = '${temporaryDirectory.path}${Platform.pathSeparator}'
+              '${safeName.isEmpty ? "config.toml" : safeName}';
+          await File(path).writeAsBytes(selection.bytes!, flush: true);
+        }
       }
       if (path == null || path.isEmpty) {
         throw 'The selected file did not provide a readable path or bytes.';
@@ -1964,7 +2011,7 @@ class AppState extends ChangeNotifier {
 
       _status = 'Opening ${selection.name}...';
       notifyListeners();
-      final raw = _configParser(path);
+      final raw = await _configParser(path);
       if (raw.isEmpty) {
         _status = 'Empty result from parser';
         notifyListeners();
@@ -2049,9 +2096,13 @@ class AppState extends ChangeNotifier {
   Future<void> openConfigurationPath(String path) {
     final normalizedPath = path.trim();
     if (normalizedPath.isEmpty) return Future<void>.value();
+    final parsedUri = Uri.tryParse(normalizedPath);
+    final webName = parsedUri != null && parsedUri.pathSegments.isNotEmpty
+        ? parsedUri.pathSegments.last
+        : normalizedPath;
     return openFile(
       selectionOverride: ConfigOpenSelection(
-        name: File(normalizedPath).uri.pathSegments.last,
+        name: kIsWeb ? webName : File(normalizedPath).uri.pathSegments.last,
         path: normalizedPath,
       ),
     );

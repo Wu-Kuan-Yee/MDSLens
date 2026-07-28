@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
+
+import 'package:http/http.dart' as http;
 
 const mdsLensRepositoryUrl = 'https://github.com/Wu-Kuan-Yee/MDSLens';
 const mdsLensSourceUrl = 'https://github.com/Wu-Kuan-Yee/MDSLens';
@@ -22,41 +23,31 @@ class ReleaseUpdate {
 }
 
 Future<ReleaseUpdate> checkLatestMDSLensRelease(String currentVersion) async {
-  final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
-  try {
-    final request = await client.getUrl(Uri.parse(mdsLensLatestReleaseApiUrl));
-    request.headers.set(HttpHeaders.userAgentHeader, 'MDSLens');
-    request.headers.set(
-      HttpHeaders.acceptHeader,
-      'application/vnd.github+json',
-    );
-    final response = await request.close();
-    final body = await response.transform(utf8.decoder).join();
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw HttpException(
-        'GitHub returned HTTP ${response.statusCode}',
-        uri: request.uri,
-      );
-    }
-    final decoded = jsonDecode(body);
-    if (decoded is! Map) {
-      throw const FormatException('Invalid release response');
-    }
-    final latest = decoded['tag_name']?.toString().trim() ?? '';
-    if (!_parseVersion(latest).isValid) {
-      throw const FormatException('Invalid release version');
-    }
-    final releaseUrl = decoded['html_url']?.toString().trim();
-    return ReleaseUpdate(
-      latestVersion: latest,
-      releaseUrl: releaseUrl == null || releaseUrl.isEmpty
-          ? mdsLensReleasesUrl
-          : releaseUrl,
-      updateAvailable: compareVersions(latest, currentVersion) > 0,
-    );
-  } finally {
-    client.close(force: true);
+  final response = await http.get(
+    Uri.parse(mdsLensLatestReleaseApiUrl),
+    headers: const {
+      'Accept': 'application/vnd.github+json',
+    },
+  ).timeout(const Duration(seconds: 10));
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    throw Exception('GitHub returned HTTP ${response.statusCode}');
   }
+  final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+  if (decoded is! Map) {
+    throw const FormatException('Invalid release response');
+  }
+  final latest = decoded['tag_name']?.toString().trim() ?? '';
+  if (!_parseVersion(latest).isValid) {
+    throw const FormatException('Invalid release version');
+  }
+  final releaseUrl = decoded['html_url']?.toString().trim();
+  return ReleaseUpdate(
+    latestVersion: latest,
+    releaseUrl: releaseUrl == null || releaseUrl.isEmpty
+        ? mdsLensReleasesUrl
+        : releaseUrl,
+    updateAvailable: compareVersions(latest, currentVersion) > 0,
+  );
 }
 
 int compareVersions(String left, String right) {
