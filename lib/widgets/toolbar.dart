@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/app_state.dart';
 import '../services/external_url_launcher.dart';
+import '../services/keyboard_shortcuts.dart';
 import '../services/rust_bridge.dart';
 import '../services/system_font_service.dart';
 import 'dialogs/login.dart';
 import 'dialogs/ssh.dart';
 import 'dialogs/about.dart';
 import 'dialogs/keyboard_safe_dialog.dart';
+import 'dialogs/keyboard_shortcuts.dart';
 import 'dropdown_items.dart';
 import 'plot_panel.dart';
 import 'polished_dropdown.dart';
@@ -311,6 +313,15 @@ class ResponsiveToolbar extends StatelessWidget {
   }
 }
 
+String _shortcutTooltip(
+  AppState app,
+  String label,
+  MdsShortcutCommand command,
+) {
+  final shortcut = app.shortcutText(command);
+  return shortcut.isEmpty ? label : '$label ($shortcut)';
+}
+
 class _CollapsedMetadataScroller extends StatefulWidget {
   const _CollapsedMetadataScroller({required this.metadata});
 
@@ -523,6 +534,7 @@ class ToolbarWidget extends StatelessWidget {
           flex: 3,
           child: TextField(
             controller: app.shotCtrl,
+            focusNode: app.shotFocusNode,
             style: TextStyle(fontSize: uiSize),
             decoration: InputDecoration(
               isDense: true,
@@ -556,37 +568,31 @@ class ToolbarWidget extends StatelessWidget {
         _toolbarIconButton(
           context,
           icon: Icons.skip_previous_rounded,
-          tooltip: 'Previous shot',
-          onPressed: () {
-            final cur = app.shotCtrl.text.trim().isNotEmpty
-                ? app.shotCtrl.text.trim()
-                : app.shotText;
-            final s = int.tryParse(cur);
-            if (s != null) {
-              app.shotText = (s - 1).toString();
-              app.startRefresh();
-            }
-          },
+          tooltip: _shortcutTooltip(
+            app,
+            'Previous shot',
+            MdsShortcutCommand.previousShot,
+          ),
+          onPressed: () => app.loadRelativeShot(-1),
         ),
         _toolbarIconButton(
           context,
           icon: Icons.skip_next_rounded,
-          tooltip: 'Next shot',
-          onPressed: () {
-            final cur = app.shotCtrl.text.trim().isNotEmpty
-                ? app.shotCtrl.text.trim()
-                : app.shotText;
-            final s = int.tryParse(cur);
-            if (s != null) {
-              app.shotText = (s + 1).toString();
-              app.startRefresh();
-            }
-          },
+          tooltip: _shortcutTooltip(
+            app,
+            'Next shot',
+            MdsShortcutCommand.nextShot,
+          ),
+          onPressed: () => app.loadRelativeShot(1),
         ),
         _toolbarIconButton(
           context,
           icon: Icons.last_page_rounded,
-          tooltip: 'Latest shot',
+          tooltip: _shortcutTooltip(
+            app,
+            'Latest shot',
+            MdsShortcutCommand.latestShot,
+          ),
           onPressed: () => app.fetchLatestShot(),
         ),
       ],
@@ -597,14 +603,22 @@ class ToolbarWidget extends StatelessWidget {
         _toolbarIconButton(
           context,
           icon: Icons.pan_tool_alt_rounded,
-          tooltip: 'Zoom and move mode',
+          tooltip: _shortcutTooltip(
+            app,
+            'Zoom and move mode',
+            MdsShortcutCommand.zoomMode,
+          ),
           active: app.interactionMode == 0,
           onPressed: () => app.interactionMode = 0,
         ),
         _toolbarIconButton(
           context,
           icon: Icons.gps_fixed_rounded,
-          tooltip: 'Point mode',
+          tooltip: _shortcutTooltip(
+            app,
+            'Point mode',
+            MdsShortcutCommand.pointMode,
+          ),
           active: app.interactionMode == 1,
           onPressed: () => app.interactionMode = 1,
         ),
@@ -885,6 +899,9 @@ class ToolbarWidget extends StatelessWidget {
           case 'fonts':
             _showFontDialog(ctx, app);
             break;
+          case 'shortcuts':
+            KeyboardShortcutsDialog.show(ctx);
+            break;
           case 'about':
             AboutDialogWidget.show(ctx);
             break;
@@ -905,6 +922,11 @@ class ToolbarWidget extends StatelessWidget {
           value: 'fonts',
           icon: Icons.font_download_outlined,
           label: 'Customize fonts',
+        ),
+        _settingsMenuItem(
+          value: 'shortcuts',
+          icon: Icons.keyboard_alt_outlined,
+          label: 'Keyboard shortcuts',
         ),
         _settingsMenuItem(
           value: 'about',

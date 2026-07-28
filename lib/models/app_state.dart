@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/credential_store.dart';
+import '../services/keyboard_shortcuts.dart';
 import '../services/platform_file_dialog.dart';
 import '../services/network_permission_service.dart';
 import '../services/rust_bridge.dart';
@@ -54,6 +55,7 @@ const _filePreferenceKeys = <String>[
   'fontUnitSize',
   'fontUiSize',
   'iconSize',
+  'keyboardShortcuts',
   'limitShotHistory',
   'shotHistoryLimit',
   'webBookmarks',
@@ -532,6 +534,20 @@ class AppState extends ChangeNotifier {
   final List<PlotData> _plots = [];
   List<PlotData> get plots => _plots;
   int selectedCol = -1, selectedRow = -1;
+  int? get selectedPlotIndex {
+    if (selectedCol < 0 ||
+        selectedCol >= _columns.length ||
+        selectedRow < 0 ||
+        selectedRow >= _columns[selectedCol].length) {
+      return null;
+    }
+    var index = selectedRow;
+    for (var column = 0; column < selectedCol; column++) {
+      index += _columns[column].length;
+    }
+    return index < _plots.length ? index : null;
+  }
+
   void selectPanel(int col, int row) {
     if (selectedCol != col || selectedRow != row) {
       selectedCol = col;
@@ -546,6 +562,35 @@ class AppState extends ChangeNotifier {
       selectedRow = -1;
       notifyListeners();
     }
+  }
+
+  void movePanelSelection(int columnDelta, int rowDelta) {
+    if (_columns.isEmpty) return;
+    var column = selectedCol;
+    var row = selectedRow;
+    if (column < 0 ||
+        column >= _columns.length ||
+        row < 0 ||
+        row >= _columns[column].length) {
+      column = _columns.indexWhere((items) => items.isNotEmpty);
+      row = 0;
+    } else if (columnDelta != 0) {
+      var candidate = column + columnDelta;
+      while (candidate >= 0 &&
+          candidate < _columns.length &&
+          _columns[candidate].isEmpty) {
+        candidate += columnDelta;
+      }
+      if (candidate >= 0 &&
+          candidate < _columns.length &&
+          _columns[candidate].isNotEmpty) {
+        column = candidate;
+        row = row.clamp(0, _columns[column].length - 1);
+      }
+    } else if (rowDelta != 0) {
+      row = (row + rowDelta).clamp(0, _columns[column].length - 1);
+    }
+    if (column >= 0 && row >= 0) selectPanel(column, row);
   }
 
   double? crosshairX;
@@ -577,6 +622,7 @@ class AppState extends ChangeNotifier {
   String get displayedShot => _displayedShot;
   String? _pendingImportedShot;
   final _shotCtrl = TextEditingController();
+  final shotFocusNode = FocusNode(debugLabel: 'main-shot-input');
   TextEditingController get shotCtrl => _shotCtrl;
   set shotText(String v) {
     _invalidateFetchForSettingsChange();
@@ -806,8 +852,33 @@ class AppState extends ChangeNotifier {
   int get fontUnitSize => _fontUnitSize;
   int get fontUiSize => _fontUiSize;
   int get iconSize => _iconSize;
-  void applyFontSettings(String family, int legend, int axis, int unit, int ui,
-      {int? iconSize}) {
+  Map<MdsShortcutCommand, MdsShortcutBinding> _keyboardShortcuts =
+      defaultMdsShortcutBindings();
+  Map<MdsShortcutCommand, MdsShortcutBinding> get keyboardShortcuts =>
+      Map.unmodifiable(_keyboardShortcuts);
+
+  void applyKeyboardShortcuts(
+    Map<MdsShortcutCommand, MdsShortcutBinding> bindings,
+  ) {
+    _keyboardShortcuts = Map.of(bindings);
+    savePreferences();
+    notifyListeners();
+  }
+
+  String shortcutText(MdsShortcutCommand command) {
+    final binding = _keyboardShortcuts[command];
+    if (binding == null) return '';
+    return binding.strokes.map((stroke) => stroke.displayText).join(' / ');
+  }
+
+  void applyFontSettings(
+    String family,
+    int legend,
+    int axis,
+    int unit,
+    int ui, {
+    int? iconSize,
+  }) {
     _fontFamily = family;
     _fontLegendSize = legend;
     _fontAxisSize = axis;
@@ -981,6 +1052,14 @@ class AppState extends ChangeNotifier {
     for (final plot in _plots) {
       plot.clearViewRange();
     }
+    _viewResetId++;
+    notifyListeners();
+  }
+
+  void resetSelectedView() {
+    final index = selectedPlotIndex;
+    if (index == null) return;
+    _plots[index].clearViewRange();
     _viewResetId++;
     notifyListeners();
   }
@@ -1195,6 +1274,11 @@ class AppState extends ChangeNotifier {
   void maximizePlot(int idx) {
     _maximizedPlot = idx;
     notifyListeners();
+  }
+
+  void maximizeSelectedPanel() {
+    final index = selectedPlotIndex;
+    if (index != null) maximizePlot(index);
   }
 
   void showAllPanels() {
@@ -1610,6 +1694,12 @@ class AppState extends ChangeNotifier {
               ? (setting('iconSize') as num).toInt()
               : _iconSize)
           .clamp(18, 32);
+      final shortcutsJson = setting('keyboardShortcuts')?.toString();
+      if (shortcutsJson != null && shortcutsJson.isNotEmpty) {
+        _keyboardShortcuts = decodeMdsShortcutBindings(
+          jsonDecode(shortcutsJson),
+        );
+      }
       _limitShotHistory = setting('limitShotHistory') is bool
           ? setting('limitShotHistory') as bool
           : _limitShotHistory;
@@ -1699,6 +1789,9 @@ class AppState extends ChangeNotifier {
         'fontUnitSize': _fontUnitSize,
         'fontUiSize': _fontUiSize,
         'iconSize': _iconSize,
+        'keyboardShortcuts': jsonEncode(
+          encodeMdsShortcutBindings(_keyboardShortcuts),
+        ),
         'limitShotHistory': _limitShotHistory,
         'shotHistoryLimit': _shotHistoryLimit,
         'webBookmarks': jsonEncode(_webBookmarks),
@@ -2300,6 +2393,15 @@ class AppState extends ChangeNotifier {
     } else {
       _doFetch(shot: _shotText);
     }
+  }
+
+  void loadRelativeShot(int delta) {
+    final current =
+        _shotCtrl.text.trim().isNotEmpty ? _shotCtrl.text.trim() : _shotText;
+    final shot = int.tryParse(current);
+    if (shot == null) return;
+    shotText = (shot + delta).toString();
+    startRefresh();
   }
 
   Future<void> _loadPendingImportedConfiguration() async {
@@ -2978,6 +3080,7 @@ class AppState extends ChangeNotifier {
   void dispose() {
     prepareForExit();
     _shotCtrl.dispose();
+    shotFocusNode.dispose();
     super.dispose();
   }
 }

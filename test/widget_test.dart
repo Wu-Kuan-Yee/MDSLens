@@ -3873,11 +3873,16 @@ void main() {
     expect(find.byTooltip('Save configuration'), findsOneWidget);
     expect(find.byTooltip('Restore default configuration'), findsOneWidget);
     expect(find.byTooltip('Refresh waveforms'), findsOneWidget);
-    expect(find.byTooltip('Previous shot'), findsOneWidget);
-    expect(find.byTooltip('Next shot'), findsOneWidget);
-    expect(find.byTooltip('Latest shot'), findsOneWidget);
-    expect(find.byTooltip('Zoom and move mode'), findsOneWidget);
-    expect(find.byTooltip('Point mode'), findsOneWidget);
+    Finder shortcutTooltip(String prefix) => find.byWidgetPredicate(
+          (widget) =>
+              widget is Tooltip &&
+              (widget.message?.startsWith(prefix) ?? false),
+        );
+    expect(shortcutTooltip('Previous shot'), findsOneWidget);
+    expect(shortcutTooltip('Next shot'), findsOneWidget);
+    expect(shortcutTooltip('Latest shot'), findsOneWidget);
+    expect(shortcutTooltip('Zoom and move mode'), findsOneWidget);
+    expect(shortcutTooltip('Point mode'), findsOneWidget);
     expect(
       tester.getSize(find.byTooltip('Open configuration')).height,
       greaterThanOrEqualTo(44),
@@ -3974,7 +3979,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    expect(find.byType(PopupMenuDivider), findsNWidgets(3));
+    expect(find.byType(PopupMenuDivider), findsNWidgets(4));
   });
 
   testWidgets('Shot history uses the polished compact dropdown', (

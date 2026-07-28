@@ -81,10 +81,6 @@ class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
         event.logicalKey == LogicalKeyboardKey.shiftRight) {
       app.shiftHeld = event is KeyDownEvent;
     }
-    if (event is KeyDownEvent &&
-        event.logicalKey == LogicalKeyboardKey.escape) {
-      return app.handleEscapeKey();
-    }
     return false; // Don't absorb key events
   }
 
