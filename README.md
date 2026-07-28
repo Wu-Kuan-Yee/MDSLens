@@ -21,6 +21,8 @@ Source code, releases, and update checks are hosted in the
   full-resolution detail when zooming.
 - Zoom/Move and synchronized Point modes for mouse, touch, trackpad, and stylus.
 - Per-signal Tree, Signal, legend, server, color, visibility, and data controls.
+- Single-panel export and selectable multi-panel CSV export with complete
+  signal and coordinate metadata.
 - Responsive layouts, configurable fonts and themes, internal web bookmarks,
   shot history management, and native system file/link integration.
 
