@@ -52,7 +52,8 @@ struct SessionAuth {
     authenticated: bool,
     user: String,
     token: String,
-    api_url: String,
+    requested_api_url: String,
+    effective_api_url: String,
     ssh: Option<FrbSshSettings>,
     used_ssh: bool,
 }
@@ -244,8 +245,9 @@ async fn security_headers(request: Request<Body>, next: Next) -> Response {
     for (name, value) in [
         (
             "content-security-policy",
-            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; \
-             style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; \
+            "default-src 'self'; script-src 'self' blob: 'wasm-unsafe-eval'; \
+             worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; \
+             img-src 'self' data: blob:; \
              font-src 'self' data:; connect-src 'self' https://api.github.com; \
              object-src 'none'; base-uri 'self'; frame-ancestors 'self'",
         ),
@@ -291,7 +293,7 @@ async fn session_status(
         ok: true,
         authenticated: auth.authenticated,
         user: auth.user,
-        api_url: auth.api_url,
+        api_url: auth.requested_api_url,
         used_ssh: auth.used_ssh,
     })
     .into_response();
@@ -346,7 +348,8 @@ async fn login(
             authenticated: true,
             user: payload.user.trim().to_string(),
             token,
-            api_url: effective_url,
+            requested_api_url: api_url,
+            effective_api_url: effective_url,
             ssh,
             used_ssh,
         };
@@ -387,7 +390,7 @@ async fn latest_shot(
     let session = authenticated_session(&state, &headers)?;
     let auth = session_auth(&session)?;
     let result = tokio::task::spawn_blocking(move || {
-        mds_auth::http::fetch_latest_shot(&auth.api_url, &auth.token)
+        mds_auth::http::fetch_latest_shot(&auth.effective_api_url, &auth.token)
     })
     .await
     .map_err(|error| ApiError::internal(format!("Latest-shot worker failed: {error}")))?
@@ -410,7 +413,7 @@ async fn shot_info(
     let session = authenticated_session(&state, &headers)?;
     let auth = session_auth(&session)?;
     let result = tokio::task::spawn_blocking(move || {
-        mds_auth::http::fetch_shot_info(&auth.api_url, &auth.token, &payload.shot)
+        mds_auth::http::fetch_shot_info(&auth.effective_api_url, &auth.token, &payload.shot)
     })
     .await
     .map_err(|error| ApiError::internal(format!("Shot-info worker failed: {error}")))?
@@ -493,10 +496,10 @@ async fn test_ssh(
     State(state): State<GatewayState>,
     headers: HeaderMap,
     Json(settings): Json<FrbSshSettings>,
-) -> ApiResult<Json<Value>> {
+) -> ApiResult<Response> {
     validate_origin(&headers, &state.policy)?;
     validate_ssh_settings(&settings, &state.policy)?;
-    let (_, session, _) = session_for_request(&state, &headers)?;
+    let (id, session, created) = session_for_request(&state, &headers)?;
     let test_settings = settings.clone();
     tokio::task::spawn_blocking(move || mds_bridge::api::ssh_test(test_settings))
         .await
@@ -507,15 +510,16 @@ async fn test_ssh(
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .ssh = Some(settings);
-    Ok(Json(json!({"ok": true})))
+    let response = Json(json!({"ok": true})).into_response();
+    Ok(with_session_cookie(response, &id, created, &state.policy))
 }
 
 async fn disconnect_ssh(
     State(state): State<GatewayState>,
     headers: HeaderMap,
-) -> ApiResult<Json<Value>> {
+) -> ApiResult<Response> {
     validate_origin(&headers, &state.policy)?;
-    let (_, session, _) = session_for_request(&state, &headers)?;
+    let (id, session, created) = session_for_request(&state, &headers)?;
     session
         .tunnel
         .lock()
@@ -527,7 +531,8 @@ async fn disconnect_ssh(
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     auth.ssh = None;
     auth.used_ssh = false;
-    Ok(Json(json!({"ok": true})))
+    let response = Json(json!({"ok": true})).into_response();
+    Ok(with_session_cookie(response, &id, created, &state.policy))
 }
 
 async fn parse_configuration(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 class MDSLensTheme {
   static ThemeData light({
@@ -50,8 +51,11 @@ class MDSLensTheme {
       cardColor: card,
       appBarTheme: AppBarTheme(backgroundColor: scaffold),
     );
-    TextStyle? style(TextStyle? source, double size) =>
-        source?.copyWith(fontFamily: fontFamily, fontSize: size.clamp(6, 48));
+    TextStyle? style(TextStyle? source, double size) => source?.copyWith(
+          fontFamily: fontFamily,
+          fontFamilyFallback: kIsWeb ? const ['MDSLens Noto Sans SC'] : null,
+          fontSize: size.clamp(6, 48),
+        );
     final source = base.textTheme;
     final colors = base.colorScheme;
     final textTheme = source.copyWith(

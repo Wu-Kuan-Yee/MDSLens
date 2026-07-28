@@ -12,6 +12,7 @@ import '../services/network_permission_service.dart';
 import '../services/rust_bridge.dart';
 import '../services/source_index.dart';
 import '../services/user_data_store.dart';
+import '../services/web_gateway_client.dart';
 
 const _configurationSignalColors = [
   '#2364aa',
@@ -226,10 +227,16 @@ Future<String?> _saveConfigurationFile(
 }
 
 Future<String> _parseConfiguration(String path) {
+  if (kIsWeb) {
+    return WebGatewayClient.instance.parseConfiguration(path);
+  }
   return Isolate.run(() => RustBridge.instance.parseEnv(path));
 }
 
 Future<Uint8List> _encodeConfiguration(String configJson) async {
+  if (kIsWeb) {
+    return WebGatewayClient.instance.encodeConfiguration(configJson, 'toml');
+  }
   final toml = await Isolate.run(
     () => RustBridge.instance.encodeEnv(configJson),
   );
@@ -237,6 +244,9 @@ Future<Uint8List> _encodeConfiguration(String configJson) async {
 }
 
 Future<Uint8List> _encodeWebscpConfiguration(String configJson) async {
+  if (kIsWeb) {
+    return WebGatewayClient.instance.encodeConfiguration(configJson, 'webscp');
+  }
   final webscp = await Isolate.run(
     () => RustBridge.instance.encodeEnvWebscp(configJson),
   );
@@ -244,6 +254,9 @@ Future<Uint8List> _encodeWebscpConfiguration(String configJson) async {
 }
 
 Future<String> _testSshInBackground(String settingsJson) {
+  if (kIsWeb) {
+    return WebGatewayClient.instance.testSsh(settingsJson);
+  }
   return Isolate.run(() => RustBridge.instance.sshT(settingsJson));
 }
 
@@ -252,6 +265,9 @@ Future<String> _fetchSignalsInBackground(
   String dataMode,
   String sshSettingsJson,
 ) {
+  if (kIsWeb) {
+    return WebGatewayClient.instance.fetchSignals(configJson, dataMode);
+  }
   return Isolate.run(
     () =>
         RustBridge.instance.fetchSigSsh(configJson, dataMode, sshSettingsJson),
@@ -262,6 +278,10 @@ Future<void> _prewarmSignalsInBackground(
   String configJson,
   String sshSettingsJson,
 ) async {
+  if (kIsWeb) {
+    await WebGatewayClient.instance.prewarmSignals(configJson);
+    return;
+  }
   final raw = await Isolate.run(
     () => RustBridge.instance.prewarmSig(configJson, sshSettingsJson),
   );
@@ -278,6 +298,9 @@ Future<String> _fetchShotInfoInBackground(
   String token,
   String shot,
 ) {
+  if (kIsWeb) {
+    return WebGatewayClient.instance.shotInfo(shot);
+  }
   return Isolate.run(() => RustBridge.instance.fetchSInfo(apiUrl, token, shot));
 }
 
@@ -302,6 +325,14 @@ Future<({String token, bool usedSsh})> _loginToApi(
   String password,
   String sshSettingsJson,
 ) async {
+  if (kIsWeb) {
+    return WebGatewayClient.instance.login(
+      apiUrl,
+      user,
+      password,
+      sshSettingsJson,
+    );
+  }
   final prepared = await _prepareApiUrl(apiUrl, sshSettingsJson);
   final base = prepared.url.replaceAll(RegExp(r'/$'), '');
   final client = HttpClient();
@@ -400,6 +431,9 @@ Future<dynamic> _fetchLatestShotFromApi(
   String token,
   String sshSettingsJson,
 ) async {
+  if (kIsWeb) {
+    return WebGatewayClient.instance.latestShot();
+  }
   final prepared = await _prepareApiUrl(apiUrl, sshSettingsJson);
   final base = prepared.url.replaceAll(RegExp(r'/$'), '');
   final client = HttpClient();
@@ -634,8 +668,14 @@ class AppState extends ChangeNotifier {
             (signalFetchWorker == null
                 ? _prewarmSignalsInBackground
                 : _skipSignalPrewarm),
-        _sshDisconnect =
-            sshDisconnect ?? (() => RustBridge.instance.disconnectSsh()),
+        _sshDisconnect = sshDisconnect ??
+            (() {
+              if (kIsWeb) {
+                unawaited(WebGatewayClient.instance.disconnectSsh());
+              } else {
+                RustBridge.instance.disconnectSsh();
+              }
+            }),
         _shotInfoFetchWorker =
             shotInfoFetchWorker ?? _fetchShotInfoInBackground,
         _loginWorker = loginWorker ?? _loginToApi,
@@ -1031,7 +1071,11 @@ class AppState extends ChangeNotifier {
     _activeNativeFetchId = null;
     if (requestId == null) return;
     try {
-      RustBridge.instance.cancelFetch(requestId);
+      if (kIsWeb) {
+        unawaited(WebGatewayClient.instance.cancelFetch(requestId));
+      } else {
+        RustBridge.instance.cancelFetch(requestId);
+      }
     } catch (_) {
       // The result-generation guard below still prevents stale data from
       // reaching the UI when a development build has an older native bridge.
@@ -1279,7 +1323,11 @@ class AppState extends ChangeNotifier {
     _loggedIn = false;
     _authToken = '';
     _explicitlyLoggedOut = true;
-    _disconnectSshTunnels();
+    if (kIsWeb) {
+      unawaited(WebGatewayClient.instance.logout());
+    } else {
+      _disconnectSshTunnels();
+    }
     _resetSshConnectionState();
     savePreferences();
     setStatus('Logged out');
@@ -1430,6 +1478,31 @@ class AppState extends ChangeNotifier {
     NetworkAccessPreparation? preparedNetworkAccess,
   }) async {
     await preferencesReady;
+    if (kIsWeb) {
+      try {
+        final session = await WebGatewayClient.instance.session();
+        if (_disposed) return;
+        if (session['authenticated'] == true &&
+            _rememberLogin &&
+            !_explicitlyLoggedOut) {
+          _loggedIn = true;
+          _authToken = 'gateway-session';
+          _loginUser = session['user']?.toString() ?? _loginUser;
+          recordSshUsage(session['used_ssh'] == true);
+          _status = _loginUser.trim().isEmpty
+              ? 'Browser session restored'
+              : 'Logged in as $_loginUser';
+          notifyListeners();
+          await fetchLatestShot();
+        }
+      } catch (error) {
+        if (!_disposed) {
+          _status = 'Web Gateway unavailable: $error';
+          notifyListeners();
+        }
+      }
+      return;
+    }
     if (_disposed || !_rememberLogin || _explicitlyLoggedOut) return;
     if (_loginUser.trim().isNotEmpty) {
       try {
@@ -2623,7 +2696,9 @@ class AppState extends ChangeNotifier {
     _cancelPendingFullShotRefresh(resetCadence: true);
     _discardPendingWaveformFetch();
     _cancelActiveNativeFetch();
-    _disconnectSshTunnels();
+    // Keep the browser's HttpOnly gateway session alive across page reloads.
+    // Native applications still release their local forwarding sockets here.
+    if (!kIsWeb) _disconnectSshTunnels();
     _fetchGeneration++;
     _fetching = false;
     _fetchingPlotIndex = null;

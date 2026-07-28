@@ -26,6 +26,10 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  fonts:
+    - family: MDSLens Noto Sans SC
+      fonts:
+        - asset: assets/fonts/NotoSansSC-Variable.ttf
   assets:
     - assets/app_icon.png
     - assets/source_index/trees.txt
