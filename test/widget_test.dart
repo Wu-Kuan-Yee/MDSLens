@@ -5233,6 +5233,15 @@ void main() {
     await tester.tap(find.text('Update'));
     await tester.pumpAndSettle();
     expect(find.text('Open Release'), findsOneWidget);
+    final lastUrlBeforeUpdateChoice = openedUrls.last;
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(openedUrls.last, lastUrlBeforeUpdateChoice);
+
+    await tester.ensureVisible(find.text('Update'));
+    await tester.tap(find.text('Update'));
+    await tester.pumpAndSettle();
+    expect(find.text('Open Release'), findsOneWidget);
     await tester.tap(find.text('Open Release'));
     await tester.pumpAndSettle();
 
