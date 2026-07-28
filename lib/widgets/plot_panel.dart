@@ -1090,7 +1090,6 @@ class _PlotPanelState extends State<PlotPanel> {
             width: 10,
             height: 10,
             decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
               shape: BoxShape.circle,
               border: Border.all(color: color, width: 2),
             ),

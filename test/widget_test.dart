@@ -2907,6 +2907,24 @@ void main() {
       expect(charts[1].data.extraLinesData.horizontalLines.single.y, 22);
       expect(find.byKey(const ValueKey('plot-point-marker-0')), findsOneWidget);
       expect(find.byKey(const ValueKey('plot-point-marker-1')), findsOneWidget);
+      final marker = tester
+          .widgetList<Container>(
+            find.descendant(
+              of: find.byKey(const ValueKey('plot-point-marker-0')),
+              matching: find.byType(Container),
+            ),
+          )
+          .singleWhere(
+            (container) =>
+                container.decoration is BoxDecoration &&
+                (container.decoration! as BoxDecoration).shape ==
+                    BoxShape.circle,
+          );
+      expect(
+        (marker.decoration! as BoxDecoration).color,
+        isNull,
+        reason: 'The crosshair lines must remain visible through the ring.',
+      );
     },
   );
 
