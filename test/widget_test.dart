@@ -4861,7 +4861,34 @@ void main() {
     );
   });
 
-  testWidgets('Layout Setup selects and deletes columns with icon actions', (
+  test('Layout selection toggles panels and whole columns by identity', () {
+    Map<String, dynamic> panel(String title) => {'title': title};
+    final first = panel('First');
+    final second = panel('Second');
+    final third = panel('Third');
+    final columns = [
+      [first, second],
+      [third],
+    ];
+    final selected = Set<Map<String, dynamic>>.identity();
+
+    toggleLayoutColumnSelection(columns.first, selected);
+    expect(selected, containsAll([first, second]));
+    expect(layoutColumnIsSelected(columns.first, selected), isTrue);
+
+    toggleLayoutPanelSelection(first, selected);
+    expect(layoutColumnIsSelected(columns.first, selected), isFalse);
+    expect(selected, contains(second));
+
+    toggleLayoutColumnSelection(columns.first, selected);
+    expect(layoutColumnIsSelected(columns.first, selected), isTrue);
+    toggleLayoutPanelSelection(third, selected);
+    expect(deleteSelectedLayoutPanels(columns, selected), 3);
+    expect(columns, isEmpty);
+    expect(selected, isEmpty);
+  });
+
+  testWidgets('Layout Setup multi-selects and deletes panels and columns', (
     tester,
   ) async {
     final app = AppState();
@@ -4910,29 +4937,36 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('layout-column-header-2')));
     await tester.pump();
-    final deleteColumn = find.byKey(const ValueKey('layout-delete-column-2'));
-    expect(deleteColumn, findsOneWidget);
-    expect(tester.widget(deleteColumn), isA<IconButton>());
+    expect(
+      find.byKey(const ValueKey('layout-column-selected-2')),
+      findsOneWidget,
+    );
+    final deleteSelected = find.byKey(
+      const ValueKey('layout-delete-selected'),
+    );
+    expect(tester.widget<FilledButton>(deleteSelected).onPressed, isNotNull);
 
     await tester.tap(find.byKey(const ValueKey('layout-setup-blank-area')));
     await tester.pump();
-    expect(deleteColumn, findsNothing);
+    expect(
+      tester.widget<FilledButton>(deleteSelected).onPressed,
+      isNull,
+    );
 
-    await tester.tap(find.byKey(const ValueKey('layout-preview-panel-0')));
-    await tester.pump();
     expect(
       tester.widget(find.byKey(const ValueKey('layout-edit-panel-1'))),
       isA<IconButton>(),
     );
-    expect(
-      tester.widget(find.byKey(const ValueKey('layout-delete-panel-1'))),
-      isA<IconButton>(),
-    );
-
+    expect(find.byKey(const ValueKey('layout-delete-panel-1')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('layout-preview-panel-0')));
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('layout-column-header-2')));
     await tester.pump();
-    await tester.tap(deleteColumn);
-    await tester.pump();
+    expect(find.text('Delete 2'), findsOneWidget);
+    await tester.tap(deleteSelected);
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(const ValueKey('layout-preview-column-0')), findsOneWidget);
     expect(find.byKey(const ValueKey('layout-preview-column-1')), findsNothing);
 
     await tester.tap(find.widgetWithText(TextButton, 'Apply'));
@@ -5013,11 +5047,8 @@ void main() {
     expect(tallColumn.thumbVisibility, isTrue);
     expect(tallColumn.controller?.position.maxScrollExtent, greaterThan(0));
 
-    await tester.drag(
-      find.byKey(const ValueKey('layout-column-scroll-0')),
-      const Offset(0, -140),
-    );
-    await tester.pumpAndSettle();
+    tallColumn.controller!.jumpTo(140);
+    await tester.pump();
     expect(tallColumn.controller?.position.pixels, greaterThan(0));
 
     await tester.drag(
@@ -5071,22 +5102,20 @@ void main() {
     expect(find.text(r'Curve 3 Signal: \signal_c'), findsOneWidget);
     expect(find.textContaining('Curve 4'), findsNothing);
     expect(find.text('Title: '), findsNothing);
-    expect(find.byKey(const ValueKey('layout-edit-panel-1')), findsNothing);
+    expect(find.byKey(const ValueKey('layout-edit-panel-1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('layout-delete-panel-1')), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('layout-preview-panel-0')));
     await tester.pump();
     expect(find.byKey(const ValueKey('layout-edit-panel-1')), findsOneWidget);
-    expect(find.byKey(const ValueKey('layout-delete-panel-1')), findsOneWidget);
 
     final layoutDialog = tester.getRect(
       find.byKey(const ValueKey('keyboard-safe-dialog')),
     );
     await tester.tapAt(Offset(layoutDialog.right - 20, layoutDialog.top + 20));
     await tester.pump();
-    expect(find.byKey(const ValueKey('layout-edit-panel-1')), findsNothing);
+    expect(find.byKey(const ValueKey('layout-edit-panel-1')), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('layout-preview-panel-0')));
-    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('layout-edit-panel-1')));
     await tester.pumpAndSettle();
     expect(find.text('Panel Setup'), findsOneWidget);
@@ -5125,8 +5154,8 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('layout-preview-panel-1')));
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('layout-delete-panel-2')));
-    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('layout-delete-selected')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('layout-preview-panel-1')), findsNothing);
 
     await tester.tap(find.widgetWithText(TextButton, 'Apply'));
@@ -5135,6 +5164,39 @@ void main() {
     expect(app.columns.single, hasLength(1));
     expect(app.columns.single.single['title'], 'Edited title');
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Layout Setup Reset restores the opening draft', (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.applyLayoutList([1, 1]);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(700, 900);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Layout setup'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('layout-column-header-2')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('layout-delete-selected')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('layout-preview-column-1')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('layout-reset')));
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(const ValueKey('layout-preview-column-1')), findsOneWidget);
+    expect(find.textContaining('0 panels selected'), findsOneWidget);
   });
 
   testWidgets(
