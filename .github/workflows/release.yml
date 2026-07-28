@@ -330,10 +330,48 @@ jobs:
           path: build/dist/*
           if-no-files-found: error
 
+  web:
+    name: Web Gateway ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+            channel: stable
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            channel: main
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: ${{ matrix.channel }}
+          cache: true
+      - uses: dtolnay/rust-toolchain@1.92.0
+      - name: Install gateway build tools
+        run: >-
+          sudo apt-get update &&
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y
+          build-essential cmake curl nasm perl pkg-config
+      - name: Build self-contained Web package
+        run: ./scripts/build_web.sh
+      - name: Smoke-test Web bundle and session security
+        run: >-
+          ./scripts/verify_web_bundle.sh
+          rust/target/release/mdslens-web-gateway build/web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mdslens-web-linux-${{ matrix.arch }}
+          path: build/dist/mdslens-web-linux-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+
   publish:
     name: Publish GitHub release
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [windows, windows-msixbundle, macos, linux, linux-flatpak, linux-portable-runtime, android, apple-mobile]
+    needs: [windows, windows-msixbundle, macos, linux, linux-flatpak, linux-portable-runtime, android, apple-mobile, web]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4

@@ -27,6 +27,10 @@ Source code, releases, and update checks are hosted in the
   while preserving those separate files.
 - Responsive layouts, configurable fonts, icon sizes and themes, internal web
   bookmarks, shot history management, and native system file/link integration.
+- Installable WebAssembly PWA support. Users open one HTTPS URL; browser-native
+  pickers, drag-and-drop and downloads preserve the desktop file workflow,
+  while a same-origin Rust gateway provides authenticated MDSip and SSH access
+  without exposing API tokens to page JavaScript.
 
 Point readouts use the horizontal coordinate name reported by MDSplus. Many
 MDSplus dimensions are anonymous arrays rather than named nodes; in that case
@@ -84,6 +88,9 @@ python build_app.py -p windows -a x64 -f exe msi msix zip 7z
 # iOS/iPadOS unsigned packages for user re-signing
 ./build_app.py -p ios -p ipados \
   -f unsigned-ipa unsigned-app xcarchive zip 7z
+
+# Self-contained WebAssembly/PWA plus Linux Web Gateway
+./scripts/build_web.sh
 ```
 
 Output lands in `build/dist/` with filenames following `mdslens-<platform>-<arch>.<format>`. Pushing a `v*` tag triggers GitHub Actions to build the release matrix on each native system in parallel.
@@ -143,3 +150,4 @@ MDSLens is licensed under [GPL-3.0-or-later](LICENSE).
 - [Build & Signing Guide](docs/BUILDING.md)
 - [Platforms, Architectures & Static Linking Boundaries](docs/PLATFORM_SUPPORT.md)
 - [Performance, Dependencies & Size Audit](docs/PERFORMANCE_AUDIT.md)
+- [Web / PWA Build and Deployment](docs/WEB_DEPLOYMENT.md)

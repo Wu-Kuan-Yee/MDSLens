@@ -17,6 +17,7 @@ operating system's security protections globally just to run MDSLens.
 | Linux | Native package, AppImage, Flatpak, Snap, or ZIP | Match x64 or ARM64 |
 | Android | Universal APK, or a matching armv7/arm64/x64 APK | AAB files are for stores and cannot be installed directly |
 | iOS/iPadOS | Download the unsigned IPA and re-sign it, or install from source with Xcode | Unsigned IPA cannot be installed directly |
+| Web / PWA | Open the deployment's HTTPS URL | No local runtime or manual setup; the browser may offer Install App/Add to Home Screen |
 
 ## Runtime Dependency Summary
 
@@ -34,9 +35,23 @@ The remaining system or optional installation dependencies are:
 | Linux | glibc, GTK 3, GLib/GIO, libsecret, C++ runtime, X11/Wayland and EGL/OpenGL/Mesa stack | One of `zenity`, `kdialog`, or `qarma` for Open/Save/Export dialogs; a Secret Service provider for persistent credentials |
 | Android | A supported Android system | Nothing for direct APK installation; Android SDK Platform Tools only for `adb` installation |
 | iOS/iPadOS | A supported iOS/iPadOS system and valid application signature | Xcode for self-signing; Apple Configurator is optional for installing an already signed IPA |
+| Web / PWA | A current browser with WebAssembly; JavaScript fallback is included | Nothing on the user's device; the deployment administrator runs the gateway |
 
 These are runtime requirements. Developers compiling packages need the
 additional toolchains listed in [BUILDING.md](BUILDING.md).
+
+## Web / PWA
+
+Open the HTTPS address supplied by the deployment administrator. The full
+interface runs in the browser and uses native file pickers, drag-and-drop and
+downloads for configuration and export workflows. On browsers that expose an
+install action, choose **Install App** or **Add to Home Screen** to launch
+MDSLens like an installed application; installation is optional.
+
+No Flutter, Rust, MDSplus, SSH client, extension or companion application is
+needed on the user's device. Rendering and local editing remain in the
+browser. Loading new server data requires the deployment's gateway because
+browser security does not allow direct MDSip or SSH sockets.
 
 ## macOS
 

@@ -15,6 +15,7 @@ With Flutter 3.44 as the baseline, the upstream Flutter deployment targets used 
 | Linux | x64, arm64 | DEB, RPM, pkg.tar, AppImage, Flatpak, Snap, ZIP/7z/tar.gz/xz/bz2 | Same-arch Linux |
 | Android | armv7, arm64, x64 | Per-ABI/universal APK, multi-architecture AAB, APKS | Windows/macOS/Linux |
 | iOS / iPadOS | arm64 device | Unsigned IPA, APP, XCArchive and compressed bundles | macOS |
+| Web / PWA | Browser WASM with JavaScript fallback; x64 or ARM64 Linux gateway | Hosted PWA plus server deployment archive | Linux matching the gateway architecture |
 
 Sources: [Flutter supported platforms](https://docs.flutter.dev/reference/supported-platforms) and [multi-platform build host restrictions](https://docs.flutter.dev/platform-integration).
 

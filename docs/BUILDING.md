@@ -35,9 +35,26 @@ tools needed only for particular package formats:
 | Linux | Python, Flutter, rustup, compiler/build tools, GTK 3 and libsecret development files, `patchelf`, Perl, NASM | `dpkg-deb`, `rpmbuild`, `zstd`, `xz`, `appimagetool`, Flatpak, `mksquashfs`, or 7-Zip according to requested formats |
 | Android | Python, Flutter, rustup, JDK 17+, Android SDK Platform 36 and NDK 28.2.13676358, Bash, Perl | Android release keystore; bundletool 1.18.3 for APKS; Platform Tools/ADB for device installation |
 | iOS/iPadOS | Python, Flutter, rustup, Xcode and command-line tools | 7-Zip; Apple Account/team, certificate and provisioning profile are needed by the user who re-signs for installation |
+| Web / PWA | Flutter, rustup, C/C++ build tools, CMake, Perl, NASM and curl | HTTPS reverse proxy and a Linux x64 or ARM64 server for deployment |
 
 Git and network access are normally needed for the first dependency download.
 They are not application runtime dependencies.
+
+## Web / PWA
+
+Build the browser application and same-origin gateway together:
+
+```sh
+./scripts/build_web.sh
+```
+
+The output is a self-contained
+`build/dist/mdslens-web-<platform>-<arch>.tar.gz` (tagged releases provide
+Linux x64 and ARM64 server packages). The Flutter build includes the
+WASM/JavaScript fallback, local CanvasKit/Skwasm and fallback fonts; it does not
+fetch rendering resources from a public CDN at runtime. See
+[WEB_DEPLOYMENT.md](WEB_DEPLOYMENT.md) for localhost testing, HTTPS reverse
+proxy settings, outbound host allowlisting, browser storage and security.
 
 Before building, run the platform-aware diagnostic:
 

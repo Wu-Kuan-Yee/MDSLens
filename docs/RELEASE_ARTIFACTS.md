@@ -98,6 +98,20 @@ The iOS and iPadOS aliases contain the same universal mobile application.
 Every IPA has the standard `Payload/MDSLens.app` layout and must be re-signed
 by the user before installation.
 
+## Web / PWA
+
+For Web hosting servers:
+
+- `mdslens-web-linux-x64.tar.gz`
+- `mdslens-web-linux-arm64.tar.gz`
+
+Each archive contains the native Rust Web Gateway and the complete
+self-hosted Flutter WebAssembly/PWA assets. It is a server deployment package,
+not something each browser user installs. After an administrator deploys it
+behind HTTPS, users open the resulting URL and the browser automatically
+downloads and caches the application. See
+[WEB_DEPLOYMENT.md](WEB_DEPLOYMENT.md).
+
 ## Unsupported targets
 
 No HarmonyOS NEXT HAP/APP/HAR/HSP is generated. The repository has no
