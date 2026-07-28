@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -26,8 +27,7 @@ class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _sysDark =
-        WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+    _sysDark = WidgetsBinding.instance.platformDispatcher.platformBrightness ==
         Brightness.dark;
     ThemeChannel.init();
     StylusModeChannel.init(
@@ -94,7 +94,7 @@ class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
     _themeEventRevision++;
     final isDark =
         WidgetsBinding.instance.platformDispatcher.platformBrightness ==
-        Brightness.dark;
+            Brightness.dark;
     if (isDark != _sysDark) setState(() => _sysDark = isDark);
   }
 
@@ -103,6 +103,12 @@ class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       _scheduleThemeCalibration();
     }
+  }
+
+  @override
+  Future<AppExitResponse> didRequestAppExit() async {
+    context.read<AppState>().prepareForExit();
+    return AppExitResponse.exit;
   }
 
   @override
@@ -121,8 +127,8 @@ class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
     final isDark = app.themeMode == 0
         ? false
         : app.themeMode == 1
-        ? true
-        : _sysDark;
+            ? true
+            : _sysDark;
     return MaterialApp(
       title: 'MDSLens',
       debugShowCheckedModeBanner: false,

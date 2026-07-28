@@ -101,8 +101,8 @@ class ConfigOpenSelection {
 }
 
 typedef ConfigOpenPicker = Future<ConfigOpenSelection?> Function();
-typedef ConfigSavePicker =
-    Future<String?> Function(String suggestedName, Uint8List bytes);
+typedef ConfigSavePicker = Future<String?> Function(
+    String suggestedName, Uint8List bytes);
 typedef ConfigParser = String Function(String path);
 typedef ConfigEncoder = Future<Uint8List> Function(String configJson);
 typedef ImportedShotDecision = Future<bool> Function(String importedShot);
@@ -123,35 +123,32 @@ enum ConfigurationFileFormat {
 /// out of it prevents an old installation from silently becoming a source of
 /// state for this application as well.
 bool isLegacyMdsScopeConfigurationPath(String path) {
-  final normalized = path
-      .replaceAll('\\', '/')
-      .replaceAll(RegExp(r'/+'), '/')
-      .toLowerCase();
+  final normalized =
+      path.replaceAll('\\', '/').replaceAll(RegExp(r'/+'), '/').toLowerCase();
   return normalized.endsWith('/.mdsscope') ||
       normalized.contains('/.mdsscope/') ||
       normalized.endsWith('/.config/mdsscope') ||
       normalized.contains('/.config/mdsscope/');
 }
 
-typedef SignalFetchWorker =
-    Future<String> Function(
-      String configJson,
-      String dataMode,
-      String sshSettingsJson,
-    );
+typedef SignalFetchWorker = Future<String> Function(
+  String configJson,
+  String dataMode,
+  String sshSettingsJson,
+);
 
-typedef SignalPrewarmWorker =
-    Future<void> Function(String configJson, String sshSettingsJson);
+typedef SignalPrewarmWorker = Future<void> Function(
+    String configJson, String sshSettingsJson);
 
 enum _WaveformFetchKind { global, panel }
 
 class _WaveformFetchRequest {
   _WaveformFetchRequest.global(this.shot)
-    : kind = _WaveformFetchKind.global,
-      plotIndex = null;
+      : kind = _WaveformFetchKind.global,
+        plotIndex = null;
 
   _WaveformFetchRequest.panel(this.shot, this.plotIndex)
-    : kind = _WaveformFetchKind.panel;
+      : kind = _WaveformFetchKind.panel;
 
   final _WaveformFetchKind kind;
   final String shot;
@@ -161,29 +158,26 @@ class _WaveformFetchRequest {
   String key(int dataMode) => '${kind.name}|$shot|$plotIndex|$dataMode';
 }
 
-typedef ShotInfoFetchWorker =
-    Future<String> Function(String apiUrl, String token, String shot);
+typedef ShotInfoFetchWorker = Future<String> Function(
+    String apiUrl, String token, String shot);
 
-typedef LoginWorker =
-    Future<({String token, bool usedSsh})> Function(
-      String apiUrl,
-      String user,
-      String password,
-      String sshSettingsJson,
-    );
+typedef LoginWorker = Future<({String token, bool usedSsh})> Function(
+  String apiUrl,
+  String user,
+  String password,
+  String sshSettingsJson,
+);
 
-typedef LatestShotWorker =
-    Future<dynamic> Function(
-      String apiUrl,
-      String token,
-      String sshSettingsJson,
-    );
+typedef LatestShotWorker = Future<dynamic> Function(
+  String apiUrl,
+  String token,
+  String sshSettingsJson,
+);
 
 Future<ConfigOpenSelection?> _pickConfigurationFile() async {
   final mobile = Platform.isAndroid || Platform.isIOS;
-  final privateDirectory = mobile
-      ? null
-      : await UserDataStore().configurationDirectory();
+  final privateDirectory =
+      mobile ? null : await UserDataStore().configurationDirectory();
   final result = await FilePicker.platform.pickFiles(
     dialogTitle: 'Open MDSLens configuration',
     // iOS/iPadOS document providers do not consistently map the non-standard
@@ -217,12 +211,10 @@ Future<String?> _saveConfigurationFile(
   Uint8List bytes,
 ) async {
   final mobile = Platform.isAndroid || Platform.isIOS;
-  final extension = suggestedName.toLowerCase().endsWith('.webscp')
-      ? 'webscp'
-      : 'toml';
-  final privateDirectory = mobile
-      ? null
-      : await UserDataStore().configurationDirectory();
+  final extension =
+      suggestedName.toLowerCase().endsWith('.webscp') ? 'webscp' : 'toml';
+  final privateDirectory =
+      mobile ? null : await UserDataStore().configurationDirectory();
   return saveBytesWithFilePicker(
     dialogTitle: 'Save MDSLens configuration',
     fileName: suggestedName,
@@ -365,9 +357,8 @@ String decodeLoginToken(
   try {
     decoded = jsonDecode(trimmed);
   } on FormatException {
-    final preview = trimmed.length > 160
-        ? '${trimmed.substring(0, 160)}...'
-        : trimmed;
+    final preview =
+        trimmed.length > 160 ? '${trimmed.substring(0, 160)}...' : trimmed;
     final status = httpStatus == null ? '' : ' (HTTP $httpStatus)';
     throw 'Login server returned invalid JSON$status: $preview';
   }
@@ -444,9 +435,8 @@ dynamic decodeLatestShotResponse(
   try {
     decoded = jsonDecode(trimmed);
   } on FormatException {
-    final preview = trimmed.length > 160
-        ? '${trimmed.substring(0, 160)}...'
-        : trimmed;
+    final preview =
+        trimmed.length > 160 ? '${trimmed.substring(0, 160)}...' : trimmed;
     final status = httpStatus == null ? '' : ' (HTTP $httpStatus)';
     throw 'Latest-shot server returned invalid JSON$status: $preview';
   }
@@ -632,25 +622,26 @@ class AppState extends ChangeNotifier {
     SshTestWorker? sshTestWorker,
     UserDataStore? userDataStore,
     CredentialStore? credentialStore,
-  }) : _signalFetchWorker = signalFetchWorker ?? _fetchSignalsInBackground,
-       _signalPrewarmWorker =
-           signalPrewarmWorker ??
-           (signalFetchWorker == null
-               ? _prewarmSignalsInBackground
-               : _skipSignalPrewarm),
-       _sshDisconnect =
-           sshDisconnect ?? (() => RustBridge.instance.disconnectSsh()),
-       _shotInfoFetchWorker = shotInfoFetchWorker ?? _fetchShotInfoInBackground,
-       _loginWorker = loginWorker ?? _loginToApi,
-       _latestShotWorker = latestShotWorker ?? _fetchLatestShotFromApi,
-       _configOpenPicker = configOpenPicker ?? _pickConfigurationFile,
-       _configSavePicker = configSavePicker ?? _saveConfigurationFile,
-       _configParser = configParser ?? _parseConfiguration,
-       _configEncoder = configEncoder ?? _encodeConfiguration,
-       _webscpConfigEncoder = webscpConfigEncoder ?? _encodeWebscpConfiguration,
-       _sshTestWorker = sshTestWorker ?? _testSshInBackground,
-       _userDataStore = userDataStore ?? UserDataStore(),
-       _credentialStore = credentialStore ?? PlatformCredentialStore() {
+  })  : _signalFetchWorker = signalFetchWorker ?? _fetchSignalsInBackground,
+        _signalPrewarmWorker = signalPrewarmWorker ??
+            (signalFetchWorker == null
+                ? _prewarmSignalsInBackground
+                : _skipSignalPrewarm),
+        _sshDisconnect =
+            sshDisconnect ?? (() => RustBridge.instance.disconnectSsh()),
+        _shotInfoFetchWorker =
+            shotInfoFetchWorker ?? _fetchShotInfoInBackground,
+        _loginWorker = loginWorker ?? _loginToApi,
+        _latestShotWorker = latestShotWorker ?? _fetchLatestShotFromApi,
+        _configOpenPicker = configOpenPicker ?? _pickConfigurationFile,
+        _configSavePicker = configSavePicker ?? _saveConfigurationFile,
+        _configParser = configParser ?? _parseConfiguration,
+        _configEncoder = configEncoder ?? _encodeConfiguration,
+        _webscpConfigEncoder =
+            webscpConfigEncoder ?? _encodeWebscpConfiguration,
+        _sshTestWorker = sshTestWorker ?? _testSshInBackground,
+        _userDataStore = userDataStore ?? UserDataStore(),
+        _credentialStore = credentialStore ?? PlatformCredentialStore() {
     _shotCtrl.addListener(() {
       if (_shotCtrl.text != _shotText) {
         _invalidateFetchForSettingsChange();
@@ -809,12 +800,11 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> removeWebBookmarks(Iterable<int> indexes) async {
-    final valid =
-        indexes
-            .where((index) => index >= 0 && index < _webBookmarks.length)
-            .toSet()
-            .toList()
-          ..sort((a, b) => b.compareTo(a));
+    final valid = indexes
+        .where((index) => index >= 0 && index < _webBookmarks.length)
+        .toSet()
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
     if (valid.isEmpty) return;
     for (final index in valid) {
       _webBookmarks.removeAt(index);
@@ -1120,8 +1110,7 @@ class AppState extends ChangeNotifier {
   Duration _nextFullShotDebounceDelay() {
     final now = DateTime.now();
     final previous = _lastFullShotScheduleAt;
-    final isRapid =
-        previous != null &&
+    final isRapid = previous != null &&
         now.difference(previous) <= const Duration(milliseconds: 450);
     _lastFullShotScheduleAt = now;
     if (!isRapid) {
@@ -1409,14 +1398,13 @@ class AppState extends ChangeNotifier {
       if (_disposed || generation != _sessionGeneration) return;
       _loggedIn = false;
       _authToken = '';
-      _status = automatic
-          ? 'Automatic login failed: $error'
-          : 'Login failed: $error';
+      _status =
+          automatic ? 'Automatic login failed: $error' : 'Login failed: $error';
       await savePreferences();
       if (!_disposed) notifyListeners();
       final shouldOfferSettings =
           networkAccess == NetworkAccessPreparation.deniedPreviously ||
-          NetworkPermissionService.isConfirmedPermissionFailure(error);
+              NetworkPermissionService.isConfirmedPermissionFailure(error);
       if (shouldOfferSettings &&
           networkAccess != NetworkAccessPreparation.deniedDuringRequest) {
         reportNetworkPermissionFailure(
@@ -1480,32 +1468,28 @@ class AppState extends ChangeNotifier {
       _loginApiUrl = setting('loginApiUrl')?.toString() ?? _loginApiUrl;
       _loginUser = setting('loginUser')?.toString() ?? _loginUser;
       if (_rememberLogin) {
-        _loginPass =
-            await _readCredentialWithPlaintextMigration(
+        _loginPass = await _readCredentialWithPlaintextMigration(
               prefs,
               secureKey: _loginPasswordCredential,
               plaintextKey: 'loginPass',
             ) ??
             _loginPass;
-        _authToken =
-            await _readCredentialWithPlaintextMigration(
+        _authToken = await _readCredentialWithPlaintextMigration(
               prefs,
               secureKey: _authTokenCredential,
               plaintextKey: 'authToken',
             ) ??
             _authToken;
       }
-      _loggedIn = setting('loggedIn') is bool
-          ? setting('loggedIn') as bool
-          : _loggedIn;
+      _loggedIn =
+          setting('loggedIn') is bool ? setting('loggedIn') as bool : _loggedIn;
       if (_authToken.isEmpty) _loggedIn = false;
       _sshHost = setting('sshHost')?.toString() ?? _sshHost;
       _sshPort = setting('sshPort') is num
           ? (setting('sshPort') as num).toInt()
           : _sshPort;
       _sshUser = setting('sshUser')?.toString() ?? _sshUser;
-      _sshPass =
-          await _readCredentialWithPlaintextMigration(
+      _sshPass = await _readCredentialWithPlaintextMigration(
             prefs,
             secureKey: _sshPasswordCredential,
             plaintextKey: 'sshPass',
@@ -1515,21 +1499,18 @@ class AppState extends ChangeNotifier {
       _sshMode = setting('sshMode') is num
           ? (setting('sshMode') as num).toInt()
           : _sshMode;
-      _dataMode =
-          (setting('dataMode') is num
-                  ? (setting('dataMode') as num).toInt()
-                  : _dataMode)
-              .clamp(0, 2);
-      _interactionMode =
-          (setting('interactionMode') is num
-                  ? (setting('interactionMode') as num).toInt()
-                  : _interactionMode)
-              .clamp(0, 1);
-      _themeMode =
-          (setting('themeMode') is num
-                  ? (setting('themeMode') as num).toInt()
-                  : _themeMode)
-              .clamp(0, 2);
+      _dataMode = (setting('dataMode') is num
+              ? (setting('dataMode') as num).toInt()
+              : _dataMode)
+          .clamp(0, 2);
+      _interactionMode = (setting('interactionMode') is num
+              ? (setting('interactionMode') as num).toInt()
+              : _interactionMode)
+          .clamp(0, 1);
+      _themeMode = (setting('themeMode') is num
+              ? (setting('themeMode') as num).toInt()
+              : _themeMode)
+          .clamp(0, 2);
       _toolbarCollapsed = setting('toolbarCollapsed') is bool
           ? setting('toolbarCollapsed') as bool
           : _toolbarCollapsed;
@@ -1549,11 +1530,10 @@ class AppState extends ChangeNotifier {
       _limitShotHistory = setting('limitShotHistory') is bool
           ? setting('limitShotHistory') as bool
           : _limitShotHistory;
-      _shotHistoryLimit =
-          (setting('shotHistoryLimit') is num
-                  ? (setting('shotHistoryLimit') as num).toInt()
-                  : defaultShotHistoryLimit)
-              .clamp(1, maximumShotHistoryLimit);
+      _shotHistoryLimit = (setting('shotHistoryLimit') is num
+              ? (setting('shotHistoryLimit') as num).toInt()
+              : defaultShotHistoryLimit)
+          .clamp(1, maximumShotHistoryLimit);
 
       final bookmarksJson = setting('webBookmarks')?.toString();
       if (bookmarksJson != null) {
@@ -1805,8 +1785,8 @@ class AppState extends ChangeNotifier {
                 : int.tryParse(rawMode?.toString() ?? '');
             final mode =
                 parsedMode != null && parsedMode >= 0 && parsedMode <= 2
-                ? parsedMode
-                : _dataMode;
+                    ? parsedMode
+                    : _dataMode;
             final hideMode = signalHideModeOf(signal);
             return <String, dynamic>{
               ...signal,
@@ -1818,10 +1798,9 @@ class AppState extends ChangeNotifier {
               'server_ip': signal['server_ip']?.toString() ?? '',
               'color_name': color.isNotEmpty
                   ? color
-                  : _configurationSignalColors[index %
-                        _configurationSignalColors.length],
-              'manual_color':
-                  signal['manual_color'] == true ||
+                  : _configurationSignalColors[
+                      index % _configurationSignalColors.length],
+              'manual_color': signal['manual_color'] == true ||
                   (color.isNotEmpty && signal['manual_color'] != false),
               'hide_mode': hideMode,
               'hidden': hideMode != signalHideModeVisible,
@@ -1962,8 +1941,7 @@ class AppState extends ChangeNotifier {
           RegExp(r'[^A-Za-z0-9._-]'),
           '_',
         );
-        path =
-            '${temporaryDirectory.path}${Platform.pathSeparator}'
+        path = '${temporaryDirectory.path}${Platform.pathSeparator}'
             '${safeName.isEmpty ? "config.toml" : safeName}';
         await File(path).writeAsBytes(selection.bytes!, flush: true);
       }
@@ -2004,8 +1982,7 @@ class AppState extends ChangeNotifier {
       }
       _invalidateFetchForSettingsChange();
       final fileShot = _configurationInitialShot(json, cols);
-      final useFileShot =
-          fileShot.isNotEmpty &&
+      final useFileShot = fileShot.isNotEmpty &&
           (await importedShotDecision?.call(fileShot) ?? false);
       if (useFileShot) {
         _makeConfigurationShotInheritable(cols, fileShot);
@@ -2343,8 +2320,7 @@ class AppState extends ChangeNotifier {
     String unit,
     String xName,
     String xUnit,
-  })
-  _decodeLoadedSeries(dynamic rawSeries) {
+  }) _decodeLoadedSeries(dynamic rawSeries) {
     if (rawSeries is! Map) {
       return (
         points: null,
@@ -2574,6 +2550,26 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Stops background work before the host window or activity is destroyed.
+  ///
+  /// In particular, native waveform reads run on a helper isolate.  Leaving
+  /// one of those reads registered while the Flutter engine is shutting down
+  /// can make a desktop runner wait for the read timeout before it exits.
+  /// Cancellation is intentionally synchronous and idempotent so every
+  /// platform close path can call it without waiting for the network.
+  void prepareForExit() {
+    if (_disposed) return;
+    _disposed = true;
+    _sessionGeneration++;
+    _cancelPendingFullShotRefresh(resetCadence: true);
+    _discardPendingWaveformFetch();
+    _cancelActiveNativeFetch();
+    _disconnectSshTunnels();
+    _fetchGeneration++;
+    _fetching = false;
+    _fetchingPlotIndex = null;
+  }
+
   Future<void> fetchSinglePanel(int plotIdx) {
     final shot = _displayedShot.trim().isNotEmpty
         ? _displayedShot.trim()
@@ -2749,9 +2745,8 @@ class AppState extends ChangeNotifier {
       }
       if (!_isCurrentFetch(generation)) return;
       recordSshUsage(sshSettings.isNotEmpty);
-      final shot = data is Map
-          ? (data['shot'] ?? _findShot(data))
-          : _findShot(data);
+      final shot =
+          data is Map ? (data['shot'] ?? _findShot(data)) : _findShot(data);
       if (shot != null) {
         setShotFromApi(shot.toString());
         if (data is Map) {
@@ -2846,13 +2841,7 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
-    _disposed = true;
-    _sessionGeneration++;
-    _cancelPendingFullShotRefresh(resetCadence: true);
-    _discardPendingWaveformFetch();
-    _cancelActiveNativeFetch();
-    _disconnectSshTunnels();
-    _fetchGeneration++;
+    prepareForExit();
     _shotCtrl.dispose();
     super.dispose();
   }

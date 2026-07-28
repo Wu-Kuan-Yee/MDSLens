@@ -1221,6 +1221,27 @@ void main() {
     expect(app.status, 'Stopped');
   });
 
+  testWidgets('Application exit cancels an active waveform load immediately', (
+    tester,
+  ) async {
+    final neverCompletes = Completer<String>();
+    final app = AppState(
+      signalFetchWorker: (_, __, ___) => neverCompletes.future,
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setLoggedIn(true, 'test-token');
+    app.shotText = '170004';
+
+    app.startRefresh();
+    await tester.pump();
+    expect(app.fetching, isTrue);
+
+    app.prepareForExit();
+
+    expect(app.fetching, isFalse);
+  });
+
   test(
     'A configuration imported before login keeps its shot and loads after login',
     () async {

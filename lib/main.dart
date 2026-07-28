@@ -19,14 +19,21 @@ Future<void> _initializeApplication(
   await WidgetsBinding.instance.endOfFrame;
   final networkAccess =
       await NetworkPermissionService.requestAllStartupPermissions(
-        app.loginApiUrl,
-      );
+    app.loginApiUrl,
+  );
   await app.initializeStartupSession(preparedNetworkAccess: networkAccess);
 }
 
 void main(List<String> arguments) {
   WidgetsFlutterBinding.ensureInitialized();
   final app = AppState();
-  runApp(ChangeNotifierProvider.value(value: app, child: const MDSLensApp()));
+  // The provider owns AppState so application teardown always cancels native
+  // reads and SSH relays, including when a window is closed while Loading.
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => app,
+      child: const MDSLensApp(),
+    ),
+  );
   unawaited(_initializeApplication(app, arguments));
 }
