@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -14,6 +13,7 @@ class MainPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
+    final usesMetaShortcut = defaultTargetPlatform == TargetPlatform.macOS;
     final statusStyle = TextStyle(
       fontFamily: app.effectiveFontFamily,
       fontSize: app.fontUiSize.toDouble(),
@@ -22,13 +22,13 @@ class MainPage extends StatelessWidget {
       bindings: {
         SingleActivator(
           LogicalKeyboardKey.keyZ,
-          control: !Platform.isMacOS,
-          meta: Platform.isMacOS,
+          control: !usesMetaShortcut,
+          meta: usesMetaShortcut,
         ): () => app.interactionMode = 0,
         SingleActivator(
           LogicalKeyboardKey.keyP,
-          control: !Platform.isMacOS,
-          meta: Platform.isMacOS,
+          control: !usesMetaShortcut,
+          meta: usesMetaShortcut,
         ): () => app.interactionMode = 1,
         SingleActivator(LogicalKeyboardKey.escape): app.handleEscapeKey,
         SingleActivator(LogicalKeyboardKey.arrowLeft): () =>

@@ -36,6 +36,13 @@ render_opaque() {
 render "$SOURCE_ICON" 256 "$ROOT_DIR/assets/app_icon.png"
 render "$SOURCE_ICON" 512 "$ROOT_DIR/linux/runner/app_icon.png"
 
+# Browser favicon and installable PWA icons.
+render "$SOURCE_ICON" 32 "$ROOT_DIR/web/favicon.png"
+render "$SOURCE_ICON" 192 "$ROOT_DIR/web/icons/Icon-192.png"
+render "$SOURCE_ICON" 512 "$ROOT_DIR/web/icons/Icon-512.png"
+render_opaque 192 "$ROOT_DIR/web/icons/Icon-maskable-192.png"
+render_opaque 512 "$ROOT_DIR/web/icons/Icon-maskable-512.png"
+
 # macOS asset catalog.
 for size in 16 32 64 128 256 512 1024; do
   render "$SOURCE_ICON" "$size" \

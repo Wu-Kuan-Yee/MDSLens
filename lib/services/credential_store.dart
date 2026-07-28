@@ -1,4 +1,4 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'credential_store_platform.dart';
 
 /// Sensitive values that must never be placed in settings.json or exported
 /// configuration files.
@@ -9,45 +9,18 @@ abstract interface class CredentialStore {
 }
 
 class PlatformCredentialStore implements CredentialStore {
-  PlatformCredentialStore({FlutterSecureStorage? storage})
-    : _storage =
-          storage ??
-          const FlutterSecureStorage(
-            iOptions: IOSOptions(
-              accountName: 'com.mdslens.app.credentials',
-              accessibility: KeychainAccessibility.first_unlock_this_device,
-              synchronizable: false,
-              label: 'MDSLens credentials',
-            ),
-            mOptions: MacOsOptions(
-              accountName: 'com.mdslens.app.credentials',
-              accessibility: KeychainAccessibility.first_unlock_this_device,
-              synchronizable: false,
-              label: 'MDSLens credentials',
-              // Direct-distribution macOS builds are intentionally
-              // unsandboxed so ~/.mdslens remains available. The Data
-              // Protection Keychain requires an application-group
-              // entitlement and rejects these builds with errSecMissingEntitlement.
-              // The standard login Keychain remains encrypted and scoped to
-              // this signed application without that entitlement.
-              usesDataProtectionKeychain: false,
-            ),
-            aOptions: AndroidOptions(
-              storageNamespace: 'com.mdslens.app.credentials',
-            ),
-          );
+  PlatformCredentialStore() : _storage = PlatformCredentialBackend();
 
-  final FlutterSecureStorage _storage;
+  final PlatformCredentialBackend _storage;
 
   @override
-  Future<String?> read(String key) => _storage.read(key: key);
+  Future<String?> read(String key) => _storage.read(key);
 
   @override
-  Future<void> write(String key, String value) =>
-      _storage.write(key: key, value: value);
+  Future<void> write(String key, String value) => _storage.write(key, value);
 
   @override
-  Future<void> delete(String key) => _storage.delete(key: key);
+  Future<void> delete(String key) => _storage.delete(key);
 }
 
 class MemoryCredentialStore implements CredentialStore {

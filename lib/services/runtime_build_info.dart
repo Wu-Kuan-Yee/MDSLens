@@ -1,9 +1,8 @@
-import 'dart:ffi';
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'rust_bridge.dart';
+import 'runtime_platform_info.dart';
 
 class RuntimeSystemInfo {
   const RuntimeSystemInfo({
@@ -24,9 +23,9 @@ class RuntimeSystemInfo {
 
   factory RuntimeSystemInfo.fallback() {
     return runtimeSystemInfoForValues(
-      operatingSystem: Platform.operatingSystem,
-      operatingSystemVersion: Platform.operatingSystemVersion,
-      architecture: Abi.current().toString(),
+      operatingSystem: runtimeOperatingSystem,
+      operatingSystemVersion: runtimeOperatingSystemVersion,
+      architecture: runtimeArchitecture,
     );
   }
 }
@@ -41,18 +40,18 @@ Future<RuntimeSystemInfo> loadRuntimeSystemInfo({
   bool? useLinuxReleaseInfo,
 }) async {
   final fallback = RuntimeSystemInfo.fallback();
-  if (useLinuxReleaseInfo ?? Platform.isLinux) {
-    try {
-      final osRelease = await File('/etc/os-release').readAsString();
+  if (useLinuxReleaseInfo ?? runtimeIsLinux) {
+    final osRelease = await loadLinuxOsRelease();
+    if (osRelease != null) {
       return linuxRuntimeSystemInfo(
         osRelease: osRelease,
-        kernelVersion: Platform.operatingSystemVersion,
-        architecture: Abi.current().toString(),
+        kernelVersion: runtimeOperatingSystemVersion,
+        architecture: runtimeArchitecture,
       );
-    } catch (_) {
-      return fallback;
     }
+    return fallback;
   }
+  if (kIsWeb) return fallback;
   try {
     final result = await _systemInfoChannel.invokeMapMethod<String, dynamic>(
       'get',
