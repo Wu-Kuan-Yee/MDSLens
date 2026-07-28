@@ -5242,6 +5242,17 @@ void main() {
     await drag.moveTo(tester.getCenter(betweenColumns));
     await tester.pump(const Duration(milliseconds: 200));
     await drag.up();
+    await tester.pump();
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>)
+                .value
+                .startsWith('layout-item-settle-'),
+      ),
+      findsWidgets,
+    );
     await tester.pumpAndSettle();
 
     expect(

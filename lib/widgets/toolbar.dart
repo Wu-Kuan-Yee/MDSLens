@@ -26,6 +26,118 @@ class _LayoutDragData {
   bool get isColumn => row == null;
 }
 
+class _LayoutPanelPosition {
+  const _LayoutPanelPosition(this.column, this.row, this.columnIdentity);
+
+  final int column;
+  final int row;
+  final List<Map<String, dynamic>> columnIdentity;
+}
+
+Map<Map<String, dynamic>, _LayoutPanelPosition> _snapshotLayoutPanelPositions(
+  List<List<Map<String, dynamic>>> columns,
+) {
+  final positions = Map<Map<String, dynamic>, _LayoutPanelPosition>.identity();
+  for (var column = 0; column < columns.length; column++) {
+    for (var row = 0; row < columns[column].length; row++) {
+      positions[columns[column][row]] = _LayoutPanelPosition(
+        column,
+        row,
+        columns[column],
+      );
+    }
+  }
+  return positions;
+}
+
+Map<List<Map<String, dynamic>>, int> _snapshotLayoutColumnPositions(
+  List<List<Map<String, dynamic>>> columns,
+) {
+  final positions = Map<List<Map<String, dynamic>>, int>.identity();
+  for (var column = 0; column < columns.length; column++) {
+    positions[columns[column]] = column;
+  }
+  return positions;
+}
+
+Map<Map<String, dynamic>, Offset> _layoutPanelMotionOffsets(
+  Map<Map<String, dynamic>, _LayoutPanelPosition> before,
+  Map<Map<String, dynamic>, _LayoutPanelPosition> after,
+) {
+  final offsets = Map<Map<String, dynamic>, Offset>.identity();
+  for (final entry in after.entries) {
+    final oldPosition = before[entry.key];
+    if (oldPosition == null) continue;
+    final newPosition = entry.value;
+    final columnDelta =
+        identical(oldPosition.columnIdentity, newPosition.columnIdentity)
+            ? 0
+            : oldPosition.column - newPosition.column;
+    final offset = Offset(
+      columnDelta * 164.0,
+      (oldPosition.row - newPosition.row) * 119.0,
+    );
+    if (offset != Offset.zero) offsets[entry.key] = offset;
+  }
+  return offsets;
+}
+
+Map<List<Map<String, dynamic>>, Offset> _layoutColumnMotionOffsets(
+  Map<List<Map<String, dynamic>>, int> before,
+  Map<List<Map<String, dynamic>>, int> after,
+) {
+  final offsets = Map<List<Map<String, dynamic>>, Offset>.identity();
+  for (final entry in after.entries) {
+    final oldColumn = before[entry.key];
+    if (oldColumn == null) continue;
+    final offset = Offset((oldColumn - entry.value) * 164.0, 0);
+    if (offset != Offset.zero) offsets[entry.key] = offset;
+  }
+  return offsets;
+}
+
+class _LayoutSettlingTransform extends StatelessWidget {
+  const _LayoutSettlingTransform({
+    required this.animationId,
+    required this.revision,
+    required this.offset,
+    required this.appearing,
+    required this.child,
+  });
+
+  final int animationId;
+  final int revision;
+  final Offset offset;
+  final bool appearing;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      key: ValueKey('layout-item-settle-$animationId-$revision'),
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 210),
+      curve: Curves.easeOutCubic,
+      child: child,
+      builder: (context, value, child) {
+        final translation = Offset.lerp(offset, Offset.zero, value)!;
+        final scale = appearing ? 0.96 + 0.04 * value : 1.0;
+        return Opacity(
+          opacity: appearing ? 0.45 + 0.55 * value : 1,
+          child: Transform.translate(
+            offset: translation,
+            child: Transform.scale(
+              scale: scale,
+              alignment: Alignment.center,
+              child: child,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 bool reorderLayoutColumn(
   List<List<Map<String, dynamic>>> columns,
   int sourceColumn,
@@ -1498,6 +1610,11 @@ class ToolbarWidget extends StatelessWidget {
     final horizontalController = ScrollController();
     final verticalControllers = <int, ScrollController>{};
     final selectedPanels = Set<Map<String, dynamic>>.identity();
+    var panelMotionOffsets = Map<Map<String, dynamic>, Offset>.identity();
+    var columnMotionOffsets =
+        Map<List<Map<String, dynamic>>, Offset>.identity();
+    var appearingPanels = Set<Map<String, dynamic>>.identity();
+    var appearingColumns = Set<List<Map<String, dynamic>>>.identity();
     var layoutRevision = 0;
 
     final dialogFuture = showDialog<void>(
@@ -1505,8 +1622,31 @@ class ToolbarWidget extends StatelessWidget {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) {
           void animateLayoutChange(VoidCallback change) {
+            final oldPanels = _snapshotLayoutPanelPositions(draftColumns);
+            final oldColumns = _snapshotLayoutColumnPositions(draftColumns);
             setState(() {
               change();
+              final newPanels = _snapshotLayoutPanelPositions(draftColumns);
+              final newColumns = _snapshotLayoutColumnPositions(draftColumns);
+              panelMotionOffsets = _layoutPanelMotionOffsets(
+                oldPanels,
+                newPanels,
+              );
+              columnMotionOffsets = _layoutColumnMotionOffsets(
+                oldColumns,
+                newColumns,
+              );
+              appearingPanels = Set<Map<String, dynamic>>.identity()
+                ..addAll(
+                  newPanels.keys
+                      .where((panel) => !oldPanels.containsKey(panel)),
+                );
+              appearingColumns = Set<List<Map<String, dynamic>>>.identity()
+                ..addAll(
+                  newColumns.keys.where(
+                    (column) => !oldColumns.containsKey(column),
+                  ),
+                );
               layoutRevision++;
             });
           }
@@ -1566,36 +1706,30 @@ class ToolbarWidget extends StatelessWidget {
                           scrollDirection: Axis.horizontal,
                           child: SizedBox(
                             width: layoutWidth,
-                            child: TweenAnimationBuilder<double>(
-                              key: ValueKey('layout-settle-$layoutRevision'),
-                              tween: Tween(begin: 0.975, end: 1),
-                              duration: const Duration(milliseconds: 210),
-                              curve: Curves.easeOutCubic,
-                              builder: (context, value, child) => Opacity(
-                                opacity: ((value - 0.975) / 0.025).clamp(
-                                  0.35,
-                                  1,
-                                ),
-                                child: Transform.scale(
-                                  scale: value,
-                                  alignment: Alignment.center,
-                                  child: child,
-                                ),
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  for (var displayColumn = 0;
-                                      displayColumn < displayColumns.length;
-                                      displayColumn++) ...[
-                                    _layoutColumnDropTarget(
-                                      context: ctx,
-                                      columns: draftColumns,
-                                      insertionIndex: displayColumn,
-                                      onLayoutChanged: () =>
-                                          animateLayoutChange(() {}),
-                                    ),
-                                    Expanded(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                for (var displayColumn = 0;
+                                    displayColumn < displayColumns.length;
+                                    displayColumn++) ...[
+                                  _layoutColumnDropTarget(
+                                    context: ctx,
+                                    columns: draftColumns,
+                                    insertionIndex: displayColumn,
+                                    onLayoutChange: animateLayoutChange,
+                                  ),
+                                  Expanded(
+                                    child: _LayoutSettlingTransform(
+                                      animationId: identityHashCode(
+                                        draftColumns[displayColumn],
+                                      ),
+                                      revision: layoutRevision,
+                                      offset: columnMotionOffsets[
+                                              draftColumns[displayColumn]] ??
+                                          Offset.zero,
+                                      appearing: appearingColumns.contains(
+                                        draftColumns[displayColumn],
+                                      ),
                                       child:
                                           LongPressDraggable<_LayoutDragData>(
                                         key: ValueKey(
@@ -1824,11 +1958,8 @@ class ToolbarWidget extends StatelessWidget {
                                                                       displayColumn,
                                                                   insertionRow:
                                                                       0,
-                                                                  onLayoutChanged:
-                                                                      () =>
-                                                                          animateLayoutChange(
-                                                                    () {},
-                                                                  ),
+                                                                  onLayoutChange:
+                                                                      animateLayoutChange,
                                                                 ),
                                                                 for (final cell
                                                                     in displayColumns[
@@ -1854,6 +1985,22 @@ class ToolbarWidget extends StatelessWidget {
                                                                               .sourceColumn][cell
                                                                           .sourceRow],
                                                                     ),
+                                                                    settleOffset: panelMotionOffsets[draftColumns[
+                                                                            cell
+                                                                                .sourceColumn][cell
+                                                                            .sourceRow]] ??
+                                                                        Offset
+                                                                            .zero,
+                                                                    appearing:
+                                                                        appearingPanels
+                                                                            .contains(
+                                                                      draftColumns[
+                                                                          cell
+                                                                              .sourceColumn][cell
+                                                                          .sourceRow],
+                                                                    ),
+                                                                    layoutRevision:
+                                                                        layoutRevision,
                                                                     onSelect: () =>
                                                                         setState(
                                                                             () {
@@ -1897,11 +2044,8 @@ class ToolbarWidget extends StatelessWidget {
                                                                     insertionRow:
                                                                         cell.sourceRow +
                                                                             1,
-                                                                    onLayoutChanged:
-                                                                        () =>
-                                                                            animateLayoutChange(
-                                                                      () {},
-                                                                    ),
+                                                                    onLayoutChange:
+                                                                        animateLayoutChange,
                                                                   ),
                                                                 ],
                                                               ],
@@ -1918,16 +2062,15 @@ class ToolbarWidget extends StatelessWidget {
                                         ),
                                       ),
                                     ),
-                                  ],
-                                  _layoutColumnDropTarget(
-                                    context: ctx,
-                                    columns: draftColumns,
-                                    insertionIndex: displayColumns.length,
-                                    onLayoutChanged: () =>
-                                        animateLayoutChange(() {}),
                                   ),
                                 ],
-                              ),
+                                _layoutColumnDropTarget(
+                                  context: ctx,
+                                  columns: draftColumns,
+                                  insertionIndex: displayColumns.length,
+                                  onLayoutChange: animateLayoutChange,
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -2107,23 +2250,28 @@ class ToolbarWidget extends StatelessWidget {
     required BuildContext context,
     required List<List<Map<String, dynamic>>> columns,
     required int insertionIndex,
-    required VoidCallback onLayoutChanged,
+    required ValueChanged<VoidCallback> onLayoutChange,
   }) {
     return DragTarget<_LayoutDragData>(
       key: ValueKey('layout-column-drop-$insertionIndex'),
       onWillAcceptWithDetails: (_) => true,
       onAcceptWithDetails: (details) {
-        final changed = details.data.isColumn
-            ? reorderLayoutColumn(columns, details.data.column, insertionIndex)
-            : moveLayoutPanelToNewColumn(
-                columns,
-                sourceColumn: details.data.column,
-                sourceRow: details.data.row!,
-                insertionIndex: insertionIndex,
-              );
-        if (changed) {
-          onLayoutChanged();
-        }
+        onLayoutChange(() {
+          if (details.data.isColumn) {
+            reorderLayoutColumn(
+              columns,
+              details.data.column,
+              insertionIndex,
+            );
+          } else {
+            moveLayoutPanelToNewColumn(
+              columns,
+              sourceColumn: details.data.column,
+              sourceRow: details.data.row!,
+              insertionIndex: insertionIndex,
+            );
+          }
+        });
       },
       builder: (context, candidates, rejected) {
         final isPanel = candidates.any(
@@ -2216,21 +2364,21 @@ class ToolbarWidget extends StatelessWidget {
     required List<List<Map<String, dynamic>>> columns,
     required int targetColumn,
     required int insertionRow,
-    required VoidCallback onLayoutChanged,
+    required ValueChanged<VoidCallback> onLayoutChange,
   }) {
     return DragTarget<_LayoutDragData>(
       key: ValueKey('layout-panel-drop-$targetColumn-$insertionRow'),
       onWillAcceptWithDetails: (details) => !details.data.isColumn,
       onAcceptWithDetails: (details) {
-        if (reorderLayoutPanel(
-          columns,
-          sourceColumn: details.data.column,
-          sourceRow: details.data.row!,
-          targetColumn: targetColumn,
-          insertionRow: insertionRow,
-        )) {
-          onLayoutChanged();
-        }
+        onLayoutChange(() {
+          reorderLayoutPanel(
+            columns,
+            sourceColumn: details.data.column,
+            sourceRow: details.data.row!,
+            targetColumn: targetColumn,
+            insertionRow: insertionRow,
+          );
+        });
       },
       builder: (context, candidates, rejected) => AnimatedContainer(
         duration: const Duration(milliseconds: 160),
@@ -2318,6 +2466,9 @@ class ToolbarWidget extends StatelessWidget {
     required int sourceRow,
     required int panelNumber,
     required bool selected,
+    required Offset settleOffset,
+    required bool appearing,
+    required int layoutRevision,
     required VoidCallback onSelect,
     required VoidCallback onEdit,
   }) {
@@ -2332,48 +2483,54 @@ class ToolbarWidget extends StatelessWidget {
       width: 170,
     );
     return Expanded(
-      child: LongPressDraggable<_LayoutDragData>(
-        key: ValueKey('layout-panel-drag-$panelNumber'),
-        data: dragData,
-        delay: const Duration(milliseconds: 320),
-        hapticFeedbackOnStart: true,
-        feedback: dragFeedback,
-        childWhenDragging: Opacity(
-          opacity: 0.22,
-          child: Container(
-            margin: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              border: Border.all(color: Theme.of(context).dividerColor),
-              borderRadius: BorderRadius.circular(6),
+      child: _LayoutSettlingTransform(
+        animationId: identityHashCode(panel),
+        revision: layoutRevision,
+        offset: settleOffset,
+        appearing: appearing,
+        child: LongPressDraggable<_LayoutDragData>(
+          key: ValueKey('layout-panel-drag-$panelNumber'),
+          data: dragData,
+          delay: const Duration(milliseconds: 320),
+          hapticFeedbackOnStart: true,
+          feedback: dragFeedback,
+          childWhenDragging: Opacity(
+            opacity: 0.22,
+            child: Container(
+              margin: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                border: Border.all(color: Theme.of(context).dividerColor),
+                borderRadius: BorderRadius.circular(6),
+              ),
             ),
           ),
-        ),
-        child: GestureDetector(
-          onTap: onSelect,
-          child: Container(
-            key: ValueKey('layout-preview-panel-${panelNumber - 1}'),
-            width: double.infinity,
-            margin: const EdgeInsets.symmetric(horizontal: 4),
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: selected ? colors.primary : Colors.grey.shade400,
-                width: selected ? 2 : 1,
+          child: GestureDetector(
+            onTap: onSelect,
+            child: Container(
+              key: ValueKey('layout-preview-panel-${panelNumber - 1}'),
+              width: double.infinity,
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: selected ? colors.primary : Colors.grey.shade400,
+                  width: selected ? 2 : 1,
+                ),
+                borderRadius: BorderRadius.circular(6),
+                color: colors.primaryContainer.withValues(alpha: 0.3),
               ),
-              borderRadius: BorderRadius.circular(6),
-              color: colors.primaryContainer.withValues(alpha: 0.3),
-            ),
-            child: _buildLayoutPanelPreview(
-              context,
-              panel: panel,
-              panelNumber: panelNumber,
-              selected: selected,
-              onEdit: onEdit,
-              dragHandle: _layoutDragHandle(
-                context: context,
-                key: ValueKey('layout-panel-drag-handle-$panelNumber'),
-                data: dragData,
-                tooltip: 'Drag panel $panelNumber',
-                feedback: dragFeedback,
+              child: _buildLayoutPanelPreview(
+                context,
+                panel: panel,
+                panelNumber: panelNumber,
+                selected: selected,
+                onEdit: onEdit,
+                dragHandle: _layoutDragHandle(
+                  context: context,
+                  key: ValueKey('layout-panel-drag-handle-$panelNumber'),
+                  data: dragData,
+                  tooltip: 'Drag panel $panelNumber',
+                  feedback: dragFeedback,
+                ),
               ),
             ),
           ),
