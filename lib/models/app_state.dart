@@ -227,12 +227,16 @@ Future<String?> _saveConfigurationFile(
 String _parseConfiguration(String path) => RustBridge.instance.parseEnv(path);
 
 Future<Uint8List> _encodeConfiguration(String configJson) async {
-  final toml = RustBridge.instance.encodeEnv(configJson);
+  final toml = await Isolate.run(
+    () => RustBridge.instance.encodeEnv(configJson),
+  );
   return Uint8List.fromList(utf8.encode(toml));
 }
 
 Future<Uint8List> _encodeWebscpConfiguration(String configJson) async {
-  final webscp = RustBridge.instance.encodeEnvWebscp(configJson);
+  final webscp = await Isolate.run(
+    () => RustBridge.instance.encodeEnvWebscp(configJson),
+  );
   return Uint8List.fromList(utf8.encode(webscp));
 }
 

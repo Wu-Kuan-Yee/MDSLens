@@ -36,9 +36,8 @@ bool reorderLayoutColumn(
     return false;
   }
   final column = columns.removeAt(sourceColumn);
-  final adjusted = insertionIndex > sourceColumn
-      ? insertionIndex - 1
-      : insertionIndex;
+  final adjusted =
+      insertionIndex > sourceColumn ? insertionIndex - 1 : insertionIndex;
   columns.insert(adjusted.clamp(0, columns.length), column);
   return adjusted != sourceColumn;
 }
@@ -588,9 +587,8 @@ class ToolbarWidget extends StatelessWidget {
           final width = constraints.maxWidth;
           final compact = width < 560;
           final wide = width >= 940;
-          final rateSelectorWidth = (190 + (uiSize - 12).clamp(0, 16) * 2)
-              .clamp(190, 222)
-              .toDouble();
+          final rateSelectorWidth =
+              (190 + (uiSize - 12).clamp(0, 16) * 2).clamp(190, 222).toDouble();
           final shotInfo = _shotInfoPanel(
             context,
             compact: compact,
@@ -1200,14 +1198,14 @@ class ToolbarWidget extends StatelessWidget {
                   onChanged: bookmarks.isEmpty
                       ? null
                       : (checked) => setDialogState(() {
-                          if (checked == true) {
-                            selected.addAll(
-                              bookmarks.map((bookmark) => bookmark.index),
-                            );
-                          } else {
-                            selected.clear();
-                          }
-                        }),
+                            if (checked == true) {
+                              selected.addAll(
+                                bookmarks.map((bookmark) => bookmark.index),
+                              );
+                            } else {
+                              selected.clear();
+                            }
+                          }),
                 ),
                 const Divider(height: 1),
                 const SizedBox(height: 10),
@@ -1326,8 +1324,9 @@ class ToolbarWidget extends StatelessWidget {
                           ..clear()
                           ..addAll(
                             app.webBookmarks.asMap().entries.map(
-                              (entry) => (index: entry.key, value: entry.value),
-                            ),
+                                  (entry) =>
+                                      (index: entry.key, value: entry.value),
+                                ),
                           );
                         selected.clear();
                         if (dialogContext.mounted) {
@@ -1504,11 +1503,9 @@ class ToolbarWidget extends StatelessWidget {
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                for (
-                                  var displayColumn = 0;
-                                  displayColumn < displayColumns.length;
-                                  displayColumn++
-                                ) ...[
+                                for (var displayColumn = 0;
+                                    displayColumn < displayColumns.length;
+                                    displayColumn++) ...[
                                   _layoutColumnDropTarget(
                                     context: ctx,
                                     columns: draftColumns,
@@ -1561,16 +1558,14 @@ class ToolbarWidget extends StatelessWidget {
                                           ),
                                           decoration: BoxDecoration(
                                             border: Border.all(
-                                              color:
-                                                  selectedCol ==
+                                              color: selectedCol ==
                                                           displayColumn &&
                                                       selectedRow < 0
                                                   ? Theme.of(
                                                       ctx,
                                                     ).colorScheme.primary
                                                   : Theme.of(ctx).dividerColor,
-                                              width:
-                                                  selectedCol ==
+                                              width: selectedCol ==
                                                           displayColumn &&
                                                       selectedRow < 0
                                                   ? 2
@@ -1598,21 +1593,24 @@ class ToolbarWidget extends StatelessWidget {
                                                     children: [
                                                       Padding(
                                                         padding:
-                                                            const EdgeInsets.only(
-                                                              left: 3,
-                                                            ),
-                                                        child: _layoutDragHandle(
+                                                            const EdgeInsets
+                                                                .only(
+                                                          left: 3,
+                                                        ),
+                                                        child:
+                                                            _layoutDragHandle(
                                                           context: ctx,
                                                           key: ValueKey(
                                                             'layout-column-drag-handle-${displayColumn + 1}',
                                                           ),
-                                                          data:
-                                                              _LayoutDragData.column(
-                                                                displayColumn,
-                                                              ),
+                                                          data: _LayoutDragData
+                                                              .column(
+                                                            displayColumn,
+                                                          ),
                                                           tooltip:
                                                               'Drag column ${displayColumn + 1}',
-                                                          feedback: _layoutDragFeedback(
+                                                          feedback:
+                                                              _layoutDragFeedback(
                                                             ctx,
                                                             icon: Icons
                                                                 .view_column_rounded,
@@ -1630,7 +1628,8 @@ class ToolbarWidget extends StatelessWidget {
                                                                 .scaleDown,
                                                             child: Text(
                                                               'Column ${displayColumn + 1}',
-                                                              style: const TextStyle(
+                                                              style:
+                                                                  const TextStyle(
                                                                 fontSize: 10,
                                                                 fontWeight:
                                                                     FontWeight
@@ -1645,32 +1644,32 @@ class ToolbarWidget extends StatelessWidget {
                                                           selectedRow < 0)
                                                         Padding(
                                                           padding:
-                                                              const EdgeInsets.only(
-                                                                right: 3,
-                                                              ),
-                                                          child: _layoutIconButton(
+                                                              const EdgeInsets
+                                                                  .only(
+                                                            right: 3,
+                                                          ),
+                                                          child:
+                                                              _layoutIconButton(
                                                             context: ctx,
                                                             key: ValueKey(
                                                               'layout-delete-column-${displayColumn + 1}',
                                                             ),
                                                             icon: Icons
                                                                 .delete_outline_rounded,
-                                                            tooltip:
-                                                                draftColumns
+                                                            tooltip: draftColumns
                                                                         .length >
                                                                     1
                                                                 ? 'Delete column'
                                                                 : 'At least one column is required',
                                                             destructive: true,
-                                                            onPressed:
-                                                                draftColumns
+                                                            onPressed: draftColumns
                                                                         .length >
                                                                     1
                                                                 ? () {
                                                                     draftColumns
                                                                         .removeAt(
-                                                                          displayColumn,
-                                                                        );
+                                                                      displayColumn,
+                                                                    );
                                                                     selectedCol =
                                                                         -1;
                                                                     selectedRow =
@@ -1688,24 +1687,27 @@ class ToolbarWidget extends StatelessWidget {
                                               ),
                                               Expanded(
                                                 child: LayoutBuilder(
-                                                  builder: (context, constraints) {
+                                                  builder:
+                                                      (context, constraints) {
                                                     final panelCount =
-                                                        displayColumns[displayColumn]
+                                                        displayColumns[
+                                                                displayColumn]
                                                             .length;
                                                     final requiredHeight =
                                                         panelCount * 112.0 +
-                                                        (panelCount + 1) * 7.0;
+                                                            (panelCount + 1) *
+                                                                7.0;
                                                     final needsVerticalScroll =
                                                         requiredHeight >
-                                                        constraints.maxHeight +
-                                                            0.5;
+                                                            constraints
+                                                                    .maxHeight +
+                                                                0.5;
                                                     final controller =
                                                         verticalControllers
                                                             .putIfAbsent(
-                                                              displayColumn,
-                                                              ScrollController
-                                                                  .new,
-                                                            );
+                                                      displayColumn,
+                                                      ScrollController.new,
+                                                    );
                                                     return Scrollbar(
                                                       key: ValueKey(
                                                         'layout-column-scrollbar-$displayColumn',
@@ -1714,7 +1716,8 @@ class ToolbarWidget extends StatelessWidget {
                                                       thumbVisibility:
                                                           needsVerticalScroll,
                                                       interactive: true,
-                                                      child: SingleChildScrollView(
+                                                      child:
+                                                          SingleChildScrollView(
                                                         key: ValueKey(
                                                           'layout-column-scroll-$displayColumn',
                                                         ),
@@ -1736,7 +1739,8 @@ class ToolbarWidget extends StatelessWidget {
                                                                 insertionRow: 0,
                                                                 setState:
                                                                     setState,
-                                                                clearSelection: () {
+                                                                clearSelection:
+                                                                    () {
                                                                   selectedCol =
                                                                       -1;
                                                                   selectedRow =
@@ -1744,44 +1748,49 @@ class ToolbarWidget extends StatelessWidget {
                                                                 },
                                                               ),
                                                               for (final cell
-                                                                  in displayColumns[displayColumn]) ...[
+                                                                  in displayColumns[
+                                                                      displayColumn]) ...[
                                                                 _buildDraggableLayoutPanel(
                                                                   ctx,
-                                                                  panel:
-                                                                      draftColumns[cell
+                                                                  panel: draftColumns[
+                                                                      cell
                                                                           .sourceColumn][cell
-                                                                          .sourceRow],
+                                                                      .sourceRow],
                                                                   sourceColumn:
                                                                       cell.sourceColumn,
                                                                   sourceRow: cell
                                                                       .sourceRow,
                                                                   panelNumber:
                                                                       cell.plotIndex +
-                                                                      1,
-                                                                  selected:
-                                                                      selectedCol ==
-                                                                          cell.sourceColumn &&
+                                                                          1,
+                                                                  selected: selectedCol ==
+                                                                          cell
+                                                                              .sourceColumn &&
                                                                       selectedRow ==
                                                                           cell.sourceRow,
-                                                                  onSelect: () => setState(() {
+                                                                  onSelect: () =>
+                                                                      setState(
+                                                                          () {
                                                                     selectedCol =
                                                                         cell.sourceColumn;
                                                                     selectedRow =
                                                                         cell.sourceRow;
                                                                   }),
-                                                                  onEdit: () async {
+                                                                  onEdit:
+                                                                      () async {
                                                                     final panel =
-                                                                        draftColumns[cell
-                                                                            .sourceColumn][cell
+                                                                        draftColumns[
+                                                                            cell
+                                                                                .sourceColumn][cell
                                                                             .sourceRow];
                                                                     final changed =
                                                                         await _editLayoutPanel(
-                                                                          ctx,
-                                                                          app,
-                                                                          panel,
-                                                                          cell.plotIndex +
-                                                                              1,
-                                                                        );
+                                                                      ctx,
+                                                                      app,
+                                                                      panel,
+                                                                      cell.plotIndex +
+                                                                          1,
+                                                                    );
                                                                     if (changed &&
                                                                         ctx.mounted) {
                                                                       setState(
@@ -1790,7 +1799,9 @@ class ToolbarWidget extends StatelessWidget {
                                                                     }
                                                                   },
                                                                   onDelete: () {
-                                                                    final panelCount = draftColumns.fold(
+                                                                    final panelCount =
+                                                                        draftColumns
+                                                                            .fold(
                                                                       0,
                                                                       (
                                                                         count,
@@ -1804,18 +1815,18 @@ class ToolbarWidget extends StatelessWidget {
                                                                         1) {
                                                                       return;
                                                                     }
-                                                                    draftColumns[cell
-                                                                            .sourceColumn]
+                                                                    draftColumns[
+                                                                            cell.sourceColumn]
                                                                         .removeAt(
-                                                                          cell.sourceRow,
-                                                                        );
-                                                                    if (draftColumns[cell
-                                                                            .sourceColumn]
+                                                                      cell.sourceRow,
+                                                                    );
+                                                                    if (draftColumns[
+                                                                            cell.sourceColumn]
                                                                         .isEmpty) {
                                                                       draftColumns
                                                                           .removeAt(
-                                                                            cell.sourceColumn,
-                                                                          );
+                                                                        cell.sourceColumn,
+                                                                      );
                                                                     }
                                                                     selectedCol =
                                                                         -1;
@@ -1834,10 +1845,11 @@ class ToolbarWidget extends StatelessWidget {
                                                                       displayColumn,
                                                                   insertionRow:
                                                                       cell.sourceRow +
-                                                                      1,
+                                                                          1,
                                                                   setState:
                                                                       setState,
-                                                                  clearSelection: () {
+                                                                  clearSelection:
+                                                                      () {
                                                                     selectedCol =
                                                                         -1;
                                                                     selectedRow =
@@ -1883,8 +1895,7 @@ class ToolbarWidget extends StatelessWidget {
                       children: [
                         TextButton.icon(
                           onPressed: () {
-                            final targetColumn =
-                                selectedCol >= 0 &&
+                            final targetColumn = selectedCol >= 0 &&
                                     selectedCol < draftColumns.length
                                 ? selectedCol
                                 : draftColumns.length - 1;
@@ -1965,13 +1976,13 @@ class ToolbarWidget extends StatelessWidget {
   }
 
   Map<String, dynamic> _emptyPanelConfig() => {
-    'title': '',
-    'x_label': 's',
-    'y_label': 'a.u.',
-    'extraction_points': 2000,
-    'grid': true,
-    'signal_specs': <Map<String, dynamic>>[],
-  };
+        'title': '',
+        'x_label': 's',
+        'y_label': 'a.u.',
+        'extraction_points': 2000,
+        'grid': true,
+        'signal_specs': <Map<String, dynamic>>[],
+      };
 
   Widget _layoutIconButton({
     required BuildContext context,
@@ -2433,8 +2444,8 @@ class ToolbarWidget extends StatelessWidget {
 
     final signals = List<Map<String, dynamic>>.from(
       (panel['signal_specs'] as List?)?.whereType<Map>().map(
-            (signal) => Map<String, dynamic>.from(signal),
-          ) ??
+                (signal) => Map<String, dynamic>.from(signal),
+              ) ??
           const [],
     );
     if (signals.isEmpty) {
@@ -2634,7 +2645,7 @@ class ToolbarWidget extends StatelessWidget {
                             title: Text(
                               app.limitShotHistory
                                   ? 'Keep only the most recent '
-                                        '${app.shotHistoryLimit} shots'
+                                      '${app.shotHistoryLimit} shots'
                                   : 'Keep all shot history',
                               style: const TextStyle(
                                 fontWeight: FontWeight.w700,
@@ -2691,8 +2702,7 @@ class ToolbarWidget extends StatelessWidget {
                                 key: const ValueKey(
                                   'shot-history-retention-restore-default',
                                 ),
-                                tooltip:
-                                    'Restore the default limit '
+                                tooltip: 'Restore the default limit '
                                     '(${AppState.defaultShotHistoryLimit})',
                                 onPressed: () {
                                   app.restoreDefaultShotHistoryLimit();
@@ -2701,8 +2711,8 @@ class ToolbarWidget extends StatelessWidget {
                                       .toString();
                                   limitController.selection =
                                       TextSelection.collapsed(
-                                        offset: limitController.text.length,
-                                      );
+                                    offset: limitController.text.length,
+                                  );
                                   syncHistory();
                                   setState(() => limitError = null);
                                 },
@@ -2732,12 +2742,12 @@ class ToolbarWidget extends StatelessWidget {
                     onChanged: history.isEmpty
                         ? null
                         : (checked) => setState(() {
-                            if (checked == true) {
-                              selected.addAll(history);
-                            } else {
-                              selected.clear();
-                            }
-                          }),
+                              if (checked == true) {
+                                selected.addAll(history);
+                              } else {
+                                selected.clear();
+                              }
+                            }),
                   ),
                   const Divider(height: 1),
                   const SizedBox(height: 10),
@@ -3028,7 +3038,9 @@ class ToolbarWidget extends StatelessWidget {
                           const SizedBox(height: 3),
                           Text(
                             description,
-                            style: Theme.of(dialogContext).textTheme.bodySmall
+                            style: Theme.of(dialogContext)
+                                .textTheme
+                                .bodySmall
                                 ?.copyWith(color: colors.onSurfaceVariant),
                           ),
                         ],
@@ -3080,6 +3092,12 @@ class ToolbarWidget extends StatelessWidget {
       },
     );
     if (format != null) {
+      // Let the format route finish its reverse animation before preparing
+      // bytes or asking the OS to attach a native save sheet to this window.
+      // The encoders themselves run on a helper isolate, so the application
+      // remains responsive while a large layout is serialized.
+      await WidgetsBinding.instance.endOfFrame;
+      await Future<void>.delayed(Duration.zero);
       await app.saveFile(format: format);
     }
   }
@@ -3197,8 +3215,8 @@ class ToolbarWidget extends StatelessWidget {
     final tooltip = app.sshConnected
         ? 'SSH tunnel — in use'
         : app.sshTunnelReachable
-        ? 'SSH tunnel — reachable, not in use'
-        : 'SSH tunnel';
+            ? 'SSH tunnel — reachable, not in use'
+            : 'SSH tunnel';
     return _toolbarIconButton(
       ctx,
       icon: Icons.terminal_rounded,
@@ -3256,8 +3274,7 @@ class ToolbarWidget extends StatelessWidget {
                 key: const ValueKey('theme-mode-thumb'),
                 duration: const Duration(milliseconds: 150),
                 curve: Curves.easeOutCubic,
-                left:
-                    selectedIndex * segmentWidth +
+                left: selectedIndex * segmentWidth +
                     (segmentWidth - thumbSize) / 2,
                 top: (trackContentHeight - thumbSize) / 2,
                 child: Container(
