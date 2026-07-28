@@ -1580,11 +1580,11 @@ class AppState extends ChangeNotifier {
           notifyListeners();
           await fetchLatestShot();
         }
-      } catch (error) {
-        if (!_disposed) {
-          _status = 'Web Gateway unavailable: $error';
-          notifyListeners();
-        }
+      } catch (_) {
+        // A static public deployment has the same UI but no live gateway.
+        // Treat the session probe like an ordinary offline startup: an
+        // explicit Login, SSH, or waveform request will report the same
+        // connection failure it would in the native application.
       }
       return;
     }

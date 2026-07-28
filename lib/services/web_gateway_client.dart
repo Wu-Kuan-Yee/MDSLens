@@ -1,7 +1,32 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
+
+class WebGatewayUnavailableException implements Exception {
+  const WebGatewayUnavailableException();
+
+  @override
+  String toString() => 'Connection failed.';
+}
+
+dynamic decodeWebGatewayResponse(http.Response response) {
+  dynamic value;
+  try {
+    value = jsonDecode(utf8.decode(response.bodyBytes));
+  } on FormatException {
+    throw const WebGatewayUnavailableException();
+  }
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    final message = value is Map ? value['error']?.toString().trim() : null;
+    if (message == null || message.isEmpty) {
+      throw const WebGatewayUnavailableException();
+    }
+    throw message;
+  }
+  return value;
+}
 
 /// Same-origin client for the server-side capabilities that browsers cannot
 /// provide directly (MDSip, SSH and protected API sessions).
@@ -16,7 +41,8 @@ class WebGatewayClient {
   static const _basePath = '/gateway/v1';
   static const _sessionMarker = 'gateway-session';
 
-  Future<Map<String, dynamic>> session() => _get('/session');
+  Future<Map<String, dynamic>> session() =>
+      _get('/session', timeout: const Duration(seconds: 5));
 
   Future<({String token, bool usedSsh})> login(
     String apiUrl,
@@ -25,12 +51,16 @@ class WebGatewayClient {
     String sshSettingsJson,
   ) async {
     final ssh = _decodeOptionalMap(sshSettingsJson);
-    final response = await _post('/login', {
-      'api_url': apiUrl,
-      'user': user,
-      'password': password,
-      if (ssh != null) 'ssh': ssh,
-    });
+    final response = await _post(
+      '/login',
+      {
+        'api_url': apiUrl,
+        'user': user,
+        'password': password,
+        if (ssh != null) 'ssh': ssh,
+      },
+      timeout: const Duration(seconds: 45),
+    );
     return (
       token: _sessionMarker,
       usedSsh: response['used_ssh'] == true,
@@ -49,10 +79,14 @@ class WebGatewayClient {
   }
 
   Future<String> fetchSignals(String configJson, String dataMode) async {
-    final response = await _postValue('/signals/fetch', {
-      'config_json': configJson,
-      'data_mode': int.tryParse(dataMode) ?? 0,
-    });
+    final response = await _postValue(
+      '/signals/fetch',
+      {
+        'config_json': configJson,
+        'data_mode': int.tryParse(dataMode) ?? 0,
+      },
+      timeout: const Duration(minutes: 5),
+    );
     return jsonEncode(response);
   }
 
@@ -69,7 +103,11 @@ class WebGatewayClient {
     if (settings == null) {
       throw const FormatException('SSH settings are required.');
     }
-    final response = await _post('/ssh/test', settings);
+    final response = await _post(
+      '/ssh/test',
+      settings,
+      timeout: const Duration(seconds: 45),
+    );
     return jsonEncode(response);
   }
 
@@ -110,18 +148,30 @@ class WebGatewayClient {
     return Uint8List.fromList(utf8.encode(content));
   }
 
-  Future<Map<String, dynamic>> _get(String path) async {
-    final response = await http
-        .get(Uri.parse('$_basePath$path'), headers: _headers)
-        .timeout(const Duration(seconds: 20));
-    return _decodeMap(response);
+  Future<Map<String, dynamic>> _get(
+    String path, {
+    Duration timeout = const Duration(seconds: 20),
+  }) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_basePath$path'), headers: _headers)
+          .timeout(timeout);
+      return _decodeMap(response);
+    } on WebGatewayUnavailableException {
+      rethrow;
+    } on TimeoutException {
+      throw const WebGatewayUnavailableException();
+    } on http.ClientException {
+      throw const WebGatewayUnavailableException();
+    }
   }
 
   Future<Map<String, dynamic>> _post(
     String path,
-    Map<String, dynamic> body,
-  ) async {
-    final value = await _postValue(path, body);
+    Map<String, dynamic> body, {
+    Duration timeout = const Duration(seconds: 20),
+  }) async {
+    final value = await _postValue(path, body, timeout: timeout);
     if (value is! Map) {
       throw const FormatException(
         'The Web Gateway returned an unexpected response.',
@@ -132,16 +182,25 @@ class WebGatewayClient {
 
   Future<dynamic> _postValue(
     String path,
-    Map<String, dynamic> body,
-  ) async {
-    final response = await http
-        .post(
-          Uri.parse('$_basePath$path'),
-          headers: _headers,
-          body: jsonEncode(body),
-        )
-        .timeout(const Duration(minutes: 5));
-    return _decode(response);
+    Map<String, dynamic> body, {
+    Duration timeout = const Duration(seconds: 20),
+  }) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$_basePath$path'),
+            headers: _headers,
+            body: jsonEncode(body),
+          )
+          .timeout(timeout);
+      return _decode(response);
+    } on WebGatewayUnavailableException {
+      rethrow;
+    } on TimeoutException {
+      throw const WebGatewayUnavailableException();
+    } on http.ClientException {
+      throw const WebGatewayUnavailableException();
+    }
   }
 
   Map<String, String> get _headers => const {
@@ -159,20 +218,7 @@ class WebGatewayClient {
     return Map<String, dynamic>.from(value);
   }
 
-  dynamic _decode(http.Response response) {
-    dynamic value;
-    try {
-      value = jsonDecode(utf8.decode(response.bodyBytes));
-    } on FormatException {
-      throw 'Web Gateway returned invalid JSON (HTTP ${response.statusCode}).';
-    }
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      final message = value is Map ? value['error']?.toString() : null;
-      throw message ??
-          'Web Gateway request failed (HTTP ${response.statusCode}).';
-    }
-    return value;
-  }
+  dynamic _decode(http.Response response) => decodeWebGatewayResponse(response);
 
   Map<String, dynamic>? _decodeOptionalMap(String source) {
     if (source.trim().isEmpty) return null;
