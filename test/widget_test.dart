@@ -216,6 +216,75 @@ void main() {
     expect(selected?.range, PanelExportRange.allData);
   });
 
+  testWidgets(
+    'Multiple panel export mirrors the live waveform column arrangement',
+    (tester) async {
+      final app = AppState();
+      await app.preferencesReady;
+      addTearDown(app.dispose);
+      app.applyLayoutList([2, 1, 3]);
+      for (var index = 0; index < app.plots.length; index++) {
+        app.plots[index].series[0] = SeriesData(
+          points: [
+            [0, index.toDouble()],
+          ],
+        );
+      }
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1100, 950);
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: app,
+          child: MaterialApp(
+            home: Builder(
+              builder: (context) => FilledButton(
+                onPressed: () => showMultiPanelExportDialog(context, app),
+                child: const Text('Open export layout'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open export layout'));
+      await tester.pumpAndSettle();
+
+      expect(panelExportChoiceColumns(app).map((column) => column.length), [
+        2,
+        1,
+        3,
+      ]);
+      final panel1 = tester.getRect(
+        find.byKey(const ValueKey('multi-panel-export-0')),
+      );
+      final panel2 = tester.getRect(
+        find.byKey(const ValueKey('multi-panel-export-1')),
+      );
+      final panel3 = tester.getRect(
+        find.byKey(const ValueKey('multi-panel-export-2')),
+      );
+      final panel4 = tester.getRect(
+        find.byKey(const ValueKey('multi-panel-export-3')),
+      );
+
+      expect(panel2.left, closeTo(panel1.left, 0.1));
+      expect(panel2.top, greaterThan(panel1.bottom));
+      expect(panel3.left, greaterThan(panel1.right));
+      expect(panel4.left, greaterThan(panel3.right));
+      expect(panel3.height, greaterThan(panel1.height * 1.7));
+      expect(
+        find.byKey(const ValueKey('panel-export-horizontal-scrollbar')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('panel-export-vertical-scrollbar')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   test('Multiple panel CSV preserves panel and signal metadata', () {
     final csv = encodeMultiplePanelCsv([
       {

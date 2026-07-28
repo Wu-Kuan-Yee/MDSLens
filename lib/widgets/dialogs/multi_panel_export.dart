@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -118,6 +119,19 @@ List<PanelExportChoice> panelExportChoices(AppState app) {
   return result;
 }
 
+List<List<PanelExportChoice>> panelExportChoiceColumns(AppState app) {
+  final choices = panelExportChoices(app);
+  final columns = <List<PanelExportChoice>>[
+    for (var column = 0; column < app.columns.length; column++) [],
+  ];
+  for (final choice in choices) {
+    if (choice.column >= 0 && choice.column < columns.length) {
+      columns[choice.column].add(choice);
+    }
+  }
+  return columns.where((column) => column.isNotEmpty).toList();
+}
+
 String _signalDisplayName(dynamic raw, int index) {
   if (raw is! Map) return 'Signal ${index + 1}';
   final legend = raw['legend']?.toString().trim() ?? '';
@@ -136,6 +150,7 @@ Future<PanelExportRequest?> showMultiPanelExportDialog(
   bool allowPanelSelection = true,
 }) async {
   final choices = panelExportChoices(app);
+  final choiceColumns = panelExportChoiceColumns(app);
   final selected = initialSelection == null
       ? <int>{
           for (final choice in choices)
@@ -146,6 +161,8 @@ Future<PanelExportRequest?> showMultiPanelExportDialog(
   var range = PanelExportRange.allData;
   final xMinController = TextEditingController();
   final xMaxController = TextEditingController();
+  final horizontalController = ScrollController();
+  final verticalController = ScrollController();
   String? rangeError;
   try {
     return await showDialog<PanelExportRequest>(
@@ -324,58 +341,16 @@ Future<PanelExportRequest?> showMultiPanelExportDialog(
                     ),
                     const SizedBox(height: 12),
                     Expanded(
-                      child: Scrollbar(
-                        child: ListView.separated(
-                          itemCount: choices.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 8),
-                          itemBuilder: (context, position) {
-                            final choice = choices[position];
-                            final title = choice.title.isEmpty
-                                ? 'Panel ${choice.index + 1}'
-                                : 'Panel ${choice.index + 1} · ${choice.title}';
-                            final signals = choice.signalNames.isEmpty
-                                ? 'No configured signals'
-                                : choice.signalNames.join(', ');
-                            return Card(
-                              margin: EdgeInsets.zero,
-                              clipBehavior: Clip.antiAlias,
-                              child: CheckboxListTile(
-                                key: ValueKey(
-                                  'multi-panel-export-${choice.index}',
-                                ),
-                                value: selected.contains(choice.index),
-                                enabled: choice.hasData,
-                                onChanged: choice.hasData
-                                    ? (checked) => setState(() {
-                                          if (checked == true) {
-                                            selected.add(choice.index);
-                                          } else {
-                                            selected.remove(choice.index);
-                                          }
-                                        })
-                                    : null,
-                                secondary: CircleAvatar(
-                                  backgroundColor: choice.hasData
-                                      ? colors.primaryContainer
-                                      : colors.surfaceContainerHighest,
-                                  foregroundColor: choice.hasData
-                                      ? colors.onPrimaryContainer
-                                      : colors.onSurfaceVariant,
-                                  child: Text('${choice.index + 1}'),
-                                ),
-                                title: Text(title),
-                                subtitle: Text(
-                                  choice.hasData
-                                      ? '${choice.loadedSeries} loaded curve(s) · $signals'
-                                      : 'No loaded data · $signals',
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                      child: _PanelExportLayoutGrid(
+                        columns: choiceColumns,
+                        selected: selected,
+                        horizontalController: horizontalController,
+                        verticalController: verticalController,
+                        onToggle: (choice) => setState(() {
+                          if (!selected.remove(choice.index)) {
+                            selected.add(choice.index);
+                          }
+                        }),
                       ),
                     ),
                   ],
@@ -402,6 +377,275 @@ Future<PanelExportRequest?> showMultiPanelExportDialog(
   } finally {
     xMinController.dispose();
     xMaxController.dispose();
+    horizontalController.dispose();
+    verticalController.dispose();
+  }
+}
+
+class _PanelExportLayoutGrid extends StatelessWidget {
+  const _PanelExportLayoutGrid({
+    required this.columns,
+    required this.selected,
+    required this.horizontalController,
+    required this.verticalController,
+    required this.onToggle,
+  });
+
+  final List<List<PanelExportChoice>> columns;
+  final Set<int> selected;
+  final ScrollController horizontalController;
+  final ScrollController verticalController;
+  final ValueChanged<PanelExportChoice> onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    if (columns.isEmpty) {
+      return const Center(child: Text('No panels are available.'));
+    }
+    final colors = Theme.of(context).colorScheme;
+    final maxRows = columns.fold<int>(
+      1,
+      (maximum, column) => math.max(maximum, column.length),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final canvasWidth = math.max(
+          constraints.maxWidth,
+          columns.length * 154.0,
+        );
+        final canvasHeight = math.max(
+          constraints.maxHeight,
+          maxRows * 104.0 + 34,
+        );
+        final horizontalOverflow = canvasWidth > constraints.maxWidth + 0.5;
+        final verticalOverflow = canvasHeight > constraints.maxHeight + 0.5;
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: colors.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: colors.outlineVariant),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Scrollbar(
+              key: const ValueKey('panel-export-horizontal-scrollbar'),
+              controller: horizontalController,
+              thumbVisibility: horizontalOverflow,
+              interactive: true,
+              notificationPredicate: (notification) =>
+                  notification.metrics.axis == Axis.horizontal,
+              child: SingleChildScrollView(
+                key: const ValueKey('panel-export-horizontal-scroll'),
+                controller: horizontalController,
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: canvasWidth,
+                  height: constraints.maxHeight,
+                  child: Scrollbar(
+                    key: const ValueKey('panel-export-vertical-scrollbar'),
+                    controller: verticalController,
+                    thumbVisibility: verticalOverflow,
+                    interactive: true,
+                    notificationPredicate: (notification) =>
+                        notification.metrics.axis == Axis.vertical,
+                    child: SingleChildScrollView(
+                      key: const ValueKey('panel-export-vertical-scroll'),
+                      controller: verticalController,
+                      child: SizedBox(
+                        width: canvasWidth,
+                        height: canvasHeight,
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (var columnIndex = 0;
+                                  columnIndex < columns.length;
+                                  columnIndex++)
+                                Expanded(
+                                  child: Padding(
+                                    padding: EdgeInsets.only(
+                                      left: columnIndex == 0 ? 0 : 4,
+                                      right: columnIndex == columns.length - 1
+                                          ? 0
+                                          : 4,
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        SizedBox(
+                                          height: 26,
+                                          child: Center(
+                                            child: Text(
+                                              'Column ${columnIndex + 1}',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .labelMedium
+                                                  ?.copyWith(
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                            ),
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: Column(
+                                            children: [
+                                              for (final choice
+                                                  in columns[columnIndex])
+                                                Expanded(
+                                                  child: Padding(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                      vertical: 4,
+                                                    ),
+                                                    child: _PanelExportTile(
+                                                      choice: choice,
+                                                      selected:
+                                                          selected.contains(
+                                                        choice.index,
+                                                      ),
+                                                      onTap: choice.hasData
+                                                          ? () =>
+                                                              onToggle(choice)
+                                                          : null,
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _PanelExportTile extends StatelessWidget {
+  const _PanelExportTile({
+    required this.choice,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final PanelExportChoice choice;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final title =
+        choice.title.isEmpty ? 'Panel ${choice.index + 1}' : choice.title;
+    final signals = choice.signalNames.isEmpty
+        ? 'No configured signals'
+        : choice.signalNames.join(', ');
+    final tooltip = 'Panel ${choice.index + 1}'
+        '${choice.title.isEmpty ? "" : " · ${choice.title}"}\n'
+        '${choice.hasData ? "${choice.loadedSeries} loaded curve(s)" : "No loaded data"}'
+        '\n$signals';
+    return Semantics(
+      button: choice.hasData,
+      selected: selected,
+      enabled: choice.hasData,
+      label: tooltip,
+      child: Tooltip(
+        message: tooltip,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 140),
+          opacity: choice.hasData ? 1 : 0.48,
+          child: Material(
+            color: selected
+                ? colors.primaryContainer.withValues(alpha: 0.86)
+                : colors.surfaceContainerLow,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: BorderSide(
+                color: selected ? colors.primary : colors.outlineVariant,
+                width: selected ? 2 : 1,
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              key: ValueKey('multi-panel-export-${choice.index}'),
+              onTap: onTap,
+              child: Stack(
+                children: [
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 24, 8, 8),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            signals,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 7,
+                    top: 6,
+                    child: Text(
+                      'Panel ${choice.index + 1}',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: colors.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  ),
+                  Positioned(
+                    right: 6,
+                    top: 5,
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 140),
+                      child: Icon(
+                        selected
+                            ? Icons.check_circle_rounded
+                            : choice.hasData
+                                ? Icons.radio_button_unchecked_rounded
+                                : Icons.block_rounded,
+                        key: ValueKey(
+                          '${choice.index}-$selected-${choice.hasData}',
+                        ),
+                        size: 18,
+                        color:
+                            selected ? colors.primary : colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
