@@ -8,6 +8,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 env:
   FLUTTER_VERSION: 3.44.7
@@ -388,3 +390,62 @@ jobs:
         run: |
           gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || gh release create "${GITHUB_REF_NAME}" --generate-notes
           find artifacts -maxdepth 1 -type f -print0 | xargs -0 gh release upload "${GITHUB_REF_NAME}" --clobber
+
+  pages:
+    name: Deploy latest Web release to GitHub Pages
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [publish, web]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: github-pages
+      cancel-in-progress: true
+    steps:
+      - name: Confirm this is the latest published release
+        id: latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          latest_tag="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)"
+          if [[ "$latest_tag" == "$GITHUB_REF_NAME" ]]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping Pages: latest release is ${latest_tag}, not ${GITHUB_REF_NAME}."
+          fi
+      - uses: actions/download-artifact@v4
+        if: steps.latest.outputs.deploy == 'true'
+        with:
+          name: mdslens-web-linux-x64
+          path: pages-input
+      - name: Prepare the released static frontend
+        if: steps.latest.outputs.deploy == 'true'
+        shell: bash
+        run: |
+          mkdir -p pages
+          tar -xzf pages-input/mdslens-web-linux-x64.tar.gz -C pages-input
+          cp -a pages-input/mdslens-web-linux-x64/web/. pages/
+          repository_name="${GITHUB_REPOSITORY#*/}"
+          sed -i "s#<base href=\"/\">#<base href=\"/${repository_name}/\">#" pages/index.html
+          touch pages/.nojekyll
+      - name: Configure GitHub Pages
+        if: steps.latest.outputs.deploy == 'true'
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - name: Upload GitHub Pages artifact
+        if: steps.latest.outputs.deploy == 'true'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: pages
+      - name: Deploy GitHub Pages
+        if: steps.latest.outputs.deploy == 'true'
+        id: deployment
+        uses: actions/deploy-pages@v4

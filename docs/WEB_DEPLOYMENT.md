@@ -53,6 +53,24 @@ MDSLENS_WEB_SECURE_COOKIE=0 \
 Then open `http://127.0.0.1:8088/`. The insecure-cookie switch is only for
 localhost development.
 
+Do not double-click `web/index.html` or open the source template directly.
+Browsers deliberately block WebAssembly modules, generated resources and
+Service Workers loaded from a `file://` URL. The page now explains this instead
+of remaining blank, but the application must still be served over HTTP/HTTPS.
+
+## GitHub Pages
+
+Every tagged release deploys the exact static frontend from its Linux x64 Web
+release artifact to `https://wu-kuan-yee.github.io/MDSLens/`. The deployment
+uses the project subdirectory as Flutter's base path and does not replace the
+downloadable self-contained gateway archive.
+
+GitHub Pages is a static host and cannot execute `mdslens-web-gateway`.
+Consequently, the Pages site can load the interface and use browser-local
+configuration, editing, drag-and-drop and downloads, but login, SSH and live
+MDS data require a separately deployed HTTPS gateway. For the complete
+experience, deploy the release archive as described below.
+
 ## Production
 
 Run the gateway as an unprivileged service and put an HTTPS reverse proxy such
