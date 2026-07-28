@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <script defer src="startup.js"></script>
   <!--
     If you are serving your web app in a path other than the root, change the
     href value below to reflect the base path you are serving from.
@@ -32,8 +33,74 @@
 
   <title>MDSLens</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    html, body {
+      background: #0b1120;
+      height: 100%;
+      margin: 0;
+    }
+
+    #mdslens-startup {
+      align-items: center;
+      box-sizing: border-box;
+      color: #e5e7eb;
+      display: flex;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      inset: 0;
+      justify-content: center;
+      padding: 24px;
+      position: fixed;
+      transition: opacity 180ms ease, visibility 180ms ease;
+      z-index: 2147483647;
+    }
+
+    #mdslens-startup-card {
+      background: #111827;
+      border: 1px solid #334155;
+      border-radius: 18px;
+      box-shadow: 0 24px 70px rgb(0 0 0 / 35%);
+      box-sizing: border-box;
+      max-width: 640px;
+      padding: 28px;
+      width: 100%;
+    }
+
+    #mdslens-startup h1 {
+      font-size: 24px;
+      margin: 0 0 12px;
+    }
+
+    #mdslens-startup p {
+      color: #cbd5e1;
+      line-height: 1.6;
+      margin: 8px 0 0;
+    }
+
+    #mdslens-startup code {
+      background: #020617;
+      border-radius: 8px;
+      display: block;
+      margin-top: 16px;
+      overflow-x: auto;
+      padding: 12px;
+      white-space: pre;
+    }
+
+    body.mdslens-ready #mdslens-startup {
+      opacity: 0;
+      pointer-events: none;
+      visibility: hidden;
+    }
+  </style>
 </head>
 <body>
+  <div id="mdslens-startup" role="status" aria-live="polite">
+    <div id="mdslens-startup-card">
+      <h1>MDSLens</h1>
+      <p id="mdslens-startup-message">Loading the Web application…</p>
+      <code id="mdslens-startup-help" hidden></code>
+    </div>
+  </div>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader

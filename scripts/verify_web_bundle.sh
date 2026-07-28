@@ -33,6 +33,8 @@ for _ in {1..50}; do
 done
 
 curl -fsS "http://127.0.0.1:$port/" | grep -q 'MDSLens'
+curl -fsS "http://127.0.0.1:$port/startup.js" |
+  grep -q "window.location.protocol === 'file:'"
 session_headers="$(curl -fsS -D - -o /dev/null -c "$cookie_file" \
   "http://127.0.0.1:$port/gateway/v1/session")"
 grep -qi 'HttpOnly' <<<"$session_headers"
@@ -43,5 +45,6 @@ curl -fsS -b "$cookie_file" \
 grep -q '"useLocalCanvasKit":true' "$web_root/flutter_bootstrap.js"
 test -f "$web_root/main.dart.wasm"
 test -f "$web_root/canvaskit/skwasm.wasm"
+test -f "$web_root/startup.js"
 
 echo "Web bundle smoke test passed."
