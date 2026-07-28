@@ -90,8 +90,17 @@ mkdir -p "$(dirname "$OUTPUT")"
 # shellcheck disable=SC2086
 lipo -create $LIBRARIES -output "$OUTPUT"
 
+# Rust and Xcode can ship different LLVM major versions. Apple nm may reject
+# newer, otherwise valid object attributes before it reaches the archive member
+# containing the FFI exports. Prefer nm's authoritative symbol table, but fall
+# back to the Mach-O string table when that compatibility failure occurs.
+NM_OUTPUT=$(nm -gU "$OUTPUT" 2>/dev/null || true)
+STRING_OUTPUT=$(mktemp "${TMPDIR:-/tmp}/mdslens-ios-symbols.XXXXXX")
+trap 'rm -f "$STRING_OUTPUT"' EXIT HUP INT TERM
+strings "$OUTPUT" > "$STRING_OUTPUT"
 for symbol in mds_bridge_abi_version mds_parse_environment mds_encode_environment mds_request_login mds_fetch_signals mds_free_string; do
-  if ! nm -gU "$OUTPUT" 2>/dev/null | grep -q "_${symbol}$"; then
+  if ! printf '%s\n' "$NM_OUTPUT" | grep -q "_${symbol}$" &&
+     ! grep -q "^_${symbol}$" "$STRING_OUTPUT"; then
     echo "iOS Rust library is missing required symbol: $symbol" >&2
     exit 1
   fi

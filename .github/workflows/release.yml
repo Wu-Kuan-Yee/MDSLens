@@ -394,7 +394,7 @@ jobs:
   pages:
     name: Deploy latest Web release to GitHub Pages
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [publish, web]
+    needs: [web]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -407,18 +407,24 @@ jobs:
       group: github-pages
       cancel-in-progress: true
     steps:
-      - name: Confirm this is the latest published release
+      - name: Confirm this is the latest version tag
         id: latest
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          latest_tag="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)"
+          latest_tag="$(
+            gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v" \
+              --paginate --jq '.[].ref' |
+              sed 's#^refs/tags/##' |
+              sort -V |
+              tail -n 1
+          )"
           if [[ "$latest_tag" == "$GITHUB_REF_NAME" ]]; then
             echo "deploy=true" >> "$GITHUB_OUTPUT"
           else
             echo "deploy=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping Pages: latest release is ${latest_tag}, not ${GITHUB_REF_NAME}."
+            echo "Skipping Pages: latest version tag is ${latest_tag}, not ${GITHUB_REF_NAME}."
           fi
       - uses: actions/download-artifact@v4
         if: steps.latest.outputs.deploy == 'true'
