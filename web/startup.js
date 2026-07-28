@@ -5,6 +5,35 @@
   const help = document.getElementById('mdslens-startup-help');
   let ready = false;
 
+  // Flutter owns secondary-click handling inside its rendering surface.
+  // Suppress the browser's native context menu there so the gesture reaches
+  // the application's panel menu on every Web renderer.
+  document.addEventListener('contextmenu', (event) => {
+    if (event.target instanceof Element && event.target.closest('flutter-view')) {
+      event.preventDefault();
+    }
+  });
+
+  // Local Font Access is intentionally permission-gated by browsers. Expose a
+  // small, typed boundary to Dart when the browser supports it. MDSLens loads
+  // only the selected face, avoiding the very large memory cost of importing
+  // every installed font into the Flutter renderer.
+  window.mdslensLocalFontFamilies = async () => {
+    if (typeof window.queryLocalFonts !== 'function') return [];
+    const fonts = await window.queryLocalFonts();
+    return [...new Set(fonts.map((font) => font.family).filter(Boolean))]
+      .sort((left, right) => left.localeCompare(right));
+  };
+  window.mdslensLocalFontBytes = async (family) => {
+    if (typeof window.queryLocalFonts !== 'function') return null;
+    const fonts = await window.queryLocalFonts();
+    const candidates = fonts.filter((font) => font.family === family);
+    if (!candidates.length) return null;
+    const face = candidates.find((font) => /regular|normal/i.test(font.style || ''))
+      || candidates[0];
+    return (await face.blob()).arrayBuffer();
+  };
+
   const showFailure = (text, command) => {
     if (ready) return;
     message.textContent = text;

@@ -13,6 +13,7 @@ import '../services/rust_bridge.dart';
 import '../services/source_index.dart';
 import '../services/user_data_store.dart';
 import '../services/web_gateway_client.dart';
+import '../services/web_configuration_encoder.dart';
 
 const _configurationSignalColors = [
   '#2364aa',
@@ -235,7 +236,7 @@ Future<String> _parseConfiguration(String path) {
 
 Future<Uint8List> _encodeConfiguration(String configJson) async {
   if (kIsWeb) {
-    return WebGatewayClient.instance.encodeConfiguration(configJson, 'toml');
+    return WebConfigurationEncoder.encode(configJson, 'toml');
   }
   final toml = await Isolate.run(
     () => RustBridge.instance.encodeEnv(configJson),
@@ -245,7 +246,7 @@ Future<Uint8List> _encodeConfiguration(String configJson) async {
 
 Future<Uint8List> _encodeWebscpConfiguration(String configJson) async {
   if (kIsWeb) {
-    return WebGatewayClient.instance.encodeConfiguration(configJson, 'webscp');
+    return WebConfigurationEncoder.encode(configJson, 'webscp');
   }
   final webscp = await Isolate.run(
     () => RustBridge.instance.encodeEnvWebscp(configJson),

@@ -2603,16 +2603,28 @@ class ToolbarWidget extends StatelessWidget {
                 child: const Text('Cancel'),
               ),
               TextButton(
-                onPressed: () {
-                  app.applyFontSettings(
-                    fontFamily,
-                    legendSize,
-                    axisSize,
-                    unitSize,
-                    uiSize,
-                    iconSize: iconSize,
-                  );
-                  Navigator.pop(ctx);
+                onPressed: () async {
+                  try {
+                    await SystemFontService.prepareFamily(fontFamily);
+                    app.applyFontSettings(
+                      fontFamily,
+                      legendSize,
+                      axisSize,
+                      unitSize,
+                      uiSize,
+                      iconSize: iconSize,
+                    );
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  } catch (error) {
+                    if (!ctx.mounted) return;
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'The browser could not load this local font: $error',
+                        ),
+                      ),
+                    );
+                  }
                 },
                 child: const Text('OK'),
               ),

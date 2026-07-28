@@ -1,9 +1,5 @@
-import 'dart:io';
-
-import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
-
-const MethodChannel _systemFontsChannel = MethodChannel('mdslens/system_fonts');
+import 'system_font_backend.dart'
+    if (dart.library.js_interop) 'system_font_backend_web.dart';
 
 class SystemFontService {
   SystemFontService._();
@@ -19,21 +15,11 @@ class SystemFontService {
   ];
 
   static Future<List<String>> loadFamilies() async {
-    if (kIsWeb) return fallbackFamilies;
-    if (!(Platform.isAndroid ||
-        Platform.isIOS ||
-        Platform.isMacOS ||
-        Platform.isWindows ||
-        Platform.isLinux)) {
-      return fallbackFamilies;
-    }
     try {
-      final raw = await _systemFontsChannel.invokeListMethod<String>(
-        'listFamilies',
-      );
+      final raw = await loadSystemFontFamilies();
       final seen = <String>{};
       final families = <String>[];
-      for (final value in raw ?? const <String>[]) {
+      for (final value in raw) {
         final family = value.trim();
         final key = family.toLowerCase();
         if (family.isEmpty ||
@@ -51,5 +37,13 @@ class SystemFontService {
     } catch (_) {
       return fallbackFamilies;
     }
+  }
+
+  /// Makes a browser-selected local font available to Flutter's renderer.
+  ///
+  /// Native platforms already resolve installed families through the host.
+  static Future<void> prepareFamily(String family) async {
+    if (family == 'System') return;
+    await prepareSystemFontFamily(family);
   }
 }
