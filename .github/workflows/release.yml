@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
   pages: write
   id-token: write
 
@@ -364,16 +365,67 @@ jobs:
         run: >-
           ./scripts/verify_web_bundle.sh
           rust/target/release/mdslens-web-gateway build/web
+      - name: Log in to GitHub Container Registry
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish architecture-specific Web Gateway image
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: docker/build-push-action@v6
+        with:
+          context: build/web-package/mdslens-web-linux-${{ matrix.arch }}
+          file: deploy/container/Dockerfile
+          push: true
+          build-args: MDSLENS_VERSION=${{ github.ref_name }}
+          tags: ghcr.io/wu-kuan-yee/mdslens-web-gateway:${{ github.ref_name }}-${{ matrix.arch }}
       - uses: actions/upload-artifact@v4
         with:
           name: mdslens-web-linux-${{ matrix.arch }}
           path: build/dist/mdslens-web-linux-${{ matrix.arch }}.tar.gz
           if-no-files-found: error
 
+  web-container:
+    name: Publish multi-architecture Web Gateway image
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [web]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish version and latest manifests
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE: ghcr.io/wu-kuan-yee/mdslens-web-gateway
+        shell: bash
+        run: |
+          latest_tag="$(
+            gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v" \
+              --paginate --jq '.[].ref' |
+              sed 's#^refs/tags/##' |
+              sort -V |
+              tail -n 1
+          )"
+          manifest_tags=(--tag "${IMAGE}:${GITHUB_REF_NAME}")
+          if [[ "$latest_tag" == "$GITHUB_REF_NAME" ]]; then
+            manifest_tags+=(--tag "${IMAGE}:latest")
+          fi
+          docker buildx imagetools create \
+            "${manifest_tags[@]}" \
+            "${IMAGE}:${GITHUB_REF_NAME}-x64" \
+            "${IMAGE}:${GITHUB_REF_NAME}-arm64"
+
   publish:
     name: Publish GitHub release
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [windows, windows-msixbundle, macos, linux, linux-flatpak, linux-portable-runtime, android, apple-mobile, web]
+    needs: [windows, windows-msixbundle, macos, linux, linux-flatpak, linux-portable-runtime, android, apple-mobile, web, web-container]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4

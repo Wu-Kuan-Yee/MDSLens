@@ -61,6 +61,8 @@ jobs:
         run: >-
           ./scripts/verify_web_bundle.sh
           rust/target/release/mdslens-web-gateway build/web
+      - name: Verify hardened container deployment
+        run: ./scripts/verify_container_deployment.sh
       - uses: actions/upload-artifact@v4
         with:
           name: ci-web-linux-x64
