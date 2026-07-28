@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -70,6 +71,21 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Import dropped configuration?'), findsOneWidget);
     expect(find.text('experiment.webscp'), findsOneWidget);
+    await tester.tapAt(const Offset(2, 2));
+    await tester.pump();
+    expect(
+      find.text('Import dropped configuration?'),
+      findsOneWidget,
+      reason: 'tapping the modal barrier must not silently abandon the import',
+    );
+    expect(result, isNull);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(result, isFalse);
+
+    await tester.tap(find.text('Confirm drop'));
+    await tester.pumpAndSettle();
     await tester.tap(
       find.byKey(const ValueKey('cancel-dropped-configuration')),
     );
@@ -83,6 +99,39 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(result, isTrue);
+  });
+
+  testWidgets('Android dropped content URIs are read through ContentResolver', (
+    tester,
+  ) async {
+    const channel = MethodChannel('mdslens/drop_file_access.test');
+    final expected = Uint8List.fromList(utf8.encode('title = "Ip"'));
+    String? receivedUri;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+      call,
+    ) async {
+      receivedUri = call.arguments as String;
+      return expected;
+    });
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        null,
+      ),
+    );
+    final file = DropItemFile(
+      'content://zte.com.cn.filer.fileprovider/config1.toml',
+      name: 'config1.toml',
+    );
+
+    final bytes = await readDroppedConfigurationBytes(
+      file,
+      androidOverride: true,
+      channel: channel,
+    );
+
+    expect(receivedUri, file.path);
+    expect(bytes, expected);
   });
 
   testWidgets('Only the waveform area is a configuration drop target', (

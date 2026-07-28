@@ -74,6 +74,37 @@ class MainActivity: FlutterActivity() {
             }
             result.success(filesDir.absolutePath)
         }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "mdslens/drop_file_access"
+        ).setMethodCallHandler { call, result ->
+            if (call.method != "readContentUri") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            val value = call.arguments as? String
+            if (value.isNullOrBlank()) {
+                result.error("INVALID_URI", "The dropped content URI is empty.", null)
+                return@setMethodCallHandler
+            }
+            try {
+                val uri = Uri.parse(value)
+                val bytes = contentResolver.openInputStream(uri)?.use { stream ->
+                    stream.readBytes()
+                }
+                if (bytes == null) {
+                    result.error(
+                        "READ_FAILED",
+                        "The Android document provider returned no file data.",
+                        null
+                    )
+                } else {
+                    result.success(bytes)
+                }
+            } catch (error: Exception) {
+                result.error("READ_FAILED", error.message, null)
+            }
+        }
         openRequestsChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "mdslens/open_requests"

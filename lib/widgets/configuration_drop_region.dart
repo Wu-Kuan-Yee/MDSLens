@@ -1,8 +1,8 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/app_state.dart';
@@ -13,76 +13,106 @@ bool isSupportedConfigurationFileName(String name) {
   return lower.endsWith('.toml') || lower.endsWith('.webscp');
 }
 
+const _androidDropFileChannel = MethodChannel('mdslens/drop_file_access');
+
+Future<Uint8List> readDroppedConfigurationBytes(
+  DropItem file, {
+  bool? androidOverride,
+  MethodChannel channel = _androidDropFileChannel,
+}) async {
+  final isAndroid = androidOverride ?? Platform.isAndroid;
+  if (isAndroid && file.path.toLowerCase().startsWith('content://')) {
+    final bytes = await channel.invokeMethod<Uint8List>(
+      'readContentUri',
+      file.path,
+    );
+    if (bytes == null) {
+      throw const FileSystemException(
+        'The Android document provider returned no file data.',
+      );
+    }
+    return bytes;
+  }
+  return file.readAsBytes();
+}
+
 Future<bool> confirmDroppedConfigurationImport(
   BuildContext context,
   String fileName,
 ) async {
   final result = await showDialog<bool>(
     context: context,
+    barrierDismissible: false,
     builder: (dialogContext) {
       final colors = Theme.of(dialogContext).colorScheme;
-      return KeyboardSafeDialog(
-        maxWidth: 520,
-        title: const Row(
-          children: [
-            Icon(Icons.file_download_outlined),
-            SizedBox(width: 10),
-            Flexible(child: Text('Import dropped configuration?')),
-          ],
-        ),
-        content: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: colors.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: colors.outlineVariant),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+      return CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.escape): () =>
+              Navigator.pop(dialogContext, false),
+        },
+        child: KeyboardSafeDialog(
+          maxWidth: 520,
+          title: const Row(
             children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.description_outlined,
-                    color: colors.primary,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      fileName,
-                      key: const ValueKey('dropped-configuration-name'),
-                      style: Theme.of(dialogContext).textTheme.titleSmall,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Importing this file will replace the current waveform layout. '
-                'Nothing changes unless you confirm.',
-                style: Theme.of(dialogContext).textTheme.bodyMedium?.copyWith(
-                      color: colors.onSurfaceVariant,
-                    ),
-              ),
+              Icon(Icons.file_download_outlined),
+              SizedBox(width: 10),
+              Flexible(child: Text('Import dropped configuration?')),
             ],
           ),
+          content: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: colors.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: colors.outlineVariant),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.description_outlined,
+                      color: colors.primary,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        fileName,
+                        key: const ValueKey('dropped-configuration-name'),
+                        style: Theme.of(dialogContext).textTheme.titleSmall,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Importing this file will replace the current waveform layout. '
+                  'Nothing changes unless you confirm.',
+                  style: Theme.of(dialogContext).textTheme.bodyMedium?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton.icon(
+              key: const ValueKey('cancel-dropped-configuration'),
+              autofocus: true,
+              onPressed: () => Navigator.pop(dialogContext, false),
+              icon: const Icon(Icons.close_rounded),
+              label: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              key: const ValueKey('import-dropped-configuration'),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              icon: const Icon(Icons.file_open_rounded),
+              label: const Text('Import'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton.icon(
-            key: const ValueKey('cancel-dropped-configuration'),
-            autofocus: true,
-            onPressed: () => Navigator.pop(dialogContext, false),
-            icon: const Icon(Icons.close_rounded),
-            label: const Text('Cancel'),
-          ),
-          FilledButton.icon(
-            key: const ValueKey('import-dropped-configuration'),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            icon: const Icon(Icons.file_open_rounded),
-            label: const Text('Import'),
-          ),
-        ],
       );
     },
   );
@@ -133,7 +163,7 @@ class _ConfigurationDropRegionState extends State<ConfigurationDropRegion> {
       return;
     }
     try {
-      final bytes = await file.readAsBytes();
+      final bytes = await readDroppedConfigurationBytes(file);
       if (Platform.isIOS && file.path.contains('mdslens-drop-')) {
         await File(file.path).parent.delete(recursive: true);
       }
