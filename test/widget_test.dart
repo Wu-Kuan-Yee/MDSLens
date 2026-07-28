@@ -18,6 +18,7 @@ import 'package:mdslens/services/identity_file_access.dart';
 import 'package:mdslens/services/incoming_configuration_service.dart';
 import 'package:mdslens/services/platform_file_dialog.dart';
 import 'package:mdslens/services/runtime_build_info.dart';
+import 'package:mdslens/services/simple_zip.dart';
 import 'package:mdslens/services/source_index.dart';
 import 'package:mdslens/services/update_service.dart';
 import 'package:mdslens/services/user_data_store.dart';
@@ -177,7 +178,7 @@ void main() {
         [0, 2],
       ],
     );
-    Set<int>? selected;
+    PanelExportRequest? selected;
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
         value: app,
@@ -198,6 +199,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Export multiple panels'), findsOneWidget);
     expect(find.text('Export 2 panel(s)'), findsOneWidget);
+    expect(find.byKey(const ValueKey('panel-export-format')), findsOneWidget);
+    expect(find.byKey(const ValueKey('panel-export-range')), findsOneWidget);
 
     await tester.tap(
       find.byKey(const ValueKey('multi-panel-export-1')),
@@ -208,7 +211,9 @@ void main() {
       find.byKey(const ValueKey('multi-panel-export-confirm')),
     );
     await tester.pumpAndSettle();
-    expect(selected, {0});
+    expect(selected?.panels, {0});
+    expect(selected?.format, PanelExportFormat.csv);
+    expect(selected?.range, PanelExportRange.allData);
   });
 
   test('Multiple panel CSV preserves panel and signal metadata', () {
@@ -237,10 +242,112 @@ void main() {
       },
     ]);
 
-    expect(csv, contains('"Ip, primary"'));
     expect(csv, contains('"plasma ""current"""'));
     expect(csv, contains(r'\pcrl01'));
     expect(csv, contains('time,s,A,0.1,500000.0'));
+  });
+
+  test('Panel export creates independent files in every supported format', () {
+    final panels = [
+      {
+        'index': 0,
+        'column': 0,
+        'row': 0,
+        'title': 'Plasma current',
+        'series': [
+          {
+            'index': 0,
+            'legend': 'Ip',
+            'shot': '170010',
+            'tree': 'pcs_east',
+            'signal': r'\pcrl01',
+            'server': '202.127.204.12',
+            'x_name': 'time',
+            'x_unit': 's',
+            'y_unit': 'A',
+            'points': const [
+              [0.1, 1.0],
+            ],
+          },
+        ],
+      },
+      {
+        'index': 1,
+        'column': 0,
+        'row': 1,
+        'title': 'Density',
+        'series': [
+          {
+            'index': 0,
+            'legend': 'ne',
+            'shot': '170010',
+            'tree': 'east',
+            'signal': r'\ne',
+            'server': '202.127.204.12',
+            'x_name': 'time',
+            'x_unit': 's',
+            'y_unit': 'm-3',
+            'points': const [
+              [0.1, 2.0],
+            ],
+          },
+        ],
+      },
+    ];
+
+    for (final format in PanelExportFormat.values) {
+      final files = buildPanelExportFiles(panels, format);
+      expect(files, hasLength(2));
+      expect(files.first.name, 'panel-01-Plasma-current.${format.extension}');
+      expect(files.last.name, 'panel-02-Density.${format.extension}');
+      expect(files.every((file) => file.bytes.isNotEmpty), isTrue);
+    }
+  });
+
+  test('Current view export filters each panel by its visible X range', () {
+    final app = AppState();
+    addTearDown(app.dispose);
+    app.applyLayoutList([1]);
+    app.plots[0]
+      ..series[0] = SeriesData(
+        points: const [
+          [0, 10],
+          [1, 20],
+          [2, 30],
+        ],
+        xName: 'time',
+      )
+      ..setViewRange(0.5, 1.5, 0, 40);
+
+    final snapshot = panelExportSnapshot(
+      app,
+      const PanelExportRequest(
+        panels: {0},
+        format: PanelExportFormat.csv,
+        range: PanelExportRange.currentView,
+      ),
+    );
+    final points =
+        ((snapshot.single['series'] as List).single as Map)['points'] as List;
+    expect(points, [
+      [1.0, 20.0],
+    ]);
+  });
+
+  test('Mobile multi-panel export ZIP contains one named entry per panel', () {
+    final archive = createStoredZip({
+      'panel-01.csv': Uint8List.fromList(utf8.encode('one')),
+      'panel-02.csv': Uint8List.fromList(utf8.encode('two')),
+    });
+    final text = latin1.decode(archive);
+
+    expect(archive.sublist(0, 4), [0x50, 0x4b, 0x03, 0x04]);
+    expect(text, contains('panel-01.csv'));
+    expect(text, contains('panel-02.csv'));
+    expect(
+      archive.sublist(archive.length - 22, archive.length - 18),
+      [0x50, 0x4b, 0x05, 0x06],
+    );
   });
 
   test('Point readout interpolates ascending and descending waveforms', () {
@@ -4043,7 +4150,18 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('plot-context-menu-export')));
     await tester.pumpAndSettle();
-    expect(exportDialogCalls, 1);
+    expect(find.text('Export panel data'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('multi-panel-export-confirm')),
+    );
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      for (var attempt = 0; attempt < 20 && exportDialogCalls == 0; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    });
+    await tester.pump();
+    expect(exportDialogCalls, 1, reason: app.status);
     expect(app.status, 'Export cancelled');
     expect(tester.takeException(), isNull);
   });

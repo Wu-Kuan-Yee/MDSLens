@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -2044,7 +2042,13 @@ class _PlotPanelState extends State<PlotPanel> {
         app.applySharedYScale(r != null ? r[2] : 0, r != null ? r[3] : 1);
         break;
       case 'export':
-        await _exportCsv(app);
+        await exportMultiplePanels(
+          context,
+          app,
+          saveDialog: widget.exportSaveDialog,
+          initialSelection: {widget.plotIdx},
+          allowPanelSelection: false,
+        );
         break;
       case 'exportMultiple':
         await exportMultiplePanels(
@@ -2166,47 +2170,6 @@ class _PlotPanelState extends State<PlotPanel> {
         int.tryParse(panel['extraction_points']?.toString() ?? '') ?? 2000;
     if (extractionPoints != previousExtractionPoints && app.hasActiveSession) {
       await app.fetchSinglePanel(widget.plotIdx);
-    }
-  }
-
-  Future<void> _exportCsv(AppState app) async {
-    final plot = app.plots[widget.plotIdx];
-    final buf = StringBuffer();
-    buf.writeln(
-      '# MDSLens Export — ${plot.title.isNotEmpty ? plot.title : "Panel ${widget.plotIdx + 1}"}',
-    );
-    for (var i = 0; i < plot.series.length; i++) {
-      final s = plot.series[i];
-      if (s?.points == null || s!.points!.isEmpty) continue;
-      if (plot.series.length > 1) buf.writeln('# Series $i');
-      buf.writeln('x, y');
-      for (final p in s.points!) {
-        buf.writeln('${p[0]}, ${p[1]}');
-      }
-      buf.writeln();
-    }
-    if (buf.length == 0) return;
-    try {
-      final fileName =
-          '${plot.title.isNotEmpty ? plot.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_') : "export"}.csv';
-      app.setStatus('Choose where to export the waveform data...');
-      // A native save panel must not be presented while the popup route is
-      // still completing its dismissal on desktop window managers.
-      await WidgetsBinding.instance.endOfFrame;
-      final path = await saveBytesWithFilePicker(
-        dialogTitle: 'Export waveform data',
-        fileName: fileName,
-        allowedExtensions: const ['csv'],
-        bytes: Uint8List.fromList(utf8.encode(buf.toString())),
-        saveDialog: widget.exportSaveDialog,
-      );
-      if (path != null) {
-        app.setStatus('Exported to ${path.split('/').last}');
-      } else {
-        app.setStatus('Export cancelled');
-      }
-    } catch (e) {
-      app.setStatus('Export error: $e');
     }
   }
 

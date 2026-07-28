@@ -1,12 +1,56 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/app_state.dart';
 import '../../services/platform_file_dialog.dart';
+import '../../services/simple_zip.dart';
+import '../polished_dropdown.dart';
 import 'keyboard_safe_dialog.dart';
+
+enum PanelExportFormat {
+  text('Text', 'txt', Icons.description_outlined),
+  csv('CSV', 'csv', Icons.table_chart_outlined),
+  tsv('TSV', 'tsv', Icons.view_column_outlined),
+  json('JSON', 'json', Icons.data_object_rounded);
+
+  const PanelExportFormat(this.label, this.extension, this.icon);
+
+  final String label;
+  final String extension;
+  final IconData icon;
+}
+
+enum PanelExportRange {
+  allData('All data', Icons.all_inclusive_rounded),
+  currentView('Current view', Icons.center_focus_strong_rounded),
+  customXRange('Custom X range', Icons.straighten_rounded);
+
+  const PanelExportRange(this.label, this.icon);
+
+  final String label;
+  final IconData icon;
+}
+
+class PanelExportRequest {
+  const PanelExportRequest({
+    required this.panels,
+    required this.format,
+    required this.range,
+    this.xMin,
+    this.xMax,
+  });
+
+  final Set<int> panels;
+  final PanelExportFormat format;
+  final PanelExportRange range;
+  final double? xMin;
+  final double? xMax;
+}
 
 class PanelExportChoice {
   const PanelExportChoice({
@@ -27,6 +71,15 @@ class PanelExportChoice {
 
   bool get hasData => loadedSeries > 0;
 }
+
+class PanelExportFile {
+  const PanelExportFile(this.name, this.bytes);
+
+  final String name;
+  final Uint8List bytes;
+}
+
+typedef PlatformDirectoryDialog = Future<String?> Function();
 
 List<PanelExportChoice> panelExportChoices(AppState app) {
   final result = <PanelExportChoice>[];
@@ -76,193 +129,387 @@ String _signalDisplayName(dynamic raw, int index) {
   return normalized.isEmpty ? 'Signal ${index + 1}' : normalized;
 }
 
-Future<Set<int>?> showMultiPanelExportDialog(
+Future<PanelExportRequest?> showMultiPanelExportDialog(
   BuildContext context,
-  AppState app,
-) async {
+  AppState app, {
+  Set<int>? initialSelection,
+  bool allowPanelSelection = true,
+}) async {
   final choices = panelExportChoices(app);
-  final selected = <int>{
-    for (final choice in choices)
-      if (choice.hasData) choice.index,
-  };
-  return showDialog<Set<int>>(
-    context: context,
-    builder: (dialogContext) => StatefulBuilder(
-      builder: (context, setState) {
-        final selectable = choices.where((choice) => choice.hasData).toList();
-        final allSelected = selectable.isNotEmpty &&
-            selectable.every((choice) => selected.contains(choice.index));
-        final someSelected = selected.isNotEmpty && !allSelected;
-        final colors = Theme.of(context).colorScheme;
-        return KeyboardSafeDialog(
-          maxWidth: 700,
-          maxHeight: 760,
-          title: const Row(
-            children: [
-              Icon(Icons.library_add_check_rounded),
-              SizedBox(width: 10),
-              Flexible(child: Text('Export multiple panels')),
-            ],
-          ),
-          content: SizedBox(
-            width: 640,
-            height: 440,
-            child: Column(
+  final selected = initialSelection == null
+      ? <int>{
+          for (final choice in choices)
+            if (choice.hasData) choice.index,
+        }
+      : Set<int>.from(initialSelection);
+  var format = PanelExportFormat.csv;
+  var range = PanelExportRange.allData;
+  final xMinController = TextEditingController();
+  final xMaxController = TextEditingController();
+  String? rangeError;
+  try {
+    return await showDialog<PanelExportRequest>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setState) {
+          final selectable = choices.where((choice) => choice.hasData).toList();
+          final allSelected = selectable.isNotEmpty &&
+              selectable.every((choice) => selected.contains(choice.index));
+          final someSelected = selected.isNotEmpty && !allSelected;
+          final colors = Theme.of(context).colorScheme;
+
+          void submit() {
+            double? xMin;
+            double? xMax;
+            if (range == PanelExportRange.customXRange) {
+              xMin = double.tryParse(xMinController.text.trim());
+              xMax = double.tryParse(xMaxController.text.trim());
+              if (xMin == null ||
+                  xMax == null ||
+                  !xMin.isFinite ||
+                  !xMax.isFinite ||
+                  xMin >= xMax) {
+                setState(() {
+                  rangeError =
+                      'Enter finite X values with minimum less than maximum.';
+                });
+                return;
+              }
+            }
+            Navigator.pop(
+              dialogContext,
+              PanelExportRequest(
+                panels: Set<int>.from(selected),
+                format: format,
+                range: range,
+                xMin: xMin,
+                xMax: xMax,
+              ),
+            );
+          }
+
+          return KeyboardSafeDialog(
+            maxWidth: 700,
+            maxHeight: 820,
+            title: Row(
               children: [
-                Material(
-                  color: colors.surfaceContainerLow,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    side: BorderSide(color: colors.outlineVariant),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: CheckboxListTile(
-                    key: const ValueKey('multi-panel-export-select-all'),
-                    tristate: true,
-                    value: someSelected ? null : allSelected,
-                    onChanged: selectable.isEmpty
-                        ? null
-                        : (_) => setState(() {
-                              if (allSelected) {
-                                selected.clear();
-                              } else {
-                                selected.addAll(
-                                  selectable.map((choice) => choice.index),
-                                );
-                              }
-                            }),
-                    secondary: const Icon(Icons.select_all_rounded),
-                    title: const Text('Select all panels with data'),
-                    subtitle: Text(
-                      '${selected.length} of ${selectable.length} selected',
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: Scrollbar(
-                    child: ListView.separated(
-                      itemCount: choices.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (context, position) {
-                        final choice = choices[position];
-                        final title = choice.title.isEmpty
-                            ? 'Panel ${choice.index + 1}'
-                            : 'Panel ${choice.index + 1} · ${choice.title}';
-                        final signals = choice.signalNames.isEmpty
-                            ? 'No configured signals'
-                            : choice.signalNames.join(', ');
-                        return Card(
-                          margin: EdgeInsets.zero,
-                          clipBehavior: Clip.antiAlias,
-                          child: CheckboxListTile(
-                            key: ValueKey(
-                              'multi-panel-export-${choice.index}',
-                            ),
-                            value: selected.contains(choice.index),
-                            enabled: choice.hasData,
-                            onChanged: choice.hasData
-                                ? (checked) => setState(() {
-                                      if (checked == true) {
-                                        selected.add(choice.index);
-                                      } else {
-                                        selected.remove(choice.index);
-                                      }
-                                    })
-                                : null,
-                            secondary: CircleAvatar(
-                              backgroundColor: choice.hasData
-                                  ? colors.primaryContainer
-                                  : colors.surfaceContainerHighest,
-                              foregroundColor: choice.hasData
-                                  ? colors.onPrimaryContainer
-                                  : colors.onSurfaceVariant,
-                              child: Text('${choice.index + 1}'),
-                            ),
-                            title: Text(title),
-                            subtitle: Text(
-                              choice.hasData
-                                  ? '${choice.loadedSeries} loaded curve(s) · $signals'
-                                  : 'No loaded data · $signals',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                const Icon(Icons.file_download_outlined),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    allowPanelSelection
+                        ? 'Export multiple panels'
+                        : 'Export panel data',
                   ),
                 ),
               ],
             ),
-          ),
-          actions: [
-            TextButton.icon(
-              onPressed: () => Navigator.pop(dialogContext),
-              icon: const Icon(Icons.close_rounded),
-              label: const Text('Cancel'),
+            content: SizedBox(
+              width: 640,
+              height: allowPanelSelection ? 560 : 240,
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: PolishedDropdown<PanelExportFormat>(
+                          key: const ValueKey('panel-export-format'),
+                          id: 'panel-export-format',
+                          value: format,
+                          leadingIcon: format.icon,
+                          options: [
+                            for (final option in PanelExportFormat.values)
+                              PolishedDropdownOption(
+                                value: option,
+                                label: option.label,
+                                icon: option.icon,
+                              ),
+                          ],
+                          onChanged: (value) => setState(() => format = value),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: PolishedDropdown<PanelExportRange>(
+                          key: const ValueKey('panel-export-range'),
+                          id: 'panel-export-range',
+                          value: range,
+                          leadingIcon: range.icon,
+                          options: [
+                            for (final option in PanelExportRange.values)
+                              PolishedDropdownOption(
+                                value: option,
+                                label: option.label,
+                                icon: option.icon,
+                              ),
+                          ],
+                          onChanged: (value) => setState(() {
+                            range = value;
+                            rangeError = null;
+                          }),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (range == PanelExportRange.customXRange) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            key: const ValueKey('panel-export-x-min'),
+                            controller: xMinController,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              signed: true,
+                              decimal: true,
+                            ),
+                            decoration:
+                                const InputDecoration(labelText: 'X minimum'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            key: const ValueKey('panel-export-x-max'),
+                            controller: xMaxController,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              signed: true,
+                              decimal: true,
+                            ),
+                            decoration:
+                                const InputDecoration(labelText: 'X maximum'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (rangeError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          rangeError!,
+                          style: TextStyle(color: colors.error),
+                        ),
+                      ),
+                  ],
+                  if (allowPanelSelection) ...[
+                    const SizedBox(height: 12),
+                    Material(
+                      color: colors.surfaceContainerLow,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        side: BorderSide(color: colors.outlineVariant),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: CheckboxListTile(
+                        key: const ValueKey('multi-panel-export-select-all'),
+                        tristate: true,
+                        value: someSelected ? null : allSelected,
+                        onChanged: selectable.isEmpty
+                            ? null
+                            : (_) => setState(() {
+                                  if (allSelected) {
+                                    selected.clear();
+                                  } else {
+                                    selected.addAll(
+                                      selectable.map((choice) => choice.index),
+                                    );
+                                  }
+                                }),
+                        secondary: const Icon(Icons.select_all_rounded),
+                        title: const Text('Select all panels with data'),
+                        subtitle: Text(
+                          '${selected.length} of ${selectable.length} selected',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: Scrollbar(
+                        child: ListView.separated(
+                          itemCount: choices.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 8),
+                          itemBuilder: (context, position) {
+                            final choice = choices[position];
+                            final title = choice.title.isEmpty
+                                ? 'Panel ${choice.index + 1}'
+                                : 'Panel ${choice.index + 1} · ${choice.title}';
+                            final signals = choice.signalNames.isEmpty
+                                ? 'No configured signals'
+                                : choice.signalNames.join(', ');
+                            return Card(
+                              margin: EdgeInsets.zero,
+                              clipBehavior: Clip.antiAlias,
+                              child: CheckboxListTile(
+                                key: ValueKey(
+                                  'multi-panel-export-${choice.index}',
+                                ),
+                                value: selected.contains(choice.index),
+                                enabled: choice.hasData,
+                                onChanged: choice.hasData
+                                    ? (checked) => setState(() {
+                                          if (checked == true) {
+                                            selected.add(choice.index);
+                                          } else {
+                                            selected.remove(choice.index);
+                                          }
+                                        })
+                                    : null,
+                                secondary: CircleAvatar(
+                                  backgroundColor: choice.hasData
+                                      ? colors.primaryContainer
+                                      : colors.surfaceContainerHighest,
+                                  foregroundColor: choice.hasData
+                                      ? colors.onPrimaryContainer
+                                      : colors.onSurfaceVariant,
+                                  child: Text('${choice.index + 1}'),
+                                ),
+                                title: Text(title),
+                                subtitle: Text(
+                                  choice.hasData
+                                      ? '${choice.loadedSeries} loaded curve(s) · $signals'
+                                      : 'No loaded data · $signals',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
-            FilledButton.icon(
-              key: const ValueKey('multi-panel-export-confirm'),
-              onPressed: selected.isEmpty
-                  ? null
-                  : () => Navigator.pop(dialogContext, Set<int>.from(selected)),
-              icon: const Icon(Icons.file_download_outlined),
-              label: Text('Export ${selected.length} panel(s)'),
-            ),
-          ],
-        );
-      },
-    ),
-  );
+            actions: [
+              TextButton.icon(
+                onPressed: () => Navigator.pop(dialogContext),
+                icon: const Icon(Icons.close_rounded),
+                label: const Text('Cancel'),
+              ),
+              FilledButton.icon(
+                key: const ValueKey('multi-panel-export-confirm'),
+                onPressed: selected.isEmpty ? null : submit,
+                icon: const Icon(Icons.file_download_outlined),
+                label: Text('Export ${selected.length} panel(s)'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  } finally {
+    xMinController.dispose();
+    xMaxController.dispose();
+  }
 }
 
 Future<void> exportMultiplePanels(
   BuildContext context,
   AppState app, {
   PlatformSaveDialog? saveDialog,
+  PlatformDirectoryDialog? directoryDialog,
+  bool? mobileOverride,
+  Set<int>? initialSelection,
+  bool allowPanelSelection = true,
 }) async {
-  final selected = await showMultiPanelExportDialog(context, app);
-  if (selected == null || selected.isEmpty || !context.mounted) return;
+  final request = await showMultiPanelExportDialog(
+    context,
+    app,
+    initialSelection: initialSelection,
+    allowPanelSelection: allowPanelSelection,
+  );
+  if (request == null || request.panels.isEmpty || !context.mounted) return;
 
-  app.setStatus('Preparing data from ${selected.length} panels...');
-  final snapshot = _panelExportSnapshot(app, selected);
-  final csv = await Isolate.run(() => encodeMultiplePanelCsv(snapshot));
-  final shot = app.displayedShot.trim().isNotEmpty
-      ? app.displayedShot.trim()
-      : app.shotText.trim();
-  final safeShot = shot.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
-  final fileName =
-      safeShot.isEmpty ? 'mdslens-panels.csv' : 'mdslens-$safeShot-panels.csv';
+  app.setStatus('Preparing data from ${request.panels.length} panels...');
+  final snapshot = panelExportSnapshot(app, request);
+  final files = await Isolate.run(
+    () => buildPanelExportFiles(snapshot, request.format),
+  );
+  if (files.isEmpty) {
+    app.setStatus('Export error: no data exists in the selected range');
+    return;
+  }
+
+  final mobile = mobileOverride ?? (Platform.isAndroid || Platform.isIOS);
   try {
     app.setStatus('Choose where to export the selected panel data...');
-    await WidgetsBinding.instance.endOfFrame;
-    final destination = await saveBytesWithFilePicker(
-      dialogTitle: 'Export selected panel data',
-      fileName: fileName,
-      allowedExtensions: const ['csv'],
-      bytes: Uint8List.fromList(utf8.encode(csv)),
-      saveDialog: saveDialog,
-    );
+    if (saveDialog == null && directoryDialog == null) {
+      await WidgetsBinding.instance.endOfFrame;
+    }
+    if (files.length == 1) {
+      final file = files.single;
+      final destination = await saveBytesWithFilePicker(
+        dialogTitle: 'Export panel data',
+        fileName: file.name,
+        allowedExtensions: [request.format.extension],
+        bytes: file.bytes,
+        mobileOverride: mobile,
+        saveDialog: saveDialog,
+      );
+      app.setStatus(
+        destination == null
+            ? 'Export cancelled'
+            : 'Exported ${_displayName(destination)}',
+      );
+      return;
+    }
+
+    if (mobile || saveDialog != null) {
+      final archiveName = _archiveFileName(app);
+      final archive = createStoredZip({
+        for (final file in files) file.name: file.bytes,
+      });
+      final destination = await saveBytesWithFilePicker(
+        dialogTitle: 'Export panel data files',
+        fileName: archiveName,
+        allowedExtensions: const ['zip'],
+        bytes: archive,
+        mobileOverride: mobile,
+        saveDialog: saveDialog,
+      );
+      app.setStatus(
+        destination == null
+            ? 'Export cancelled'
+            : 'Exported ${files.length} panel files to '
+                '${_displayName(destination)}',
+      );
+      return;
+    }
+
+    final directory = await (directoryDialog ??
+        () => FilePicker.platform.getDirectoryPath(
+              dialogTitle: 'Export each panel to this folder',
+              lockParentWindow: true,
+            ))();
+    if (directory == null || directory.trim().isEmpty) {
+      app.setStatus('Export cancelled');
+      return;
+    }
+    for (final file in files) {
+      await File(
+        '$directory${Platform.pathSeparator}${file.name}',
+      ).writeAsBytes(file.bytes, flush: true);
+    }
     app.setStatus(
-      destination == null
-          ? 'Export cancelled'
-          : 'Exported ${selected.length} panels to ${_displayName(destination)}',
+      'Exported ${files.length} independent panel files to '
+      '${_displayName(directory)}',
     );
   } catch (error) {
     app.setStatus('Export error: $error');
   }
 }
 
-List<Map<String, dynamic>> _panelExportSnapshot(
+List<Map<String, dynamic>> panelExportSnapshot(
   AppState app,
-  Set<int> selected,
+  PanelExportRequest request,
 ) {
   final snapshot = <Map<String, dynamic>>[];
   var index = 0;
   for (var column = 0; column < app.columns.length; column++) {
     for (var row = 0; row < app.columns[column].length; row++) {
-      if (!selected.contains(index) || index >= app.plots.length) {
+      if (!request.panels.contains(index) || index >= app.plots.length) {
         index++;
         continue;
       }
@@ -270,12 +517,24 @@ List<Map<String, dynamic>> _panelExportSnapshot(
       final plot = app.plots[index];
       final specs = (panel['signal_specs'] as List?) ?? const [];
       final series = <Map<String, dynamic>>[];
+      final (rangeMin, rangeMax) = switch (request.range) {
+        PanelExportRange.allData => (null, null),
+        PanelExportRange.currentView => (plot.viewMinX, plot.viewMaxX),
+        PanelExportRange.customXRange => (request.xMin, request.xMax),
+      };
       for (var signal = 0; signal < plot.series.length; signal++) {
         final data = plot.series[signal];
         if (data?.points == null || data!.points!.isEmpty) continue;
         final spec = signal < specs.length && specs[signal] is Map
             ? Map<String, dynamic>.from(specs[signal] as Map)
             : <String, dynamic>{};
+        final points = [
+          for (final point in data.points!)
+            if ((rangeMin == null || point[0] >= rangeMin) &&
+                (rangeMax == null || point[0] <= rangeMax))
+              List<double>.from(point),
+        ];
+        if (points.isEmpty) continue;
         series.add({
           'index': signal,
           'legend': _signalDisplayName(spec, signal),
@@ -286,66 +545,163 @@ List<Map<String, dynamic>> _panelExportSnapshot(
           'x_name': data.xName,
           'x_unit': data.xUnit,
           'y_unit': data.unit,
-          'points': data.points,
+          'points': points,
         });
       }
-      snapshot.add({
-        'index': index,
-        'column': column,
-        'row': row,
-        'title': plot.title,
-        'series': series,
-      });
+      if (series.isNotEmpty) {
+        snapshot.add({
+          'index': index,
+          'column': column,
+          'row': row,
+          'title': plot.title,
+          'series': series,
+        });
+      }
       index++;
     }
   }
   return snapshot;
 }
 
+List<PanelExportFile> buildPanelExportFiles(
+  List<Map<String, dynamic>> panels,
+  PanelExportFormat format,
+) {
+  return [
+    for (final panel in panels)
+      PanelExportFile(
+        _panelFileName(panel, format.extension),
+        Uint8List.fromList(
+          utf8.encode(
+            switch (format) {
+              PanelExportFormat.text => _encodePanelText(panel),
+              PanelExportFormat.csv => _encodePanelDelimited(panel, ','),
+              PanelExportFormat.tsv => _encodePanelDelimited(panel, '\t'),
+              PanelExportFormat.json =>
+                const JsonEncoder.withIndent('  ').convert(panel),
+            },
+          ),
+        ),
+      ),
+  ];
+}
+
 String encodeMultiplePanelCsv(List<Map<String, dynamic>> panels) {
+  final output = StringBuffer();
+  for (final panel in panels) {
+    if (output.isNotEmpty) output.writeln();
+    output.write(_encodePanelDelimited(panel, ','));
+  }
+  return output.toString();
+}
+
+String _encodePanelDelimited(Map<String, dynamic> panel, String delimiter) {
   final output = StringBuffer()
     ..writeln(
-      'panel,column,row,panel_title,series,legend,shot,tree,signal,server_ip,'
-      'x_name,x_unit,y_unit,x,y',
+      [
+        'series',
+        'legend',
+        'shot',
+        'tree',
+        'signal',
+        'server_ip',
+        'x_name',
+        'x_unit',
+        'y_unit',
+        'x',
+        'y',
+      ].join(delimiter),
     );
-  for (final panel in panels) {
-    final seriesList = (panel['series'] as List?) ?? const [];
-    for (final rawSeries in seriesList) {
-      final series = rawSeries as Map;
-      final points = (series['points'] as List?) ?? const [];
-      for (final rawPoint in points) {
-        final point = rawPoint as List;
-        if (point.length < 2) continue;
-        output.writeln(
-          [
-            (panel['index'] as int) + 1,
-            (panel['column'] as int) + 1,
-            (panel['row'] as int) + 1,
-            panel['title'],
-            (series['index'] as int) + 1,
-            series['legend'],
-            series['shot'],
-            series['tree'],
-            series['signal'],
-            series['server'],
-            series['x_name'],
-            series['x_unit'],
-            series['y_unit'],
-            point[0],
-            point[1],
-          ].map(_csvValue).join(','),
-        );
-      }
+  final seriesList = (panel['series'] as List?) ?? const [];
+  for (final rawSeries in seriesList) {
+    final series = rawSeries as Map;
+    final points = (series['points'] as List?) ?? const [];
+    for (final rawPoint in points) {
+      final point = rawPoint as List;
+      if (point.length < 2) continue;
+      final fields = [
+        (series['index'] as int) + 1,
+        series['legend'],
+        series['shot'],
+        series['tree'],
+        series['signal'],
+        series['server'],
+        series['x_name'],
+        series['x_unit'],
+        series['y_unit'],
+        point[0],
+        point[1],
+      ];
+      output.writeln(
+        fields
+            .map(
+              delimiter == ',' ? _csvValue : (value) => _tsvValue(value),
+            )
+            .join(delimiter),
+      );
     }
   }
   return output.toString();
 }
+
+String _encodePanelText(Map<String, dynamic> panel) {
+  final output = StringBuffer()
+    ..writeln('MDSLens waveform export')
+    ..writeln('Panel: ${(panel['index'] as int) + 1}')
+    ..writeln('Title: ${panel['title']}')
+    ..writeln();
+  for (final rawSeries in (panel['series'] as List?) ?? const []) {
+    final series = rawSeries as Map;
+    output
+      ..writeln('Series: ${(series['index'] as int) + 1}')
+      ..writeln('Legend: ${series['legend']}')
+      ..writeln('Shot: ${series['shot']}')
+      ..writeln('Tree: ${series['tree']}')
+      ..writeln('Signal: ${series['signal']}')
+      ..writeln(
+        '${series['x_name']} [${series['x_unit']}]\t'
+        'value [${series['y_unit']}]',
+      );
+    for (final rawPoint in (series['points'] as List?) ?? const []) {
+      final point = rawPoint as List;
+      if (point.length >= 2) output.writeln('${point[0]}\t${point[1]}');
+    }
+    output.writeln();
+  }
+  return output.toString();
+}
+
+String _panelFileName(Map<String, dynamic> panel, String extension) {
+  final number = ((panel['index'] as int) + 1).toString().padLeft(2, '0');
+  final title = _safeName(panel['title']?.toString() ?? '');
+  return title.isEmpty
+      ? 'panel-$number.$extension'
+      : 'panel-$number-$title.$extension';
+}
+
+String _archiveFileName(AppState app) {
+  final shot = app.displayedShot.trim().isNotEmpty
+      ? app.displayedShot.trim()
+      : app.shotText.trim();
+  final safeShot = _safeName(shot);
+  return safeShot.isEmpty
+      ? 'mdslens-panels.zip'
+      : 'mdslens-$safeShot-panels.zip';
+}
+
+String _safeName(String value) => value
+    .trim()
+    .replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '-')
+    .replaceAll(RegExp(r'^-+|-+$'), '');
 
 String _csvValue(Object? value) {
   final text = value?.toString() ?? '';
   if (!text.contains(RegExp(r'[",\r\n]'))) return text;
   return '"${text.replaceAll('"', '""')}"';
 }
+
+String _tsvValue(Object? value) =>
+    (value?.toString() ?? '').replaceAll(RegExp(r'[\t\r\n]+'), ' ');
 
 String _displayName(String path) {
   final parts = Uri.decodeComponent(path).split(RegExp(r'[/\\]'));

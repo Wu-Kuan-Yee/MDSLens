@@ -21,10 +21,12 @@ Source code, releases, and update checks are hosted in the
   full-resolution detail when zooming.
 - Zoom/Move and synchronized Point modes for mouse, touch, trackpad, and stylus.
 - Per-signal Tree, Signal, legend, server, color, visibility, and data controls.
-- Single-panel export and selectable multi-panel CSV export with complete
-  signal and coordinate metadata.
-- Responsive layouts, configurable fonts and themes, internal web bookmarks,
-  shot history management, and native system file/link integration.
+- Single- and multi-panel export in text, CSV, TSV, or JSON, using all data,
+  the current view, or a custom X range. Each panel is written to an
+  independent file; mobile platforms package multi-panel results in one ZIP
+  while preserving those separate files.
+- Responsive layouts, configurable fonts, icon sizes and themes, internal web
+  bookmarks, shot history management, and native system file/link integration.
 
 Point readouts use the horizontal coordinate name reported by MDSplus. Many
 MDSplus dimensions are anonymous arrays rather than named nodes; in that case
