@@ -40,9 +40,10 @@ use a `mdslens-web-macos-<arch>.tar.gz` name. The build deliberately uses
 application WASM, icons and the Chinese fallback font are inside `web/`.
 
 Each Linux archive also contains a hardened Compose deployment under
-`deploy/container`. For a Synology deployment in which the public UI is
-available to everyone but server operations work only on the private network,
-follow [the Synology split-DNS guide](SYNOLOGY_WEB_DEPLOYMENT.md).
+`deploy/container`. For a deployment in which the public UI is available to
+everyone but server operations work only on the private network, follow the
+[private Gateway and split-DNS guide](PRIVATE_GATEWAY_DEPLOYMENT.md). Synology
+is one supported example rather than a requirement.
 
 ## Run locally
 

@@ -1,5 +1,10 @@
 # Synology private-gateway deployment
 
+This is the Synology-specific example of the
+[generic private Gateway design](PRIVATE_GATEWAY_DEPLOYMENT.md). The same
+container and split-DNS architecture also works on ordinary Linux servers,
+virtual machines and other compatible container hosts.
+
 This deployment gives public and private-network visitors the same MDSLens Web
 application and interaction model. The only observable difference is whether a
 server operation connects:

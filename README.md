@@ -100,10 +100,12 @@ is generated as `<version>.r<commits-after-tag>.g<commit>`. Build-only labels
 such as `v0.0.1-build.1` are deliberately ignored as public versions.
 The complete output list and unsupported-target boundary are documented in
 [Release Artifact Matrix](docs/RELEASE_ARTIFACTS.md).
-Web deployment is documented in [MDSLens Web / PWA Deployment](docs/WEB_DEPLOYMENT.md).
-For a public UI with private-network-only Login, SSH and MDS access on a
-Synology NAS, use the
-[Synology private-gateway deployment](docs/SYNOLOGY_WEB_DEPLOYMENT.md).
+Web deployment is documented in
+[MDSLens Web / PWA Deployment](docs/WEB_DEPLOYMENT.md). For a public UI with
+private-network-only Login, SSH and MDS access on any suitable internal server,
+use the
+[private Gateway deployment](docs/PRIVATE_GATEWAY_DEPLOYMENT.md). A
+[Synology-specific example](docs/SYNOLOGY_WEB_DEPLOYMENT.md) is also available.
 
 On Windows, the portable distribution must be a complete ZIP/tar archive containing the EXE, Flutter DLLs, plugins, and data directory; copying `mdslens.exe` alone is not sufficient. On macOS, `.app` is likewise a directory-based application bundle.
 
