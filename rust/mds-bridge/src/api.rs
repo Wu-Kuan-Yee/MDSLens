@@ -295,7 +295,7 @@ pub fn ssh_test(settings: FrbSshSettings) -> Result<(), String> {
 
 
 pub fn fetch_signals(config_json: String, mode: i32) -> Vec<FrbLoadedSignal> {
-    fetch_signals_inner(config_json, mode, None)
+    fetch_signals_inner(config_json, mode, None, None)
 }
 
 static ACTIVE_FETCHES: OnceLock<Mutex<HashMap<u64, Arc<AtomicBool>>>> = OnceLock::new();
@@ -367,7 +367,20 @@ pub fn fetch_signals_ssh(config_json: String, mode: i32, ssh_settings_json: Stri
             }],
         }
     };
-    fetch_signals_inner(config_json, mode, ssh_settings)
+    fetch_signals_inner(config_json, mode, ssh_settings, None)
+}
+
+/// Fetch signals with an SSH tunnel manager owned by one browser session.
+///
+/// Unlike the native entry points, this keeps credentials and forwarded ports
+/// isolated from other users of a shared web gateway.
+pub fn fetch_signals_for_session(
+    config_json: String,
+    mode: i32,
+    ssh_settings: Option<FrbSshSettings>,
+    tunnel_manager: &mut mds_ssh::tunnel::SshTunnelManager,
+) -> Vec<FrbLoadedSignal> {
+    fetch_signals_inner(config_json, mode, ssh_settings, Some(tunnel_manager))
 }
 
 /// Warm the process-wide connection pool used by waveform reads.
@@ -391,7 +404,34 @@ pub fn prewarm_signals(config_json: String, ssh_settings_json: String) -> Result
     Ok(())
 }
 
-fn fetch_signals_inner(config_json: String, mode: i32, ssh_settings: Option<FrbSshSettings>) -> Vec<FrbLoadedSignal> {
+/// Warm connections with an SSH tunnel manager owned by one browser session.
+pub fn prewarm_signals_for_session(
+    config_json: String,
+    ssh_settings: Option<FrbSshSettings>,
+    tunnel_manager: &mut mds_ssh::tunnel::SshTunnelManager,
+) -> Result<(), String> {
+    let config: FrbLayoutConfig =
+        serde_json::from_str(&config_json).map_err(|e| format!("Config parse: {e}"))?;
+    let mut rust_config = config.into_rust();
+    if let Some(ssh) = ssh_settings {
+        if !ssh.host.is_empty() && ssh.mode > 0 {
+            tunnel_manager.reload_settings(ssh.into_rust());
+            tunnel_manager.prepare_layout(&mut rust_config)?;
+        } else {
+            tunnel_manager.reload_settings(mds_ssh::settings::SshSettings::default());
+        }
+    }
+    let cancel = Arc::new(AtomicBool::new(false));
+    mds_ip::pipeline::warm_connections(&rust_config, &cancel);
+    Ok(())
+}
+
+fn fetch_signals_inner(
+    config_json: String,
+    mode: i32,
+    ssh_settings: Option<FrbSshSettings>,
+    mut session_tunnel_manager: Option<&mut mds_ssh::tunnel::SshTunnelManager>,
+) -> Vec<FrbLoadedSignal> {
     let request_id = serde_json::from_str::<serde_json::Value>(&config_json)
         .ok()
         .and_then(|value| value.get("request_id").and_then(|id| id.as_u64()))
@@ -421,31 +461,42 @@ fn fetch_signals_inner(config_json: String, mode: i32, ssh_settings: Option<FrbS
     // Set up or reuse persistent SSH tunnels if configured.
     if let Some(ssh) = ssh_settings {
         if !ssh.host.is_empty() && ssh.mode > 0 {
-            let tunnel_epoch = DATA_TUNNEL_EPOCH.load(Ordering::Acquire);
-            let manager = data_tunnel_manager();
-            let mut manager = manager
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            if tunnel_epoch == DATA_TUNNEL_EPOCH.load(Ordering::Acquire) {
+            if let Some(manager) = session_tunnel_manager.as_deref_mut() {
                 manager.reload_settings(ssh.into_rust());
-                match manager.prepare_layout(&mut rust_config) {
-                    Ok(rewrote) => {
-                        if rewrote {
-                            eprintln!("[mds-bridge] SSH tunnels active for data fetch");
+                if let Err(e) = manager.prepare_layout(&mut rust_config) {
+                    eprintln!("[mds-bridge] SSH tunnel setup failed (will try direct): {}", e);
+                }
+            } else {
+                let tunnel_epoch = DATA_TUNNEL_EPOCH.load(Ordering::Acquire);
+                let manager = data_tunnel_manager();
+                let mut manager = manager
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                if tunnel_epoch == DATA_TUNNEL_EPOCH.load(Ordering::Acquire) {
+                    manager.reload_settings(ssh.into_rust());
+                    match manager.prepare_layout(&mut rust_config) {
+                        Ok(rewrote) => {
+                            if rewrote {
+                                eprintln!("[mds-bridge] SSH tunnels active for data fetch");
+                            }
+                        }
+                        Err(e) => {
+                            // Tunnel setup failed, log but continue with direct connection
+                            eprintln!("[mds-bridge] SSH tunnel setup failed (will try direct): {}", e);
                         }
                     }
-                    Err(e) => {
-                        // Tunnel setup failed, log but continue with direct connection
-                        eprintln!("[mds-bridge] SSH tunnel setup failed (will try direct): {}", e);
-                    }
+                }
+                if tunnel_epoch != DATA_TUNNEL_EPOCH.load(Ordering::Acquire) {
+                    manager.reload_settings(mds_ssh::settings::SshSettings::default());
                 }
             }
-            if tunnel_epoch != DATA_TUNNEL_EPOCH.load(Ordering::Acquire) {
-                manager.reload_settings(mds_ssh::settings::SshSettings::default());
-            }
+        } else if let Some(manager) = session_tunnel_manager.as_deref_mut() {
+            manager.reload_settings(mds_ssh::settings::SshSettings::default());
         } else {
             disconnect_data_tunnels();
         }
+    } else if let Some(manager) = session_tunnel_manager.as_deref_mut() {
+        manager.reload_settings(mds_ssh::settings::SshSettings::default());
     } else {
         disconnect_data_tunnels();
     }

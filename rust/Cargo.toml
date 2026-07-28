@@ -1,6 +1,13 @@
 [workspace]
 resolver = "2"
-members = ["mds-bridge", "mds-core", "mds-ip", "mds-ssh", "mds-auth"]
+members = [
+    "mds-bridge",
+    "mds-core",
+    "mds-ip",
+    "mds-ssh",
+    "mds-auth",
+    "mdslens-web-gateway",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -23,12 +30,18 @@ tracing = "0.1"
 base64 = "0.22"
 sha2 = "0.10"
 ring = "0.17"
+axum = "0.8"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
+tower-http = { version = "0.6", features = ["fs", "set-header", "trace"] }
+url = "2"
+tempfile = "3"
 
 # Internal crates
 mds-core = { path = "mds-core" }
 mds-ip = { path = "mds-ip" }
 mds-ssh = { path = "mds-ssh" }
 mds-auth = { path = "mds-auth" }
+mds-bridge = { path = "mds-bridge" }
 
 
 [profile.release]
