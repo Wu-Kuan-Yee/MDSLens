@@ -352,6 +352,16 @@ Map<MdsShortcutCommand, MdsShortcutBinding> defaultMdsShortcutBindings() {
   };
 }
 
+Map<MdsShortcutCommand, MdsShortcutBinding>
+    restoredDefaultMdsShortcutBindings() {
+  final defaults = defaultMdsShortcutBindings();
+  return {
+    for (final definition in mdsShortcutDefinitions)
+      definition.command:
+          defaults[definition.command] ?? const MdsShortcutBinding(),
+  };
+}
+
 Map<MdsShortcutCommand, MdsShortcutBinding> decodeMdsShortcutBindings(
   dynamic value,
 ) {

@@ -14,6 +14,7 @@ class KeyboardShortcutsDialog {
     var draft = Map<MdsShortcutCommand, MdsShortcutBinding>.from(
       app.keyboardShortcuts,
     );
+    var draftRevision = 0;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -47,15 +48,16 @@ class KeyboardShortcutsDialog {
                     (item) => item.category == category,
                   ))
                     _ShortcutRow(
+                      key: ValueKey(
+                        '${definition.id}-shortcut-$draftRevision',
+                      ),
                       definition: definition,
-                      binding:
-                          draft[definition.command] ??
+                      binding: draft[definition.command] ??
                           const MdsShortcutBinding(),
                       conflicting: {
-                        for (final stroke
-                            in (draft[definition.command] ??
-                                    const MdsShortcutBinding())
-                                .strokes)
+                        for (final stroke in (draft[definition.command] ??
+                                const MdsShortcutBinding())
+                            .strokes)
                           if (conflicts.contains(stroke)) stroke,
                       },
                       onChanged: (binding) => setState(() {
@@ -77,8 +79,13 @@ class KeyboardShortcutsDialog {
             actions: [
               OutlinedButton.icon(
                 key: const ValueKey('shortcut-reset-defaults'),
-                onPressed: () =>
-                    setState(() => draft = defaultMdsShortcutBindings()),
+                onPressed: () {
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  setState(() {
+                    draft = restoredDefaultMdsShortcutBindings();
+                    draftRevision++;
+                  });
+                },
                 icon: const Icon(Icons.restart_alt_rounded),
                 label: const Text('Restore defaults'),
               ),
@@ -129,6 +136,7 @@ Set<MdsShortcutStroke> _conflictingStrokes(
 
 class _ShortcutRow extends StatelessWidget {
   const _ShortcutRow({
+    super.key,
     required this.definition,
     required this.binding,
     required this.conflicting,
@@ -142,63 +150,62 @@ class _ShortcutRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Card(
-    margin: const EdgeInsets.only(bottom: 6),
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final controls = [
-            _ShortcutCapture(
-              key: ValueKey('${definition.id}-primary'),
-              label: 'Primary',
-              value: binding.primary,
-              conflicting:
-                  binding.primary != null &&
-                  conflicting.contains(binding.primary),
-              onChanged: (value) => onChanged(
-                binding.copyWith(primary: value, clearPrimary: value == null),
-              ),
-            ),
-            _ShortcutCapture(
-              key: ValueKey('${definition.id}-alternative'),
-              label: 'Alternative',
-              value: binding.alternative,
-              conflicting:
-                  binding.alternative != null &&
-                  conflicting.contains(binding.alternative),
-              onChanged: (value) => onChanged(
-                binding.copyWith(
-                  alternative: value,
-                  clearAlternative: value == null,
+        margin: const EdgeInsets.only(bottom: 6),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final controls = [
+                _ShortcutCapture(
+                  key: ValueKey('${definition.id}-primary'),
+                  label: 'Primary',
+                  value: binding.primary,
+                  conflicting: binding.primary != null &&
+                      conflicting.contains(binding.primary),
+                  onChanged: (value) => onChanged(
+                    binding.copyWith(
+                        primary: value, clearPrimary: value == null),
+                  ),
                 ),
-              ),
-            ),
-          ];
-          if (constraints.maxWidth < 520) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(definition.label),
-                const SizedBox(height: 8),
-                Wrap(spacing: 8, runSpacing: 8, children: controls),
-              ],
-            );
-          }
-          return Row(
-            children: [
-              Expanded(child: Text(definition.label)),
-              ...controls.map(
-                (control) => Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: control,
+                _ShortcutCapture(
+                  key: ValueKey('${definition.id}-alternative'),
+                  label: 'Alternative',
+                  value: binding.alternative,
+                  conflicting: binding.alternative != null &&
+                      conflicting.contains(binding.alternative),
+                  onChanged: (value) => onChanged(
+                    binding.copyWith(
+                      alternative: value,
+                      clearAlternative: value == null,
+                    ),
+                  ),
                 ),
-              ),
-            ],
-          );
-        },
-      ),
-    ),
-  );
+              ];
+              if (constraints.maxWidth < 520) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(definition.label),
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 8, runSpacing: 8, children: controls),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: Text(definition.label)),
+                  ...controls.map(
+                    (control) => Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: control,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      );
 }
 
 class _ShortcutCapture extends StatefulWidget {
@@ -261,9 +268,8 @@ class _ShortcutCaptureState extends State<_ShortcutCapture> {
       child: OutlinedButton.icon(
         style: OutlinedButton.styleFrom(
           side: BorderSide(color: color),
-          foregroundColor: widget.conflicting
-              ? Theme.of(context).colorScheme.error
-              : null,
+          foregroundColor:
+              widget.conflicting ? Theme.of(context).colorScheme.error : null,
         ),
         onPressed: () {
           setState(() => _capturing = true);

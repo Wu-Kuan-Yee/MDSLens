@@ -42,4 +42,15 @@ void main() {
     );
     expect(decoded[MdsShortcutCommand.latestShot]!.primary, isNull);
   });
+
+  test('Restore defaults repopulates every empty shortcut binding', () {
+    final restored = restoredDefaultMdsShortcutBindings();
+
+    expect(restored.keys, containsAll(MdsShortcutCommand.values));
+    expect(restored.length, MdsShortcutCommand.values.length);
+    expect(restored[MdsShortcutCommand.pointMode]!.primary, isNotNull);
+    expect(restored[MdsShortcutCommand.latestShot]!.primary, isNotNull);
+    expect(restored[MdsShortcutCommand.exitPoint]!.primary!.key,
+        LogicalKeyboardKey.escape);
+  });
 }
