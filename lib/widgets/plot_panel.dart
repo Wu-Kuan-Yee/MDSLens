@@ -14,6 +14,7 @@ import '../models/app_state.dart';
 import '../services/platform_file_dialog.dart';
 import '../services/source_index.dart';
 import 'dialogs/keyboard_safe_dialog.dart';
+import 'dialogs/multi_panel_export.dart';
 
 const _colors = [
   Color(0xFF2364aa),
@@ -334,18 +335,14 @@ class _PlotPanelState extends State<PlotPanel> {
         maxX: renderMaxX,
       );
       final spots = rendered.spots;
-      viewMinX = viewMinX == null
-          ? rendered.minX
-          : math.min(viewMinX, rendered.minX);
-      viewMaxX = viewMaxX == null
-          ? rendered.maxX
-          : math.max(viewMaxX, rendered.maxX);
-      viewMinY = viewMinY == null
-          ? rendered.minY
-          : math.min(viewMinY, rendered.minY);
-      viewMaxY = viewMaxY == null
-          ? rendered.maxY
-          : math.max(viewMaxY, rendered.maxY);
+      viewMinX =
+          viewMinX == null ? rendered.minX : math.min(viewMinX, rendered.minX);
+      viewMaxX =
+          viewMaxX == null ? rendered.maxX : math.max(viewMaxX, rendered.maxX);
+      viewMinY =
+          viewMinY == null ? rendered.minY : math.min(viewMinY, rendered.minY);
+      viewMaxY =
+          viewMaxY == null ? rendered.maxY : math.max(viewMaxY, rendered.maxY);
       bars.add(
         LineChartBarData(
           spots: spots,
@@ -421,18 +418,18 @@ class _PlotPanelState extends State<PlotPanel> {
                       Expanded(
                         child: bars.isEmpty
                             ? isLoading
-                                  ? _buildLoadingIndicator(app, theme)
-                                  : Center(
-                                      child: Text(
-                                        _getPlaceholderText(plot),
-                                        style: TextStyle(
-                                          color: Colors.grey,
-                                          fontFamily: app.effectiveFontFamily,
-                                          fontSize: app.fontUiSize.toDouble(),
-                                        ),
-                                        textAlign: TextAlign.center,
+                                ? _buildLoadingIndicator(app, theme)
+                                : Center(
+                                    child: Text(
+                                      _getPlaceholderText(plot),
+                                      style: TextStyle(
+                                        color: Colors.grey,
+                                        fontFamily: app.effectiveFontFamily,
+                                        fontSize: app.fontUiSize.toDouble(),
                                       ),
-                                    )
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  )
                             : Stack(
                                 key: _chartAreaKey,
                                 children: [
@@ -549,12 +546,10 @@ class _PlotPanelState extends State<PlotPanel> {
         final yTickCount = yMin != null && yMax != null
             ? (gridH / 34.0 + 1).round().clamp(3, 6)
             : 0;
-        final xTicks = xTickCount > 1
-            ? evenTicks(xMin!, xMax!, xTickCount)
-            : <double>[];
-        final yTicks = yTickCount > 1
-            ? evenTicks(yMin!, yMax!, yTickCount)
-            : <double>[];
+        final xTicks =
+            xTickCount > 1 ? evenTicks(xMin!, xMax!, xTickCount) : <double>[];
+        final yTicks =
+            yTickCount > 1 ? evenTicks(yMin!, yMax!, yTickCount) : <double>[];
 
         return Stack(
           children: [
@@ -660,8 +655,7 @@ class _PlotPanelState extends State<PlotPanel> {
             for (int i = 0; i < yTicks.length; i++)
               Positioned(
                 left: gridLeft,
-                top:
-                    gridTop +
+                top: gridTop +
                     ((yTicks.length - 1 - i) / (yTicks.length - 1)) * gridH,
                 child: Container(width: 3, height: 1, color: tickColor),
               ),
@@ -676,12 +670,11 @@ class _PlotPanelState extends State<PlotPanel> {
             for (int i = 0; i < yTicks.length; i++)
               Positioned(
                 left: 2,
-                top:
-                    (gridTop +
-                            ((yTicks.length - 1 - i) / (yTicks.length - 1)) *
-                                gridH -
-                            6)
-                        .clamp(2.0, double.infinity),
+                top: (gridTop +
+                        ((yTicks.length - 1 - i) / (yTicks.length - 1)) *
+                            gridH -
+                        6)
+                    .clamp(2.0, double.infinity),
                 child: SizedBox(
                   width: gridLeft - 6,
                   child: Text(
@@ -1275,9 +1268,9 @@ class _PlotPanelState extends State<PlotPanel> {
     }
 
     Offset toPixel(FlSpot spot) => Offset(
-      gridLeft + (spot.x - _viewMinX) / (_viewMaxX - _viewMinX) * gridWidth,
-      (_viewMaxY - spot.y) / (_viewMaxY - _viewMinY) * gridHeight,
-    );
+          gridLeft + (spot.x - _viewMinX) / (_viewMaxX - _viewMinX) * gridWidth,
+          (_viewMaxY - spot.y) / (_viewMaxY - _viewMinY) * gridHeight,
+        );
 
     var bestDistance = double.infinity;
     int? bestSeries;
@@ -1348,8 +1341,7 @@ class _PlotPanelState extends State<PlotPanel> {
         ? app.crosshairSourceSeries
         : 0;
     if (chooseSeries) {
-      seriesIndex =
-          _pickSeriesAt(localPosition, maximumDistance: pickRadius) ??
+      seriesIndex = _pickSeriesAt(localPosition, maximumDistance: pickRadius) ??
           (_usableSeriesIndex(
                 app.plots[widget.plotIdx],
                 _findPanel(app),
@@ -1410,9 +1402,8 @@ class _PlotPanelState extends State<PlotPanel> {
 
     final previousScale = _lastTrackpadScale;
     _lastTrackpadScale = event.scale;
-    final incrementalScale = previousScale > 0
-        ? event.scale / previousScale
-        : 1.0;
+    final incrementalScale =
+        previousScale > 0 ? event.scale / previousScale : 1.0;
     final canScale = incrementalScale.isFinite && incrementalScale > 0;
     final panDelta = event.localPanDelta;
 
@@ -1451,8 +1442,7 @@ class _PlotPanelState extends State<PlotPanel> {
       _stylusDragStarted = false;
       _stylusLongPressTriggered = false;
       final app = context.read<AppState>();
-      _stylusShouldErase =
-          event.kind == PointerDeviceKind.invertedStylus ||
+      _stylusShouldErase = event.kind == PointerDeviceKind.invertedStylus ||
           app.stylusEraserMode ||
           _hasStylusButton(event.buttons);
       _startLongPressTimer(event, stylus: true);
@@ -1489,8 +1479,7 @@ class _PlotPanelState extends State<PlotPanel> {
     final isMid = (event.buttons & kMiddleMouseButton) != 0;
     final isShiftLeft =
         app.shiftHeld && (event.buttons & kPrimaryMouseButton) != 0;
-    final isMouseLeft =
-        event.kind == PointerDeviceKind.mouse &&
+    final isMouseLeft = event.kind == PointerDeviceKind.mouse &&
         (event.buttons & kPrimaryMouseButton) != 0 &&
         !app.shiftHeld;
     if (isMouseLeft) {
@@ -1995,6 +1984,12 @@ class _PlotPanelState extends State<PlotPanel> {
               label: 'Export Data',
               icon: Icons.file_download_outlined,
             ),
+            PolishedPopupMenuOption(
+              id: 'export-multiple',
+              value: 'exportMultiple',
+              label: 'Export Multiple Panels',
+              icon: Icons.library_add_check_rounded,
+            ),
           ],
         ),
         const PolishedPopupMenuGroup(
@@ -2051,6 +2046,13 @@ class _PlotPanelState extends State<PlotPanel> {
       case 'export':
         await _exportCsv(app);
         break;
+      case 'exportMultiple':
+        await exportMultiplePanels(
+          context,
+          app,
+          saveDialog: widget.exportSaveDialog,
+        );
+        break;
       case 'dataSource':
         _showDataSourceSetup(context, app);
         break;
@@ -2104,9 +2106,8 @@ class _PlotPanelState extends State<PlotPanel> {
     for (final col in app.columns) {
       for (final p in col) {
         final sc = (p['signal_specs'] as List?)?.length ?? 1;
-        final oldSeries = idx < curPlots.length
-            ? curPlots[idx].series
-            : <SeriesData?>[];
+        final oldSeries =
+            idx < curPlots.length ? curPlots[idx].series : <SeriesData?>[];
         final oldPlot = idx < curPlots.length ? curPlots[idx] : null;
         newPlots.add(
           PlotData(
@@ -2115,11 +2116,11 @@ class _PlotPanelState extends State<PlotPanel> {
             yLabel: p['y_label']?.toString() ?? 'a.u.',
             series: _resizeSeries(oldSeries, sc > 0 ? sc : 1),
           )..setViewRange(
-            oldPlot?.viewMinX ?? double.nan,
-            oldPlot?.viewMaxX ?? double.nan,
-            oldPlot?.viewMinY ?? double.nan,
-            oldPlot?.viewMaxY ?? double.nan,
-          ),
+              oldPlot?.viewMinX ?? double.nan,
+              oldPlot?.viewMaxX ?? double.nan,
+              oldPlot?.viewMinY ?? double.nan,
+              oldPlot?.viewMaxY ?? double.nan,
+            ),
         );
         idx++;
       }
@@ -2154,9 +2155,8 @@ class _PlotPanelState extends State<PlotPanel> {
           title: plot.title,
           xLabel: _effectiveXLabel(plot, panel),
           yLabel: _effectiveYLabel(plot, panel),
-          extractionPoints: parsedPoints != null && parsedPoints >= 2
-              ? parsedPoints
-              : 2000,
+          extractionPoints:
+              parsedPoints != null && parsedPoints >= 2 ? parsedPoints : 2000,
         );
       },
     );
@@ -2315,11 +2315,10 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
       text: actual?.yLabel ?? widget.panel['y_label']?.toString() ?? 'a.u.',
     );
     _pointsCtrl = TextEditingController(
-      text:
-          (actual?.extractionPoints ??
-                  widget.panel['extraction_points'] ??
-                  2000)
-              .toString(),
+      text: (actual?.extractionPoints ??
+              widget.panel['extraction_points'] ??
+              2000)
+          .toString(),
     );
     _titleCtrl.addListener(() {
       if (!_syncingActualValues) _titleEdited = true;
@@ -2520,8 +2519,8 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
       final extractionPoints = int.tryParse(_pointsCtrl.text);
       widget.panel['extraction_points'] =
           extractionPoints != null && extractionPoints >= 2
-          ? extractionPoints
-          : 2000;
+              ? extractionPoints
+              : 2000;
     }
     widget.panel['grid'] = _grid;
     widget.panel['custom_x_range'] = _customX;
@@ -2701,30 +2700,31 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
 
   Future<List<String>> _signalsForTree(String tree) async {
     final key = tree.trim().toLowerCase().replaceAll(
-      RegExp(r'[^a-z0-9_-]+'),
-      '_',
-    );
+          RegExp(r'[^a-z0-9_-]+'),
+          '_',
+        );
     if (key.isEmpty) {
       const allKey = '__all__';
       if (_signalCache.containsKey(allKey)) return _signalCache[allKey]!;
       final signalLists = await Future.wait(_treeNames.map(_signalsForTree));
-      final allSignals =
-          signalLists.expand((signals) => signals).toSet().toList()
-            ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      final allSignals = signalLists
+          .expand((signals) => signals)
+          .toSet()
+          .toList()
+        ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
       _signalCache[allKey] = allSignals;
       return allSignals;
     }
     if (_signalCache.containsKey(key)) return _signalCache[key]!;
     try {
       final text = await _loadAsset('assets/source_index/signals/$key.txt');
-      final sigs =
-          text
-              .split('\n')
-              .expand(sourceIndexSignalNames)
-              .followedBy(_sourceIndexMemory.signalsForTree(tree))
-              .toSet()
-              .toList()
-            ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      final sigs = text
+          .split('\n')
+          .expand(sourceIndexSignalNames)
+          .followedBy(_sourceIndexMemory.signalsForTree(tree))
+          .toSet()
+          .toList()
+        ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
       _signalCache[key] = sigs;
       _indexTreeSignals(tree, sigs);
       return sigs;
@@ -2757,11 +2757,11 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
   }
 
   static InputDecoration _dsDeco() => InputDecoration(
-    isDense: true,
-    filled: true,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-  );
+        isDense: true,
+        filled: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      );
 
   static Widget _hdrCell(String text, double rightPad) {
     return Padding(
@@ -2784,22 +2784,22 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
     final defaultRate = context.read<AppState>().dataMode;
     _rows.add(
       _DSRow(
-          shot: TextEditingController(
-            text: resolveDataSourceShot(
-              signalShot: s?['shot'],
-              inputShot: widget.defaultShot,
-            ),
+        shot: TextEditingController(
+          text: resolveDataSourceShot(
+            signalShot: s?['shot'],
+            inputShot: widget.defaultShot,
           ),
-          y: TextEditingController(text: s?['y_expr']?.toString() ?? ''),
-          legend: TextEditingController(text: s?['legend']?.toString() ?? ''),
-          tree: TextEditingController(
-            text: s?['experiment']?.toString() ?? 'pcs_east',
-          ),
-          server: TextEditingController(
-            text: s?['server_ip']?.toString() ?? '202.127.204.12',
-          ),
-          xExpr: s?['x_expr']?.toString() ?? '',
-        )
+        ),
+        y: TextEditingController(text: s?['y_expr']?.toString() ?? ''),
+        legend: TextEditingController(text: s?['legend']?.toString() ?? ''),
+        tree: TextEditingController(
+          text: s?['experiment']?.toString() ?? 'pcs_east',
+        ),
+        server: TextEditingController(
+          text: s?['server_ip']?.toString() ?? '202.127.204.12',
+        ),
+        xExpr: s?['x_expr']?.toString() ?? '',
+      )
         ..hideMode = s == null ? signalHideModeVisible : signalHideModeOf(s)
         ..colorIdx = i % _presetColors.length
         ..readMode = (s?['read_mode'] as int?) ?? defaultRate,
@@ -2864,17 +2864,16 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                         text: last?.server.text ?? '202.127.204.12',
                       );
                       final defaultRate = context.read<AppState>().dataMode;
-                      final newRow =
-                          _DSRow(
-                              shot: shotCtrl,
-                              y: yCtrl,
-                              legend: legendCtrl,
-                              tree: treeCtrl,
-                              server: serverCtrl,
-                              xExpr: '',
-                            )
-                            ..colorIdx = _rows.length % _presetColors.length
-                            ..readMode = defaultRate;
+                      final newRow = _DSRow(
+                        shot: shotCtrl,
+                        y: yCtrl,
+                        legend: legendCtrl,
+                        tree: treeCtrl,
+                        server: serverCtrl,
+                        xExpr: '',
+                      )
+                        ..colorIdx = _rows.length % _presetColors.length
+                        ..readMode = defaultRate;
                       setState(() {
                         _rows.add(newRow);
                       });
@@ -3092,8 +3091,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
     for (final r in _rows) {
       if (r.y.text.trim().isEmpty) continue;
       final shot = r.shot.text.trim();
-      final colorValue =
-          r.customColor ??
+      final colorValue = r.customColor ??
           Color(_presetColors[r.colorIdx % _presetColors.length]);
       widget.signals.add({
         'shot': shot.isNotEmpty ? shot : widget.defaultShot,
@@ -3281,17 +3279,17 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
 
   @override
   Widget build(BuildContext ctx) => CompositedTransformTarget(
-    link: _layerLink,
-    child: TextField(
-      groupId: _tapRegionGroup,
-      controller: widget.controller,
-      focusNode: _node,
-      decoration: _DataSourceDialogState._dsDeco(),
-      style: const TextStyle(fontSize: 12),
-      onTap: _update,
-      onChanged: (_) => widget.onChanged?.call(),
-    ),
-  );
+        link: _layerLink,
+        child: TextField(
+          groupId: _tapRegionGroup,
+          controller: widget.controller,
+          focusNode: _node,
+          decoration: _DataSourceDialogState._dsDeco(),
+          style: const TextStyle(fontSize: 12),
+          onTap: _update,
+          onChanged: (_) => widget.onChanged?.call(),
+        ),
+      );
 }
 
 class _ColorPicker extends StatelessWidget {
@@ -3301,11 +3299,10 @@ class _ColorPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext ctx) {
-    final current =
-        row.customColor ??
+    final current = row.customColor ??
         Color(
-          _DataSourceDialogState._presetColors[row.colorIdx %
-              _DataSourceDialogState._presetColors.length],
+          _DataSourceDialogState._presetColors[
+              row.colorIdx % _DataSourceDialogState._presetColors.length],
         );
     return GestureDetector(
       onTap: () => _showColorDialog(ctx, current),

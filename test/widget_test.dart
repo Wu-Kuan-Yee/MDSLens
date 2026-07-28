@@ -24,6 +24,7 @@ import 'package:mdslens/services/user_data_store.dart';
 import 'package:mdslens/theme/mdslens_theme.dart';
 import 'package:mdslens/widgets/dialogs/about.dart';
 import 'package:mdslens/widgets/dialogs/login.dart';
+import 'package:mdslens/widgets/dialogs/multi_panel_export.dart';
 import 'package:mdslens/widgets/configuration_drop_region.dart';
 import 'package:mdslens/widgets/plot_panel.dart';
 import 'package:mdslens/widgets/plot_grid.dart';
@@ -158,6 +159,88 @@ void main() {
       tester.getTopLeft(dropRegion).dy,
       greaterThanOrEqualTo(tester.getBottomLeft(toolbar).dy),
     );
+  });
+
+  testWidgets('Multiple panel export selects loaded panels in one dialog', (
+    tester,
+  ) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.plots[0].series[0] = SeriesData(
+      points: const [
+        [0, 1],
+      ],
+    );
+    app.plots[1].series[0] = SeriesData(
+      points: const [
+        [0, 2],
+      ],
+    );
+    Set<int>? selected;
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () async {
+                selected = await showMultiPanelExportDialog(context, app);
+              },
+              child: const Text('Export panels'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Export panels'));
+    await tester.pumpAndSettle();
+    expect(find.text('Export multiple panels'), findsOneWidget);
+    expect(find.text('Export 2 panel(s)'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('multi-panel-export-1')),
+    );
+    await tester.pump();
+    expect(find.text('Export 1 panel(s)'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('multi-panel-export-confirm')),
+    );
+    await tester.pumpAndSettle();
+    expect(selected, {0});
+  });
+
+  test('Multiple panel CSV preserves panel and signal metadata', () {
+    final csv = encodeMultiplePanelCsv([
+      {
+        'index': 1,
+        'column': 0,
+        'row': 1,
+        'title': 'Ip, primary',
+        'series': [
+          {
+            'index': 0,
+            'legend': 'plasma "current"',
+            'shot': '170010',
+            'tree': 'pcs_east',
+            'signal': r'\pcrl01',
+            'server': '202.127.204.12',
+            'x_name': 'time',
+            'x_unit': 's',
+            'y_unit': 'A',
+            'points': const [
+              [0.1, 500000.0],
+            ],
+          },
+        ],
+      },
+    ]);
+
+    expect(csv, contains('"Ip, primary"'));
+    expect(csv, contains('"plasma ""current"""'));
+    expect(csv, contains(r'\pcrl01'));
+    expect(csv, contains('time,s,A,0.1,500000.0'));
   });
 
   test('Point readout interpolates ascending and descending waveforms', () {
