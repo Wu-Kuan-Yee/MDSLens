@@ -51,6 +51,7 @@ const _filePreferenceKeys = <String>[
   'fontAxisSize',
   'fontUnitSize',
   'fontUiSize',
+  'iconSize',
   'limitShotHistory',
   'shotHistoryLimit',
   'webBookmarks',
@@ -753,6 +754,7 @@ class AppState extends ChangeNotifier {
       _fontAxisSize = 8,
       _fontUnitSize = 9,
       _fontUiSize = 12;
+  int _iconSize = 22;
   String get fontFamily => _fontFamily;
   String? get effectiveFontFamily =>
       _fontFamily == 'System' ? null : _fontFamily;
@@ -760,18 +762,15 @@ class AppState extends ChangeNotifier {
   int get fontAxisSize => _fontAxisSize;
   int get fontUnitSize => _fontUnitSize;
   int get fontUiSize => _fontUiSize;
-  void applyFontSettings(
-    String family,
-    int legend,
-    int axis,
-    int unit,
-    int ui,
-  ) {
+  int get iconSize => _iconSize;
+  void applyFontSettings(String family, int legend, int axis, int unit, int ui,
+      {int? iconSize}) {
     _fontFamily = family;
     _fontLegendSize = legend;
     _fontAxisSize = axis;
     _fontUnitSize = unit;
     _fontUiSize = ui;
+    if (iconSize != null) _iconSize = iconSize.clamp(18, 32);
     savePreferences();
     notifyListeners();
   }
@@ -1531,6 +1530,10 @@ class AppState extends ChangeNotifier {
       _fontUiSize = setting('fontUiSize') is num
           ? (setting('fontUiSize') as num).toInt()
           : _fontUiSize;
+      _iconSize = (setting('iconSize') is num
+              ? (setting('iconSize') as num).toInt()
+              : _iconSize)
+          .clamp(18, 32);
       _limitShotHistory = setting('limitShotHistory') is bool
           ? setting('limitShotHistory') as bool
           : _limitShotHistory;
@@ -1619,6 +1622,7 @@ class AppState extends ChangeNotifier {
         'fontAxisSize': _fontAxisSize,
         'fontUnitSize': _fontUnitSize,
         'fontUiSize': _fontUiSize,
+        'iconSize': _iconSize,
         'limitShotHistory': _limitShotHistory,
         'shotHistoryLimit': _shotHistoryLimit,
         'webBookmarks': jsonEncode(_webBookmarks),

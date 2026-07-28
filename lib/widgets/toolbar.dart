@@ -870,7 +870,7 @@ class ToolbarWidget extends StatelessWidget {
         ),
         child: Icon(
           Icons.settings,
-          size: 22,
+          size: app.iconSize.toDouble(),
           color: Theme.of(ctx).colorScheme.onSurface,
         ),
       ),
@@ -2518,6 +2518,7 @@ class ToolbarWidget extends StatelessWidget {
     var axisSize = app.fontAxisSize;
     var unitSize = app.fontUnitSize;
     var uiSize = app.fontUiSize;
+    var iconSize = app.iconSize;
     var families = <String>['System', ...SystemFontService.fallbackFamilies];
     var fontLoadScheduled = false;
     showDialog<void>(
@@ -2587,6 +2588,13 @@ class ToolbarWidget extends StatelessWidget {
                   (v) => setState(() => unitSize = v),
                 ),
                 _fontRow('UI size', uiSize, (v) => setState(() => uiSize = v)),
+                _fontRow(
+                  'Icon size',
+                  iconSize,
+                  (v) => setState(() => iconSize = v),
+                  minimum: 18,
+                  maximum: 32,
+                ),
               ],
             ),
             actions: [
@@ -2602,6 +2610,7 @@ class ToolbarWidget extends StatelessWidget {
                     axisSize,
                     unitSize,
                     uiSize,
+                    iconSize: iconSize,
                   );
                   Navigator.pop(ctx);
                 },
@@ -2614,18 +2623,24 @@ class ToolbarWidget extends StatelessWidget {
     );
   }
 
-  Widget _fontRow(String label, int value, void Function(int) onChanged) {
+  Widget _fontRow(
+    String label,
+    int value,
+    void Function(int) onChanged, {
+    int minimum = 6,
+    int maximum = 28,
+  }) {
     return Row(
       children: [
         SizedBox(width: 100, child: Text(label)),
         IconButton(
           icon: const Icon(Icons.remove, size: 16),
-          onPressed: value > 6 ? () => onChanged(value - 1) : null,
+          onPressed: value > minimum ? () => onChanged(value - 1) : null,
         ),
         SizedBox(width: 30, child: Text('$value', textAlign: TextAlign.center)),
         IconButton(
           icon: const Icon(Icons.add, size: 16),
-          onPressed: value < 28 ? () => onChanged(value + 1) : null,
+          onPressed: value < maximum ? () => onChanged(value + 1) : null,
         ),
       ],
     );
@@ -3252,7 +3267,10 @@ class ToolbarWidget extends StatelessWidget {
                   : null,
               foregroundColor: active ? highlight : colors.onSurface,
             ),
-            child: Icon(icon, size: 22),
+            child: Icon(
+              icon,
+              size: context.read<AppState>().iconSize.toDouble(),
+            ),
           ),
         ),
       ),

@@ -135,10 +135,12 @@ class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
       theme: MDSLensTheme.light(
         fontFamily: app.effectiveFontFamily,
         uiFontSize: app.fontUiSize.toDouble(),
+        iconSize: app.iconSize.toDouble(),
       ),
       darkTheme: MDSLensTheme.dark(
         fontFamily: app.effectiveFontFamily,
         uiFontSize: app.fontUiSize.toDouble(),
+        iconSize: app.iconSize.toDouble(),
       ),
       themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
       home: NetworkPermissionGate(

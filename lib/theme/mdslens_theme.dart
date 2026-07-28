@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 
 class MDSLensTheme {
-  static ThemeData light({String? fontFamily, double uiFontSize = 12}) {
+  static ThemeData light({
+    String? fontFamily,
+    double uiFontSize = 12,
+    double iconSize = 22,
+  }) {
     return _build(
       brightness: Brightness.light,
       seed: const Color(0xFF2563eb),
@@ -9,10 +13,15 @@ class MDSLensTheme {
       card: const Color(0xFFffffff),
       fontFamily: fontFamily,
       uiFontSize: uiFontSize,
+      iconSize: iconSize,
     );
   }
 
-  static ThemeData dark({String? fontFamily, double uiFontSize = 12}) {
+  static ThemeData dark({
+    String? fontFamily,
+    double uiFontSize = 12,
+    double iconSize = 22,
+  }) {
     return _build(
       brightness: Brightness.dark,
       seed: const Color(0xFF60a5fa),
@@ -20,6 +29,7 @@ class MDSLensTheme {
       card: const Color(0xFF0f172a),
       fontFamily: fontFamily,
       uiFontSize: uiFontSize,
+      iconSize: iconSize,
     );
   }
 
@@ -30,6 +40,7 @@ class MDSLensTheme {
     required Color card,
     required String? fontFamily,
     required double uiFontSize,
+    required double iconSize,
   }) {
     final base = ThemeData(
       useMaterial3: true,
@@ -61,6 +72,7 @@ class MDSLensTheme {
       labelSmall: style(source.labelSmall, uiFontSize - 2),
     );
     return base.copyWith(
+      iconTheme: base.iconTheme.copyWith(size: iconSize.clamp(18, 32)),
       textTheme: textTheme,
       primaryTextTheme: textTheme,
       inputDecorationTheme: InputDecorationThemeData(

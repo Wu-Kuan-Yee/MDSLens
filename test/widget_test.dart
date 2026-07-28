@@ -518,11 +518,16 @@ void main() {
   );
 
   test('Customize Fonts values are applied to the application theme', () {
-    final theme = MDSLensTheme.light(fontFamily: 'Courier New', uiFontSize: 18);
+    final theme = MDSLensTheme.light(
+      fontFamily: 'Courier New',
+      uiFontSize: 18,
+      iconSize: 30,
+    );
 
     expect(theme.textTheme.bodyMedium?.fontFamily, 'Courier New');
     expect(theme.textTheme.bodyMedium?.fontSize, 18);
     expect(theme.textTheme.labelLarge?.fontSize, 18);
+    expect(theme.iconTheme.size, 30);
     expect(theme.inputDecorationTheme.filled, isTrue);
     final popupShape = theme.popupMenuTheme.shape as RoundedRectangleBorder;
     expect(popupShape.borderRadius, BorderRadius.circular(12));
@@ -708,7 +713,14 @@ void main() {
     first.themeMode = 0;
     first.toolbarCollapsed = true;
     first.shotText = '163701';
-    first.applyFontSettings('Courier New', 17, 14, 13, 16);
+    first.applyFontSettings(
+      'Courier New',
+      17,
+      14,
+      13,
+      16,
+      iconSize: 30,
+    );
     first.addWebBookmark('Status', 'http://10.0.0.8/status');
     first.applyLayoutList([1, 2]);
     first.columns[0][0]['title'] = 'Saved panel';
@@ -728,6 +740,7 @@ void main() {
     expect(second.shotText, '163701');
     expect(second.fontFamily, 'Courier New');
     expect(second.fontLegendSize, 17);
+    expect(second.iconSize, 30);
     expect(second.webBookmarks, [
       {'Status': 'http://10.0.0.8/status'},
     ]);
@@ -741,6 +754,7 @@ void main() {
       jsonDecode(await settingsFile.readAsString())['fontFamily'],
       'Courier New',
     );
+    expect(jsonDecode(await settingsFile.readAsString())['iconSize'], 30);
     final legacy = await SharedPreferences.getInstance();
     expect(legacy.containsKey('shotHistory'), isFalse);
   });
