@@ -56,9 +56,7 @@ cp docs/WEB_DEPLOYMENT.md "$stage/README.md"
 cp LICENSE "$stage/LICENSE"
 cp assets/fonts/OFL.txt "$stage/NOTO_SANS_SC_LICENSE.txt"
 mkdir -p "$stage/deploy"
-cp deploy/container/Dockerfile "$stage/deploy/Dockerfile"
-cp deploy/container/compose.yaml "$stage/compose.yaml"
-cp deploy/container/.env.example "$stage/.env.example"
+cp -R deploy/container "$stage/deploy/container"
 
 mkdir -p "$dist"
 tar -C "$(dirname "$stage")" -czf \

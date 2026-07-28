@@ -490,8 +490,7 @@ jobs:
           mkdir -p pages
           tar -xzf pages-input/mdslens-web-linux-x64.tar.gz -C pages-input
           cp -a pages-input/mdslens-web-linux-x64/web/. pages/
-          repository_name="${GITHUB_REPOSITORY#*/}"
-          sed -i "s#<base href=\"/\">#<base href=\"/${repository_name}/\">#" pages/index.html
+          sed -i 's#<base href="/">#<base href="./">#' pages/index.html
           touch pages/.nojekyll
       - name: Configure GitHub Pages
         if: steps.latest.outputs.deploy == 'true'

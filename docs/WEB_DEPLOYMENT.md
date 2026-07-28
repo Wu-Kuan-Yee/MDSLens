@@ -39,6 +39,11 @@ use a `mdslens-web-macos-<arch>.tar.gz` name. The build deliberately uses
 `--no-web-resources-cdn`; CanvasKit/Skwasm, the
 application WASM, icons and the Chinese fallback font are inside `web/`.
 
+Each Linux archive also contains a hardened Compose deployment under
+`deploy/container`. For a Synology deployment in which the public UI is
+available to everyone but server operations work only on the private network,
+follow [the Synology split-DNS guide](SYNOLOGY_WEB_DEPLOYMENT.md).
+
 ## Run locally
 
 ```sh
@@ -66,10 +71,12 @@ uses the project subdirectory as Flutter's base path and does not replace the
 downloadable self-contained gateway archive.
 
 GitHub Pages is a static host and cannot execute `mdslens-web-gateway`.
-Consequently, the Pages site can load the interface and use browser-local
-configuration, editing, drag-and-drop and downloads, but login, SSH and live
-MDS data require a separately deployed HTTPS gateway. For the complete
-experience, deploy the release archive as described below.
+Consequently, the Pages site presents the same interface and interaction flow,
+but a server operation ends with a normal connection failure when no
+same-origin Gateway is reachable. Browser-local configuration, editing,
+drag-and-drop and downloads continue to work. A split-DNS deployment can serve
+this same hostname from a private Gateway without exposing that Gateway
+publicly.
 
 ## Production
 
