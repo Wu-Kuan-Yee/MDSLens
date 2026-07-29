@@ -12,7 +12,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::body::Body;
 use axum::extract::State;
-use axum::http::header::{COOKIE, ORIGIN, SET_COOKIE};
+use axum::http::header::{CONTENT_TYPE, COOKIE, ORIGIN, SET_COOKIE};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Request, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -34,6 +34,7 @@ const DEVELOPMENT_SESSION_COOKIE: &str = "mdslens_session";
 const MAX_CONFIG_BYTES: usize = 4 * 1024 * 1024;
 const MAX_REQUEST_BYTES: usize = 64 * 1024 * 1024;
 const SESSION_LIFETIME_SECONDS: u64 = 12 * 60 * 60;
+const SIGNAL_BATCH_MAGIC: &[u8; 8] = b"MDSLBIN1";
 
 #[derive(Clone)]
 struct GatewayState {
@@ -197,6 +198,7 @@ async fn main() {
         .route("/shot/latest", post(latest_shot))
         .route("/shot/info", post(shot_info))
         .route("/signals/fetch", post(fetch_signals))
+        .route("/signals/fetch-binary", post(fetch_signals_binary))
         .route("/signals/prewarm", post(prewarm_signals))
         .route("/signals/cancel", post(cancel_fetch))
         .route("/ssh/test", post(test_ssh))
@@ -454,6 +456,82 @@ async fn fetch_signals(
     serde_json::to_value(result)
         .map(Json)
         .map_err(|error| ApiError::internal(error.to_string()))
+}
+
+async fn fetch_signals_binary(
+    State(state): State<GatewayState>,
+    headers: HeaderMap,
+    Json(payload): Json<FetchRequest>,
+) -> ApiResult<Response> {
+    validate_origin(&headers, &state.policy)?;
+    validate_signal_hosts(&payload.config_json, &state.policy)?;
+    let session = authenticated_session(&state, &headers)?;
+    let auth = session_auth(&session)?;
+    let operation_session = Arc::clone(&session);
+    let result = tokio::task::spawn_blocking(move || {
+        let mut manager = operation_session
+            .tunnel
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        mds_bridge::api::fetch_signals_for_session(
+            payload.config_json,
+            payload.data_mode,
+            auth.ssh,
+            &mut manager,
+        )
+    })
+    .await
+    .map_err(|error| ApiError::internal(format!("Signal worker failed: {error}")))?;
+    let body = encode_signal_batch(result)?;
+    Ok((
+        [(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/vnd.mdslens.signals-v1"),
+        )],
+        body,
+    )
+        .into_response())
+}
+
+fn encode_signal_batch(mut signals: Vec<mds_bridge::api::FrbLoadedSignal>) -> ApiResult<Vec<u8>> {
+    let signal_count = u32::try_from(signals.len())
+        .map_err(|_| ApiError::internal("Signal batch contains too many entries."))?;
+    let mut output = Vec::new();
+    output.extend_from_slice(SIGNAL_BATCH_MAGIC);
+    output.extend_from_slice(&signal_count.to_le_bytes());
+    for signal in &mut signals {
+        let uniform = std::mem::take(&mut signal.series.uniform_y);
+        let points = std::mem::take(&mut signal.series.points);
+        let metadata =
+            serde_json::to_vec(signal).map_err(|error| ApiError::internal(error.to_string()))?;
+        let metadata_len = u32::try_from(metadata.len())
+            .map_err(|_| ApiError::internal("Signal metadata is too large."))?;
+        let uniform_len = u32::try_from(uniform.len())
+            .map_err(|_| ApiError::internal("Uniform signal data is too large."))?;
+        let point_len = u32::try_from(points.len())
+            .map_err(|_| ApiError::internal("Irregular signal data is too large."))?;
+        output.extend_from_slice(&metadata_len.to_le_bytes());
+        output.extend_from_slice(&uniform_len.to_le_bytes());
+        output.extend_from_slice(&point_len.to_le_bytes());
+        output.extend_from_slice(&metadata);
+        pad_to_eight_bytes(&mut output);
+        for value in uniform {
+            output.extend_from_slice(&value.to_le_bytes());
+        }
+        pad_to_eight_bytes(&mut output);
+        for point in points {
+            let x = point.first().copied().unwrap_or_default();
+            let y = point.get(1).copied().unwrap_or_default();
+            output.extend_from_slice(&x.to_le_bytes());
+            output.extend_from_slice(&y.to_le_bytes());
+        }
+    }
+    Ok(output)
+}
+
+fn pad_to_eight_bytes(output: &mut Vec<u8>) {
+    let padding = (8 - output.len() % 8) % 8;
+    output.resize(output.len() + padding, 0);
 }
 
 async fn prewarm_signals(
@@ -951,5 +1029,46 @@ mod tests {
         assert_eq!(configuration_extension("layout.toml").unwrap(), ".toml");
         assert_eq!(configuration_extension("layout.webscp").unwrap(), ".webscp");
         assert!(configuration_extension("layout.json").is_err());
+    }
+
+    #[test]
+    fn binary_signal_batches_keep_waveforms_out_of_json() {
+        let signal = mds_bridge::api::FrbLoadedSignal {
+            column: 1,
+            row: 2,
+            signal: 3,
+            shot: "164309".into(),
+            series: mds_bridge::api::FrbSignalSeries {
+                name: "IP".into(),
+                uniform_y: vec![1.25, 2.5],
+                uniform_start: -0.1,
+                uniform_step: 0.05,
+                points: vec![vec![3.0, 4.0]],
+                ..Default::default()
+            },
+        };
+        let encoded = encode_signal_batch(vec![signal]).unwrap();
+        assert_eq!(&encoded[..8], SIGNAL_BATCH_MAGIC);
+        assert_eq!(u32::from_le_bytes(encoded[8..12].try_into().unwrap()), 1);
+        let metadata_len = u32::from_le_bytes(encoded[12..16].try_into().unwrap()) as usize;
+        assert_eq!(u32::from_le_bytes(encoded[16..20].try_into().unwrap()), 2);
+        assert_eq!(u32::from_le_bytes(encoded[20..24].try_into().unwrap()), 1);
+        let metadata: Value = serde_json::from_slice(&encoded[24..24 + metadata_len]).unwrap();
+        assert_eq!(metadata["series"]["uniform_y"], json!([]));
+        assert_eq!(metadata["series"]["points"], json!([]));
+        let uniform_start = (24 + metadata_len + 7) & !7;
+        assert_eq!(
+            f32::from_le_bytes(
+                encoded[uniform_start..uniform_start + 4]
+                    .try_into()
+                    .unwrap()
+            ),
+            1.25
+        );
+        let points_start = (uniform_start + 8 + 7) & !7;
+        assert_eq!(
+            f64::from_le_bytes(encoded[points_start..points_start + 8].try_into().unwrap()),
+            3.0
+        );
     }
 }

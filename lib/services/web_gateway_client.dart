@@ -90,6 +90,42 @@ class WebGatewayClient {
     return jsonEncode(response);
   }
 
+  Future<String> fetchSignalsBinary(
+    String configJson,
+    String dataMode,
+    void Function(Map<String, dynamic>) onSignal,
+  ) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$_basePath/signals/fetch-binary'),
+            headers: const {
+              'Accept': 'application/vnd.mdslens.signals-v1',
+              'Content-Type': 'application/json; charset=utf-8',
+            },
+            body: jsonEncode({
+              'config_json': configJson,
+              'data_mode': int.tryParse(dataMode) ?? 0,
+            }),
+          )
+          .timeout(const Duration(minutes: 5));
+      if (response.statusCode == 404 || response.statusCode == 405) {
+        return fetchSignals(configJson, dataMode);
+      }
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        decodeWebGatewayResponse(response);
+      }
+      decodeWebSignalBatch(response.bodyBytes, onSignal);
+      return '[]';
+    } on WebGatewayUnavailableException {
+      rethrow;
+    } on TimeoutException {
+      throw const WebGatewayUnavailableException();
+    } on http.ClientException {
+      throw const WebGatewayUnavailableException();
+    }
+  }
+
   Future<void> prewarmSignals(String configJson) async {
     await _post('/signals/prewarm', {'config_json': configJson});
   }
@@ -228,4 +264,113 @@ class WebGatewayClient {
     }
     return Map<String, dynamic>.from(value);
   }
+}
+
+int decodeWebSignalBatch(
+  Uint8List bytes,
+  void Function(Map<String, dynamic>) onSignal,
+) {
+  const magic = <int>[77, 68, 83, 76, 66, 73, 78, 49];
+  if (bytes.length < 12) {
+    throw const FormatException(
+        'The Web Gateway returned invalid signal data.');
+  }
+  for (var index = 0; index < magic.length; index++) {
+    if (bytes[index] != magic[index]) {
+      throw const FormatException(
+        'The Web Gateway returned invalid signal data.',
+      );
+    }
+  }
+  final data = ByteData.sublistView(bytes);
+  final signalCount = data.getUint32(8, Endian.little);
+  var offset = 12;
+  for (var signalIndex = 0; signalIndex < signalCount; signalIndex++) {
+    if (offset + 12 > bytes.length) {
+      throw const FormatException(
+        'The Web Gateway returned truncated signal metadata.',
+      );
+    }
+    final metadataLength = data.getUint32(offset, Endian.little);
+    final uniformLength = data.getUint32(offset + 4, Endian.little);
+    final pointLength = data.getUint32(offset + 8, Endian.little);
+    offset += 12;
+    final metadataEnd = offset + metadataLength;
+    if (metadataEnd > bytes.length) {
+      throw const FormatException(
+        'The Web Gateway returned truncated signal metadata.',
+      );
+    }
+    final decoded = jsonDecode(utf8.decode(bytes.sublist(offset, metadataEnd)));
+    if (decoded is! Map || decoded['series'] is! Map) {
+      throw const FormatException(
+        'The Web Gateway returned invalid signal metadata.',
+      );
+    }
+    final signal = Map<String, dynamic>.from(decoded);
+    final series = Map<String, dynamic>.from(signal['series'] as Map);
+    offset = _alignSignalOffset(metadataEnd);
+
+    final uniformBytes = uniformLength * Float32List.bytesPerElement;
+    if (offset + uniformBytes > bytes.length) {
+      throw const FormatException(
+        'The Web Gateway returned truncated uniform signal data.',
+      );
+    }
+    if (uniformLength > 0) {
+      series['uniform_y'] = _readFloat32Values(bytes, offset, uniformLength);
+    }
+    offset = _alignSignalOffset(offset + uniformBytes);
+
+    final pointBytes = pointLength * 2 * Float64List.bytesPerElement;
+    if (offset + pointBytes > bytes.length) {
+      throw const FormatException(
+        'The Web Gateway returned truncated irregular signal data.',
+      );
+    }
+    if (pointLength > 0) {
+      final values = _readFloat64Values(bytes, offset, pointLength * 2);
+      series['points'] = <List<double>>[
+        for (var index = 0; index < values.length; index += 2)
+          <double>[values[index], values[index + 1]],
+      ];
+    }
+    offset += pointBytes;
+    signal['series'] = series;
+    onSignal(signal);
+  }
+  if (offset != bytes.length) {
+    throw const FormatException(
+      'The Web Gateway returned trailing signal data.',
+    );
+  }
+  return signalCount;
+}
+
+int _alignSignalOffset(int offset) => (offset + 7) & ~7;
+
+Float32List _readFloat32Values(Uint8List bytes, int offset, int length) {
+  final absoluteOffset = bytes.offsetInBytes + offset;
+  if (Endian.host == Endian.little &&
+      absoluteOffset % Float32List.bytesPerElement == 0) {
+    return Float32List.view(bytes.buffer, absoluteOffset, length);
+  }
+  final data = ByteData.sublistView(bytes, offset, offset + length * 4);
+  return Float32List.fromList(<double>[
+    for (var index = 0; index < length; index++)
+      data.getFloat32(index * 4, Endian.little),
+  ]);
+}
+
+Float64List _readFloat64Values(Uint8List bytes, int offset, int length) {
+  final absoluteOffset = bytes.offsetInBytes + offset;
+  if (Endian.host == Endian.little &&
+      absoluteOffset % Float64List.bytesPerElement == 0) {
+    return Float64List.view(bytes.buffer, absoluteOffset, length);
+  }
+  final data = ByteData.sublistView(bytes, offset, offset + length * 8);
+  return Float64List.fromList(<double>[
+    for (var index = 0; index < length; index++)
+      data.getFloat64(index * 8, Endian.little),
+  ]);
 }
