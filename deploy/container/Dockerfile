@@ -1,4 +1,6 @@
-FROM debian:bookworm-slim
+FROM alpine:3.22 AS certificates
+
+FROM ubuntu:24.04
 
 ARG MDSLENS_VERSION=development
 LABEL org.opencontainers.image.title="MDSLens Web Gateway" \
@@ -7,10 +9,10 @@ LABEL org.opencontainers.image.title="MDSLens Web Gateway" \
       org.opencontainers.image.version="${MDSLENS_VERSION}" \
       org.opencontainers.image.licenses="GPL-3.0-or-later"
 
-RUN apt-get update \
-    && apt-get install --yes --no-install-recommends ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && groupadd --gid 65532 mdslens \
+COPY --from=certificates /etc/ssl/certs/ca-certificates.crt \
+  /etc/ssl/certs/ca-certificates.crt
+
+RUN groupadd --gid 65532 mdslens \
     && useradd --uid 65532 --gid 65532 --no-create-home \
       --home-dir /nonexistent --shell /usr/sbin/nologin mdslens
 
