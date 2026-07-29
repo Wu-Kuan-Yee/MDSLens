@@ -9,10 +9,12 @@ use crate::protocol::{self, Message};
 use mds_core::types::{DataReadMode, PlotSpec, SignalSeries, SignalSpec};
 use std::collections::HashMap;
 use std::net::TcpStream;
-use std::sync::{Mutex, OnceLock};
-use std::time::Instant;
+use std::sync::{Condvar, Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 const FIXED_TIME_RESOLUTION_SECONDS: f64 = 0.0001;
+const DEFAULT_FULL_LARGE_SIGNAL_POINTS: usize = 8_000_000;
+const DEFAULT_FULL_LARGE_DOWNLOAD_LIMIT: usize = 2;
 
 #[derive(Clone)]
 struct SignalMetadata {
@@ -22,9 +24,58 @@ struct SignalMetadata {
 }
 
 static SIGNAL_METADATA_CACHE: OnceLock<Mutex<HashMap<String, SignalMetadata>>> = OnceLock::new();
+static FULL_LARGE_DOWNLOADS: OnceLock<(Mutex<HashMap<String, usize>>, Condvar)> = OnceLock::new();
 
 fn signal_metadata_cache() -> &'static Mutex<HashMap<String, SignalMetadata>> {
     SIGNAL_METADATA_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn full_large_downloads() -> &'static (Mutex<HashMap<String, usize>>, Condvar) {
+    FULL_LARGE_DOWNLOADS.get_or_init(|| (Mutex::new(HashMap::new()), Condvar::new()))
+}
+
+struct FullLargeDownloadPermit {
+    server: String,
+}
+
+impl FullLargeDownloadPermit {
+    fn acquire(server: String) -> Result<Self, String> {
+        let limit = full_large_download_limit();
+        let (downloads, changed) = full_large_downloads();
+        let mut active = downloads
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        loop {
+            if protocol::current_operation_canceled() {
+                return Err("operation canceled".into());
+            }
+            let count = active.entry(server.clone()).or_default();
+            if *count < limit {
+                *count += 1;
+                return Ok(Self { server });
+            }
+            active = changed
+                .wait_timeout(active, Duration::from_millis(50))
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .0;
+        }
+    }
+}
+
+impl Drop for FullLargeDownloadPermit {
+    fn drop(&mut self) {
+        let (downloads, changed) = full_large_downloads();
+        let mut active = downloads
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(count) = active.get_mut(&self.server) {
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                active.remove(&self.server);
+            }
+        }
+        changed.notify_one();
+    }
 }
 
 // ── Fetch request ─────────────────────────────────────────────────────────
@@ -447,6 +498,22 @@ fn fetch_full(socket: &mut TcpStream, req: &FetchRequest, result: &mut FetchResu
     // through to the generic MDS expression path instead of declaring a valid
     // signal empty.
     let scaled = scaled_simple_signal_expr(&req.sig.y_expr);
+    let size_expression = scaled.as_ref().map_or_else(
+        || req.sig.y_expr.trim(),
+        |expression| expression.base_expr.as_str(),
+    );
+    let expected_points = full_point_count_best_effort(socket, size_expression);
+    let _large_download_permit = if expected_points >= full_large_signal_point_threshold() {
+        match FullLargeDownloadPermit::acquire(req.sig.server_ip.trim().to_string()) {
+            Ok(permit) => Some(permit),
+            Err(error) => {
+                result.series.error = error;
+                return;
+            }
+        }
+    } else {
+        None
+    };
     if req.sig.x_expr.trim().is_empty() {
         if let Some(ref scaled_expr) = scaled {
             if is_east_timebase_candidate(req, &scaled_expr.base_expr) {
@@ -734,6 +801,52 @@ fn numeric_query(socket: &mut TcpStream, expression: &str) -> (Vec<f64>, Option<
         },
         Err(error) => (Vec::new(), Some(error)),
     }
+}
+
+fn full_point_count_best_effort(socket: &mut TcpStream, expression: &str) -> usize {
+    protocol::value(socket, &format!("size({expression})"))
+        .ok()
+        .and_then(|message| protocol::int_from_message(&message).ok())
+        .filter(|count| *count > 0)
+        .map_or(0, |count| count as usize)
+}
+
+fn configured_usize(names: &[&str], default_value: usize, min: usize, max: usize) -> usize {
+    names
+        .iter()
+        .find_map(|name| {
+            std::env::var(name)
+                .ok()
+                .and_then(|value| value.parse::<usize>().ok())
+        })
+        .unwrap_or(default_value)
+        .clamp(min, max)
+}
+
+fn full_large_download_limit() -> usize {
+    configured_usize(
+        &[
+            "MDSLENS_FULL_LARGE_LIMIT",
+            "MDSSCOPE_FULL_LARGE_LIMIT",
+            "WEBSCOPE_FULL_LARGE_LIMIT",
+        ],
+        DEFAULT_FULL_LARGE_DOWNLOAD_LIMIT,
+        1,
+        8,
+    )
+}
+
+fn full_large_signal_point_threshold() -> usize {
+    configured_usize(
+        &[
+            "MDSLENS_FULL_LARGE_POINTS",
+            "MDSSCOPE_FULL_LARGE_POINTS",
+            "WEBSCOPE_FULL_LARGE_POINTS",
+        ],
+        DEFAULT_FULL_LARGE_SIGNAL_POINTS,
+        100_000,
+        100_000_000,
+    )
 }
 
 pub fn normalized_name(expr: &str) -> String {

@@ -1582,6 +1582,42 @@ void main() {
     expect(app.viewResetId, greaterThan(0));
   });
 
+  testWidgets('Full rate changes debounce before releasing old waveforms', (
+    tester,
+  ) async {
+    var requests = 0;
+    final app = AppState(
+      signalFetchWorker: (_, __, ___) async {
+        requests++;
+        return '[]';
+      },
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setLoggedIn(true, 'test-token');
+    app.updatePlotSeriesByColRow(
+      0,
+      0,
+      0,
+      const [
+        [0.0, 1.0],
+        [1.0, 2.0],
+      ],
+      null,
+    );
+    app.dataMode = 2;
+    app.startRateRefresh();
+
+    expect(requests, 0);
+    expect(app.plots.first.series.first?.hasData, isTrue);
+    await tester.pump(const Duration(milliseconds: 119));
+    expect(requests, 0);
+    expect(app.plots.first.series.first?.hasData, isTrue);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(requests, 1);
+    expect(app.plots.first.series.first?.hasData, isFalse);
+  });
+
   testWidgets('Stop cancels a pending Full shot request', (tester) async {
     var requestCount = 0;
     final app = AppState(

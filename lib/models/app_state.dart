@@ -1272,7 +1272,10 @@ class AppState extends ChangeNotifier {
     return Duration(milliseconds: milliseconds > 380 ? 380 : milliseconds);
   }
 
-  void _scheduleFullShotFetch(String shot) {
+  void _scheduleFullFetch(
+    String shot, {
+    required String pendingStatus,
+  }) {
     _cancelPendingFullShotRefresh();
     _discardPendingWaveformFetch();
     _cancelActiveNativeFetch();
@@ -1280,13 +1283,17 @@ class AppState extends ChangeNotifier {
     final delay = _nextFullShotDebounceDelay();
     _fetchingPlotIndex = null;
     _fetching = true;
-    _status = 'Shot selected; loading in ${delay.inMilliseconds} ms...';
+    _status = '$pendingStatus; loading in ${delay.inMilliseconds} ms...';
     notifyListeners();
     _fullShotDebounceTimer = Timer(delay, () {
       _fullShotDebounceTimer = null;
       if (_disposed) return;
       unawaited(_doFetch(shot: shot));
     });
+  }
+
+  void _scheduleFullShotFetch(String shot) {
+    _scheduleFullFetch(shot, pendingStatus: 'Shot selected');
   }
 
   // Max panel (null = show all)
@@ -2471,7 +2478,11 @@ class AppState extends ChangeNotifier {
     _synchronizeSignalRuntimeSettings(_shotText);
     _addToHistory(_shotText);
     savePreferences();
-    _doFetch(shot: _shotText);
+    if (_dataMode == 2) {
+      _scheduleFullFetch(_shotText, pendingStatus: 'Full rate selected');
+    } else {
+      _doFetch(shot: _shotText);
+    }
   }
 
   void startRateRefresh() {
@@ -2489,7 +2500,11 @@ class AppState extends ChangeNotifier {
     }
     _rateViewResetId++;
     savePreferences();
-    _doFetch(shot: _shotText);
+    if (_dataMode == 2) {
+      _scheduleFullFetch(_shotText, pendingStatus: 'Full rate selected');
+    } else {
+      _doFetch(shot: _shotText);
+    }
   }
 
   String _buildSignalConfigJson(String shot, int requestId) {
@@ -2820,6 +2835,13 @@ class AppState extends ChangeNotifier {
     _activeNativeFetchId = generation;
     _status = 'Fetching...';
     _beginGlobalPanelFetchTracking();
+    // Full responses can be very large. Release the previous generation
+    // immediately before the debounced request begins so rate changes never
+    // retain two complete waveform generations at once. Streamed panels will
+    // repopulate individually as soon as each signal arrives.
+    if (dataMode == '2') {
+      _clearAllSeriesPoints();
+    }
     notifyListeners();
 
     try {

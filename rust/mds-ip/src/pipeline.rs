@@ -17,6 +17,10 @@ use std::sync::{mpsc, Arc, Mutex};
 
 /// Maximum concurrent chunks per wave.
 const MAX_GLOBAL_SOCKETS: usize = 16;
+/// Full reads briefly hold the wire buffer, decoded f64 values, and the final
+/// f32 series at the same time. A lower wave width prevents memory pressure
+/// from stalling the UI while retaining useful I/O parallelism.
+const MAX_GLOBAL_FULL_SOCKETS: usize = 8;
 
 pub type SignalCallback = Box<dyn Fn(LoadedSignal) + Send + Sync>;
 
@@ -38,27 +42,28 @@ pub fn fetch_all(
     }
 
     let n = requests.len();
-    let results: Arc<Mutex<Vec<Option<FetchResult>>>> =
-        Arc::new(Mutex::new(vec![None; n]));
+    let results: Arc<Mutex<Vec<Option<FetchResult>>>> = Arc::new(Mutex::new(vec![None; n]));
     let groups = group_requests(&requests);
     let chunks = build_chunks(&requests, &groups);
 
     // Wave dispatch
+    let wave_limit = global_wave_limit(&requests);
     let mut next = 0usize;
     while next < chunks.len() && !cancel.load(Ordering::Relaxed) {
-        let end = (next + MAX_GLOBAL_SOCKETS).min(chunks.len());
+        let end = (next + wave_limit).min(chunks.len());
         let wave = &chunks[next..end];
         next = end;
 
         let (result_tx, result_rx) = mpsc::channel();
         let mut handles = Vec::new();
         for chunk in wave {
-            let reqs: Vec<FetchRequest> = chunk.iter()
-                .map(|&i| requests[i].clone()).collect();
+            let reqs: Vec<FetchRequest> = chunk.iter().map(|&i| requests[i].clone()).collect();
             let cancel = cancel.clone();
             let result_tx = result_tx.clone();
             handles.push(std::thread::spawn(move || {
-                if cancel.load(Ordering::Relaxed) { return Vec::new(); }
+                if cancel.load(Ordering::Relaxed) {
+                    return Vec::new();
+                }
                 fetch_chunk_serial_streaming(&reqs, &cancel, Some(&result_tx))
             }));
         }
@@ -72,7 +77,9 @@ pub fn fetch_all(
                 callback(fetch_result_to_loaded(&requests, &fr));
             }
             if let Ok(mut res) = results.lock() {
-                if idx < res.len() { res[idx] = Some(fr); }
+                if idx < res.len() {
+                    res[idx] = Some(fr);
+                }
             }
         }
         for handle in handles {
@@ -88,7 +95,8 @@ pub fn fetch_all(
     // Return the current load immediately, then grow the hot pool for later
     // refreshes without delaying this result.
     let mut guard = results.lock().unwrap();
-    let output = guard.iter_mut()
+    let output = guard
+        .iter_mut()
         .filter_map(Option::take)
         .map(|fr| fetch_result_into_loaded(&requests, fr))
         .collect();
@@ -97,9 +105,22 @@ pub fn fetch_all(
     output
 }
 
+fn global_wave_limit(requests: &[FetchRequest]) -> usize {
+    if requests
+        .iter()
+        .any(|request| request.read_mode == DataReadMode::Full)
+    {
+        MAX_GLOBAL_FULL_SOCKETS
+    } else {
+        MAX_GLOBAL_SOCKETS
+    }
+}
+
 /// Pre-connect to all unique servers in the layout.
 pub fn warm_connections(config: &LayoutConfig, cancel: &Arc<AtomicBool>) {
-    let mut servers: Vec<String> = config.columns.iter()
+    let mut servers: Vec<String> = config
+        .columns
+        .iter()
         .flat_map(|c| c.iter())
         .flat_map(|p| p.signal_specs.iter())
         .filter(|s| !s.server_ip.is_empty() && !s.is_hidden())
@@ -109,24 +130,19 @@ pub fn warm_connections(config: &LayoutConfig, cancel: &Arc<AtomicBool>) {
     servers.dedup();
 
     for server in servers {
-        if cancel.load(Ordering::Relaxed) { break; }
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
         // Match the 16-worker fetch pipeline so the first large layout can
         // start on authenticated sockets instead of serializing cold setup
         // work behind its signal reads.
-        ensure_reusable_connections(
-            &server,
-            protocol::MDS_PORT,
-            MAX_GLOBAL_SOCKETS,
-        );
+        ensure_reusable_connections(&server, protocol::MDS_PORT, MAX_GLOBAL_SOCKETS);
     }
 }
 
 // ── Internal: chunk fetch ─────────────────────────────────────────────────
 
-fn fetch_chunk_serial(
-    requests: &[FetchRequest],
-    cancel: &Arc<AtomicBool>,
-) -> Vec<FetchResult> {
+fn fetch_chunk_serial(requests: &[FetchRequest], cancel: &Arc<AtomicBool>) -> Vec<FetchResult> {
     fetch_chunk_serial_streaming(requests, cancel, None)
 }
 
@@ -135,26 +151,27 @@ fn fetch_chunk_serial_streaming(
     cancel: &Arc<AtomicBool>,
     result_tx: Option<&mpsc::Sender<FetchResult>>,
 ) -> Vec<FetchResult> {
-    if requests.is_empty() { return Vec::new(); }
+    if requests.is_empty() {
+        return Vec::new();
+    }
 
     let first = &requests[0];
     let host = &first.sig.server_ip;
     let tree = &first.sig.experiment;
     let shot = effective_shot(&first.plot, &first.sig);
 
-    let preserve_connection = requests.iter()
+    let preserve_connection = requests
+        .iter()
         .all(|request| request.read_mode != DataReadMode::Full);
     protocol::with_cancel_context(cancel.clone(), preserve_connection, || {
-        let fetched = with_reusable_connection(
-            host,
-            protocol::MDS_PORT,
-            tree,
-            &shot,
-            |connection| {
+        let fetched =
+            with_reusable_connection(host, protocol::MDS_PORT, tree, &shot, |connection| {
                 let mut results = Vec::with_capacity(requests.len());
                 let mut transport_failed = false;
                 for req in requests {
-                    if cancel.load(Ordering::Relaxed) { break; }
+                    if cancel.load(Ordering::Relaxed) {
+                        break;
+                    }
                     let result = fetch::fetch_signal(&mut connection.stream, req);
                     let error = result.series.error.to_ascii_lowercase();
                     transport_failed |= error.contains("read error")
@@ -167,11 +184,9 @@ fn fetch_chunk_serial_streaming(
                         results.push(result);
                     }
                 }
-                let reusable =
-                    !transport_failed && protocol::current_connection_reusable();
+                let reusable = !transport_failed && protocol::current_connection_reusable();
                 (results, reusable)
-            },
-        );
+            });
         match fetched {
             Ok(results) => results,
             Err(e) => {
@@ -188,14 +203,17 @@ fn fetch_chunk_serial_streaming(
                     }
                     Vec::new()
                 } else {
-                    requests.iter().map(|req| FetchResult {
-                        loaded_index: req.loaded_index,
-                        series: mds_core::types::SignalSeries {
-                            name: fetch::normalized_name(&req.sig.y_expr),
-                            error: e.clone(),
-                            ..Default::default()
-                        },
-                    }).collect()
+                    requests
+                        .iter()
+                        .map(|req| FetchResult {
+                            loaded_index: req.loaded_index,
+                            series: mds_core::types::SignalSeries {
+                                name: fetch::normalized_name(&req.sig.y_expr),
+                                error: e.clone(),
+                                ..Default::default()
+                            },
+                        })
+                        .collect()
                 }
             }
         }
@@ -212,16 +230,22 @@ fn retry_transient(
 ) {
     let to_retry = retry_indices(requests, &results.lock().unwrap());
 
-    if to_retry.is_empty() { return; }
+    if to_retry.is_empty() {
+        return;
+    }
 
     // Retry genuine transient failures with bounded parallelism. Missing nodes
     // are permanent and must not delay every otherwise-complete panel.
     const MAX_RETRY_SOCKETS: usize = 8;
     for wave in to_retry.chunks(MAX_RETRY_SOCKETS) {
-        if cancel.load(Ordering::Relaxed) { break; }
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
         let mut handles = Vec::with_capacity(wave.len());
         for &index in wave {
-            let Some(request) = requests.get(index).cloned() else { continue };
+            let Some(request) = requests.get(index).cloned() else {
+                continue;
+            };
             let cancel = cancel.clone();
             handles.push(std::thread::spawn(move || {
                 fetch_chunk_serial(std::slice::from_ref(&request), &cancel)
@@ -235,7 +259,9 @@ fn retry_transient(
                         callback(fetch_result_to_loaded(requests, &fr));
                     }
                     if let Ok(mut res) = results.lock() {
-                        if idx < res.len() { res[idx] = Some(fr); }
+                        if idx < res.len() {
+                            res[idx] = Some(fr);
+                        }
                     }
                 }
             }
@@ -255,21 +281,18 @@ fn is_permanent_mds_error(error: &str) -> bool {
 
 fn should_stream_result(result: &FetchResult) -> bool {
     result.series.has_data()
-        || (!result.series.error.is_empty()
-            && is_permanent_mds_error(&result.series.error))
+        || (!result.series.error.is_empty() && is_permanent_mds_error(&result.series.error))
 }
 
-fn retry_indices(
-    requests: &[FetchRequest],
-    results: &[Option<FetchResult>],
-) -> Vec<usize> {
-    requests.iter()
+fn retry_indices(requests: &[FetchRequest], results: &[Option<FetchResult>]) -> Vec<usize> {
+    requests
+        .iter()
         .filter_map(|request| {
-            let needs_retry = results.get(request.loaded_index)
+            let needs_retry = results
+                .get(request.loaded_index)
                 .and_then(|result| result.as_ref())
                 .is_none_or(|result| {
-                    !result.series.has_data()
-                        && !is_permanent_mds_error(&result.series.error)
+                    !result.series.has_data() && !is_permanent_mds_error(&result.series.error)
                 });
             needs_retry.then_some(request.loaded_index)
         })
@@ -285,7 +308,9 @@ fn build_requests(config: &LayoutConfig, read_mode: DataReadMode) -> Vec<FetchRe
     for (col, column) in config.columns.iter().enumerate() {
         for (row, plot) in column.iter().enumerate() {
             for (sig_idx, sig) in plot.signal_specs.iter().enumerate() {
-                if sig.is_hidden() { continue; }
+                if sig.is_hidden() {
+                    continue;
+                }
                 let mode = effective_read_mode(read_mode, sig.read_mode);
                 let max_pts = match mode {
                     DataReadMode::Thin => plot.extraction_points.max(1) as usize,
@@ -295,10 +320,14 @@ fn build_requests(config: &LayoutConfig, read_mode: DataReadMode) -> Vec<FetchRe
 
                 requests.push(FetchRequest {
                     loaded_index: index,
-                    column: col as i32, row: row as i32, signal: sig_idx as i32,
+                    column: col as i32,
+                    row: row as i32,
+                    signal: sig_idx as i32,
                     shot: effective_shot(plot, sig),
-                    plot: plot.clone(), sig: sig.clone(),
-                    read_mode: mode, max_points: max_pts,
+                    plot: plot.clone(),
+                    sig: sig.clone(),
+                    read_mode: mode,
+                    max_points: max_pts,
                 });
                 index += 1;
             }
@@ -316,7 +345,10 @@ fn group_requests(requests: &[FetchRequest]) -> HashMap<String, Vec<usize>> {
     groups
 }
 
-fn build_chunks(requests: &[FetchRequest], groups: &HashMap<String, Vec<usize>>) -> Vec<Vec<usize>> {
+fn build_chunks(
+    requests: &[FetchRequest],
+    groups: &HashMap<String, Vec<usize>>,
+) -> Vec<Vec<usize>> {
     let mut chunks: Vec<Vec<usize>> = Vec::new();
     for indices in groups.values() {
         let first = &requests[indices[0]];
@@ -332,10 +364,11 @@ fn build_chunks(requests: &[FetchRequest], groups: &HashMap<String, Vec<usize>>)
             }
             chunks.extend(buckets.into_iter().filter(|bucket| !bucket.is_empty()));
         }
-        if normal.is_empty() { continue; }
+        if normal.is_empty() {
+            continue;
+        }
 
-        let available =
-            reusable_connection_count(&first.sig.server_ip, protocol::MDS_PORT).max(1);
+        let available = reusable_connection_count(&first.sig.server_ip, protocol::MDS_PORT).max(1);
         let desired = ((normal.len() + 1) / 2).clamp(1, 8);
         let hot_bucket_count = available.min(desired);
         let is_east = first.sig.experiment.trim().eq_ignore_ascii_case("east");
@@ -362,7 +395,9 @@ fn build_chunks(requests: &[FetchRequest], groups: &HashMap<String, Vec<usize>>)
                 buckets[position % bucket_count].push(index);
             }
             for bucket in buckets {
-                if !bucket.is_empty() { chunks.push(bucket); }
+                if !bucket.is_empty() {
+                    chunks.push(bucket);
+                }
             }
         } else {
             chunks.push(normal);
@@ -425,23 +460,32 @@ fn grow_hot_pool(requests: &[FetchRequest], groups: &HashMap<String, Vec<usize>>
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 fn effective_shot(plot: &PlotSpec, sig: &SignalSpec) -> String {
-    if !sig.shot.trim().is_empty() { sig.shot.clone() }
-    else { plot.shot.clone() }
+    if !sig.shot.trim().is_empty() {
+        sig.shot.clone()
+    } else {
+        plot.shot.clone()
+    }
 }
 
 fn fetch_result_to_loaded(requests: &[FetchRequest], fr: &FetchResult) -> LoadedSignal {
     let req = &requests[fr.loaded_index];
     LoadedSignal {
-        column: req.column, row: req.row, signal: req.signal,
-        shot: req.shot.clone(), series: fr.series.clone(),
+        column: req.column,
+        row: req.row,
+        signal: req.signal,
+        shot: req.shot.clone(),
+        series: fr.series.clone(),
     }
 }
 
 fn fetch_result_into_loaded(requests: &[FetchRequest], fr: FetchResult) -> LoadedSignal {
     let req = &requests[fr.loaded_index];
     LoadedSignal {
-        column: req.column, row: req.row, signal: req.signal,
-        shot: req.shot.clone(), series: fr.series,
+        column: req.column,
+        row: req.row,
+        signal: req.signal,
+        shot: req.shot.clone(),
+        series: fr.series,
     }
 }
 
@@ -452,14 +496,20 @@ mod tests {
     fn make_test_config() -> LayoutConfig {
         let plot = PlotSpec {
             title: "Test".into(),
-            extraction_points: 2000, grid: true,
+            extraction_points: 2000,
+            grid: true,
             signal_specs: vec![SignalSpec {
-                y_expr: "\\test".into(), experiment: "t".into(),
-                server_ip: "127.0.0.1".into(), ..Default::default()
+                y_expr: "\\test".into(),
+                experiment: "t".into(),
+                server_ip: "127.0.0.1".into(),
+                ..Default::default()
             }],
             ..Default::default()
         };
-        LayoutConfig { columns: vec![vec![plot]], ..Default::default() }
+        LayoutConfig {
+            columns: vec![vec![plot]],
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -469,14 +519,32 @@ mod tests {
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].read_mode, DataReadMode::Thin);
         assert_eq!(requests[0].max_points, 2000);
+        assert_eq!(global_wave_limit(&requests), MAX_GLOBAL_SOCKETS);
+    }
+
+    #[test]
+    fn full_reads_use_a_memory_safe_wave_width() {
+        let requests = build_requests(&make_test_config(), DataReadMode::Full);
+        assert_eq!(global_wave_limit(&requests), MAX_GLOBAL_FULL_SOCKETS);
     }
 
     #[test]
     fn test_build_requests_hidden_skipped() {
         let mut config = make_test_config();
         config.columns[0][0].signal_specs = vec![
-            SignalSpec { y_expr: "\\a".into(), experiment: "t".into(), server_ip: "1.1.1.1".into(), hidden: true, ..Default::default() },
-            SignalSpec { y_expr: "\\b".into(), experiment: "t".into(), server_ip: "1.1.1.1".into(), ..Default::default() },
+            SignalSpec {
+                y_expr: "\\a".into(),
+                experiment: "t".into(),
+                server_ip: "1.1.1.1".into(),
+                hidden: true,
+                ..Default::default()
+            },
+            SignalSpec {
+                y_expr: "\\b".into(),
+                experiment: "t".into(),
+                server_ip: "1.1.1.1".into(),
+                ..Default::default()
+            },
         ];
         assert_eq!(build_requests(&config, DataReadMode::Thin).len(), 1);
     }
@@ -485,8 +553,18 @@ mod tests {
     fn test_group_and_chunk() {
         let mut config = make_test_config();
         config.columns[0][0].signal_specs = vec![
-            SignalSpec { y_expr: "\\a".into(), experiment: "t1".into(), server_ip: "10.0.0.1".into(), ..Default::default() },
-            SignalSpec { y_expr: "\\b".into(), experiment: "t2".into(), server_ip: "10.0.0.2".into(), ..Default::default() },
+            SignalSpec {
+                y_expr: "\\a".into(),
+                experiment: "t1".into(),
+                server_ip: "10.0.0.1".into(),
+                ..Default::default()
+            },
+            SignalSpec {
+                y_expr: "\\b".into(),
+                experiment: "t2".into(),
+                server_ip: "10.0.0.2".into(),
+                ..Default::default()
+            },
         ];
         let requests = build_requests(&config, DataReadMode::Thin);
         let groups = group_requests(&requests);
@@ -499,9 +577,24 @@ mod tests {
     fn heavy_east_signals_are_isolated_and_prioritized() {
         let mut config = make_test_config();
         config.columns[0][0].signal_specs = vec![
-            SignalSpec { y_expr: "\\IP".into(), experiment: "east".into(), server_ip: "10.0.0.1".into(), ..Default::default() },
-            SignalSpec { y_expr: "\\HRS01".into(), experiment: "east".into(), server_ip: "10.0.0.1".into(), ..Default::default() },
-            SignalSpec { y_expr: "\\HRS02".into(), experiment: "east".into(), server_ip: "10.0.0.1".into(), ..Default::default() },
+            SignalSpec {
+                y_expr: "\\IP".into(),
+                experiment: "east".into(),
+                server_ip: "10.0.0.1".into(),
+                ..Default::default()
+            },
+            SignalSpec {
+                y_expr: "\\HRS01".into(),
+                experiment: "east".into(),
+                server_ip: "10.0.0.1".into(),
+                ..Default::default()
+            },
+            SignalSpec {
+                y_expr: "\\HRS02".into(),
+                experiment: "east".into(),
+                server_ip: "10.0.0.1".into(),
+                ..Default::default()
+            },
         ];
         let requests = build_requests(&config, DataReadMode::Thin);
         let groups = group_requests(&requests);
@@ -515,14 +608,32 @@ mod tests {
     #[test]
     fn test_effective_read_mode() {
         // Per-signal always overrides global when set
-        assert_eq!(effective_read_mode(DataReadMode::Thin, Some(DataReadMode::Full)), DataReadMode::Full);
-        assert_eq!(effective_read_mode(DataReadMode::Full, Some(DataReadMode::Thin)), DataReadMode::Thin);
-        assert_eq!(effective_read_mode(DataReadMode::Medium, Some(DataReadMode::Full)), DataReadMode::Full);
+        assert_eq!(
+            effective_read_mode(DataReadMode::Thin, Some(DataReadMode::Full)),
+            DataReadMode::Full
+        );
+        assert_eq!(
+            effective_read_mode(DataReadMode::Full, Some(DataReadMode::Thin)),
+            DataReadMode::Thin
+        );
+        assert_eq!(
+            effective_read_mode(DataReadMode::Medium, Some(DataReadMode::Full)),
+            DataReadMode::Full
+        );
         // No per-signal → global default
-        assert_eq!(effective_read_mode(DataReadMode::Thin, None), DataReadMode::Thin);
-        assert_eq!(effective_read_mode(DataReadMode::Full, None), DataReadMode::Full);
+        assert_eq!(
+            effective_read_mode(DataReadMode::Thin, None),
+            DataReadMode::Thin
+        );
+        assert_eq!(
+            effective_read_mode(DataReadMode::Full, None),
+            DataReadMode::Full
+        );
         // Equal modes
-        assert_eq!(effective_read_mode(DataReadMode::Medium, Some(DataReadMode::Medium)), DataReadMode::Medium);
+        assert_eq!(
+            effective_read_mode(DataReadMode::Medium, Some(DataReadMode::Medium)),
+            DataReadMode::Medium
+        );
     }
 
     #[test]
