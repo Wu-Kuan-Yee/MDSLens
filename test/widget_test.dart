@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/gestures.dart';
@@ -626,6 +627,29 @@ void main() {
     expect(zoomed.spots.first.x, lessThanOrEqualTo(4));
     expect(zoomed.spots.last.x, greaterThanOrEqualTo(4.1));
     expect(zoomed.spots.length, lessThan(points.length ~/ 10));
+  });
+
+  test('Compact uniform waveform renders when regular points are empty', () {
+    final series = SeriesData(
+      points: <List<double>>[],
+      uniformY: Float32List.fromList(<double>[1, 2, 3]),
+      uniformStart: -0.1,
+      uniformStep: 0.05,
+    );
+
+    expect(series.hasData, isTrue);
+    expect(series.pointCount, 3);
+
+    final rendered = PlotRenderCache().render(series);
+    expect(rendered.spots, <FlSpot>[
+      const FlSpot(-0.1, 1),
+      const FlSpot(-0.05, 2),
+      const FlSpot(0, 3),
+    ]);
+    expect(rendered.minX, -0.1);
+    expect(rendered.maxX, 0);
+    expect(rendered.minY, 1);
+    expect(rendered.maxY, 3);
   });
 
   test('Release versions are compared semantically', () {

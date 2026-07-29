@@ -3317,7 +3317,11 @@ class SeriesData {
       points?.isNotEmpty == true ||
       (uniformY?.isNotEmpty == true && uniformStep != 0);
 
-  int get pointCount => points?.length ?? uniformY?.length ?? 0;
+  int get pointCount {
+    final regular = points;
+    if (regular != null && regular.isNotEmpty) return regular.length;
+    return uniformY?.length ?? 0;
+  }
 
   void clearData() {
     points = null;
