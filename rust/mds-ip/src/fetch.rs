@@ -21,8 +21,7 @@ struct SignalMetadata {
     x_unit: String,
 }
 
-static SIGNAL_METADATA_CACHE: OnceLock<Mutex<HashMap<String, SignalMetadata>>> =
-    OnceLock::new();
+static SIGNAL_METADATA_CACHE: OnceLock<Mutex<HashMap<String, SignalMetadata>>> = OnceLock::new();
 
 fn signal_metadata_cache() -> &'static Mutex<HashMap<String, SignalMetadata>> {
     SIGNAL_METADATA_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
@@ -86,10 +85,7 @@ pub struct SamplingPlan {
 // ── Entry: fetch one signal on an open socket ─────────────────────────────
 
 /// Fetch a single signal on an already-open socket. Dispatches by read mode.
-pub fn fetch_signal(
-    socket: &mut TcpStream,
-    request: &FetchRequest,
-) -> FetchResult {
+pub fn fetch_signal(socket: &mut TcpStream, request: &FetchRequest) -> FetchResult {
     let started = Instant::now();
     let mut result = FetchResult {
         loaded_index: request.loaded_index,
@@ -126,8 +122,7 @@ pub fn fetch_signal(
 fn trace_fetch_enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
     *ENABLED.get_or_init(|| {
-        std::env::var("MDSLENS_MDS_TRACE")
-            .is_ok_and(|value| !value.is_empty() && value != "0")
+        std::env::var("MDSLENS_MDS_TRACE").is_ok_and(|value| !value.is_empty() && value != "0")
     })
 }
 
@@ -172,18 +167,27 @@ fn try_saved_signal(socket: &mut TcpStream, y_expr: &str) -> Option<SignalSeries
     let y_msg = protocol::value(
         socket,
         &format!("( _jscope_0 = ({}), fs_float(_jscope_0))", saved_node),
-    ).ok()?;
+    )
+    .ok()?;
     let x_msg = protocol::value(
         socket,
-        &format!("( _jscope_1 = (dim_of({})), ft_float(_jscope_1))", saved_node),
-    ).ok()?;
+        &format!(
+            "( _jscope_1 = (dim_of({})), ft_float(_jscope_1))",
+            saved_node
+        ),
+    )
+    .ok()?;
     let y_values = protocol::numeric_from_message(&y_msg).ok()?;
     let x_values = protocol::numeric_from_message(&x_msg).ok()?;
     let count = y_values.len().min(x_values.len());
-    if count == 0 { return None; }
+    if count == 0 {
+        return None;
+    }
     Some(SignalSeries {
         name: normalized_name(y_expr),
-        points: (0..count).map(|index| [x_values[index], y_values[index]]).collect(),
+        points: (0..count)
+            .map(|index| [x_values[index], y_values[index]])
+            .collect(),
         ..Default::default()
     })
 }
@@ -199,8 +203,8 @@ fn fetch_east_fixed_resolution(socket: &mut TcpStream, req: &FetchRequest) -> Op
     }
 
     let mut start = plan.timebase.start;
-    let mut end = start
-        + (plan.sampling.source_count.saturating_sub(1) as f64) * plan.timebase.step;
+    let mut end =
+        start + (plan.sampling.source_count.saturating_sub(1) as f64) * plan.timebase.step;
     if req.plot.custom_x_range
         && req.plot.xmin.is_finite()
         && req.plot.xmax.is_finite()
@@ -233,7 +237,8 @@ fn fetch_east_fixed_resolution(socket: &mut TcpStream, req: &FetchRequest) -> Op
     protocol::value(
         socket,
         &format!("SetTimeContext({start:.12},{end:.12},{requested_step:.12})"),
-    ).ok()?;
+    )
+    .ok()?;
     let response = protocol::value(socket, &y_expr);
     let cleanup_ok = protocol::value_for_cleanup(socket, "SetTimeContext()")
         .is_ok_and(|message| message.status & 1 != 0);
@@ -269,7 +274,9 @@ fn try_east_thin_plan(socket: &mut TcpStream, req: &FetchRequest) -> Option<East
     }
 
     let freq = values[1].round() as usize;
-    if freq == 0 { return None; }
+    if freq == 0 {
+        return None;
+    }
     let daqtime = values[0];
     let point_count = if daqtime.is_finite() && daqtime > 0.0 {
         (daqtime * freq as f64).round() as usize
@@ -277,14 +284,21 @@ fn try_east_thin_plan(socket: &mut TcpStream, req: &FetchRequest) -> Option<East
         let size = protocol::value(socket, &format!("size({y})")).ok()?;
         protocol::int_from_message(&size).ok()?.max(0) as usize
     };
-    if point_count == 0 { return None; }
+    if point_count == 0 {
+        return None;
+    }
 
     let plan = sampling_from_point_count(point_count, req.max_points);
-    if plan.sampled_count == 0 { return None; }
+    if plan.sampled_count == 0 {
+        return None;
+    }
 
     Some(EastThinPlan {
         sampling: plan,
-        timebase: EastTimebase { start: values[2], step: 1.0 / freq as f64 },
+        timebase: EastTimebase {
+            start: values[2],
+            step: 1.0 / freq as f64,
+        },
     })
 }
 
@@ -306,18 +320,32 @@ fn fetch_east_length_sampled(socket: &mut TcpStream, req: &FetchRequest, result:
     let step = plan.step;
 
     let y_expr = if step > 1 {
-        format!("( _jscope_0 = (data({})[1:*:{}]), fs_float(_jscope_0))", req.sig.y_expr.trim(), step)
+        format!(
+            "( _jscope_0 = (data({})[1:*:{}]), fs_float(_jscope_0))",
+            req.sig.y_expr.trim(),
+            step
+        )
     } else {
-        format!("( _jscope_0 = ({}), fs_float(_jscope_0))", req.sig.y_expr.trim())
+        format!(
+            "( _jscope_0 = ({}), fs_float(_jscope_0))",
+            req.sig.y_expr.trim()
+        )
     };
 
     match protocol::value(socket, &y_expr) {
         Ok(msg) => {
             // Get X axis from dim_of(y) for proper time coords (matching C++ behavior)
             let x_expr = if step > 1 {
-                format!("( _jscope_1 = (data(dim_of({}))[1:*:{}]), ft_float(_jscope_1))", req.sig.y_expr.trim(), step)
+                format!(
+                    "( _jscope_1 = (data(dim_of({}))[1:*:{}]), ft_float(_jscope_1))",
+                    req.sig.y_expr.trim(),
+                    step
+                )
             } else {
-                format!("( _jscope_1 = (dim_of({})), ft_float(_jscope_1))", req.sig.y_expr.trim())
+                format!(
+                    "( _jscope_1 = (dim_of({})), ft_float(_jscope_1))",
+                    req.sig.y_expr.trim()
+                )
             };
             if let Ok(x_msg) = protocol::value(socket, &x_expr) {
                 if let Ok(x_vals) = protocol::numeric_from_message(&x_msg) {
@@ -333,7 +361,9 @@ fn fetch_east_length_sampled(socket: &mut TcpStream, req: &FetchRequest, result:
             }
             result.series = series_from_msg(normalized_name(&req.sig.y_expr), &msg, req.max_points);
         }
-        Err(e) => { result.series.error = e; }
+        Err(e) => {
+            result.series.error = e;
+        }
     }
 }
 
@@ -356,32 +386,54 @@ fn fetch_medium(socket: &mut TcpStream, req: &FetchRequest, result: &mut FetchRe
 }
 
 fn fetch_east_length_sampled_with_budget(
-    socket: &mut TcpStream, req: &FetchRequest, result: &mut FetchResult, budget: usize,
+    socket: &mut TcpStream,
+    req: &FetchRequest,
+    result: &mut FetchResult,
+    budget: usize,
 ) {
     let size_expr = format!("size({})", req.sig.y_expr.trim());
     let total = match protocol::value(socket, &size_expr) {
         Ok(msg) => protocol::int_from_message(&msg).unwrap_or(0) as usize,
         Err(_) => 0,
     };
-    if total == 0 { result.series.error = "empty signal".into(); return; }
+    if total == 0 {
+        result.series.error = "empty signal".into();
+        return;
+    }
 
     let plan = sampling_from_point_count(total, budget);
     let y_expr = if plan.step > 1 {
-        format!("( _jscope_0 = (data({})[1:*:{}]), fs_float(_jscope_0))", req.sig.y_expr.trim(), plan.step)
+        format!(
+            "( _jscope_0 = (data({})[1:*:{}]), fs_float(_jscope_0))",
+            req.sig.y_expr.trim(),
+            plan.step
+        )
     } else {
-        format!("( _jscope_0 = ({}), fs_float(_jscope_0))", req.sig.y_expr.trim())
+        format!(
+            "( _jscope_0 = ({}), fs_float(_jscope_0))",
+            req.sig.y_expr.trim()
+        )
     };
 
     match protocol::value(socket, &y_expr) {
         Ok(msg) => {
             // Try to derive timebase first (EAST signal freq+trigtime)
             if let Some(tb) = try_timebase(socket, req) {
-                result.series = series_from_msg_uniform(normalized_name(&req.sig.y_expr), &msg, tb.start, tb.step, req.max_points);
+                result.series = series_from_msg_uniform(
+                    normalized_name(&req.sig.y_expr),
+                    &msg,
+                    tb.start,
+                    tb.step,
+                    req.max_points,
+                );
             } else {
-                result.series = series_from_msg(normalized_name(&req.sig.y_expr), &msg, req.max_points);
+                result.series =
+                    series_from_msg(normalized_name(&req.sig.y_expr), &msg, req.max_points);
             }
         }
-        Err(e) => { result.series.error = e; }
+        Err(e) => {
+            result.series.error = e;
+        }
     }
 }
 
@@ -389,42 +441,92 @@ fn fetch_east_length_sampled_with_budget(
 
 fn fetch_full(socket: &mut TcpStream, req: &FetchRequest, result: &mut FetchResult) {
     // Full: read all raw data, no downsampling.
-    // Try to derive timebase for uniform storage.
-    if is_east_signal(req) {
-        if let Some(tb) = try_timebase(socket, req) {
-            let y_expr = format!("( _jscope_0 = ({}), fs_float(_jscope_0))", req.sig.y_expr.trim());
-            match protocol::value(socket, &y_expr) {
-                Ok(msg) => {
-                    result.series = series_from_msg_uniform(
-                        normalized_name(&req.sig.y_expr), &msg, tb.start, tb.step, usize::MAX,
+    // A simple scaled EAST node can still use the compact uniform-X
+    // representation. Query metadata on the underlying node, then apply the
+    // expression's scale locally. If any part of this optimization fails, fall
+    // through to the generic MDS expression path instead of declaring a valid
+    // signal empty.
+    let scaled = scaled_simple_signal_expr(&req.sig.y_expr);
+    if req.sig.x_expr.trim().is_empty() {
+        if let Some(ref scaled_expr) = scaled {
+            if is_east_timebase_candidate(req, &scaled_expr.base_expr) {
+                if let Some(tb) = try_timebase_for_expr(socket, &scaled_expr.base_expr) {
+                    let y_expr = format!(
+                        "( _jscope_0 = ({}), fs_float(_jscope_0))",
+                        scaled_expr.base_expr
                     );
-                    return;
+                    if let Ok(msg) = protocol::value(socket, &y_expr) {
+                        let mut series = series_from_msg_uniform(
+                            normalized_name(&req.sig.y_expr),
+                            &msg,
+                            tb.start,
+                            tb.step,
+                            usize::MAX,
+                        );
+                        if series.has_data() {
+                            apply_series_scale(&mut series, &req.sig.y_expr, scaled_expr.scale);
+                            result.series = series;
+                            return;
+                        }
+                    }
                 }
-                Err(e) => { result.series.error = e; return; }
             }
         }
     }
 
-    // Generic: get both X and Y
-    let y_expr = format!("( _jscope_0 = ({}), fs_float(_jscope_0))", req.sig.y_expr.trim());
-    let x_expr = if !req.sig.x_expr.trim().is_empty() {
-        format!("( _jscope_1 = ({}), ft_float(_jscope_1))", req.sig.x_expr.trim())
+    let raw_y = req.sig.y_expr.trim();
+    let y_expr = format!("( _jscope_0 = ({raw_y}), fs_float(_jscope_0))");
+    let (y_vals, mut last_error) = numeric_query(socket, &y_expr);
+    let y_vals = if y_vals.is_empty() {
+        let (fallback, fallback_error) = numeric_query(socket, &format!("data({raw_y})"));
+        if fallback_error.is_some() {
+            last_error = fallback_error;
+        }
+        fallback
     } else {
-        format!("( _jscope_1 = (dim_of({})), ft_float(_jscope_1))", req.sig.y_expr.trim())
+        y_vals
     };
+    if y_vals.is_empty() {
+        result.series.error = last_error.unwrap_or_else(|| "empty signal".into());
+        return;
+    }
 
-    let y_msg = match protocol::value(socket, &y_expr) { Ok(m) => m, Err(e) => { result.series.error = e; return; } };
-    let x_msg = match protocol::value(socket, &x_expr) { Ok(m) => m, Err(e) => { result.series.error = e; return; } };
-
-    let y_vals = protocol::numeric_from_message(&y_msg).unwrap_or_default();
-    let x_vals = protocol::numeric_from_message(&x_msg).unwrap_or_default();
-    let n = y_vals.len().min(x_vals.len());
-
-    result.series = SignalSeries {
-        name: normalized_name(&req.sig.y_expr),
-        points: (0..n).map(|i| [x_vals[i], y_vals[i]]).collect(),
-        ..Default::default()
+    let configured_x = req.sig.x_expr.trim();
+    let mut x_vals = if configured_x.is_empty() {
+        Vec::new()
+    } else {
+        numeric_query(
+            socket,
+            &format!("( _jscope_1 = ({configured_x}), ft_float(_jscope_1))"),
+        )
+        .0
     };
+    if x_vals.is_empty() && configured_x.is_empty() {
+        if let Some(tb) = try_timebase(socket, req) {
+            let series = series_from_values_uniform(
+                normalized_name(&req.sig.y_expr),
+                y_vals.clone(),
+                tb.start,
+                tb.step,
+            );
+            if series.has_data() {
+                result.series = series;
+                return;
+            }
+        }
+    }
+    if x_vals.is_empty() {
+        x_vals = numeric_query(
+            socket,
+            &format!("( _jscope_1 = (dim_of({raw_y})), ft_float(_jscope_1))"),
+        )
+        .0;
+    }
+
+    result.series = series_from_values(normalized_name(&req.sig.y_expr), y_vals, x_vals);
+    if !result.series.has_data() {
+        result.series.error = "no numeric points".into();
+    }
 }
 
 // ── Generic Thin ──────────────────────────────────────────────────────────
@@ -435,24 +537,43 @@ fn fetch_generic_thin(socket: &mut TcpStream, req: &FetchRequest, result: &mut F
         Ok(msg) => protocol::int_from_message(&msg).unwrap_or(0) as usize,
         Err(_) => 0,
     };
-    if total == 0 { result.series.error = "empty signal".into(); return; }
+    if total == 0 {
+        result.series.error = "empty signal".into();
+        return;
+    }
 
     let plan = sampling_from_point_count(total, req.max_points);
     let y_expr = if plan.step > 1 {
-        format!("( _jscope_0 = (data({})[1:*:{}]), fs_float(_jscope_0))", req.sig.y_expr.trim(), plan.step)
+        format!(
+            "( _jscope_0 = (data({})[1:*:{}]), fs_float(_jscope_0))",
+            req.sig.y_expr.trim(),
+            plan.step
+        )
     } else {
-        format!("( _jscope_0 = ({}), fs_float(_jscope_0))", req.sig.y_expr.trim())
+        format!(
+            "( _jscope_0 = ({}), fs_float(_jscope_0))",
+            req.sig.y_expr.trim()
+        )
     };
 
     match protocol::value(socket, &y_expr) {
         Ok(msg) => {
             if let Some(tb) = try_timebase(socket, req) {
-                result.series = series_from_msg_uniform(normalized_name(&req.sig.y_expr), &msg, tb.start, tb.step, req.max_points);
+                result.series = series_from_msg_uniform(
+                    normalized_name(&req.sig.y_expr),
+                    &msg,
+                    tb.start,
+                    tb.step,
+                    req.max_points,
+                );
             } else {
-                result.series = series_from_msg(normalized_name(&req.sig.y_expr), &msg, req.max_points);
+                result.series =
+                    series_from_msg(normalized_name(&req.sig.y_expr), &msg, req.max_points);
             }
         }
-        Err(e) => { result.series.error = e; }
+        Err(e) => {
+            result.series.error = e;
+        }
     }
 }
 
@@ -460,34 +581,63 @@ fn fetch_generic_thin(socket: &mut TcpStream, req: &FetchRequest, result: &mut F
 
 /// Derive EAST timebase from `freq` and `trigtime` (separate queries, matching C++).
 fn try_timebase(socket: &mut TcpStream, req: &FetchRequest) -> Option<EastTimebase> {
-    let y = req.sig.y_expr.trim();
+    let scaled = scaled_simple_signal_expr(&req.sig.y_expr)?;
+    if !is_east_timebase_candidate(req, &scaled.base_expr) {
+        return None;
+    }
+    try_timebase_for_expr(socket, &scaled.base_expr)
+}
+
+fn try_timebase_for_expr(socket: &mut TcpStream, y: &str) -> Option<EastTimebase> {
     // Query using MDSplus attribute syntax: yExpr:freq and yExpr:trigtime
     let freq_expr = format!("{}:freq", y);
     let trig_expr = format!("{}:trigtime", y);
 
-    match (protocol::value(socket, &freq_expr), protocol::value(socket, &trig_expr)) {
-        (Ok(fm), Ok(tm)) => {
-            let fv = protocol::numeric_from_message(&fm).ok()?;
-            let tv = protocol::numeric_from_message(&tm).ok()?;
-            if !fv.is_empty() && !tv.is_empty() && fv[0].is_finite() && tv[0].is_finite() && fv[0] > 0.0 {
-                let freq = fv[0].round() as usize;
-                return Some(EastTimebase { start: tv[0], step: 1.0 / freq as f64 });
-            }
-        }
-        _ => {}
+    match (
+        protocol::value(socket, &freq_expr),
+        protocol::value(socket, &trig_expr),
+    ) {
+        (Ok(fm), Ok(tm)) => east_timebase_from_messages(&fm, &tm),
+        _ => None,
     }
-    None
+}
+
+fn east_timebase_from_messages(
+    freq_message: &Message,
+    trig_message: &Message,
+) -> Option<EastTimebase> {
+    // `:freq` is commonly an integer scalar. Treating those four bytes as an
+    // IEEE-754 float produces a tiny value, which rounds to zero and turns the
+    // Full-mode time step into infinity.
+    let freq = protocol::int_from_message(freq_message).ok()?;
+    let trig = protocol::numeric_from_message(trig_message).ok()?;
+    let start = *trig.first()?;
+    if freq <= 0 || !start.is_finite() {
+        return None;
+    }
+    let step = 1.0 / f64::from(freq);
+    (step.is_finite() && step > 0.0).then_some(EastTimebase { start, step })
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 fn is_east_signal(req: &FetchRequest) -> bool {
+    let Some(scaled) = scaled_simple_signal_expr(&req.sig.y_expr) else {
+        return false;
+    };
+    req.sig.x_expr.trim().is_empty() && is_east_timebase_candidate(req, &scaled.base_expr)
+}
+
+fn is_east_timebase_candidate(req: &FetchRequest, y_expr: &str) -> bool {
     let experiment = req.sig.experiment.trim();
     let shot_is_supported = experiment.eq_ignore_ascii_case("east")
-        && req.shot.trim().parse::<i64>().is_ok_and(|shot| shot > 44326);
+        && req
+            .shot
+            .trim()
+            .parse::<i64>()
+            .is_ok_and(|shot| shot > 44326);
     (shot_is_supported || experiment.eq_ignore_ascii_case("eastpower"))
-        && req.sig.x_expr.trim().is_empty()
-        && is_simple_mds_node(&req.sig.y_expr)
+        && is_simple_mds_node(y_expr)
 }
 
 fn is_simple_mds_node(expression: &str) -> bool {
@@ -498,11 +648,103 @@ fn is_simple_mds_node(expression: &str) -> bool {
             .any(|character| matches!(character, '(' | ')' | '[' | ']' | ',' | ' '))
 }
 
+#[derive(Debug, Clone, PartialEq)]
+struct ScaledSignalExpr {
+    base_expr: String,
+    scale: f64,
+}
+
+fn scaled_simple_signal_expr(expression: &str) -> Option<ScaledSignalExpr> {
+    let mut compact: String = expression.chars().filter(|c| !c.is_whitespace()).collect();
+    let mut sign = 1.0;
+    if compact.starts_with('-') {
+        sign = -1.0;
+        compact.remove(0);
+    } else if compact.starts_with('+') {
+        compact.remove(0);
+    }
+
+    let (node_part, suffix) = if compact.starts_with('(') {
+        let close = compact.find(')')?;
+        (&compact[1..close], &compact[close + 1..])
+    } else {
+        let operator = compact.find(['*', '/']).unwrap_or(compact.len());
+        (&compact[..operator], &compact[operator..])
+    };
+    if !is_simple_mds_node(node_part) {
+        return None;
+    }
+    let node_name = node_part.strip_prefix('\\')?;
+    let mut chars = node_name.chars();
+    if !chars
+        .next()
+        .is_some_and(|character| character.is_ascii_alphabetic())
+        || !chars.all(|character| character.is_ascii_alphanumeric() || character == '_')
+    {
+        return None;
+    }
+
+    let scale = if suffix.is_empty() {
+        sign
+    } else {
+        let mut chars = suffix.chars();
+        let operator = chars.next()?;
+        let value = chars.as_str().parse::<f64>().ok()?;
+        if !value.is_finite() || value == 0.0 {
+            return None;
+        }
+        sign * if operator == '*' {
+            value
+        } else if operator == '/' {
+            1.0 / value
+        } else {
+            return None;
+        }
+    };
+    Some(ScaledSignalExpr {
+        base_expr: node_part.to_string(),
+        scale,
+    })
+}
+
+fn apply_series_scale(series: &mut SignalSeries, name: &str, scale: f64) {
+    series.name = normalized_name(name);
+    if scale == 1.0 {
+        return;
+    }
+    for point in &mut series.points {
+        point[1] *= scale;
+    }
+    for value in &mut series.uniform_y {
+        *value = (f64::from(*value) * scale) as f32;
+    }
+    if series.uniform_min_y.is_finite() && series.uniform_max_y.is_finite() {
+        let first = series.uniform_min_y * scale;
+        let second = series.uniform_max_y * scale;
+        series.uniform_min_y = first.min(second);
+        series.uniform_max_y = first.max(second);
+    }
+}
+
+fn numeric_query(socket: &mut TcpStream, expression: &str) -> (Vec<f64>, Option<String>) {
+    match protocol::value(socket, expression) {
+        Ok(message) => match protocol::numeric_from_message(&message) {
+            Ok(values) => (values, None),
+            Err(error) => (Vec::new(), Some(error)),
+        },
+        Err(error) => (Vec::new(), Some(error)),
+    }
+}
+
 pub fn normalized_name(expr: &str) -> String {
     expr.trim().to_string()
 }
 
-fn populate_series_metadata(socket: &mut TcpStream, request: &FetchRequest, series: &mut SignalSeries) {
+fn populate_series_metadata(
+    socket: &mut TcpStream,
+    request: &FetchRequest,
+    series: &mut SignalSeries,
+) {
     let y_expr = request.sig.y_expr.trim();
     let configured_x = request.sig.x_expr.trim();
     let cache_key = format!(
@@ -526,8 +768,7 @@ fn populate_series_metadata(socket: &mut TcpStream, request: &FetchRequest, seri
     } else {
         configured_x.to_string()
     };
-    let (raw_unit, raw_x_unit, raw_x_name) =
-        query_series_metadata(socket, y_expr, &x_expr);
+    let (raw_unit, raw_x_unit, raw_x_name) = query_series_metadata(socket, y_expr, &x_expr);
     series.unit = raw_unit
         .as_ref()
         .map(|unit| scaled_si_unit(unit, expression_numeric_scale(y_expr)))
@@ -537,7 +778,8 @@ fn populate_series_metadata(socket: &mut TcpStream, request: &FetchRequest, seri
     // A dimension is often an anonymous RANGE/ARRAY rather than a named tree
     // node. Prefer the name returned by MDSplus, but retain the exact source
     // expression when no name exists instead of presenting a fabricated "x".
-    series.x_name = raw_x_name.clone()
+    series.x_name = raw_x_name
+        .clone()
         .and_then(valid_axis_name)
         .unwrap_or_else(|| axis_expression_label(&x_expr));
 
@@ -545,11 +787,14 @@ fn populate_series_metadata(socket: &mut TcpStream, request: &FetchRequest, seri
         signal_metadata_cache()
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .insert(cache_key, SignalMetadata {
-                unit: series.unit.clone(),
-                x_name: series.x_name.clone(),
-                x_unit: series.x_unit.clone(),
-            });
+            .insert(
+                cache_key,
+                SignalMetadata {
+                    unit: series.unit.clone(),
+                    x_name: series.x_name.clone(),
+                    x_unit: series.x_unit.clone(),
+                },
+            );
     }
 }
 
@@ -649,15 +894,28 @@ fn scaled_si_unit(unit: &str, numeric_scale: f64) -> String {
     }
 
     const PREFIXES: &[(&str, i32)] = &[
-        ("Y", 8), ("Z", 7), ("E", 6), ("P", 5), ("T", 4), ("G", 3),
-        ("M", 2), ("k", 1), ("m", -1), ("u", -2), ("µ", -2),
-        ("μ", -2), ("n", -3), ("p", -4), ("f", -5), ("a", -6),
-        ("z", -7), ("y", -8),
+        ("Y", 8),
+        ("Z", 7),
+        ("E", 6),
+        ("P", 5),
+        ("T", 4),
+        ("G", 3),
+        ("M", 2),
+        ("k", 1),
+        ("m", -1),
+        ("u", -2),
+        ("µ", -2),
+        ("μ", -2),
+        ("n", -3),
+        ("p", -4),
+        ("f", -5),
+        ("a", -6),
+        ("z", -7),
+        ("y", -8),
     ];
     const BASE_UNITS: &[&str] = &[
-        "mol", "kat", "rad", "bar", "Ohm", "Bq", "Gy", "Sv", "Hz", "Pa",
-        "Wb", "eV", "lm", "lx", "sr", "Ω", "W", "J", "V", "A", "s", "g",
-        "m", "K", "C", "N", "F", "S", "T", "H",
+        "mol", "kat", "rad", "bar", "Ohm", "Bq", "Gy", "Sv", "Hz", "Pa", "Wb", "eV", "lm", "lx",
+        "sr", "Ω", "W", "J", "V", "A", "s", "g", "m", "K", "C", "N", "F", "S", "T", "H",
     ];
     let begins_with_unit = |text: &str| {
         BASE_UNITS.iter().any(|base| {
@@ -688,11 +946,17 @@ fn scaled_si_unit(unit: &str, numeric_scale: f64) -> String {
     PREFIXES
         .iter()
         .find(|(_, steps)| *steps == target_steps)
-        .map_or_else(|| unit.to_string(), |(prefix, _)| format!("{prefix}{base_unit}"))
+        .map_or_else(
+            || unit.to_string(),
+            |(prefix, _)| format!("{prefix}{base_unit}"),
+        )
 }
 
 /// Per-signal read mode overrides global; falls back to global when not set.
-pub fn effective_read_mode(global: DataReadMode, signal_mode: Option<DataReadMode>) -> DataReadMode {
+pub fn effective_read_mode(
+    global: DataReadMode,
+    signal_mode: Option<DataReadMode>,
+) -> DataReadMode {
     signal_mode.unwrap_or(global)
 }
 
@@ -749,22 +1013,81 @@ mod metadata_tests {
         request.shot = "44326".into();
         assert!(!is_east_signal(&request));
     }
+
+    #[test]
+    fn parses_scaled_simple_east_expressions() {
+        assert_eq!(
+            scaled_simple_signal_expr(r" -(\IP) / 1000 "),
+            Some(ScaledSignalExpr {
+                base_expr: r"\IP".into(),
+                scale: -0.001,
+            })
+        );
+        assert_eq!(
+            scaled_simple_signal_expr(r"\DAU5*2.5"),
+            Some(ScaledSignalExpr {
+                base_expr: r"\DAU5".into(),
+                scale: 2.5,
+            })
+        );
+        assert!(scaled_simple_signal_expr(r"data(\IP)").is_none());
+        assert!(scaled_simple_signal_expr(r"\IP/0").is_none());
+    }
+
+    #[test]
+    fn reads_integer_frequency_without_reinterpreting_its_bits_as_float() {
+        let frequency = Message {
+            status: 1,
+            length: 4,
+            dtype: 8,
+            body: 500_000i32.to_be_bytes().to_vec(),
+        };
+        let trigger = Message {
+            status: 1,
+            length: 8,
+            dtype: 11,
+            body: (-2.0f64).to_be_bytes().to_vec(),
+        };
+        let timebase = east_timebase_from_messages(&frequency, &trigger).unwrap();
+        assert_eq!(timebase.start, -2.0);
+        assert!((timebase.step - 0.000002).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn uniform_series_rejects_non_finite_timebases() {
+        let series =
+            series_from_values_uniform(r"\DAU5".into(), vec![1.0, 2.0], -2.0, f64::INFINITY);
+        assert!(!series.has_data());
+        assert_eq!(series.error, "invalid uniform timebase");
+    }
 }
 
 pub fn sampling_from_point_count(total: usize, max_points: usize) -> SamplingPlan {
     if total == 0 || max_points == 0 {
-        return SamplingPlan { source_count: total, step: 1, sampled_count: 0 };
+        return SamplingPlan {
+            source_count: total,
+            step: 1,
+            sampled_count: 0,
+        };
     }
     let step = ((total as f64 / max_points as f64).ceil() as usize).max(1);
     let sampled_count = (total + step - 1) / step;
-    SamplingPlan { source_count: total, step, sampled_count }
+    SamplingPlan {
+        source_count: total,
+        step,
+        sampled_count,
+    }
 }
 
 /// Build a SignalSeries from a numeric message (no timebase info).
 fn series_from_msg(name: String, msg: &Message, max_points: usize) -> SignalSeries {
     let values = protocol::numeric_from_message(msg).unwrap_or_default();
     if values.is_empty() {
-        return SignalSeries { name, error: "empty signal".into(), ..Default::default() };
+        return SignalSeries {
+            name,
+            error: "empty signal".into(),
+            ..Default::default()
+        };
     }
 
     // Store as points with actual index-based X. The caller should
@@ -773,7 +1096,11 @@ fn series_from_msg(name: String, msg: &Message, max_points: usize) -> SignalSeri
     if n <= max_points || max_points == 0 {
         SignalSeries {
             name,
-            points: values.iter().enumerate().map(|(i, &v)| [i as f64, v]).collect(),
+            points: values
+                .iter()
+                .enumerate()
+                .map(|(i, &v)| [i as f64, v])
+                .collect(),
             uniform_min_y: values.iter().fold(f64::INFINITY, |a, &v| a.min(v)),
             uniform_max_y: values.iter().fold(f64::NEG_INFINITY, |a, &v| a.max(v)),
             ..Default::default()
@@ -784,35 +1111,109 @@ fn series_from_msg(name: String, msg: &Message, max_points: usize) -> SignalSeri
         for b in 0..max_points {
             let start = b * step;
             let end = ((b + 1) * step).min(n);
-            if start >= end { continue; }
-            let (min_val, max_val) = values[start..end].iter()
-                .fold((f64::INFINITY, f64::NEG_INFINITY), |(min, max), &v| (min.min(v), max.max(v)));
+            if start >= end {
+                continue;
+            }
+            let (min_val, max_val) = values[start..end]
+                .iter()
+                .fold((f64::INFINITY, f64::NEG_INFINITY), |(min, max), &v| {
+                    (min.min(v), max.max(v))
+                });
             pts.push([(start + end) as f64 / 2.0, min_val]);
             pts.push([(start + end) as f64 / 2.0, max_val]);
         }
-        SignalSeries { name, points: pts, ..Default::default() }
+        SignalSeries {
+            name,
+            points: pts,
+            ..Default::default()
+        }
     }
 }
 
 /// Build a SignalSeries with uniform timebase.
-fn series_from_msg_uniform(name: String, msg: &Message, start: f64, step: f64, _max: usize) -> SignalSeries {
+fn series_from_msg_uniform(
+    name: String,
+    msg: &Message,
+    start: f64,
+    step: f64,
+    _max: usize,
+) -> SignalSeries {
     let values = protocol::numeric_from_message(msg).unwrap_or_default();
+    series_from_values_uniform(name, values, start, step)
+}
+
+fn series_from_values_uniform(
+    name: String,
+    values: Vec<f64>,
+    start: f64,
+    step: f64,
+) -> SignalSeries {
+    if !start.is_finite() || !step.is_finite() || step == 0.0 {
+        return SignalSeries {
+            name,
+            error: "invalid uniform timebase".into(),
+            ..Default::default()
+        };
+    }
     if values.is_empty() {
-        return SignalSeries { name, error: "empty signal".into(), ..Default::default() };
+        return SignalSeries {
+            name,
+            error: "empty signal".into(),
+            ..Default::default()
+        };
     }
 
     let mut min_y = f64::INFINITY;
     let mut max_y = f64::NEG_INFINITY;
-    let uniform_y: Vec<f32> = values.iter().map(|&v| {
-        if v < min_y { min_y = v; }
-        if v > max_y { max_y = v; }
-        v as f32
-    }).collect();
+    let uniform_y: Vec<f32> = values
+        .iter()
+        .map(|&v| {
+            if v < min_y {
+                min_y = v;
+            }
+            if v > max_y {
+                max_y = v;
+            }
+            v as f32
+        })
+        .collect();
 
     SignalSeries {
         name,
-        uniform_y, uniform_start: start, uniform_step: step,
-        uniform_min_y: min_y, uniform_max_y: max_y,
+        uniform_y,
+        uniform_start: start,
+        uniform_step: step,
+        uniform_min_y: min_y,
+        uniform_max_y: max_y,
+        ..Default::default()
+    }
+}
+
+fn series_from_values(name: String, y_values: Vec<f64>, x_values: Vec<f64>) -> SignalSeries {
+    if y_values.is_empty() {
+        return SignalSeries {
+            name,
+            error: "empty signal".into(),
+            ..Default::default()
+        };
+    }
+    let points = if x_values.is_empty() {
+        y_values
+            .into_iter()
+            .enumerate()
+            .map(|(index, y)| [index as f64, y])
+            .collect()
+    } else {
+        x_values
+            .into_iter()
+            .zip(y_values)
+            .filter(|(x, y)| x.is_finite() && y.is_finite())
+            .map(|(x, y)| [x, y])
+            .collect()
+    };
+    SignalSeries {
+        name,
+        points,
         ..Default::default()
     }
 }
