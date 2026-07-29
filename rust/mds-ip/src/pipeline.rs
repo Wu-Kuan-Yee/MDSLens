@@ -87,9 +87,10 @@ pub fn fetch_all(
 
     // Return the current load immediately, then grow the hot pool for later
     // refreshes without delaying this result.
-    let guard = results.lock().unwrap();
-    let output = guard.iter()
-        .filter_map(|r| r.as_ref().map(|fr| fetch_result_to_loaded(&requests, fr)))
+    let mut guard = results.lock().unwrap();
+    let output = guard.iter_mut()
+        .filter_map(Option::take)
+        .map(|fr| fetch_result_into_loaded(&requests, fr))
         .collect();
     drop(guard);
     grow_hot_pool(&requests, &groups);
@@ -151,21 +152,21 @@ fn fetch_chunk_serial_streaming(
             &shot,
             |connection| {
                 let mut results = Vec::with_capacity(requests.len());
+                let mut transport_failed = false;
                 for req in requests {
                     if cancel.load(Ordering::Relaxed) { break; }
                     let result = fetch::fetch_signal(&mut connection.stream, req);
-                    if let Some(tx) = result_tx {
-                        let _ = tx.send(result.clone());
-                    }
-                    results.push(result);
-                }
-                let transport_failed = results.iter().any(|result| {
                     let error = result.series.error.to_ascii_lowercase();
-                    error.contains("read error")
+                    transport_failed |= error.contains("read error")
                         || error.contains("write error")
                         || error.contains("connection closed")
-                        || error.contains("timed out")
-                });
+                        || error.contains("timed out");
+                    if let Some(tx) = result_tx {
+                        let _ = tx.send(result);
+                    } else {
+                        results.push(result);
+                    }
+                }
                 let reusable =
                     !transport_failed && protocol::current_connection_reusable();
                 (results, reusable)
@@ -174,20 +175,28 @@ fn fetch_chunk_serial_streaming(
         match fetched {
             Ok(results) => results,
             Err(e) => {
-                let results: Vec<_> = requests.iter().map(|req| FetchResult {
-                    loaded_index: req.loaded_index,
-                    series: mds_core::types::SignalSeries {
-                        name: fetch::normalized_name(&req.sig.y_expr),
-                        error: e.clone(),
-                        ..Default::default()
-                    },
-                }).collect();
                 if let Some(tx) = result_tx {
-                    for result in &results {
-                        let _ = tx.send(result.clone());
+                    for req in requests {
+                        let _ = tx.send(FetchResult {
+                            loaded_index: req.loaded_index,
+                            series: mds_core::types::SignalSeries {
+                                name: fetch::normalized_name(&req.sig.y_expr),
+                                error: e.clone(),
+                                ..Default::default()
+                            },
+                        });
                     }
+                    Vec::new()
+                } else {
+                    requests.iter().map(|req| FetchResult {
+                        loaded_index: req.loaded_index,
+                        series: mds_core::types::SignalSeries {
+                            name: fetch::normalized_name(&req.sig.y_expr),
+                            error: e.clone(),
+                            ..Default::default()
+                        },
+                    }).collect()
                 }
-                results
             }
         }
     })
@@ -425,6 +434,14 @@ fn fetch_result_to_loaded(requests: &[FetchRequest], fr: &FetchResult) -> Loaded
     LoadedSignal {
         column: req.column, row: req.row, signal: req.signal,
         shot: req.shot.clone(), series: fr.series.clone(),
+    }
+}
+
+fn fetch_result_into_loaded(requests: &[FetchRequest], fr: FetchResult) -> LoadedSignal {
+    let req = &requests[fr.loaded_index];
+    LoadedSignal {
+        column: req.column, row: req.row, signal: req.signal,
+        shot: req.shot.clone(), series: fr.series,
     }
 }
 
