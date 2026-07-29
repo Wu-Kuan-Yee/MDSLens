@@ -2620,7 +2620,8 @@ class AppState extends ChangeNotifier {
       row,
       signalIndex,
       decoded.points,
-      hasCompactData: decoded.uniformY?.isNotEmpty == true,
+      hasCompactData: decoded.uniformY?.isNotEmpty == true ||
+          decoded.interleavedPoints?.isNotEmpty == true,
     );
     updatePlotSeriesByColRow(
       column,
@@ -2631,6 +2632,7 @@ class AppState extends ChangeNotifier {
       unit: decoded.unit,
       xName: decoded.xName,
       xUnit: decoded.xUnit,
+      interleavedPoints: decoded.interleavedPoints,
       uniformY: decoded.uniformY,
       uniformStart: decoded.uniformStart,
       uniformStep: decoded.uniformStep,
@@ -2672,6 +2674,7 @@ class AppState extends ChangeNotifier {
 
   ({
     List<List<double>>? points,
+    Float64List? interleavedPoints,
     Float32List? uniformY,
     double uniformStart,
     double uniformStep,
@@ -2683,6 +2686,7 @@ class AppState extends ChangeNotifier {
     if (rawSeries is! Map) {
       return (
         points: null,
+        interleavedPoints: null,
         uniformY: null,
         uniformStart: 0,
         uniformStep: 0,
@@ -2697,22 +2701,12 @@ class AppState extends ChangeNotifier {
     final xName = rawSeries['x_name']?.toString().trim() ?? '';
     final xUnit = rawSeries['x_unit']?.toString().trim() ?? '';
     final rawPoints = rawSeries['points'];
+    final rawInterleaved = rawSeries['_interleaved_points'];
     final rawUniform = rawSeries['uniform_y'];
-    if (rawPoints == null) {
+    if (rawPoints != null && rawPoints is! List) {
       return (
         points: null,
-        uniformY: null,
-        uniformStart: 0,
-        uniformStep: 0,
-        error: rawError.isEmpty ? null : rawError,
-        unit: unit,
-        xName: xName,
-        xUnit: xUnit,
-      );
-    }
-    if (rawPoints is! List) {
-      return (
-        points: null,
+        interleavedPoints: null,
         uniformY: null,
         uniformStart: 0,
         uniformStep: 0,
@@ -2726,7 +2720,7 @@ class AppState extends ChangeNotifier {
     }
 
     final points = <List<double>>[];
-    for (final rawPoint in rawPoints) {
+    for (final rawPoint in rawPoints is List ? rawPoints : const []) {
       if (rawPoint is! List || rawPoint.length < 2) continue;
       final rawX = rawPoint[0];
       final rawY = rawPoint[1];
@@ -2736,10 +2730,15 @@ class AppState extends ChangeNotifier {
       if (!x.isFinite || !y.isFinite) continue;
       points.add([x, y]);
     }
+    final interleavedPoints = rawInterleaved is Float64List &&
+            rawInterleaved.isNotEmpty &&
+            rawInterleaved.length.isEven
+        ? rawInterleaved
+        : null;
     Float32List? uniformY;
     var uniformStart = 0.0;
     var uniformStep = 0.0;
-    if (points.isEmpty && rawUniform is List) {
+    if (points.isEmpty && interleavedPoints == null && rawUniform is List) {
       final rawStart = rawSeries['uniform_start'];
       final rawStep = rawSeries['uniform_step'];
       if (rawStart is num && rawStep is num) {
@@ -2774,13 +2773,19 @@ class AppState extends ChangeNotifier {
     }
 
     String? error = rawError.isEmpty ? null : rawError;
-    if (points.isEmpty && uniformY == null && error == null) {
-      error = rawPoints.isEmpty && (rawUniform is! List || rawUniform.isEmpty)
+    if (points.isEmpty &&
+        interleavedPoints == null &&
+        uniformY == null &&
+        error == null) {
+      error = (rawPoints == null || rawPoints.isEmpty) &&
+              rawInterleaved == null &&
+              (rawUniform is! List || rawUniform.isEmpty)
           ? 'The signal returned no samples for this tree and shot.'
           : 'The signal returned no finite numeric samples for this tree and shot.';
     }
     return (
       points: points,
+      interleavedPoints: interleavedPoints,
       uniformY: uniformY,
       uniformStart: uniformStart,
       uniformStep: uniformStep,
@@ -2909,7 +2914,8 @@ class AppState extends ChangeNotifier {
             row,
             signal,
             decoded.points,
-            hasCompactData: decoded.uniformY?.isNotEmpty == true,
+            hasCompactData: decoded.uniformY?.isNotEmpty == true ||
+                decoded.interleavedPoints?.isNotEmpty == true,
           );
           updatePlotSeriesByColRow(
             col,
@@ -2920,6 +2926,7 @@ class AppState extends ChangeNotifier {
             unit: decoded.unit,
             xName: decoded.xName,
             xUnit: decoded.xUnit,
+            interleavedPoints: decoded.interleavedPoints,
             uniformY: decoded.uniformY,
             uniformStart: decoded.uniformStart,
             uniformStep: decoded.uniformStep,
@@ -3080,7 +3087,8 @@ class AppState extends ChangeNotifier {
                   targetRow,
                   signal,
                   decoded.points,
-                  hasCompactData: decoded.uniformY?.isNotEmpty == true,
+                  hasCompactData: decoded.uniformY?.isNotEmpty == true ||
+                      decoded.interleavedPoints?.isNotEmpty == true,
                 );
                 updatePlotSeriesByColRow(
                   targetCol,
@@ -3091,6 +3099,7 @@ class AppState extends ChangeNotifier {
                   unit: decoded.unit,
                   xName: decoded.xName,
                   xUnit: decoded.xUnit,
+                  interleavedPoints: decoded.interleavedPoints,
                   uniformY: decoded.uniformY,
                   uniformStart: decoded.uniformStart,
                   uniformStep: decoded.uniformStep,
@@ -3262,6 +3271,7 @@ class AppState extends ChangeNotifier {
     String unit = '',
     String xName = '',
     String xUnit = '',
+    Float64List? interleavedPoints,
     Float32List? uniformY,
     double uniformStart = 0,
     double uniformStep = 0,
@@ -3282,6 +3292,7 @@ class AppState extends ChangeNotifier {
         unit: unit,
         xName: xName,
         xUnit: xUnit,
+        interleavedPoints: interleavedPoints,
         uniformY: uniformY,
         uniformStart: uniformStart,
         uniformStep: uniformStep,
@@ -3332,6 +3343,7 @@ class PlotData {
 
 class SeriesData {
   List<List<double>>? points;
+  Float64List? interleavedPoints;
   Float32List? uniformY;
   final double uniformStart;
   final double uniformStep;
@@ -3341,6 +3353,7 @@ class SeriesData {
   String xUnit;
   SeriesData({
     this.points,
+    this.interleavedPoints,
     this.error,
     this.unit = '',
     this.xName = '',
@@ -3352,16 +3365,22 @@ class SeriesData {
 
   bool get hasData =>
       points?.isNotEmpty == true ||
+      interleavedPoints?.isNotEmpty == true ||
       (uniformY?.isNotEmpty == true && uniformStep != 0);
 
   int get pointCount {
     final regular = points;
     if (regular != null && regular.isNotEmpty) return regular.length;
+    final interleaved = interleavedPoints;
+    if (interleaved != null && interleaved.isNotEmpty) {
+      return interleaved.length ~/ 2;
+    }
     return uniformY?.length ?? 0;
   }
 
   void clearData() {
     points = null;
+    interleavedPoints = null;
     uniformY = null;
     error = null;
   }
@@ -3369,6 +3388,20 @@ class SeriesData {
   List<List<double>> materializePoints() {
     final existing = points;
     if (existing != null && existing.isNotEmpty) return existing;
+    final interleaved = interleavedPoints;
+    if (interleaved != null && interleaved.isNotEmpty) {
+      final expanded = List<List<double>>.generate(
+        interleaved.length ~/ 2,
+        (index) => <double>[
+          interleaved[index * 2],
+          interleaved[index * 2 + 1],
+        ],
+        growable: false,
+      );
+      points = expanded;
+      interleavedPoints = null;
+      return expanded;
+    }
     final values = uniformY;
     if (values == null || values.isEmpty || uniformStep == 0) {
       return const <List<double>>[];
@@ -3407,6 +3440,31 @@ class SeriesData {
       final fraction = ((x - left[0]) / width).clamp(0.0, 1.0);
       return left[1] + (right[1] - left[1]) * fraction;
     }
+    final interleaved = interleavedPoints;
+    if (interleaved != null && interleaved.isNotEmpty) {
+      final count = interleaved.length ~/ 2;
+      var low = 0;
+      var high = count - 1;
+      while (low < high) {
+        final middle = (low + high) ~/ 2;
+        if (interleaved[middle * 2] < x) {
+          low = middle + 1;
+        } else {
+          high = middle;
+        }
+      }
+      if (low == 0) return interleaved[1];
+      final leftIndex = (low - 1) * 2;
+      final rightIndex = low * 2;
+      final leftX = interleaved[leftIndex];
+      final leftY = interleaved[leftIndex + 1];
+      final rightX = interleaved[rightIndex];
+      final rightY = interleaved[rightIndex + 1];
+      final width = rightX - leftX;
+      if (width == 0) return rightY;
+      final fraction = ((x - leftX) / width).clamp(0.0, 1.0);
+      return leftY + (rightY - leftY) * fraction;
+    }
     final values = uniformY;
     if (values == null || values.isEmpty || uniformStep == 0) return null;
     final position = (x - uniformStart) / uniformStep;
@@ -3431,6 +3489,20 @@ class SeriesData {
       }
       return <double>[minX, maxX, minY, maxY];
     }
+    final interleaved = interleavedPoints;
+    if (interleaved != null && interleaved.isNotEmpty) {
+      var minX = interleaved[0], maxX = minX;
+      var minY = interleaved[1], maxY = minY;
+      for (var index = 2; index < interleaved.length; index += 2) {
+        final x = interleaved[index];
+        final y = interleaved[index + 1];
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+      return <double>[minX, maxX, minY, maxY];
+    }
     final values = uniformY;
     if (values == null || values.isEmpty || uniformStep == 0) return null;
     var minY = values.first.toDouble();
@@ -3447,5 +3519,62 @@ class SeriesData {
       minY,
       maxY,
     ];
+  }
+
+  double pointXAt(int index) {
+    final regular = points;
+    if (regular?.isNotEmpty == true) return regular![index][0];
+    final interleaved = interleavedPoints;
+    if (interleaved?.isNotEmpty == true) return interleaved![index * 2];
+    return uniformStart + index * uniformStep;
+  }
+
+  double pointYAt(int index) {
+    final regular = points;
+    if (regular?.isNotEmpty == true) return regular![index][1];
+    final interleaved = interleavedPoints;
+    if (interleaved?.isNotEmpty == true) return interleaved![index * 2 + 1];
+    return uniformY![index];
+  }
+
+  int nearestPointIndex(double x) {
+    final count = pointCount;
+    if (count < 2) return 0;
+    final ascending = pointXAt(0) <= pointXAt(count - 1);
+    var low = 0;
+    var high = count - 1;
+    while (low < high) {
+      final middle = (low + high) ~/ 2;
+      final before = ascending ? pointXAt(middle) < x : pointXAt(middle) > x;
+      if (before) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    if (low == 0) return 0;
+    return (x - pointXAt(low - 1)).abs() < (pointXAt(low) - x).abs()
+        ? low - 1
+        : low;
+  }
+
+  double? localXResolution(double x) {
+    final count = pointCount;
+    if (count < 2) return null;
+    final index = nearestPointIndex(x);
+    var resolution = double.infinity;
+    if (index > 0) {
+      resolution = math.min(
+        resolution,
+        (pointXAt(index) - pointXAt(index - 1)).abs(),
+      );
+    }
+    if (index + 1 < count) {
+      resolution = math.min(
+        resolution,
+        (pointXAt(index + 1) - pointXAt(index)).abs(),
+      );
+    }
+    return resolution.isFinite && resolution > 0 ? resolution : null;
   }
 }

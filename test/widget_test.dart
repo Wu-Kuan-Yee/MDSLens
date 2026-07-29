@@ -652,6 +652,35 @@ void main() {
     expect(rendered.maxY, 3);
   });
 
+  test('Compact irregular waveform renders and interpolates without expansion',
+      () {
+    final transferred = Float64List.fromList(<double>[
+      0,
+      10,
+      0.5,
+      20,
+      1,
+      5,
+    ]);
+    final series = SeriesData(interleavedPoints: transferred);
+
+    expect(series.hasData, isTrue);
+    expect(series.pointCount, 3);
+    expect(series.valueAt(0.25), 15);
+    expect(series.nearestPointIndex(0.7), 1);
+    expect(series.localXResolution(0.7), 0.5);
+    expect(series.dataBounds(), <double>[0, 1, 5, 20]);
+
+    final rendered = PlotRenderCache().render(series);
+    expect(rendered.spots, const <FlSpot>[
+      FlSpot(0, 10),
+      FlSpot(0.5, 20),
+      FlSpot(1, 5),
+    ]);
+    expect(identical(series.interleavedPoints, transferred), isTrue);
+    expect(series.points, isNull);
+  });
+
   test('Compact waveform decoding retains its transferred typed buffer',
       () async {
     final transferred = Float32List.fromList(<double>[1, 2, 3]);
@@ -683,6 +712,40 @@ void main() {
 
     expect(
         identical(app.plots.first.series.first?.uniformY, transferred), isTrue);
+  });
+
+  test('Compact irregular decoding retains its transferred typed buffer',
+      () async {
+    final transferred = Float64List.fromList(<double>[0, 1, 1, 2]);
+    final app = AppState(
+      streamingSignalFetchWorker:
+          (configJson, dataMode, sshSettings, onSignal) async {
+        onSignal(<String, dynamic>{
+          'column': 0,
+          'row': 0,
+          'signal': 0,
+          'series': <String, dynamic>{
+            'error': '',
+            'points': <List<double>>[],
+            'uniform_y': <double>[],
+            '_interleaved_points': transferred,
+          },
+        });
+        return '[]';
+      },
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setLoggedIn(true, 'test-token');
+    app.shotText = '163870';
+
+    app.startRefresh();
+    await Future<void>.delayed(Duration.zero);
+
+    final series = app.plots.first.series.first;
+    expect(identical(series?.interleavedPoints, transferred), isTrue);
+    expect(series?.points, isEmpty);
+    expect(series?.valueAt(0.5), 1.5);
   });
 
   test('Plot point budget follows visible panel width', () {

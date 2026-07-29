@@ -90,8 +90,12 @@ double? interpolateWaveformY(List<List<double>> points, double x) {
   return y.isFinite ? y : null;
 }
 
-String formatPointXForReadout(double value, List<List<double>>? points) {
-  final resolution = _localXResolution(points, value);
+String formatPointXForReadout(
+  double value,
+  List<List<double>>? points, {
+  double? resolution,
+}) {
+  resolution ??= _localXResolution(points, value);
   if (resolution == null || !resolution.isFinite || resolution <= 0) {
     return value.toStringAsPrecision(12);
   }
@@ -1052,10 +1056,15 @@ class _PlotPanelState extends State<PlotPanel> {
     final signals = (panel['signal_specs'] as List?)?.cast<Map>() ?? const [];
     final color = _sigColor(seriesIndex, signals);
     final xName = _effectiveXName(plot, panel, seriesIndex);
-    final xPoints = seriesIndex < plot.series.length
-        ? plot.series[seriesIndex]?.points
-        : null;
-    final lines = <String>['$xName: ${formatPointXForReadout(x, xPoints)}'];
+    final sourceSeries =
+        seriesIndex < plot.series.length ? plot.series[seriesIndex] : null;
+    final lines = <String>[
+      '$xName: ${formatPointXForReadout(
+        x,
+        sourceSeries?.points,
+        resolution: sourceSeries?.localXResolution(x),
+      )}',
+    ];
     for (var index = 0; index < plot.series.length; index++) {
       final usable = _usableSeriesIndex(plot, panel, index);
       if (usable != index) continue;

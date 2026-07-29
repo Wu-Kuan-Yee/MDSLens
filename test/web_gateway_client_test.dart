@@ -50,9 +50,9 @@ void main() {
     expect(series['name'], 'IP');
     expect(series['uniform_y'], isA<Float32List>());
     expect(series['uniform_y'], <double>[1.25, 2.5]);
-    expect(series['points'], <List<double>>[
-      <double>[3, 4],
-    ]);
+    expect(series['points'], isEmpty);
+    expect(series['_interleaved_points'], isA<Float64List>());
+    expect(series['_interleaved_points'], <double>[3, 4]);
   });
 
   test('binary signal batches reject truncated payloads', () {

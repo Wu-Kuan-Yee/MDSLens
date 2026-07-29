@@ -15,21 +15,32 @@ void _forwardNativeBinarySignal(
   Pointer<Utf8> pointer,
   Pointer<Float> uniformPointer,
   int uniformLength,
+  Pointer<Double> pointPointer,
+  int pointLength,
 ) {
   try {
     final decoded = jsonDecode(pointer.toDartString());
     if (decoded is! Map) return;
     final signal = Map<String, dynamic>.from(decoded);
-    if (uniformLength > 0 && signal['series'] is Map) {
-      final series = Map<String, dynamic>.from(signal['series'] as Map);
+    if (signal['series'] is! Map) return;
+    final series = Map<String, dynamic>.from(signal['series'] as Map);
+    if (uniformLength > 0) {
       series['_uniform_y_transfer'] = TransferableTypedData.fromList([
         uniformPointer.cast<Uint8>().asTypedList(
               uniformLength * sizeOf<Float>(),
             ),
       ]);
       series['_uniform_y_length'] = uniformLength;
-      signal['series'] = series;
     }
+    if (pointLength > 0) {
+      series['_interleaved_points_transfer'] = TransferableTypedData.fromList([
+        pointPointer.cast<Uint8>().asTypedList(
+              pointLength * 2 * sizeOf<Double>(),
+            ),
+      ]);
+      series['_interleaved_points_length'] = pointLength;
+    }
+    signal['series'] = series;
     _nativeSignalPort?.send(signal);
   } finally {
     RustBridge.instance.freeTransferredString(pointer);
@@ -84,6 +95,14 @@ Future<String> fetchSignalsStreamingInBackground(
       final length = series.remove('_uniform_y_length');
       if (transfer is TransferableTypedData && length is int && length > 0) {
         series['uniform_y'] = transfer.materialize().asFloat32List(0, length);
+      }
+      final pointTransfer = series.remove('_interleaved_points_transfer');
+      final pointLength = series.remove('_interleaved_points_length');
+      if (pointTransfer is TransferableTypedData &&
+          pointLength is int &&
+          pointLength > 0) {
+        series['_interleaved_points'] =
+            pointTransfer.materialize().asFloat64List(0, pointLength * 2);
       }
       signal['series'] = series;
       onSignal(signal);

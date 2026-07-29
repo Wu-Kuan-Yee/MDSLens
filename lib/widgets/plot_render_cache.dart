@@ -60,8 +60,13 @@ class PlotRenderCache {
     double? maxX,
   }) {
     final points = series.points;
+    final interleaved = series.interleavedPoints;
     final uniform = series.uniformY;
-    final source = points?.isNotEmpty == true ? points! : uniform;
+    final source = points?.isNotEmpty == true
+        ? points!
+        : interleaved?.isNotEmpty == true
+            ? interleaved!
+            : uniform;
     if (source == null || series.pointCount == 0) {
       throw ArgumentError.value(source, 'series', 'must not be empty');
     }
@@ -81,6 +86,14 @@ class PlotRenderCache {
     if (points?.isNotEmpty == true) {
       visible = _visibleRange(points!, minX, maxX);
       spots = _decimate(points, maxPoints, visible.$1, visible.$2);
+    } else if (interleaved?.isNotEmpty == true) {
+      visible = _visibleInterleavedRange(series, minX, maxX);
+      spots = _decimateInterleaved(
+        series,
+        maxPoints,
+        visible.$1,
+        visible.$2,
+      );
     } else {
       visible = _visibleUniformRange(series, minX, maxX);
       spots = _decimateUniform(series, maxPoints, visible.$1, visible.$2);
@@ -113,6 +126,91 @@ class PlotRenderCache {
       renderData: renderData,
     );
     return renderData;
+  }
+
+  (int, int) _visibleInterleavedRange(
+    SeriesData series,
+    double? minX,
+    double? maxX,
+  ) {
+    final count = series.pointCount;
+    if (minX == null ||
+        maxX == null ||
+        !minX.isFinite ||
+        !maxX.isFinite ||
+        minX >= maxX ||
+        count < 2) {
+      return (0, count);
+    }
+    final ascending = series.pointXAt(0) <= series.pointXAt(count - 1);
+    bool before(double value) => ascending ? value < minX : value > maxX;
+    bool through(double value) => ascending ? value <= maxX : value >= minX;
+
+    var low = 0;
+    var high = count;
+    while (low < high) {
+      final middle = (low + high) ~/ 2;
+      if (before(series.pointXAt(middle))) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    final start = (low - 1).clamp(0, count - 1);
+    low = start;
+    high = count;
+    while (low < high) {
+      final middle = (low + high) ~/ 2;
+      if (through(series.pointXAt(middle))) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    return (start, (low + 1).clamp(start + 1, count));
+  }
+
+  List<FlSpot> _decimateInterleaved(
+    SeriesData series,
+    int maxPoints,
+    int rangeStart,
+    int rangeEnd,
+  ) {
+    final count = rangeEnd - rangeStart;
+    if (count <= maxPoints) {
+      return List<FlSpot>.unmodifiable(
+        List<FlSpot>.generate(count, (offset) {
+          final index = rangeStart + offset;
+          return FlSpot(series.pointXAt(index), series.pointYAt(index));
+        }, growable: false),
+      );
+    }
+
+    final buckets = (maxPoints / 2).ceil().clamp(1, count);
+    final spots = <FlSpot>[];
+    for (var bucket = 0; bucket < buckets; bucket++) {
+      final start = rangeStart + bucket * count ~/ buckets;
+      final end = (rangeStart + (bucket + 1) * count ~/ buckets).clamp(
+        rangeStart,
+        rangeEnd,
+      );
+      if (start >= end) continue;
+      var minY = double.infinity;
+      var maxY = double.negativeInfinity;
+      for (var index = start; index < end; index++) {
+        final y = series.pointYAt(index);
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+      final x = bucket == 0
+          ? series.pointXAt(rangeStart)
+          : bucket == buckets - 1
+              ? series.pointXAt(rangeEnd - 1)
+              : (series.pointXAt(start) + series.pointXAt(end - 1)) / 2;
+      spots.add(FlSpot(x, minY));
+      if (minY != maxY) spots.add(FlSpot(x, maxY));
+    }
+    return List<FlSpot>.unmodifiable(spots);
   }
 
   (int, int) _visibleUniformRange(

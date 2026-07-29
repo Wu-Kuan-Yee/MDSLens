@@ -138,24 +138,9 @@ class MainPage extends StatelessWidget {
     for (final plot in app.plots) {
       for (final s in plot.series) {
         if (s == null || s.pointCount < 2) continue;
-        final pts = s.materializePoints();
-        // Binary search for nearest index
-        var lo = 0;
-        var hi = pts.length - 1;
-        while (lo < hi) {
-          final mid = (lo + hi) ~/ 2;
-          if (pts[mid][0] < cx) {
-            lo = mid + 1;
-          } else {
-            hi = mid;
-          }
-        }
-        if (lo > 0 && (cx - pts[lo - 1][0]).abs() < (pts[lo][0] - cx).abs()) {
-          lo--;
-        }
-        // Step to adjacent sample
-        final next = (lo + dir).clamp(0, pts.length - 1);
-        app.setCrosshair(pts[next][0]);
+        final nearest = s.nearestPointIndex(cx);
+        final next = (nearest + dir).clamp(0, s.pointCount - 1);
+        app.setCrosshair(s.pointXAt(next));
         return;
       }
     }

@@ -329,11 +329,11 @@ int decodeWebSignalBatch(
       );
     }
     if (pointLength > 0) {
-      final values = _readFloat64Values(bytes, offset, pointLength * 2);
-      series['points'] = <List<double>>[
-        for (var index = 0; index < values.length; index += 2)
-          <double>[values[index], values[index + 1]],
-      ];
+      series['_interleaved_points'] = _readFloat64Values(
+        bytes,
+        offset,
+        pointLength * 2,
+      );
     }
     offset += pointBytes;
     signal['series'] = series;
