@@ -1108,6 +1108,7 @@ class AppState extends ChangeNotifier {
   bool get fetching => _fetching;
   int? _fetchingPlotIndex;
   final Map<int, int> _pendingPanelSignalCounts = {};
+  final Set<int> _loadedPanelIndexes = {};
   final Set<String> _streamedSignalKeys = {};
   Timer? _streamNotifyTimer;
   bool isPlotFetching(int plotIdx) =>
@@ -2557,6 +2558,7 @@ class AppState extends ChangeNotifier {
 
   void _beginGlobalPanelFetchTracking() {
     _pendingPanelSignalCounts.clear();
+    _loadedPanelIndexes.clear();
     _streamedSignalKeys.clear();
     var plotIndex = 0;
     for (final column in _columns) {
@@ -2627,15 +2629,12 @@ class AppState extends ChangeNotifier {
       } else {
         _pendingPanelSignalCounts[plotIndex] = remaining;
       }
+      if (plotIndex < _plots.length &&
+          _plots[plotIndex].series.any((series) => series?.hasData == true)) {
+        _loadedPanelIndexes.add(plotIndex);
+      }
     }
-    final loadedPanels = _plots
-        .where(
-          (plot) => plot.series.any(
-            (series) => series?.hasData == true,
-          ),
-        )
-        .length;
-    _status = 'Fetching... $loadedPanels panels ready';
+    _status = 'Fetching... ${_loadedPanelIndexes.length} panels ready';
     _streamNotifyTimer ??= Timer(const Duration(milliseconds: 16), () {
       _streamNotifyTimer = null;
       if (_isCurrentFetch(generation)) notifyListeners();
@@ -2911,6 +2910,7 @@ class AppState extends ChangeNotifier {
       _displayedShot = requestShot;
       _fetching = false;
       _pendingPanelSignalCounts.clear();
+      _loadedPanelIndexes.clear();
       _streamedSignalKeys.clear();
       _streamNotifyTimer?.cancel();
       _streamNotifyTimer = null;
@@ -2932,6 +2932,7 @@ class AppState extends ChangeNotifier {
       if (!_isCurrentFetch(generation)) return;
       _fetching = false;
       _pendingPanelSignalCounts.clear();
+      _loadedPanelIndexes.clear();
       _streamedSignalKeys.clear();
       _streamNotifyTimer?.cancel();
       _streamNotifyTimer = null;
@@ -2952,6 +2953,9 @@ class AppState extends ChangeNotifier {
     _fetchGeneration++;
     _fetching = false;
     _fetchingPlotIndex = null;
+    _pendingPanelSignalCounts.clear();
+    _loadedPanelIndexes.clear();
+    _streamedSignalKeys.clear();
     _status = 'Stopped';
     notifyListeners();
   }
@@ -2978,6 +2982,9 @@ class AppState extends ChangeNotifier {
     _fetchGeneration++;
     _fetching = false;
     _fetchingPlotIndex = null;
+    _pendingPanelSignalCounts.clear();
+    _loadedPanelIndexes.clear();
+    _streamedSignalKeys.clear();
   }
 
   Future<void> fetchSinglePanel(int plotIdx) {
