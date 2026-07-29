@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
@@ -1108,6 +1109,7 @@ class AppState extends ChangeNotifier {
   int? _fetchingPlotIndex;
   final Map<int, int> _pendingPanelSignalCounts = {};
   final Set<String> _streamedSignalKeys = {};
+  Timer? _streamNotifyTimer;
   bool isPlotFetching(int plotIdx) =>
       _fetching &&
       (_fetchingPlotIndex == plotIdx ||
@@ -2437,7 +2439,7 @@ class AppState extends ChangeNotifier {
     if (_displayedShot == shot &&
         _plots.any(
           (plot) => plot.series.any(
-            (series) => series?.points != null && series!.points!.isNotEmpty,
+            (series) => series?.hasData == true,
           ),
         )) {
       _pendingImportedShot = null;
@@ -2546,7 +2548,7 @@ class AppState extends ChangeNotifier {
     for (final plot in _plots) {
       for (final series in plot.series) {
         if (series != null) {
-          series.points = null;
+          series.clearData();
           series.error = null;
         }
       }
@@ -2596,7 +2598,13 @@ class AppState extends ChangeNotifier {
     if (!_streamedSignalKeys.add(key)) return;
 
     final decoded = _decodeLoadedSeries(signal['series']);
-    _rememberLoadedSource(column, row, signalIndex, decoded.points);
+    _rememberLoadedSource(
+      column,
+      row,
+      signalIndex,
+      decoded.points,
+      hasCompactData: decoded.uniformY?.isNotEmpty == true,
+    );
     updatePlotSeriesByColRow(
       column,
       row,
@@ -2606,6 +2614,9 @@ class AppState extends ChangeNotifier {
       unit: decoded.unit,
       xName: decoded.xName,
       xUnit: decoded.xUnit,
+      uniformY: decoded.uniformY,
+      uniformStart: decoded.uniformStart,
+      uniformStep: decoded.uniformStep,
     );
 
     final plotIndex = _plotIndexFor(column, row);
@@ -2620,12 +2631,15 @@ class AppState extends ChangeNotifier {
     final loadedPanels = _plots
         .where(
           (plot) => plot.series.any(
-            (series) => series?.points != null && series!.points!.isNotEmpty,
+            (series) => series?.hasData == true,
           ),
         )
         .length;
     _status = 'Fetching... $loadedPanels panels ready';
-    notifyListeners();
+    _streamNotifyTimer ??= Timer(const Duration(milliseconds: 16), () {
+      _streamNotifyTimer = null;
+      if (_isCurrentFetch(generation)) notifyListeners();
+    });
   }
 
   void _markUnresolvedSeries(String message) {
@@ -2634,7 +2648,7 @@ class AppState extends ChangeNotifier {
         final series = plot.series[index];
         if (series == null) {
           plot.series[index] = SeriesData(error: message);
-        } else if ((series.points == null || series.points!.isEmpty) &&
+        } else if (!series.hasData &&
             (series.error == null || series.error!.isEmpty)) {
           series.error = message;
         }
@@ -2644,6 +2658,9 @@ class AppState extends ChangeNotifier {
 
   ({
     List<List<double>>? points,
+    Float32List? uniformY,
+    double uniformStart,
+    double uniformStep,
     String? error,
     String unit,
     String xName,
@@ -2652,6 +2669,9 @@ class AppState extends ChangeNotifier {
     if (rawSeries is! Map) {
       return (
         points: null,
+        uniformY: null,
+        uniformStart: 0,
+        uniformStep: 0,
         error: 'The server returned an invalid signal payload.',
         unit: '',
         xName: '',
@@ -2667,6 +2687,9 @@ class AppState extends ChangeNotifier {
     if (rawPoints == null) {
       return (
         points: null,
+        uniformY: null,
+        uniformStart: 0,
+        uniformStep: 0,
         error: rawError.isEmpty ? null : rawError,
         unit: unit,
         xName: xName,
@@ -2676,6 +2699,9 @@ class AppState extends ChangeNotifier {
     if (rawPoints is! List) {
       return (
         points: null,
+        uniformY: null,
+        uniformStart: 0,
+        uniformStep: 0,
         error: rawError.isEmpty
             ? 'The server returned an invalid point list.'
             : rawError,
@@ -2696,6 +2722,9 @@ class AppState extends ChangeNotifier {
       if (!x.isFinite || !y.isFinite) continue;
       points.add([x, y]);
     }
+    Float32List? uniformY;
+    var uniformStart = 0.0;
+    var uniformStep = 0.0;
     if (points.isEmpty && rawUniform is List) {
       final rawStart = rawSeries['uniform_start'];
       final rawStep = rawSeries['uniform_step'];
@@ -2703,25 +2732,36 @@ class AppState extends ChangeNotifier {
         final start = rawStart.toDouble();
         final step = rawStep.toDouble();
         if (start.isFinite && step.isFinite && step != 0) {
+          final values = Float32List(rawUniform.length);
+          var valid = true;
           for (var index = 0; index < rawUniform.length; index++) {
             final rawY = rawUniform[index];
-            if (rawY is! num) continue;
-            final x = start + index * step;
-            final y = rawY.toDouble();
-            if (x.isFinite && y.isFinite) points.add([x, y]);
+            if (rawY is! num || !rawY.toDouble().isFinite) {
+              valid = false;
+              break;
+            }
+            values[index] = rawY.toDouble();
+          }
+          if (valid && values.isNotEmpty) {
+            uniformY = values;
+            uniformStart = start;
+            uniformStep = step;
           }
         }
       }
     }
 
     String? error = rawError.isEmpty ? null : rawError;
-    if (points.isEmpty && error == null) {
+    if (points.isEmpty && uniformY == null && error == null) {
       error = rawPoints.isEmpty && (rawUniform is! List || rawUniform.isEmpty)
           ? 'The signal returned no samples for this tree and shot.'
           : 'The signal returned no finite numeric samples for this tree and shot.';
     }
     return (
       points: points,
+      uniformY: uniformY,
+      uniformStart: uniformStart,
+      uniformStep: uniformStep,
       error: error,
       unit: unit,
       xName: xName,
@@ -2738,7 +2778,7 @@ class AppState extends ChangeNotifier {
     if (plotIdx < 0 || plotIdx >= _plots.length) return;
     for (final series in _plots[plotIdx].series) {
       if (series != null) {
-        series.points = null;
+        series.clearData();
         series.error = null;
       }
     }
@@ -2835,7 +2875,13 @@ class AppState extends ChangeNotifier {
           final decoded = _decodeLoadedSeries(sig['series']);
           final err = decoded.error;
           if (err != null && err.isNotEmpty) firstErr ??= err;
-          _rememberLoadedSource(col, row, signal, decoded.points);
+          _rememberLoadedSource(
+            col,
+            row,
+            signal,
+            decoded.points,
+            hasCompactData: decoded.uniformY?.isNotEmpty == true,
+          );
           updatePlotSeriesByColRow(
             col,
             row,
@@ -2845,6 +2891,9 @@ class AppState extends ChangeNotifier {
             unit: decoded.unit,
             xName: decoded.xName,
             xUnit: decoded.xUnit,
+            uniformY: decoded.uniformY,
+            uniformStart: decoded.uniformStart,
+            uniformStep: decoded.uniformStep,
           );
         }
       }
@@ -2855,10 +2904,11 @@ class AppState extends ChangeNotifier {
       _fetching = false;
       _pendingPanelSignalCounts.clear();
       _streamedSignalKeys.clear();
+      _streamNotifyTimer?.cancel();
+      _streamNotifyTimer = null;
       final loaded = _plots
           .where(
-            (p) =>
-                p.series.any((s) => s?.points != null && s!.points!.isNotEmpty),
+            (p) => p.series.any((s) => s?.hasData == true),
           )
           .length;
       _status = 'Shot $requestShot: ${firstErr ?? "$loaded panels with data"}';
@@ -2875,6 +2925,8 @@ class AppState extends ChangeNotifier {
       _fetching = false;
       _pendingPanelSignalCounts.clear();
       _streamedSignalKeys.clear();
+      _streamNotifyTimer?.cancel();
+      _streamNotifyTimer = null;
       _status = 'Error: $e';
       _markUnresolvedSeries('Loading this signal failed: $e');
       reportNetworkPermissionFailure(
@@ -2908,6 +2960,8 @@ class AppState extends ChangeNotifier {
     _disposed = true;
     _sessionGeneration++;
     _cancelPendingFullShotRefresh(resetCadence: true);
+    _streamNotifyTimer?.cancel();
+    _streamNotifyTimer = null;
     _discardPendingWaveformFetch();
     _cancelActiveNativeFetch();
     // Keep the browser's HttpOnly gateway session alive across page reloads.
@@ -2989,6 +3043,7 @@ class AppState extends ChangeNotifier {
                   targetRow,
                   signal,
                   decoded.points,
+                  hasCompactData: decoded.uniformY?.isNotEmpty == true,
                 );
                 updatePlotSeriesByColRow(
                   targetCol,
@@ -2999,6 +3054,9 @@ class AppState extends ChangeNotifier {
                   unit: decoded.unit,
                   xName: decoded.xName,
                   xUnit: decoded.xUnit,
+                  uniformY: decoded.uniformY,
+                  uniformStart: decoded.uniformStart,
+                  uniformStep: decoded.uniformStep,
                 );
               }
             }
@@ -3023,9 +3081,10 @@ class AppState extends ChangeNotifier {
     int column,
     int row,
     int signal,
-    List<List<double>>? points,
-  ) {
-    if (points?.isNotEmpty != true ||
+    List<List<double>>? points, {
+    bool hasCompactData = false,
+  }) {
+    if ((points?.isNotEmpty != true && !hasCompactData) ||
         column < 0 ||
         column >= _columns.length ||
         row < 0 ||
@@ -3166,6 +3225,9 @@ class AppState extends ChangeNotifier {
     String unit = '',
     String xName = '',
     String xUnit = '',
+    Float32List? uniformY,
+    double uniformStart = 0,
+    double uniformStep = 0,
   }) {
     var pi = 0;
     for (var c = 0; c < _columns.length; c++) {
@@ -3183,6 +3245,9 @@ class AppState extends ChangeNotifier {
         unit: unit,
         xName: xName,
         xUnit: xUnit,
+        uniformY: uniformY,
+        uniformStart: uniformStart,
+        uniformStep: uniformStep,
       );
     }
   }
@@ -3230,6 +3295,9 @@ class PlotData {
 
 class SeriesData {
   List<List<double>>? points;
+  Float32List? uniformY;
+  final double uniformStart;
+  final double uniformStep;
   String? error;
   String unit;
   String xName;
@@ -3240,5 +3308,103 @@ class SeriesData {
     this.unit = '',
     this.xName = '',
     this.xUnit = '',
+    this.uniformY,
+    this.uniformStart = 0,
+    this.uniformStep = 0,
   });
+
+  bool get hasData =>
+      points?.isNotEmpty == true ||
+      (uniformY?.isNotEmpty == true && uniformStep != 0);
+
+  int get pointCount => points?.length ?? uniformY?.length ?? 0;
+
+  void clearData() {
+    points = null;
+    uniformY = null;
+    error = null;
+  }
+
+  List<List<double>> materializePoints() {
+    final existing = points;
+    if (existing != null && existing.isNotEmpty) return existing;
+    final values = uniformY;
+    if (values == null || values.isEmpty || uniformStep == 0) {
+      return const <List<double>>[];
+    }
+    final expanded = List<List<double>>.generate(
+      values.length,
+      (index) => <double>[
+        uniformStart + index * uniformStep,
+        values[index],
+      ],
+      growable: false,
+    );
+    points = expanded;
+    uniformY = null;
+    return expanded;
+  }
+
+  double? valueAt(double x) {
+    final regular = points;
+    if (regular?.isNotEmpty == true) {
+      var low = 0;
+      var high = regular!.length - 1;
+      while (low < high) {
+        final middle = (low + high) ~/ 2;
+        if (regular[middle][0] < x) {
+          low = middle + 1;
+        } else {
+          high = middle;
+        }
+      }
+      if (low == 0) return regular.first[1];
+      final left = regular[low - 1];
+      final right = regular[low];
+      final width = right[0] - left[0];
+      if (width == 0) return right[1];
+      final fraction = ((x - left[0]) / width).clamp(0.0, 1.0);
+      return left[1] + (right[1] - left[1]) * fraction;
+    }
+    final values = uniformY;
+    if (values == null || values.isEmpty || uniformStep == 0) return null;
+    final position = (x - uniformStart) / uniformStep;
+    final lower = position.floor().clamp(0, values.length - 1);
+    final upper = position.ceil().clamp(0, values.length - 1);
+    if (lower == upper) return values[lower].toDouble();
+    final fraction = (position - lower).clamp(0.0, 1.0);
+    return values[lower] + (values[upper] - values[lower]) * fraction;
+  }
+
+  List<double>? dataBounds() {
+    final regular = points;
+    if (regular?.isNotEmpty == true) {
+      var minX = regular!.first[0], maxX = minX;
+      var minY = regular.first[1], maxY = minY;
+      for (var index = 1; index < regular.length; index++) {
+        final point = regular[index];
+        if (point[0] < minX) minX = point[0];
+        if (point[0] > maxX) maxX = point[0];
+        if (point[1] < minY) minY = point[1];
+        if (point[1] > maxY) maxY = point[1];
+      }
+      return <double>[minX, maxX, minY, maxY];
+    }
+    final values = uniformY;
+    if (values == null || values.isEmpty || uniformStep == 0) return null;
+    var minY = values.first.toDouble();
+    var maxY = minY;
+    for (var index = 1; index < values.length; index++) {
+      final value = values[index].toDouble();
+      if (value < minY) minY = value;
+      if (value > maxY) maxY = value;
+    }
+    final end = uniformStart + (values.length - 1) * uniformStep;
+    return <double>[
+      math.min(uniformStart, end),
+      math.max(uniformStart, end),
+      minY,
+      maxY,
+    ];
+  }
 }

@@ -324,11 +324,12 @@ class _PlotPanelState extends State<PlotPanel> {
     double? viewMinX, viewMaxX, viewMinY, viewMaxY;
     for (var i = 0; i < plot.series.length; i++) {
       final s = plot.series[i];
-      if (s?.points == null || s!.points!.isEmpty) continue;
+      if (s?.hasData != true) continue;
+      final series = s!;
       if (i < sigSpecs.length && signalIsHidden(sigSpecs[i])) continue;
-      activeSeries.add(s);
+      activeSeries.add(series);
       final rendered = _renderCache.render(
-        s,
+        series,
         minX: renderMinX,
         maxX: renderMaxX,
       );
@@ -991,9 +992,7 @@ class _PlotPanelState extends State<PlotPanel> {
       app.crosshairSourceSeries,
     );
     if (seriesIndex == null) return null;
-    final points = plot.series[seriesIndex]?.points;
-    if (points == null) return null;
-    final y = interpolateWaveformY(points, x);
+    final y = plot.series[seriesIndex]?.valueAt(x);
     return y == null ? null : (seriesIndex: seriesIndex, y: y);
   }
 
@@ -1006,7 +1005,7 @@ class _PlotPanelState extends State<PlotPanel> {
     bool usable(int index) =>
         index >= 0 &&
         index < plot.series.length &&
-        plot.series[index]?.points?.isNotEmpty == true &&
+        plot.series[index]?.hasData == true &&
         (signals == null ||
             index >= signals.length ||
             signals[index] is! Map ||
@@ -1056,8 +1055,7 @@ class _PlotPanelState extends State<PlotPanel> {
     for (var index = 0; index < plot.series.length; index++) {
       final usable = _usableSeriesIndex(plot, panel, index);
       if (usable != index) continue;
-      final points = plot.series[index]?.points;
-      final value = points == null ? null : interpolateWaveformY(points, x);
+      final value = plot.series[index]?.valueAt(x);
       if (value == null) continue;
       final name = index < signals.length
           ? signalLegendLabel(signals[index])
@@ -1280,7 +1278,7 @@ class _PlotPanelState extends State<PlotPanel> {
         continue;
       }
       final series = plot.series[seriesIndex];
-      if (series?.points?.isNotEmpty != true) continue;
+      if (series?.hasData != true) continue;
       final spots = _renderCache
           .render(
             series!,
@@ -1807,13 +1805,12 @@ class _PlotPanelState extends State<PlotPanel> {
     final plot = app.plots[widget.plotIdx];
     double? minX, maxX, minY, maxY;
     for (final s in plot.series) {
-      if (s?.points == null || s!.points!.isEmpty) continue;
-      for (final p in s.points!) {
-        if (minX == null || p[0] < minX) minX = p[0];
-        if (maxX == null || p[0] > maxX) maxX = p[0];
-        if (minY == null || p[1] < minY) minY = p[1];
-        if (maxY == null || p[1] > maxY) maxY = p[1];
-      }
+      final bounds = s?.dataBounds();
+      if (bounds == null) continue;
+      if (minX == null || bounds[0] < minX) minX = bounds[0];
+      if (maxX == null || bounds[1] > maxX) maxX = bounds[1];
+      if (minY == null || bounds[2] < minY) minY = bounds[2];
+      if (maxY == null || bounds[3] > maxY) maxY = bounds[3];
     }
     return minX != null ? [minX, maxX!, minY!, maxY!] : null;
   }
@@ -2188,15 +2185,12 @@ class _PlotPanelState extends State<PlotPanel> {
   ]) {
     double? minX, maxX, minY, maxY;
     for (final s in plot.series) {
-      if (s?.points == null || s!.points!.isEmpty) continue;
-      for (final p in s.points!) {
-        final x = p[0], y = p[1];
-        if (!x.isFinite || !y.isFinite) continue;
-        if (minX == null || x < minX) minX = x;
-        if (maxX == null || x > maxX) maxX = x;
-        if (minY == null || y < minY) minY = y;
-        if (maxY == null || y > maxY) maxY = y;
-      }
+      final bounds = s?.dataBounds();
+      if (bounds == null) continue;
+      if (minX == null || bounds[0] < minX) minX = bounds[0];
+      if (maxX == null || bounds[1] > maxX) maxX = bounds[1];
+      if (minY == null || bounds[2] < minY) minY = bounds[2];
+      if (maxY == null || bounds[3] > maxY) maxY = bounds[3];
     }
     if (minX == null) return null;
     var rMinX = minX, rMaxX = maxX!, rMinY = minY!, rMaxY = maxY!;

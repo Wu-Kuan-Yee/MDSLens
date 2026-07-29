@@ -3,9 +3,11 @@ import 'dart:io';
 import 'package:ffi/ffi.dart';
 
 typedef NativeSignalStreamCallback = Void Function(Pointer<Utf8>);
+typedef NativeSignalBinaryStreamCallback =
+    Void Function(Pointer<Utf8>, Pointer<Float>, UintPtr);
 
 class RustBridge {
-  static const int _expectedAbiVersion = 7;
+  static const int _expectedAbiVersion = 8;
   static RustBridge? _i;
   // ignore: unused_field
   final DynamicLibrary _lib;
@@ -21,6 +23,7 @@ class RustBridge {
   final String Function(String, String) fetchSig;
   final String Function(String, String, String) fetchSigSsh;
   final String Function(String, String, String, int) fetchSigSshStreaming;
+  final String Function(String, String, String, int) fetchSigSshStreamingBinary;
   final String Function(String, String) prewarmSig;
   final bool Function(int) cancelFetch;
   final void Function() disconnectSsh;
@@ -39,6 +42,10 @@ class RustBridge {
       fetchSigSsh = _wrap3(_lib, 'mds_fetch_signals_ssh'),
       fetchSigSshStreaming =
           _wrapStreaming4(_lib, 'mds_fetch_signals_ssh_streaming'),
+      fetchSigSshStreamingBinary = _wrapBinaryStreaming4(
+        _lib,
+        'mds_fetch_signals_ssh_streaming_binary',
+      ),
       prewarmSig = _wrap2(_lib, 'mds_prewarm_signals'),
       cancelFetch = _wrapCancelFetch(_lib),
       disconnectSsh = _lib.lookupFunction<Void Function(), void Function()>(
@@ -262,6 +269,45 @@ class RustBridge {
       try {
         result = function(aPointer, bPointer, cPointer, callback);
         return _readResult(result, name);
+      } finally {
+        malloc.free(aPointer);
+        malloc.free(bPointer);
+        malloc.free(cPointer);
+        if (result != nullptr) freeResult(result);
+      }
+    };
+  }
+
+  static String Function(String, String, String, int) _wrapBinaryStreaming4(
+    DynamicLibrary lib,
+    String symbol,
+  ) {
+    final function = lib.lookupFunction<
+        Pointer<Utf8> Function(
+          Pointer<Utf8>,
+          Pointer<Utf8>,
+          Pointer<Utf8>,
+          Pointer<NativeFunction<NativeSignalBinaryStreamCallback>>,
+        ),
+        Pointer<Utf8> Function(
+          Pointer<Utf8>,
+          Pointer<Utf8>,
+          Pointer<Utf8>,
+          Pointer<NativeFunction<NativeSignalBinaryStreamCallback>>,
+        )>(symbol);
+    final freeResult = _rustStringFree(lib);
+    return (a, b, c, callbackAddress) {
+      final aPointer = a.toNativeUtf8();
+      final bPointer = b.toNativeUtf8();
+      final cPointer = c.toNativeUtf8();
+      final callback =
+          Pointer<NativeFunction<NativeSignalBinaryStreamCallback>>.fromAddress(
+            callbackAddress,
+          );
+      Pointer<Utf8> result = nullptr;
+      try {
+        result = function(aPointer, bPointer, cPointer, callback);
+        return _readResult(result, symbol);
       } finally {
         malloc.free(aPointer);
         malloc.free(bPointer);

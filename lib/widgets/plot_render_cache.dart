@@ -22,7 +22,7 @@ class PlotSeriesRenderData {
 }
 
 class _CacheEntry {
-  final List<List<double>> points;
+  final Object source;
   final int pointCount;
   final int maxPoints;
   final double? minX;
@@ -30,7 +30,7 @@ class _CacheEntry {
   final PlotSeriesRenderData renderData;
 
   const _CacheEntry({
-    required this.points,
+    required this.source,
     required this.pointCount,
     required this.maxPoints,
     required this.minX,
@@ -55,22 +55,31 @@ class PlotRenderCache {
     double? maxX,
   }) {
     final points = series.points;
-    if (points == null || points.isEmpty) {
-      throw ArgumentError.value(points, 'series.points', 'must not be empty');
+    final uniform = series.uniformY;
+    final source = points?.isNotEmpty == true ? points! : uniform;
+    if (source == null || series.pointCount == 0) {
+      throw ArgumentError.value(source, 'series', 'must not be empty');
     }
 
     final existing = _entries[series];
     if (existing != null &&
-        identical(existing.points, points) &&
-        existing.pointCount == points.length &&
+        identical(existing.source, source) &&
+        existing.pointCount == series.pointCount &&
         existing.maxPoints == maxPoints &&
         existing.minX == minX &&
         existing.maxX == maxX) {
       return existing.renderData;
     }
 
-    final visible = _visibleRange(points, minX, maxX);
-    final spots = _decimate(points, maxPoints, visible.$1, visible.$2);
+    final (int, int) visible;
+    final List<FlSpot> spots;
+    if (points?.isNotEmpty == true) {
+      visible = _visibleRange(points!, minX, maxX);
+      spots = _decimate(points, maxPoints, visible.$1, visible.$2);
+    } else {
+      visible = _visibleUniformRange(series, minX, maxX);
+      spots = _decimateUniform(series, maxPoints, visible.$1, visible.$2);
+    }
     var renderedMinX = spots.first.x;
     var renderedMaxX = spots.first.x;
     var minY = spots.first.y;
@@ -91,14 +100,92 @@ class PlotRenderCache {
       maxY: maxY,
     );
     _entries[series] = _CacheEntry(
-      points: points,
-      pointCount: points.length,
+      source: source,
+      pointCount: series.pointCount,
       maxPoints: maxPoints,
       minX: minX,
       maxX: maxX,
       renderData: renderData,
     );
     return renderData;
+  }
+
+  (int, int) _visibleUniformRange(
+    SeriesData series,
+    double? minX,
+    double? maxX,
+  ) {
+    final count = series.uniformY!.length;
+    if (minX == null ||
+        maxX == null ||
+        !minX.isFinite ||
+        !maxX.isFinite ||
+        minX >= maxX ||
+        count < 2) {
+      return (0, count);
+    }
+    final step = series.uniformStep;
+    final first = ((minX - series.uniformStart) / step).floor();
+    final last = ((maxX - series.uniformStart) / step).ceil();
+    if (step > 0) {
+      return (
+        (first - 1).clamp(0, count - 1),
+        (last + 2).clamp(1, count),
+      );
+    }
+    return (
+      (last - 1).clamp(0, count - 1),
+      (first + 2).clamp(1, count),
+    );
+  }
+
+  List<FlSpot> _decimateUniform(
+    SeriesData series,
+    int maxPoints,
+    int rangeStart,
+    int rangeEnd,
+  ) {
+    final values = series.uniformY!;
+    final count = rangeEnd - rangeStart;
+    double xAt(int index) => series.uniformStart + index * series.uniformStep;
+    if (count <= maxPoints) {
+      return List<FlSpot>.unmodifiable(
+        List<FlSpot>.generate(
+          count,
+          (offset) {
+            final index = rangeStart + offset;
+            return FlSpot(xAt(index), values[index]);
+          },
+          growable: false,
+        ),
+      );
+    }
+
+    final buckets = (maxPoints / 2).ceil().clamp(1, count);
+    final spots = <FlSpot>[];
+    for (var bucket = 0; bucket < buckets; bucket++) {
+      final start = rangeStart + bucket * count ~/ buckets;
+      final end = (rangeStart + (bucket + 1) * count ~/ buckets).clamp(
+        rangeStart,
+        rangeEnd,
+      );
+      if (start >= end) continue;
+      var minY = double.infinity;
+      var maxY = double.negativeInfinity;
+      for (var index = start; index < end; index++) {
+        final value = values[index].toDouble();
+        if (value < minY) minY = value;
+        if (value > maxY) maxY = value;
+      }
+      final x = bucket == 0
+          ? xAt(rangeStart)
+          : bucket == buckets - 1
+              ? xAt(rangeEnd - 1)
+              : (xAt(start) + xAt(end - 1)) / 2;
+      spots.add(FlSpot(x, minY));
+      if (minY != maxY) spots.add(FlSpot(x, maxY));
+    }
+    return List<FlSpot>.unmodifiable(spots);
   }
 
   void retain(Iterable<SeriesData> activeSeries) {
@@ -182,8 +269,8 @@ class PlotRenderCache {
       final x = bucket == 0
           ? points[rangeStart][0]
           : bucket == buckets - 1
-          ? points[rangeEnd - 1][0]
-          : (points[start][0] + points[end - 1][0]) / 2;
+              ? points[rangeEnd - 1][0]
+              : (points[start][0] + points[end - 1][0]) / 2;
       spots.add(FlSpot(x, minY));
       if (minY != maxY) spots.add(FlSpot(x, maxY));
     }

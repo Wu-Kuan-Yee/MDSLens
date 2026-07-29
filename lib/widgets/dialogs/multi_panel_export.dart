@@ -95,8 +95,7 @@ List<PanelExportChoice> panelExportChoices(AppState app) {
       ];
       final loaded = plot?.series
               .where(
-                (series) =>
-                    series?.points != null && series!.points!.isNotEmpty,
+                (series) => series?.hasData == true,
               )
               .length ??
           0;
@@ -770,12 +769,13 @@ List<Map<String, dynamic>> panelExportSnapshot(
       };
       for (var signal = 0; signal < plot.series.length; signal++) {
         final data = plot.series[signal];
-        if (data?.points == null || data!.points!.isEmpty) continue;
+        if (data?.hasData != true) continue;
+        final sourcePoints = data!.materializePoints();
         final spec = signal < specs.length && specs[signal] is Map
             ? Map<String, dynamic>.from(specs[signal] as Map)
             : <String, dynamic>{};
         final points = [
-          for (final point in data.points!)
+          for (final point in sourcePoints)
             if ((rangeMin == null || point[0] >= rangeMin) &&
                 (rangeMax == null || point[0] <= rangeMax))
               List<double>.from(point),

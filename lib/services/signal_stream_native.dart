@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
@@ -11,9 +12,23 @@ typedef SignalStreamListener = void Function(Map<String, dynamic> signal);
 
 SendPort? _nativeSignalPort;
 
-void _forwardNativeSignal(Pointer<Utf8> pointer) {
+void _forwardNativeBinarySignal(
+  Pointer<Utf8> pointer,
+  Pointer<Float> uniformPointer,
+  int uniformLength,
+) {
   try {
-    _nativeSignalPort?.send(pointer.toDartString());
+    final decoded = jsonDecode(pointer.toDartString());
+    if (decoded is! Map) return;
+    final signal = Map<String, dynamic>.from(decoded);
+    if (uniformLength > 0 && signal['series'] is Map) {
+      final series = Map<String, dynamic>.from(signal['series'] as Map);
+      series['uniform_y'] = Float32List.fromList(
+        uniformPointer.asTypedList(uniformLength),
+      );
+      signal['series'] = series;
+    }
+    _nativeSignalPort?.send(signal);
   } finally {
     RustBridge.instance.freeTransferredString(pointer);
   }
@@ -26,9 +41,10 @@ void _runNativeSignalFetch(List<Object> message) {
   final sshSettingsJson = message[3] as String;
   _nativeSignalPort = output;
   try {
-    final callback =
-        Pointer.fromFunction<NativeSignalStreamCallback>(_forwardNativeSignal);
-    final result = RustBridge.instance.fetchSigSshStreaming(
+    final callback = Pointer.fromFunction<NativeSignalBinaryStreamCallback>(
+      _forwardNativeBinarySignal,
+    );
+    final result = RustBridge.instance.fetchSigSshStreamingBinary(
       configJson,
       dataMode,
       sshSettingsJson,
@@ -56,6 +72,13 @@ Future<String> fetchSignalsStreamingInBackground(
   late final StreamSubscription<Object?> subscription;
   Isolate? worker;
   subscription = receivePort.listen((message) {
+    if (message is Map &&
+        message['series'] is Map &&
+        !message.containsKey('done') &&
+        !message.containsKey('error')) {
+      onSignal(Map<String, dynamic>.from(message));
+      return;
+    }
     if (message is String) {
       try {
         final decoded = jsonDecode(message);

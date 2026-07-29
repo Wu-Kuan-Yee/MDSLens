@@ -137,8 +137,8 @@ class MainPage extends StatelessWidget {
     // Find data series, binary-search nearest sample, step to adjacent
     for (final plot in app.plots) {
       for (final s in plot.series) {
-        if (s?.points == null || s!.points!.length < 2) continue;
-        final pts = s.points!;
+        if (s == null || s.pointCount < 2) continue;
+        final pts = s.materializePoints();
         // Binary search for nearest index
         var lo = 0;
         var hi = pts.length - 1;

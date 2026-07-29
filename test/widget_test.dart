@@ -1721,7 +1721,9 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       final series = app.plots.first.series.first;
-      expect(series?.points, [
+      expect(series?.points, isEmpty);
+      expect(series?.uniformY, [1.0, 2.0, 3.0]);
+      expect(series?.materializePoints(), [
         [-0.1, 1.0],
         [-0.0999, 2.0],
         [-0.0998, 3.0],

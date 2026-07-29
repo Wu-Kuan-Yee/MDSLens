@@ -10,6 +10,7 @@ use mds_core::types::{DataReadMode, PlotSpec, SignalSeries, SignalSpec};
 use std::collections::HashMap;
 use std::net::TcpStream;
 use std::sync::{Mutex, OnceLock};
+use std::time::Instant;
 
 const FIXED_TIME_RESOLUTION_SECONDS: f64 = 0.0001;
 
@@ -89,6 +90,7 @@ pub fn fetch_signal(
     socket: &mut TcpStream,
     request: &FetchRequest,
 ) -> FetchResult {
+    let started = Instant::now();
     let mut result = FetchResult {
         loaded_index: request.loaded_index,
         series: SignalSeries {
@@ -106,8 +108,27 @@ pub fn fetch_signal(
     if result.series.has_data() {
         populate_series_metadata(socket, request, &mut result.series);
     }
+    if trace_fetch_enabled() {
+        eprintln!(
+            "[mds-ip] signal_ms={} shot={} tree={} y={} points={} error={}",
+            started.elapsed().as_millis(),
+            request.shot,
+            request.sig.experiment,
+            request.sig.y_expr,
+            result.series.points.len() + result.series.uniform_y.len(),
+            result.series.error.replace('\n', " ")
+        );
+    }
 
     result
+}
+
+fn trace_fetch_enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        std::env::var("MDSLENS_MDS_TRACE")
+            .is_ok_and(|value| !value.is_empty() && value != "0")
+    })
 }
 
 // ── Thin mode ─────────────────────────────────────────────────────────────
@@ -237,17 +258,26 @@ fn fixed_resolution_step(native_step: f64) -> f64 {
 /// Try to derive an EAST thin plan: freq + trigtime → timebase + sampling.
 fn try_east_thin_plan(socket: &mut TcpStream, req: &FetchRequest) -> Option<EastThinPlan> {
     let y = req.sig.y_expr.trim();
-    let meta_expr = format!("[size({}),{}:freq,{}:trigtime]", y, y, y);
+    // Segmented EAST nodes can spend around a second evaluating size(). The
+    // acquisition metadata gives the same count in a few milliseconds.
+    let meta_expr = format!("[{}:daqtime,{}:freq,{}:trigtime]", y, y, y);
     let meta = protocol::value(socket, &meta_expr).ok()?;
     let values = protocol::numeric_from_message(&meta).ok()?;
 
-    if values.len() < 3 || !values[0].is_finite() || !values[1].is_finite() || !values[2].is_finite() {
+    if values.len() < 3 || !values[1].is_finite() || !values[2].is_finite() {
         return None;
     }
 
-    let point_count = values[0].round() as usize;
     let freq = values[1].round() as usize;
-    if point_count == 0 || freq == 0 { return None; }
+    if freq == 0 { return None; }
+    let daqtime = values[0];
+    let point_count = if daqtime.is_finite() && daqtime > 0.0 {
+        (daqtime * freq as f64).round() as usize
+    } else {
+        let size = protocol::value(socket, &format!("size({y})")).ok()?;
+        protocol::int_from_message(&size).ok()?.max(0) as usize
+    };
+    if point_count == 0 { return None; }
 
     let plan = sampling_from_point_count(point_count, req.max_points);
     if plan.sampled_count == 0 { return None; }
@@ -452,9 +482,20 @@ fn try_timebase(socket: &mut TcpStream, req: &FetchRequest) -> Option<EastTimeba
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 fn is_east_signal(req: &FetchRequest) -> bool {
-    !req.shot.is_empty()
+    let experiment = req.sig.experiment.trim();
+    let shot_is_supported = experiment.eq_ignore_ascii_case("east")
+        && req.shot.trim().parse::<i64>().is_ok_and(|shot| shot > 44326);
+    (shot_is_supported || experiment.eq_ignore_ascii_case("eastpower"))
         && req.sig.x_expr.trim().is_empty()
-        && !req.sig.y_expr.trim().is_empty()
+        && is_simple_mds_node(&req.sig.y_expr)
+}
+
+fn is_simple_mds_node(expression: &str) -> bool {
+    let node = expression.trim();
+    node.starts_with('\\')
+        && !node
+            .chars()
+            .any(|character| matches!(character, '(' | ')' | '[' | ']' | ',' | ' '))
 }
 
 pub fn normalized_name(expr: &str) -> String {
@@ -480,23 +521,22 @@ fn populate_series_metadata(socket: &mut TcpStream, request: &FetchRequest, seri
         return;
     }
 
-    let raw_unit = query_text(socket, &format!("units_of({})", y_expr));
-    series.unit = raw_unit
-        .as_ref()
-        .map(|unit| scaled_si_unit(unit, expression_numeric_scale(y_expr)))
-        .unwrap_or_default();
-
     let x_expr = if configured_x.is_empty() {
         format!("dim_of({})", y_expr)
     } else {
         configured_x.to_string()
     };
-    let raw_x_unit = query_text(socket, &format!("units_of({})", x_expr));
+    let (raw_unit, raw_x_unit, raw_x_name) =
+        query_series_metadata(socket, y_expr, &x_expr);
+    series.unit = raw_unit
+        .as_ref()
+        .map(|unit| scaled_si_unit(unit, expression_numeric_scale(y_expr)))
+        .unwrap_or_default();
+
     series.x_unit = raw_x_unit.clone().unwrap_or_default();
     // A dimension is often an anonymous RANGE/ARRAY rather than a named tree
     // node. Prefer the name returned by MDSplus, but retain the exact source
     // expression when no name exists instead of presenting a fabricated "x".
-    let raw_x_name = query_text(socket, &format!("name_of({})", x_expr));
     series.x_name = raw_x_name.clone()
         .and_then(valid_axis_name)
         .unwrap_or_else(|| axis_expression_label(&x_expr));
@@ -511,6 +551,41 @@ fn populate_series_metadata(socket: &mut TcpStream, request: &FetchRequest, seri
                 x_unit: series.x_unit.clone(),
             });
     }
+}
+
+const METADATA_SEPARATOR: &str = "__MDSLENS_METADATA_SEPARATOR__";
+
+fn query_series_metadata(
+    socket: &mut TcpStream,
+    y_expr: &str,
+    x_expr: &str,
+) -> (Option<String>, Option<String>, Option<String>) {
+    // Metadata used to cost three serial network round trips per signal.
+    let expression = format!(
+        "if_error(trim(adjustl(units_of({y_expr}))),\"\")//\"{METADATA_SEPARATOR}\"//\
+         if_error(trim(adjustl(units_of({x_expr}))),\"\")//\"{METADATA_SEPARATOR}\"//\
+         if_error(trim(adjustl(name_of({x_expr}))),\"\")"
+    );
+    if let Some(value) = query_text(socket, &expression) {
+        let fields: Vec<_> = value.split(METADATA_SEPARATOR).collect();
+        if fields.len() == 3 {
+            return (
+                non_empty_text(fields[0]),
+                non_empty_text(fields[1]),
+                non_empty_text(fields[2]),
+            );
+        }
+    }
+    (
+        query_text(socket, &format!("units_of({y_expr})")),
+        query_text(socket, &format!("units_of({x_expr})")),
+        query_text(socket, &format!("name_of({x_expr})")),
+    )
+}
+
+fn non_empty_text(value: &str) -> Option<String> {
+    let value = value.trim().trim_matches('"').trim();
+    (!value.is_empty()).then(|| value.to_string())
 }
 
 fn valid_axis_name(value: String) -> Option<String> {
@@ -645,6 +720,34 @@ mod metadata_tests {
         assert_eq!(axis_expression_label(r" \TIMEBASE "), "TIMEBASE");
         assert_eq!(valid_axis_name("none".into()), None);
         assert_eq!(valid_axis_name(r"\TIME".into()), Some("TIME".into()));
+    }
+
+    #[test]
+    fn east_fast_path_rejects_other_trees_and_expressions() {
+        let mut request = FetchRequest {
+            loaded_index: 0,
+            column: 0,
+            row: 0,
+            signal: 0,
+            shot: "162651".into(),
+            plot: PlotSpec::default(),
+            sig: SignalSpec {
+                experiment: "east".into(),
+                y_expr: r"\IP".into(),
+                ..Default::default()
+            },
+            read_mode: DataReadMode::Thin,
+            max_points: 2000,
+        };
+        assert!(is_east_signal(&request));
+        request.sig.experiment = "analysis".into();
+        assert!(!is_east_signal(&request));
+        request.sig.experiment = "east".into();
+        request.sig.y_expr = r"data(\IP)".into();
+        assert!(!is_east_signal(&request));
+        request.sig.y_expr = r"\IP".into();
+        request.shot = "44326".into();
+        assert!(!is_east_signal(&request));
     }
 }
 
