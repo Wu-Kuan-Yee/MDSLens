@@ -501,9 +501,6 @@ class _PlotPanelState extends State<PlotPanel> {
     final legendSize = app.fontLegendSize.toDouble();
     final axisSize = app.fontAxisSize.toDouble();
     final unitSize = app.fontUnitSize.toDouble();
-    final cx = app.crosshairX;
-    final crosshair = _crosshairValue(plot, panel, cx, app);
-    final crosshairY = crosshair?.y;
     final showGrid = panel['grid'] ?? true;
     final customX = panel['custom_x_range'] == true;
     final customY = panel['custom_y_range'] == true;
@@ -577,86 +574,64 @@ class _PlotPanelState extends State<PlotPanel> {
                   ),
                 ),
               ),
-            LineChart(
-              LineChartData(
-                clipData: const FlClipData.all(),
-                lineBarsData: bars,
-                gridData: FlGridData(
-                  show: showGrid,
-                  drawVerticalLine: showGrid,
-                  drawHorizontalLine: showGrid,
-                  getDrawingHorizontalLine: (v) => FlLine(
-                    color: theme.dividerColor.withValues(alpha: 0.15),
-                    strokeWidth: 0.5,
-                  ),
-                  getDrawingVerticalLine: (v) => FlLine(
-                    color: theme.dividerColor.withValues(alpha: 0.15),
-                    strokeWidth: 0.5,
-                  ),
-                ),
-                titlesData: FlTitlesData(
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: bottomInset,
-                      getTitlesWidget: (v, m) => const SizedBox(),
+            RepaintBoundary(
+              child: LineChart(
+                LineChartData(
+                  clipData: const FlClipData.all(),
+                  lineBarsData: bars,
+                  gridData: FlGridData(
+                    show: showGrid,
+                    drawVerticalLine: showGrid,
+                    drawHorizontalLine: showGrid,
+                    getDrawingHorizontalLine: (v) => FlLine(
+                      color: theme.dividerColor.withValues(alpha: 0.15),
+                      strokeWidth: 0.5,
+                    ),
+                    getDrawingVerticalLine: (v) => FlLine(
+                      color: theme.dividerColor.withValues(alpha: 0.15),
+                      strokeWidth: 0.5,
                     ),
                   ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: gridLeft,
-                      getTitlesWidget: (v, m) => const SizedBox(),
+                  titlesData: FlTitlesData(
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: bottomInset,
+                        getTitlesWidget: (v, m) => const SizedBox(),
+                      ),
+                    ),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: gridLeft,
+                        getTitlesWidget: (v, m) => const SizedBox(),
+                      ),
+                    ),
+                    topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
                     ),
                   ),
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
+                  borderData: FlBorderData(
+                    show: true,
+                    border: Border.all(
+                      color: theme.dividerColor.withValues(alpha: 0.5),
+                      width: 1,
+                    ),
                   ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
+                  // Point interaction is handled by the panel's outer pointer
+                  // layer. Keeping fl_chart's pan recognizer enabled would win
+                  // the gesture arena and prevent one-finger page scrolling.
+                  lineTouchData: const LineTouchData(enabled: false),
+                  minX: xMin,
+                  maxX: xMax,
+                  minY: yMin,
+                  maxY: yMax,
                 ),
-                borderData: FlBorderData(
-                  show: true,
-                  border: Border.all(
-                    color: theme.dividerColor.withValues(alpha: 0.5),
-                    width: 1,
-                  ),
-                ),
-                // Point interaction is handled by the panel's outer pointer
-                // layer. Keeping fl_chart's pan recognizer enabled would win
-                // the gesture arena and prevent one-finger page scrolling.
-                lineTouchData: const LineTouchData(enabled: false),
-                extraLinesData: ExtraLinesData(
-                  verticalLines: cx != null
-                      ? [
-                          VerticalLine(
-                            x: cx,
-                            color: const Color(0xFFFF00FF),
-                            strokeWidth: 1,
-                          ),
-                        ]
-                      : [],
-                  horizontalLines: crosshairY != null
-                      ? [
-                          HorizontalLine(
-                            y: crosshairY,
-                            color: const Color(0xFFFF00FF),
-                            strokeWidth: 1,
-                          ),
-                        ]
-                      : [],
-                ),
-                minX: xMin,
-                maxX: xMax,
-                minY: yMin,
-                maxY: yMax,
+                duration: Duration.zero,
               ),
-              // Point mode updates extraLinesData every pointer frame. The
-              // package default interpolates those lines for 150 ms, so the
-              // crosshair visibly trails the direct-positioned point marker.
-              // Scientific navigation should render the current state exactly.
-              duration: Duration.zero,
             ),
             // Y-axis tick marks — 3px horizontal lines (matching C++ render.cpp:251)
             for (int i = 0; i < yTicks.length; i++)
@@ -784,22 +759,14 @@ class _PlotPanelState extends State<PlotPanel> {
               gridH,
               plot.title.isNotEmpty ? legendSize + 8 : 6,
             ),
-            if (cx != null &&
-                crosshair != null &&
-                xMin != null &&
-                xMax != null &&
-                yMin != null &&
-                yMax != null &&
-                xMax > xMin &&
-                yMax > yMin)
-              ..._buildPointReadoutOverlay(
+            ValueListenableBuilder<CrosshairSnapshot?>(
+              valueListenable: app.crosshairChanges,
+              builder: (context, crosshair, child) => _buildCrosshairOverlay(
                 plot: plot,
                 panel: panel,
                 app: app,
                 theme: theme,
-                x: cx,
-                y: crosshair.y,
-                seriesIndex: crosshair.seriesIndex,
+                crosshair: crosshair,
                 gridLeft: gridLeft,
                 gridTop: gridTop,
                 gridWidth: gridW,
@@ -809,6 +776,7 @@ class _PlotPanelState extends State<PlotPanel> {
                 minY: yMin,
                 maxY: yMax,
               ),
+            ),
           ],
         );
       },
@@ -991,17 +959,100 @@ class _PlotPanelState extends State<PlotPanel> {
     PlotData plot,
     Map<String, dynamic> panel,
     double? x,
-    AppState app,
+    int preferredSeries,
   ) {
     if (x == null) return null;
-    final seriesIndex = _usableSeriesIndex(
-      plot,
-      panel,
-      app.crosshairSourceSeries,
-    );
+    final seriesIndex = _usableSeriesIndex(plot, panel, preferredSeries);
     if (seriesIndex == null) return null;
     final y = plot.series[seriesIndex]?.valueAt(x);
     return y == null ? null : (seriesIndex: seriesIndex, y: y);
+  }
+
+  Widget _buildCrosshairOverlay({
+    required PlotData plot,
+    required Map<String, dynamic> panel,
+    required AppState app,
+    required ThemeData theme,
+    required CrosshairSnapshot? crosshair,
+    required double gridLeft,
+    required double gridTop,
+    required double gridWidth,
+    required double gridHeight,
+    required double? minX,
+    required double? maxX,
+    required double? minY,
+    required double? maxY,
+  }) {
+    if (crosshair == null ||
+        minX == null ||
+        maxX == null ||
+        minY == null ||
+        maxY == null ||
+        maxX <= minX ||
+        maxY <= minY) {
+      return const SizedBox.shrink();
+    }
+    final value = _crosshairValue(
+      plot,
+      panel,
+      crosshair.x,
+      crosshair.sourceSeries,
+    );
+    if (value == null) return const SizedBox.shrink();
+
+    final markerX = gridLeft + (crosshair.x - minX) / (maxX - minX) * gridWidth;
+    final markerY = gridTop + (maxY - value.y) / (maxY - minY) * gridHeight;
+    if (!markerX.isFinite ||
+        !markerY.isFinite ||
+        markerX < gridLeft ||
+        markerX > gridLeft + gridWidth ||
+        markerY < gridTop ||
+        markerY > gridTop + gridHeight) {
+      return const SizedBox.shrink();
+    }
+
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Stack(
+          clipBehavior: Clip.hardEdge,
+          children: [
+            Positioned(
+              key: ValueKey('plot-crosshair-v-${widget.plotIdx}'),
+              left: markerX - 0.5,
+              top: gridTop,
+              width: 1,
+              height: gridHeight,
+              child: const ColoredBox(color: Color(0xFFFF00FF)),
+            ),
+            Positioned(
+              key: ValueKey('plot-crosshair-h-${widget.plotIdx}'),
+              left: gridLeft,
+              top: markerY - 0.5,
+              width: gridWidth,
+              height: 1,
+              child: const ColoredBox(color: Color(0xFFFF00FF)),
+            ),
+            ..._buildPointReadoutOverlay(
+              plot: plot,
+              panel: panel,
+              app: app,
+              theme: theme,
+              x: crosshair.x,
+              y: value.y,
+              seriesIndex: value.seriesIndex,
+              gridLeft: gridLeft,
+              gridTop: gridTop,
+              gridWidth: gridWidth,
+              gridHeight: gridHeight,
+              minX: minX,
+              maxX: maxX,
+              minY: minY,
+              maxY: maxY,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   int? _usableSeriesIndex(

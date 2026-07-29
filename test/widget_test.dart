@@ -3125,8 +3125,22 @@ void main() {
           tester.widgetList<LineChart>(find.byType(LineChart)).toList();
       expect(charts, hasLength(2));
       expect(charts.every((chart) => chart.duration == Duration.zero), isTrue);
-      expect(charts[0].data.extraLinesData.horizontalLines.single.y, 12);
-      expect(charts[1].data.extraLinesData.horizontalLines.single.y, 22);
+      expect(
+        find.byKey(const ValueKey('plot-crosshair-v-0')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('plot-crosshair-v-1')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('plot-crosshair-h-0')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('plot-crosshair-h-1')),
+        findsOneWidget,
+      );
       expect(find.byKey(const ValueKey('plot-point-marker-0')), findsOneWidget);
       expect(find.byKey(const ValueKey('plot-point-marker-1')), findsOneWidget);
       final marker = tester
@@ -3149,6 +3163,30 @@ void main() {
       );
     },
   );
+
+  test('Crosshair motion bypasses global application notifications', () {
+    final app = AppState();
+    addTearDown(app.dispose);
+    var applicationNotifications = 0;
+    var crosshairNotifications = 0;
+    app.addListener(() => applicationNotifications++);
+    app.crosshairChanges.addListener(() => crosshairNotifications++);
+
+    app.setCrosshair(1.25, sourcePlot: 3, sourceSeries: 2);
+
+    expect(app.crosshairX, 1.25);
+    expect(app.crosshairChanges.value?.x, 1.25);
+    expect(app.crosshairChanges.value?.sourcePlot, 3);
+    expect(app.crosshairChanges.value?.sourceSeries, 2);
+    expect(applicationNotifications, 0);
+    expect(crosshairNotifications, 1);
+
+    app.clearCrosshair();
+    expect(app.crosshairX, isNull);
+    expect(app.crosshairChanges.value, isNull);
+    expect(applicationNotifications, 0);
+    expect(crosshairNotifications, 2);
+  });
 
   testWidgets('Plot legend uses signal names and supports custom labels', (
     tester,

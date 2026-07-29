@@ -517,6 +517,19 @@ dynamic decodeLatestShotResponse(
   return decoded['data'];
 }
 
+@immutable
+class CrosshairSnapshot {
+  const CrosshairSnapshot({
+    required this.x,
+    required this.sourcePlot,
+    required this.sourceSeries,
+  });
+
+  final double x;
+  final int? sourcePlot;
+  final int sourceSeries;
+}
+
 class AppState extends ChangeNotifier {
   static const int defaultShotHistoryLimit = 50;
   static const int maximumShotHistoryLimit = 10000;
@@ -607,6 +620,8 @@ class AppState extends ChangeNotifier {
   int? crosshairSourcePlot;
   int crosshairSourceSeries = 0;
   final List<({String name, double y})> crosshairReadout = [];
+  final ValueNotifier<CrosshairSnapshot?> crosshairChanges =
+      ValueNotifier<CrosshairSnapshot?>(null);
 
   void setCrosshair(double x, {int? sourcePlot, int sourceSeries = 0}) {
     crosshairX = x;
@@ -614,7 +629,11 @@ class AppState extends ChangeNotifier {
       crosshairSourcePlot = sourcePlot;
       crosshairSourceSeries = sourceSeries;
     }
-    notifyListeners();
+    crosshairChanges.value = CrosshairSnapshot(
+      x: x,
+      sourcePlot: crosshairSourcePlot,
+      sourceSeries: crosshairSourceSeries,
+    );
   }
 
   void clearCrosshair() {
@@ -622,7 +641,7 @@ class AppState extends ChangeNotifier {
     crosshairSourcePlot = null;
     crosshairSourceSeries = 0;
     crosshairReadout.clear();
-    notifyListeners();
+    crosshairChanges.value = null;
   }
 
   // Shot
@@ -2146,6 +2165,7 @@ class AppState extends ChangeNotifier {
     crosshairSourcePlot = null;
     crosshairSourceSeries = 0;
     crosshairReadout.clear();
+    crosshairChanges.value = null;
     _pointLocked = false;
     _viewResetId++;
     loadDefaultConfig();
@@ -3305,6 +3325,7 @@ class AppState extends ChangeNotifier {
     prepareForExit();
     _shotCtrl.dispose();
     shotFocusNode.dispose();
+    crosshairChanges.dispose();
     super.dispose();
   }
 }
