@@ -2732,20 +2732,28 @@ class AppState extends ChangeNotifier {
         final start = rawStart.toDouble();
         final step = rawStep.toDouble();
         if (start.isFinite && step.isFinite && step != 0) {
-          final values = Float32List(rawUniform.length);
-          var valid = true;
-          for (var index = 0; index < rawUniform.length; index++) {
-            final rawY = rawUniform[index];
-            if (rawY is! num || !rawY.toDouble().isFinite) {
-              valid = false;
-              break;
+          if (rawUniform is Float32List) {
+            if (rawUniform.isNotEmpty) {
+              uniformY = rawUniform;
+              uniformStart = start;
+              uniformStep = step;
             }
-            values[index] = rawY.toDouble();
-          }
-          if (valid && values.isNotEmpty) {
-            uniformY = values;
-            uniformStart = start;
-            uniformStep = step;
+          } else {
+            final values = Float32List(rawUniform.length);
+            var valid = true;
+            for (var index = 0; index < rawUniform.length; index++) {
+              final rawY = rawUniform[index];
+              if (rawY is! num || !rawY.toDouble().isFinite) {
+                valid = false;
+                break;
+              }
+              values[index] = rawY.toDouble();
+            }
+            if (valid && values.isNotEmpty) {
+              uniformY = values;
+              uniformStart = start;
+              uniformStep = step;
+            }
           }
         }
       }

@@ -6,8 +6,7 @@
 //! Ported from `src/mds/mds_ip_client.cpp`.
 
 use crate::client::{
-    ensure_reusable_connections, reusable_connection_count, warm_reusable_connection,
-    with_reusable_connection,
+    ensure_reusable_connections, reusable_connection_count, with_reusable_connection,
 };
 use crate::fetch::{self, effective_read_mode, FetchRequest, FetchResult};
 use crate::protocol;
@@ -110,7 +109,14 @@ pub fn warm_connections(config: &LayoutConfig, cancel: &Arc<AtomicBool>) {
 
     for server in servers {
         if cancel.load(Ordering::Relaxed) { break; }
-        let _ = warm_reusable_connection(&server, protocol::MDS_PORT);
+        // Match the 16-worker fetch pipeline so the first large layout can
+        // start on authenticated sockets instead of serializing cold setup
+        // work behind its signal reads.
+        ensure_reusable_connections(
+            &server,
+            protocol::MDS_PORT,
+            MAX_GLOBAL_SOCKETS,
+        );
     }
 }
 
@@ -232,6 +238,7 @@ fn is_permanent_mds_error(error: &str) -> bool {
     let error = error.to_ascii_lowercase();
     error.contains("node not found")
         || error.contains("no data available")
+        || error.contains("empty signal")
         || error.contains("missing server/tree/shot/signal")
         || error.contains("%tree-w-nnf")
         || error.contains("%tree-e-nodata")
@@ -535,6 +542,15 @@ mod tests {
             },
         })];
         assert!(retry_indices(&requests, &missing).is_empty());
+
+        let empty = vec![Some(FetchResult {
+            loaded_index: 0,
+            series: mds_core::types::SignalSeries {
+                error: "empty signal".into(),
+                ..Default::default()
+            },
+        })];
+        assert!(retry_indices(&requests, &empty).is_empty());
     }
 
     #[test]

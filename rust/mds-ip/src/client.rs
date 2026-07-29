@@ -193,7 +193,10 @@ where
     POOL.with(|p| f(&mut p.borrow_mut()))
 }
 
-const MAX_IDLE_CONNECTIONS_PER_SERVER: usize = 8;
+// Keep one socket for every global fetch worker. Large layouts regularly use
+// all 16 workers; discarding half of those connections made every refresh pay
+// another round of MDSIP handshakes and TreeOpen calls.
+const MAX_IDLE_CONNECTIONS_PER_SERVER: usize = 16;
 static SHARED_CONNECTIONS: OnceLock<Mutex<HashMap<String, Vec<MdsConnection>>>> =
     OnceLock::new();
 

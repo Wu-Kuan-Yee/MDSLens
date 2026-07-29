@@ -321,6 +321,9 @@ class _PlotPanelState extends State<PlotPanel> {
     final renderMaxX = customX
         ? (panel['xmax'] as num?)?.toDouble()
         : (_viewMaxX.isFinite ? _viewMaxX : null);
+    final approximatePanelWidth =
+        MediaQuery.sizeOf(context).width / math.max(1, app.columns.length);
+    final renderPointBudget = plotRenderPointBudget(approximatePanelWidth);
     double? viewMinX, viewMaxX, viewMinY, viewMaxY;
     for (var i = 0; i < plot.series.length; i++) {
       final s = plot.series[i];
@@ -330,6 +333,7 @@ class _PlotPanelState extends State<PlotPanel> {
       activeSeries.add(series);
       final rendered = _renderCache.render(
         series,
+        maxPoints: renderPointBudget,
         minX: renderMinX,
         maxX: renderMaxX,
       );

@@ -652,6 +652,45 @@ void main() {
     expect(rendered.maxY, 3);
   });
 
+  test('Compact waveform decoding retains its transferred typed buffer',
+      () async {
+    final transferred = Float32List.fromList(<double>[1, 2, 3]);
+    final app = AppState(
+      streamingSignalFetchWorker:
+          (configJson, dataMode, sshSettings, onSignal) async {
+        onSignal(<String, dynamic>{
+          'column': 0,
+          'row': 0,
+          'signal': 0,
+          'series': <String, dynamic>{
+            'error': '',
+            'points': <List<double>>[],
+            'uniform_y': transferred,
+            'uniform_start': -0.1,
+            'uniform_step': 0.05,
+          },
+        });
+        return '[]';
+      },
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setLoggedIn(true, 'test-token');
+    app.shotText = '163870';
+
+    app.startRefresh();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(
+        identical(app.plots.first.series.first?.uniformY, transferred), isTrue);
+  });
+
+  test('Plot point budget follows visible panel width', () {
+    expect(plotRenderPointBudget(100), 256);
+    expect(plotRenderPointBudget(400), 800);
+    expect(plotRenderPointBudget(2000), 2000);
+  });
+
   test('Release versions are compared semantically', () {
     expect(compareVersions('v7.1.0', '7.0.9'), greaterThan(0));
     expect(compareVersions('7.0', '7.0.0'), 0);

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:isolate';
-import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
@@ -23,9 +22,12 @@ void _forwardNativeBinarySignal(
     final signal = Map<String, dynamic>.from(decoded);
     if (uniformLength > 0 && signal['series'] is Map) {
       final series = Map<String, dynamic>.from(signal['series'] as Map);
-      series['uniform_y'] = Float32List.fromList(
-        uniformPointer.asTypedList(uniformLength),
-      );
+      series['_uniform_y_transfer'] = TransferableTypedData.fromList([
+        uniformPointer.cast<Uint8>().asTypedList(
+              uniformLength * sizeOf<Float>(),
+            ),
+      ]);
+      series['_uniform_y_length'] = uniformLength;
       signal['series'] = series;
     }
     _nativeSignalPort?.send(signal);
@@ -76,7 +78,15 @@ Future<String> fetchSignalsStreamingInBackground(
         message['series'] is Map &&
         !message.containsKey('done') &&
         !message.containsKey('error')) {
-      onSignal(Map<String, dynamic>.from(message));
+      final signal = Map<String, dynamic>.from(message);
+      final series = Map<String, dynamic>.from(signal['series'] as Map);
+      final transfer = series.remove('_uniform_y_transfer');
+      final length = series.remove('_uniform_y_length');
+      if (transfer is TransferableTypedData && length is int && length > 0) {
+        series['uniform_y'] = transfer.materialize().asFloat32List(0, length);
+      }
+      signal['series'] = series;
+      onSignal(signal);
       return;
     }
     if (message is String) {

@@ -4,6 +4,11 @@ import 'package:fl_chart/fl_chart.dart';
 
 import '../models/app_state.dart';
 
+int plotRenderPointBudget(double logicalWidth) {
+  if (!logicalWidth.isFinite || logicalWidth <= 0) return 256;
+  return (logicalWidth * 2).round().clamp(256, 2000);
+}
+
 /// Immutable geometry derived from one waveform series for chart rendering.
 class PlotSeriesRenderData {
   final List<FlSpot> spots;
