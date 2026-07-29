@@ -2,8 +2,10 @@ import 'dart:ffi';
 import 'dart:io';
 import 'package:ffi/ffi.dart';
 
+typedef NativeSignalStreamCallback = Void Function(Pointer<Utf8>);
+
 class RustBridge {
-  static const int _expectedAbiVersion = 6;
+  static const int _expectedAbiVersion = 7;
   static RustBridge? _i;
   // ignore: unused_field
   final DynamicLibrary _lib;
@@ -18,6 +20,7 @@ class RustBridge {
   final String Function(String) sshT;
   final String Function(String, String) fetchSig;
   final String Function(String, String, String) fetchSigSsh;
+  final String Function(String, String, String, int) fetchSigSshStreaming;
   final String Function(String, String) prewarmSig;
   final bool Function(int) cancelFetch;
   final void Function() disconnectSsh;
@@ -34,6 +37,8 @@ class RustBridge {
       sshT = _wrap1(_lib, 'mds_ssh_test'),
       fetchSig = _wrap2(_lib, 'mds_fetch_signals'),
       fetchSigSsh = _wrap3(_lib, 'mds_fetch_signals_ssh'),
+      fetchSigSshStreaming =
+          _wrapStreaming4(_lib, 'mds_fetch_signals_ssh_streaming'),
       prewarmSig = _wrap2(_lib, 'mds_prewarm_signals'),
       cancelFetch = _wrapCancelFetch(_lib),
       disconnectSsh = _lib.lookupFunction<Void Function(), void Function()>(
@@ -226,6 +231,48 @@ class RustBridge {
         }
       }
     };
+  }
+
+  static String Function(String, String, String, int) _wrapStreaming4(
+    DynamicLibrary lib,
+    String name,
+  ) {
+    final function = lib.lookupFunction<
+        Pointer<Utf8> Function(
+          Pointer<Utf8>,
+          Pointer<Utf8>,
+          Pointer<Utf8>,
+          Pointer<NativeFunction<NativeSignalStreamCallback>>,
+        ),
+        Pointer<Utf8> Function(
+          Pointer<Utf8>,
+          Pointer<Utf8>,
+          Pointer<Utf8>,
+          Pointer<NativeFunction<NativeSignalStreamCallback>>,
+        )>(name);
+    final freeResult = _rustStringFree(lib);
+    return (a, b, c, callbackAddress) {
+      final aPointer = a.toNativeUtf8();
+      final bPointer = b.toNativeUtf8();
+      final cPointer = c.toNativeUtf8();
+      final callback =
+          Pointer<NativeFunction<NativeSignalStreamCallback>>.fromAddress(
+              callbackAddress);
+      Pointer<Utf8> result = nullptr;
+      try {
+        result = function(aPointer, bPointer, cPointer, callback);
+        return _readResult(result, name);
+      } finally {
+        malloc.free(aPointer);
+        malloc.free(bPointer);
+        malloc.free(cPointer);
+        if (result != nullptr) freeResult(result);
+      }
+    };
+  }
+
+  void freeTransferredString(Pointer<Utf8> pointer) {
+    if (pointer != nullptr) _rustStringFree(_lib)(pointer);
   }
 
   static void Function(Pointer<Utf8>) _rustStringFree(DynamicLibrary lib) {

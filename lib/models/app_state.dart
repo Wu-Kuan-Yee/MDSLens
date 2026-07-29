@@ -11,6 +11,7 @@ import '../services/keyboard_shortcuts.dart';
 import '../services/platform_file_dialog.dart';
 import '../services/network_permission_service.dart';
 import '../services/rust_bridge.dart';
+import '../services/signal_stream.dart';
 import '../services/source_index.dart';
 import '../services/user_data_store.dart';
 import '../services/web_gateway_client.dart';
@@ -140,6 +141,13 @@ typedef SignalFetchWorker = Future<String> Function(
   String configJson,
   String dataMode,
   String sshSettingsJson,
+);
+
+typedef StreamingSignalFetchWorker = Future<String> Function(
+  String configJson,
+  String dataMode,
+  String sshSettingsJson,
+  SignalStreamListener onSignal,
 );
 
 typedef SignalPrewarmWorker = Future<void> Function(
@@ -513,6 +521,7 @@ class AppState extends ChangeNotifier {
   static const int maximumShotHistoryLimit = 10000;
 
   final SignalFetchWorker _signalFetchWorker;
+  final StreamingSignalFetchWorker? _streamingSignalFetchWorker;
   final SignalPrewarmWorker _signalPrewarmWorker;
   final SshDisconnect _sshDisconnect;
   final ShotInfoFetchWorker _shotInfoFetchWorker;
@@ -697,6 +706,7 @@ class AppState extends ChangeNotifier {
 
   AppState({
     SignalFetchWorker? signalFetchWorker,
+    StreamingSignalFetchWorker? streamingSignalFetchWorker,
     SignalPrewarmWorker? signalPrewarmWorker,
     SshDisconnect? sshDisconnect,
     ShotInfoFetchWorker? shotInfoFetchWorker,
@@ -711,6 +721,10 @@ class AppState extends ChangeNotifier {
     UserDataStore? userDataStore,
     CredentialStore? credentialStore,
   })  : _signalFetchWorker = signalFetchWorker ?? _fetchSignalsInBackground,
+        _streamingSignalFetchWorker = streamingSignalFetchWorker ??
+            (signalFetchWorker == null
+                ? fetchSignalsStreamingInBackground
+                : null),
         _signalPrewarmWorker = signalPrewarmWorker ??
             (signalFetchWorker == null
                 ? _prewarmSignalsInBackground
@@ -1092,9 +1106,13 @@ class AppState extends ChangeNotifier {
   bool _fetching = false;
   bool get fetching => _fetching;
   int? _fetchingPlotIndex;
+  final Map<int, int> _pendingPanelSignalCounts = {};
+  final Set<String> _streamedSignalKeys = {};
   bool isPlotFetching(int plotIdx) =>
       _fetching &&
-      (_fetchingPlotIndex == null || _fetchingPlotIndex == plotIdx);
+      (_fetchingPlotIndex == plotIdx ||
+          (_fetchingPlotIndex == null &&
+              _pendingPanelSignalCounts.containsKey(plotIdx)));
   String _status = 'Ready';
   String get status => _status;
   int _fetchGeneration = 0;
@@ -2535,6 +2553,81 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  void _beginGlobalPanelFetchTracking() {
+    _pendingPanelSignalCounts.clear();
+    _streamedSignalKeys.clear();
+    var plotIndex = 0;
+    for (final column in _columns) {
+      for (final panel in column) {
+        final signals = panel['signal_specs'] as List?;
+        final count = signals
+                ?.whereType<Map>()
+                .where((signal) =>
+                    signalHideModeOf(signal) == signalHideModeVisible)
+                .length ??
+            0;
+        if (count > 0) _pendingPanelSignalCounts[plotIndex] = count;
+        plotIndex++;
+      }
+    }
+  }
+
+  int? _plotIndexFor(int column, int row) {
+    if (column < 0 ||
+        column >= _columns.length ||
+        row < 0 ||
+        row >= _columns[column].length) {
+      return null;
+    }
+    var plotIndex = row;
+    for (var index = 0; index < column; index++) {
+      plotIndex += _columns[index].length;
+    }
+    return plotIndex;
+  }
+
+  void _applyStreamedSignal(Map<dynamic, dynamic> signal, int generation) {
+    if (!_isCurrentFetch(generation)) return;
+    final column = _decodeSignalIndex(signal['column']);
+    final row = _decodeSignalIndex(signal['row']);
+    final signalIndex = _decodeSignalIndex(signal['signal']);
+    if (column == null || row == null || signalIndex == null) return;
+    final key = '$column:$row:$signalIndex';
+    if (!_streamedSignalKeys.add(key)) return;
+
+    final decoded = _decodeLoadedSeries(signal['series']);
+    _rememberLoadedSource(column, row, signalIndex, decoded.points);
+    updatePlotSeriesByColRow(
+      column,
+      row,
+      signalIndex,
+      decoded.points,
+      decoded.error,
+      unit: decoded.unit,
+      xName: decoded.xName,
+      xUnit: decoded.xUnit,
+    );
+
+    final plotIndex = _plotIndexFor(column, row);
+    if (plotIndex != null) {
+      final remaining = (_pendingPanelSignalCounts[plotIndex] ?? 1) - 1;
+      if (remaining <= 0) {
+        _pendingPanelSignalCounts.remove(plotIndex);
+      } else {
+        _pendingPanelSignalCounts[plotIndex] = remaining;
+      }
+    }
+    final loadedPanels = _plots
+        .where(
+          (plot) => plot.series.any(
+            (series) => series?.points != null && series!.points!.isNotEmpty,
+          ),
+        )
+        .length;
+    _status = 'Fetching... $loadedPanels panels ready';
+    notifyListeners();
+  }
+
   void _markUnresolvedSeries(String message) {
     for (final plot in _plots) {
       for (var index = 0; index < plot.series.length; index++) {
@@ -2679,10 +2772,19 @@ class AppState extends ChangeNotifier {
     _fetching = true;
     _activeNativeFetchId = generation;
     _status = 'Fetching...';
+    _beginGlobalPanelFetchTracking();
     notifyListeners();
 
     try {
-      final raw = await _signalFetchWorker(configJson, dataMode, sshSettings);
+      final streamingWorker = _streamingSignalFetchWorker;
+      final raw = streamingWorker == null
+          ? await _signalFetchWorker(configJson, dataMode, sshSettings)
+          : await streamingWorker(
+              configJson,
+              dataMode,
+              sshSettings,
+              (signal) => _applyStreamedSignal(signal, generation),
+            );
       if (_activeNativeFetchId == generation) _activeNativeFetchId = null;
       if (!_isCurrentFetch(generation)) return;
       if (raw.isEmpty) {
@@ -2705,7 +2807,7 @@ class AppState extends ChangeNotifier {
         notifyListeners();
         return;
       }
-      if (json.isEmpty) {
+      if (json.isEmpty && streamingWorker == null) {
         _fetching = false;
         _status = 'Empty list';
         _markUnresolvedSeries(
@@ -2714,7 +2816,12 @@ class AppState extends ChangeNotifier {
         notifyListeners();
         return;
       }
-      _clearAllSeriesPoints();
+      // Streaming replaces each old curve when its new result arrives. Batch
+      // transports have no partial events, so release the previous generation
+      // only after the complete response is safely available.
+      if (_streamedSignalKeys.isEmpty) {
+        _clearAllSeriesPoints();
+      }
       String? firstErr;
       for (final sig in json) {
         if (sig is Map) {
@@ -2746,6 +2853,8 @@ class AppState extends ChangeNotifier {
       );
       _displayedShot = requestShot;
       _fetching = false;
+      _pendingPanelSignalCounts.clear();
+      _streamedSignalKeys.clear();
       final loaded = _plots
           .where(
             (p) =>
@@ -2764,6 +2873,8 @@ class AppState extends ChangeNotifier {
       if (_activeNativeFetchId == generation) _activeNativeFetchId = null;
       if (!_isCurrentFetch(generation)) return;
       _fetching = false;
+      _pendingPanelSignalCounts.clear();
+      _streamedSignalKeys.clear();
       _status = 'Error: $e';
       _markUnresolvedSeries('Loading this signal failed: $e');
       reportNetworkPermissionFailure(

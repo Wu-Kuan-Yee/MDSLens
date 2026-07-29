@@ -1,0 +1,98 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:ffi';
+import 'dart:isolate';
+
+import 'package:ffi/ffi.dart';
+
+import 'rust_bridge.dart';
+
+typedef SignalStreamListener = void Function(Map<String, dynamic> signal);
+
+SendPort? _nativeSignalPort;
+
+void _forwardNativeSignal(Pointer<Utf8> pointer) {
+  try {
+    _nativeSignalPort?.send(pointer.toDartString());
+  } finally {
+    RustBridge.instance.freeTransferredString(pointer);
+  }
+}
+
+void _runNativeSignalFetch(List<Object> message) {
+  final output = message[0] as SendPort;
+  final configJson = message[1] as String;
+  final dataMode = message[2] as String;
+  final sshSettingsJson = message[3] as String;
+  _nativeSignalPort = output;
+  try {
+    final callback =
+        Pointer.fromFunction<NativeSignalStreamCallback>(_forwardNativeSignal);
+    final result = RustBridge.instance.fetchSigSshStreaming(
+      configJson,
+      dataMode,
+      sshSettingsJson,
+      callback.address,
+    );
+    output.send(<String, String>{'done': result});
+  } catch (error, stackTrace) {
+    output.send(<String, String>{
+      'error': error.toString(),
+      'stack': stackTrace.toString(),
+    });
+  } finally {
+    _nativeSignalPort = null;
+  }
+}
+
+Future<String> fetchSignalsStreamingInBackground(
+  String configJson,
+  String dataMode,
+  String sshSettingsJson,
+  SignalStreamListener onSignal,
+) async {
+  final receivePort = ReceivePort();
+  final completion = Completer<String>();
+  late final StreamSubscription<Object?> subscription;
+  Isolate? worker;
+  subscription = receivePort.listen((message) {
+    if (message is String) {
+      try {
+        final decoded = jsonDecode(message);
+        if (decoded is Map) {
+          onSignal(Map<String, dynamic>.from(decoded));
+        }
+      } catch (_) {
+        // The authoritative final response still reports malformed payloads.
+      }
+      return;
+    }
+    if (message is Map && message['done'] is String) {
+      if (!completion.isCompleted) {
+        completion.complete(message['done'] as String);
+      }
+      return;
+    }
+    if (message is Map && message['error'] is String) {
+      if (!completion.isCompleted) {
+        completion.completeError(
+          StateError(message['error'] as String),
+          StackTrace.fromString(message['stack']?.toString() ?? ''),
+        );
+      }
+    }
+  });
+  try {
+    worker = await Isolate.spawn<List<Object>>(_runNativeSignalFetch, [
+      receivePort.sendPort,
+      configJson,
+      dataMode,
+      sshSettingsJson,
+    ]);
+    return await completion.future;
+  } finally {
+    worker?.kill(priority: Isolate.immediate);
+    await subscription.cancel();
+    receivePort.close();
+  }
+}

@@ -4,15 +4,17 @@
 //! C FFI exports for dart:ffi. All functions use JSON strings.
 
 use std::ffi::{CStr, CString};
+use std::collections::HashSet;
 use std::os::raw::c_char;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use crate::api as a;
 
 static API_TUNNEL_MANAGER: OnceLock<Mutex<mds_ssh::tunnel::SshTunnelManager>> = OnceLock::new();
 static API_TUNNEL_EPOCH: AtomicU64 = AtomicU64::new(0);
-const MDS_BRIDGE_ABI_VERSION: u32 = 6;
+const MDS_BRIDGE_ABI_VERSION: u32 = 7;
+type SignalStreamCallback = extern "C" fn(*mut c_char);
 
 macro_rules! ffi_string {
     ($s:expr) => { CString::new($s).unwrap_or_default().into_raw() };
@@ -124,6 +126,47 @@ pub extern "C" fn mds_fetch_signals_ssh(config_json: *const c_char, mode_json: *
     let mode: i32 = to_rust(mode_json).parse().unwrap_or(0);
     let results = a::fetch_signals_ssh(to_rust(config_json), mode, to_rust(ssh_settings_json));
     ffi_string!(serde_json::to_string(&results).unwrap_or_default())
+}
+
+#[no_mangle]
+pub extern "C" fn mds_fetch_signals_ssh_streaming(
+    config_json: *const c_char,
+    mode_json: *const c_char,
+    ssh_settings_json: *const c_char,
+    callback: Option<SignalStreamCallback>,
+) -> *mut c_char {
+    let mode: i32 = to_rust(mode_json).parse().unwrap_or(0);
+    let delivered = Arc::new(Mutex::new(HashSet::<(i32, i32, i32)>::new()));
+    let emit = {
+        let delivered = delivered.clone();
+        Arc::new(move |loaded: a::FrbLoadedSignal| {
+            let key = (loaded.column, loaded.row, loaded.signal);
+            if !delivered.lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .insert(key) {
+                return;
+            }
+            let Some(callback) = callback else { return };
+            let json = serde_json::to_string(&loaded).unwrap_or_default();
+            callback(ffi_string!(json));
+        })
+    };
+    let stream_emit = emit.clone();
+    let stream_callback: mds_ip::pipeline::SignalCallback = Box::new(move |loaded| {
+        stream_emit(a::FrbLoadedSignal::from(loaded));
+    });
+    let results = a::fetch_signals_ssh_streaming(
+        to_rust(config_json),
+        mode,
+        to_rust(ssh_settings_json),
+        stream_callback,
+    );
+    // Transient failures are withheld while retries run. Publish any slots
+    // that still have no streamed result before announcing completion.
+    for loaded in results {
+        emit(loaded);
+    }
+    ffi_string!("[]")
 }
 
 #[no_mangle]

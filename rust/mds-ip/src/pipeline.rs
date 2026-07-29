@@ -14,7 +14,7 @@ use crate::protocol;
 use mds_core::types::{DataReadMode, LayoutConfig, LoadedSignal, PlotSpec, SignalSpec};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
 
 /// Maximum concurrent chunks per wave.
 const MAX_GLOBAL_SOCKETS: usize = 16;
@@ -51,28 +51,33 @@ pub fn fetch_all(
         let wave = &chunks[next..end];
         next = end;
 
+        let (result_tx, result_rx) = mpsc::channel();
         let mut handles = Vec::new();
         for chunk in wave {
             let reqs: Vec<FetchRequest> = chunk.iter()
                 .map(|&i| requests[i].clone()).collect();
             let cancel = cancel.clone();
+            let result_tx = result_tx.clone();
             handles.push(std::thread::spawn(move || {
                 if cancel.load(Ordering::Relaxed) { return Vec::new(); }
-                fetch_chunk_serial(&reqs, &cancel)
+                fetch_chunk_serial_streaming(&reqs, &cancel, Some(&result_tx))
             }));
         }
+        drop(result_tx);
 
-        for handle in handles {
-            if let Ok(chunk_results) = handle.join() {
-                for fr in chunk_results {
-                    let idx = fr.loaded_index;
-                    let loaded = fetch_result_to_loaded(&requests, &fr);
-                    callback(loaded);
-                    if let Ok(mut res) = results.lock() {
-                        if idx < res.len() { res[idx] = Some(fr); }
-                    }
-                }
+        // Publish in completion order. A slow early chunk must not hold
+        // already-finished panels behind its join.
+        for fr in result_rx {
+            let idx = fr.loaded_index;
+            if should_stream_result(&fr) {
+                callback(fetch_result_to_loaded(&requests, &fr));
             }
+            if let Ok(mut res) = results.lock() {
+                if idx < res.len() { res[idx] = Some(fr); }
+            }
+        }
+        for handle in handles {
+            let _ = handle.join();
         }
     }
 
@@ -115,6 +120,14 @@ fn fetch_chunk_serial(
     requests: &[FetchRequest],
     cancel: &Arc<AtomicBool>,
 ) -> Vec<FetchResult> {
+    fetch_chunk_serial_streaming(requests, cancel, None)
+}
+
+fn fetch_chunk_serial_streaming(
+    requests: &[FetchRequest],
+    cancel: &Arc<AtomicBool>,
+    result_tx: Option<&mpsc::Sender<FetchResult>>,
+) -> Vec<FetchResult> {
     if requests.is_empty() { return Vec::new(); }
 
     let first = &requests[0];
@@ -134,7 +147,11 @@ fn fetch_chunk_serial(
                 let mut results = Vec::with_capacity(requests.len());
                 for req in requests {
                     if cancel.load(Ordering::Relaxed) { break; }
-                    results.push(fetch::fetch_signal(&mut connection.stream, req));
+                    let result = fetch::fetch_signal(&mut connection.stream, req);
+                    if let Some(tx) = result_tx {
+                        let _ = tx.send(result.clone());
+                    }
+                    results.push(result);
                 }
                 let transport_failed = results.iter().any(|result| {
                     let error = result.series.error.to_ascii_lowercase();
@@ -151,14 +168,20 @@ fn fetch_chunk_serial(
         match fetched {
             Ok(results) => results,
             Err(e) => {
-                requests.iter().map(|req| FetchResult {
+                let results: Vec<_> = requests.iter().map(|req| FetchResult {
                     loaded_index: req.loaded_index,
                     series: mds_core::types::SignalSeries {
                         name: fetch::normalized_name(&req.sig.y_expr),
                         error: e.clone(),
                         ..Default::default()
                     },
-                }).collect()
+                }).collect();
+                if let Some(tx) = result_tx {
+                    for result in &results {
+                        let _ = tx.send(result.clone());
+                    }
+                }
+                results
             }
         }
     })
@@ -193,8 +216,9 @@ fn retry_transient(
             if let Ok(retried) = handle.join() {
                 for fr in retried {
                     let idx = fr.loaded_index;
-                    let loaded = fetch_result_to_loaded(requests, &fr);
-                    callback(loaded);
+                    if should_stream_result(&fr) {
+                        callback(fetch_result_to_loaded(requests, &fr));
+                    }
                     if let Ok(mut res) = results.lock() {
                         if idx < res.len() { res[idx] = Some(fr); }
                     }
@@ -211,6 +235,12 @@ fn is_permanent_mds_error(error: &str) -> bool {
         || error.contains("missing server/tree/shot/signal")
         || error.contains("%tree-w-nnf")
         || error.contains("%tree-e-nodata")
+}
+
+fn should_stream_result(result: &FetchResult) -> bool {
+    result.series.has_data()
+        || (!result.series.error.is_empty()
+            && is_permanent_mds_error(&result.series.error))
 }
 
 fn retry_indices(
@@ -274,9 +304,23 @@ fn build_chunks(requests: &[FetchRequest], groups: &HashMap<String, Vec<usize>>)
     let mut chunks: Vec<Vec<usize>> = Vec::new();
     for indices in groups.values() {
         let first = &requests[indices[0]];
+        let (heavy, normal): (Vec<usize>, Vec<usize>) = indices
+            .iter()
+            .copied()
+            .partition(|&index| is_likely_heavy_signal(&requests[index].sig));
+        if !heavy.is_empty() {
+            let bucket_count = heavy.len().min(heavy_thin_connection_limit());
+            let mut buckets = vec![Vec::new(); bucket_count];
+            for (position, index) in heavy.into_iter().enumerate() {
+                buckets[position % bucket_count].push(index);
+            }
+            chunks.extend(buckets.into_iter().filter(|bucket| !bucket.is_empty()));
+        }
+        if normal.is_empty() { continue; }
+
         let available =
             reusable_connection_count(&first.sig.server_ip, protocol::MDS_PORT).max(1);
-        let desired = ((indices.len() + 1) / 2).clamp(1, 8);
+        let desired = ((normal.len() + 1) / 2).clamp(1, 8);
         let hot_bucket_count = available.min(desired);
         let is_east = first.sig.experiment.trim().eq_ignore_ascii_case("east");
 
@@ -285,31 +329,59 @@ fn build_chunks(requests: &[FetchRequest], groups: &HashMap<String, Vec<usize>>)
         // the background pool has already made them hot.
         if hot_bucket_count > 1 {
             let mut buckets = vec![Vec::new(); hot_bucket_count];
-            for (position, &index) in indices.iter().enumerate() {
+            for (position, &index) in normal.iter().enumerate() {
                 buckets[position % hot_bucket_count].push(index);
             }
             chunks.extend(buckets.into_iter().filter(|bucket| !bucket.is_empty()));
-        } else if is_east && indices.len() > 16 {
-            let bucket_count = if indices.len() > 48 {
+        } else if is_east && normal.len() > 16 {
+            let bucket_count = if normal.len() > 48 {
                 6
-            } else if indices.len() > 32 {
+            } else if normal.len() > 32 {
                 4
             } else {
                 2
             };
             let mut buckets = vec![Vec::new(); bucket_count];
-            for (position, &index) in indices.iter().enumerate() {
+            for (position, &index) in normal.iter().enumerate() {
                 buckets[position % bucket_count].push(index);
             }
             for bucket in buckets {
                 if !bucket.is_empty() { chunks.push(bucket); }
             }
         } else {
-            chunks.push(indices.clone());
+            chunks.push(normal);
         }
     }
-    chunks.sort_by_key(|c| -(c.len() as isize)); // largest first
+    chunks.sort_by(|a, b| {
+        let a_heavy = chunk_has_likely_heavy_signal(requests, a);
+        let b_heavy = chunk_has_likely_heavy_signal(requests, b);
+        b_heavy.cmp(&a_heavy).then_with(|| b.len().cmp(&a.len()))
+    });
     chunks
+}
+
+fn heavy_thin_connection_limit() -> usize {
+    std::env::var("MDSLENS_HEAVY_THIN_CONNECTIONS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(8)
+        .clamp(1, 8)
+}
+
+fn is_likely_heavy_signal(signal: &SignalSpec) -> bool {
+    signal.experiment.trim().eq_ignore_ascii_case("east")
+        && fetch::normalized_name(&signal.y_expr)
+            .trim_start_matches('\\')
+            .to_ascii_lowercase()
+            .starts_with("hrs")
+}
+
+fn chunk_has_likely_heavy_signal(requests: &[FetchRequest], chunk: &[usize]) -> bool {
+    chunk.iter().any(|&index| {
+        requests
+            .get(index)
+            .is_some_and(|request| is_likely_heavy_signal(&request.sig))
+    })
 }
 
 fn grow_hot_pool(requests: &[FetchRequest], groups: &HashMap<String, Vec<usize>>) {
@@ -397,6 +469,23 @@ mod tests {
         assert_eq!(groups.len(), 2);
         let chunks = build_chunks(&requests, &groups);
         assert_eq!(chunks.len(), 2);
+    }
+
+    #[test]
+    fn heavy_east_signals_are_isolated_and_prioritized() {
+        let mut config = make_test_config();
+        config.columns[0][0].signal_specs = vec![
+            SignalSpec { y_expr: "\\IP".into(), experiment: "east".into(), server_ip: "10.0.0.1".into(), ..Default::default() },
+            SignalSpec { y_expr: "\\HRS01".into(), experiment: "east".into(), server_ip: "10.0.0.1".into(), ..Default::default() },
+            SignalSpec { y_expr: "\\HRS02".into(), experiment: "east".into(), server_ip: "10.0.0.1".into(), ..Default::default() },
+        ];
+        let requests = build_requests(&config, DataReadMode::Thin);
+        let groups = group_requests(&requests);
+        let chunks = build_chunks(&requests, &groups);
+        assert_eq!(chunks.len(), 3);
+        assert!(chunk_has_likely_heavy_signal(&requests, &chunks[0]));
+        assert!(chunk_has_likely_heavy_signal(&requests, &chunks[1]));
+        assert!(!chunk_has_likely_heavy_signal(&requests, &chunks[2]));
     }
 
     #[test]

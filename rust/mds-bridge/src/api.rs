@@ -295,7 +295,7 @@ pub fn ssh_test(settings: FrbSshSettings) -> Result<(), String> {
 
 
 pub fn fetch_signals(config_json: String, mode: i32) -> Vec<FrbLoadedSignal> {
-    fetch_signals_inner(config_json, mode, None, None)
+    fetch_signals_inner(config_json, mode, None, None, None)
 }
 
 static ACTIVE_FETCHES: OnceLock<Mutex<HashMap<u64, Arc<AtomicBool>>>> = OnceLock::new();
@@ -367,7 +367,30 @@ pub fn fetch_signals_ssh(config_json: String, mode: i32, ssh_settings_json: Stri
             }],
         }
     };
-    fetch_signals_inner(config_json, mode, ssh_settings, None)
+    fetch_signals_inner(config_json, mode, ssh_settings, None, None)
+}
+
+pub fn fetch_signals_ssh_streaming(
+    config_json: String,
+    mode: i32,
+    ssh_settings_json: String,
+    callback: mds_ip::pipeline::SignalCallback,
+) -> Vec<FrbLoadedSignal> {
+    let ssh_settings = if ssh_settings_json.is_empty() {
+        None
+    } else {
+        match serde_json::from_str(&ssh_settings_json) {
+            Ok(settings) => Some(settings),
+            Err(error) => return vec![FrbLoadedSignal {
+                column: 0, row: 0, signal: 0, shot: String::new(),
+                series: FrbSignalSeries {
+                    error: format!("SSH settings parse: {error}"),
+                    ..Default::default()
+                },
+            }],
+        }
+    };
+    fetch_signals_inner(config_json, mode, ssh_settings, None, Some(callback))
 }
 
 /// Fetch signals with an SSH tunnel manager owned by one browser session.
@@ -380,7 +403,7 @@ pub fn fetch_signals_for_session(
     ssh_settings: Option<FrbSshSettings>,
     tunnel_manager: &mut mds_ssh::tunnel::SshTunnelManager,
 ) -> Vec<FrbLoadedSignal> {
-    fetch_signals_inner(config_json, mode, ssh_settings, Some(tunnel_manager))
+    fetch_signals_inner(config_json, mode, ssh_settings, Some(tunnel_manager), None)
 }
 
 /// Warm the process-wide connection pool used by waveform reads.
@@ -431,6 +454,7 @@ fn fetch_signals_inner(
     mode: i32,
     ssh_settings: Option<FrbSshSettings>,
     mut session_tunnel_manager: Option<&mut mds_ssh::tunnel::SshTunnelManager>,
+    callback: Option<mds_ip::pipeline::SignalCallback>,
 ) -> Vec<FrbLoadedSignal> {
     let request_id = serde_json::from_str::<serde_json::Value>(&config_json)
         .ok()
@@ -514,7 +538,7 @@ fn fetch_signals_inner(
         cancel
     };
     let _registration = (request_id > 0).then_some(FetchRegistration { request_id });
-    let callback: mds_ip::pipeline::SignalCallback = Box::new(|_| {});
+    let callback = callback.unwrap_or_else(|| Box::new(|_| {}));
     let results: Vec<FrbLoadedSignal> = mds_ip::pipeline::fetch_all(&rust_config, read_mode, &callback, &cancel)
         .into_iter().map(FrbLoadedSignal::from).collect();
 

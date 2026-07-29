@@ -2098,6 +2098,48 @@ void main() {
     },
   );
 
+  test('Completed panels render before the full waveform batch finishes',
+      () async {
+    final completion = Completer<String>();
+    final firstSignal = <String, dynamic>{
+      'column': 0,
+      'row': 0,
+      'signal': 0,
+      'shot': '163701',
+      'series': {
+        'points': [
+          [0.0, 42.0],
+          [1.0, 43.0],
+        ],
+        'error': '',
+      },
+    };
+    final app = AppState(
+      streamingSignalFetchWorker:
+          (configJson, dataMode, sshSettings, onSignal) {
+        onSignal(firstSignal);
+        return completion.future;
+      },
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setLoggedIn(true, 'test-token');
+
+    app.shotText = '163701';
+    app.startRefresh();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(app.fetching, isTrue);
+    expect(app.plots.first.series.first?.points?.first.last, 42.0);
+    expect(app.isPlotFetching(0), isFalse);
+    expect(app.isPlotFetching(1), isTrue);
+    expect(app.status, contains('1 panels ready'));
+
+    completion.complete(jsonEncode([firstSignal]));
+    await Future<void>.delayed(Duration.zero);
+    expect(app.fetching, isFalse);
+  });
+
   test(
     'Refresh reloads the displayed shot instead of the shot input',
     () async {
