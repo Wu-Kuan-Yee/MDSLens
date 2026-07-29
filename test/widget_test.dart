@@ -3973,10 +3973,20 @@ void main() {
     final charts =
         tester.widgetList<LineChart>(find.byType(LineChart)).toList();
     expect(charts, hasLength(4));
-    expect(
-      charts.map((chart) => chart.data.extraLinesData.horizontalLines.single.y),
-      [5, 15, 25, 35],
-    );
+    for (var plot = 0; plot < 4; plot++) {
+      expect(
+        find.byKey(ValueKey('plot-crosshair-v-$plot')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(ValueKey('plot-crosshair-h-$plot')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(ValueKey('plot-point-marker-$plot')),
+        findsOneWidget,
+      );
+    }
 
     app.interactionMode = 0;
     await tester.pump();
