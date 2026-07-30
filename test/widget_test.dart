@@ -5639,12 +5639,34 @@ void main() {
     await tester.tap(deleteSelected);
     await tester.pumpAndSettle();
     expect(
-        find.byKey(const ValueKey('layout-preview-column-0')), findsOneWidget);
+      find.byKey(const ValueKey('layout-preview-column-0')),
+      findsNothing,
+    );
     expect(find.byKey(const ValueKey('layout-preview-column-1')), findsNothing);
+    expect(tester.widget<FilledButton>(deleteSelected).onPressed, isNull);
 
     await tester.tap(find.widgetWithText(TextButton, 'Apply'));
     await tester.pumpAndSettle();
+    expect(app.columns, isEmpty);
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Layout setup'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Add panel'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('layout-preview-column-0')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('layout-preview-panel-0')),
+      findsOneWidget,
+    );
+    await tester.tap(find.widgetWithText(TextButton, 'Apply'));
+    await tester.pumpAndSettle();
     expect(app.columns, hasLength(1));
+    expect(app.columns.single, hasLength(1));
   });
 
   testWidgets('A panel drag handle can create a column between columns', (
