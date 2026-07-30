@@ -119,7 +119,9 @@ Future<DownloadedUpdate> downloadVerifiedUpdateAsset(
     onProgress?.call(
       UpdateDownloadProgress(received: received, total: asset.size),
     );
-    await for (final chunk in response.stream) {
+    await for (final chunk in response.stream.timeout(
+      const Duration(seconds: 30),
+    )) {
       if (controller.isCancelled) throw const UpdateCancelledException();
       received += chunk.length;
       if (received > asset.size) {
@@ -147,10 +149,16 @@ Future<DownloadedUpdate> downloadVerifiedUpdateAsset(
     return DownloadedUpdate(asset: asset, path: destination.path);
   } catch (error) {
     if (output != null) {
-      await output.flush();
-      await output.close();
+      try {
+        await output.flush();
+      } catch (_) {}
+      try {
+        await output.close();
+      } catch (_) {}
     }
-    if (partial.existsSync()) await partial.delete();
+    try {
+      if (partial.existsSync()) await partial.delete();
+    } catch (_) {}
     if (controller.isCancelled && error is! UpdateCancelledException) {
       throw const UpdateCancelledException();
     }
