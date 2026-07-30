@@ -7,6 +7,8 @@ import 'update_service.dart';
 bool get directUpdateSupported => true;
 String get directUpdateActionLabel => 'Reload Now';
 
+Future<void> requestApplicationExitForUpdate() async {}
+
 Future<UpdateInstallResult> installLatestReleaseUpdate(
   ReleaseUpdate release,
   RuntimeSystemInfo systemInfo, {

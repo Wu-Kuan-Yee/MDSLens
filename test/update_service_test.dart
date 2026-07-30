@@ -100,6 +100,28 @@ void main() {
           sha256:
               'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
         ),
+        UpdateManifestAsset(
+          name: 'macos-universal.zip',
+          url: 'https://example.invalid/macos.zip',
+          platform: 'macos',
+          architecture: 'universal',
+          format: 'zip',
+          strategy: 'self-replace',
+          size: 1,
+          sha256:
+              'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+        ),
+        UpdateManifestAsset(
+          name: 'macos-universal.dmg',
+          url: 'https://example.invalid/macos.dmg',
+          platform: 'macos',
+          architecture: 'universal',
+          format: 'dmg',
+          strategy: 'open-package',
+          size: 1,
+          sha256:
+              'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+        ),
       ],
     );
 
@@ -127,6 +149,24 @@ void main() {
         architecture: 'x64',
       ),
       isNull,
+    );
+    expect(
+      selectUpdateAsset(
+        manifest,
+        platform: 'macos',
+        architecture: 'arm64',
+        preferredMacOSFormat: 'zip',
+      )?.format,
+      'zip',
+    );
+    expect(
+      selectUpdateAsset(
+        manifest,
+        platform: 'macos',
+        architecture: 'arm64',
+        preferredMacOSFormat: 'dmg',
+      )?.format,
+      'dmg',
     );
   });
 

@@ -206,4 +206,65 @@ void main() {
       expect(result.closeApplication, isTrue);
     },
   );
+
+  test('macOS bundle paths are derived only from application executables', () {
+    expect(
+      macOSBundlePathFromExecutable(
+        '/Applications/MDSLens.app/Contents/MacOS/MDSLens',
+      ),
+      '/Applications/MDSLens.app',
+    );
+    expect(macOSBundlePathFromExecutable('/usr/local/bin/mdslens'), isNull);
+  });
+
+  test(
+    'AppImage update schedules a relaunch and closes the old process',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'mdslens-appimage-relaunch-test-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final current = File('${directory.path}/MDSLens.AppImage');
+      final downloaded = File('${directory.path}/downloaded.AppImage');
+      await current.writeAsString('old');
+      await downloaded.writeAsString('new');
+      final commands = <(String, List<String>)>[];
+      final update = DownloadedUpdate(
+        asset: UpdateManifestAsset(
+          name: 'mdslens-linux-x64.AppImage',
+          url: 'https://example.invalid/AppImage',
+          platform: 'linux',
+          architecture: 'x64',
+          format: 'AppImage',
+          strategy: 'open-package',
+          size: 3,
+          sha256:
+              'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        ),
+        path: downloaded.path,
+      );
+
+      final result = await launchVerifiedUpdateAsset(
+        update,
+        platformOverride: 'linux',
+        currentAppImageOverride: current.path,
+        currentPidOverride: 12345,
+        commandLauncher: (executable, arguments) async {
+          commands.add((executable, arguments));
+        },
+      );
+
+      expect(await current.readAsString(), 'new');
+      expect(commands.single.$1, '/bin/sh');
+      expect(commands.single.$2, containsAll(<String>['12345', current.path]));
+      final helperWork = Directory(commands.single.$2.last);
+      addTearDown(() async {
+        if (await helperWork.exists()) {
+          await helperWork.delete(recursive: true);
+        }
+      });
+      expect(result.status, UpdateLaunchStatus.installed);
+      expect(result.closeApplication, isTrue);
+    },
+  );
 }

@@ -28,8 +28,8 @@ platform action:
 | Platform | Update action |
 |---|---|
 | Windows | Downloads and verifies the matching x64/ARM64 setup EXE, installs it without wizard pages, closes the old process and restarts MDSLens |
-| macOS | Downloads the matching or Universal unsigned DMG, verifies it, and opens the disk image |
-| Linux | Atomically replaces a writable running AppImage for the next launch; otherwise downloads the distribution's DEB/RPM and opens the system installer |
+| macOS | Verifies and atomically replaces a writable application bundle from the matching ZIP, then restarts it; otherwise opens the verified DMG/archive |
+| Linux | Atomically replaces a writable running AppImage and restarts it; otherwise downloads the distribution's DEB/RPM and opens the system installer |
 | Android | Downloads a matching APK, verifies it, and opens Android's package installer |
 | iOS/iPadOS | Opens the release workflow because the unsigned IPA must be re-signed outside the running application |
 | Web/PWA | Reloads the page so the browser can activate the latest deployed Web bundle |
@@ -44,13 +44,23 @@ must not bypass either protection. Android's per-source installation
 permission, Linux administrator authentication, and macOS Gatekeeper likewise
 remain in control.
 
+On macOS, a silent self-update is attempted only when MDSLens is running from a
+real `.app` bundle whose parent directory is writable. The downloaded bundle
+must retain the expected `com.mdslens.app` identifier and pass strict code
+signature validation before it is staged. Replacement happens after the old
+process exits, uses a same-directory atomic rename, keeps a rollback copy until
+the swap succeeds, and then reopens MDSLens. A read-only or administrator-owned
+installation falls back to the normal package workflow instead of requesting
+hidden privilege escalation.
+
 The installation identity must also match the installed copy. In particular,
 Android updates require every release to use the same release keystore.
 Repository builds made without the Android signing secrets use a local test
 identity and may need the old test build to be uninstalled first. That normally
 removes its private application data. Current public macOS artifacts remain
-ad-hoc signed and unnotarized, so Update opens the verified DMG rather than
-replacing the running application.
+ad-hoc signed and unnotarized. The updater therefore verifies the release hash,
+bundle identifier, and ad-hoc code-signature integrity itself; it does not
+claim that the package has a trusted Developer ID or Apple notarization ticket.
 
 Flatpak and Snap installations deliberately do not show the direct-install
 action. Those package systems own their installed files and should deliver the

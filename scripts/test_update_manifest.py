@@ -16,6 +16,7 @@ class UpdateManifestTests(unittest.TestCase):
             root = Path(temporary)
             files = {
                 "mdslens-windows-x64-setup.exe": b"windows",
+                "mdslens-macos-universal-unsigned.zip": b"macos-zip",
                 "mdslens-macos-universal-unsigned.dmg": b"macos",
                 "mdslens-linux-arm64.AppImage": b"linux",
                 "mdslens-android-universal.apk": b"android",
@@ -38,6 +39,10 @@ class UpdateManifestTests(unittest.TestCase):
         self.assertEqual(
             assets["mdslens-macos-universal-unsigned.dmg"]["architecture"],
             "universal",
+        )
+        self.assertEqual(
+            assets["mdslens-macos-universal-unsigned.zip"]["strategy"],
+            "self-replace",
         )
         self.assertEqual(
             assets["mdslens-linux-arm64.AppImage"]["format"],

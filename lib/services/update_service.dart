@@ -204,6 +204,7 @@ UpdateManifest parseUpdateManifest(
         !const {
           'launch-installer',
           'open-package',
+          'self-replace',
           'system-installer',
           'manual',
         }.contains(strategy)) {
@@ -237,6 +238,7 @@ UpdateManifestAsset? selectUpdateAsset(
   required String platform,
   required String architecture,
   String? preferredLinuxFormat,
+  String? preferredMacOSFormat,
 }) {
   final normalizedPlatform =
       platform.toLowerCase() == 'ipados' ? 'ipados' : platform.toLowerCase();
@@ -264,7 +266,13 @@ UpdateManifestAsset? selectUpdateAsset(
           : asset.format == 'msi'
               ? 1
               : 10,
-      'macos' => asset.format == 'dmg' ? 0 : 10,
+      'macos' => asset.format == preferredMacOSFormat
+          ? 0
+          : asset.format == 'zip'
+              ? 1
+              : asset.format == 'dmg'
+                  ? 2
+                  : 10,
       'android' => asset.architecture == 'universal' ? 0 : architectureRank,
       'linux' => asset.format == preferredLinuxFormat
           ? 0
