@@ -12,16 +12,20 @@ Future<void> _initializeApplication(
   List<String> commandLineArguments,
 ) async {
   await app.preferencesReady;
-  await IncomingConfigurationService.start(
-    app.openConfigurationPath,
-    commandLineArguments: commandLineArguments,
-  );
-  await WidgetsBinding.instance.endOfFrame;
-  final networkAccess =
-      await NetworkPermissionService.requestAllStartupPermissions(
-    app.loginApiUrl,
-  );
-  await app.initializeStartupSession(preparedNetworkAccess: networkAccess);
+  try {
+    await IncomingConfigurationService.start(
+      app.openConfigurationPath,
+      commandLineArguments: commandLineArguments,
+    );
+    await WidgetsBinding.instance.endOfFrame;
+    final networkAccess =
+        await NetworkPermissionService.requestAllStartupPermissions(
+      app.loginApiUrl,
+    );
+    await app.initializeStartupSession(preparedNetworkAccess: networkAccess);
+  } finally {
+    app.markStartupInitializationComplete();
+  }
 }
 
 void main(List<String> arguments) {

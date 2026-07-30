@@ -51,6 +51,7 @@ const _filePreferenceKeys = <String>[
   'interactionMode',
   'themeMode',
   'toolbarCollapsed',
+  'autoCheckUpdates',
   'fontFamily',
   'fontLegendSize',
   'fontAxisSize',
@@ -721,6 +722,15 @@ class AppState extends ChangeNotifier {
   }
 
   late final Future<void> preferencesReady;
+  final Completer<void> _startupInitialization = Completer<void>();
+  Future<void> get startupInitializationReady => _startupInitialization.future;
+
+  void markStartupInitializationComplete() {
+    if (!_startupInitialization.isCompleted) {
+      _startupInitialization.complete();
+    }
+  }
+
   final UserDataStore _userDataStore;
   final CredentialStore _credentialStore;
 
@@ -867,6 +877,15 @@ class AppState extends ChangeNotifier {
   set toolbarCollapsed(bool value) {
     if (value == _toolbarCollapsed) return;
     _toolbarCollapsed = value;
+    savePreferences();
+    notifyListeners();
+  }
+
+  bool _autoCheckUpdates = true;
+  bool get autoCheckUpdates => _autoCheckUpdates;
+  void setAutoCheckUpdates(bool enabled) {
+    if (_autoCheckUpdates == enabled) return;
+    _autoCheckUpdates = enabled;
     savePreferences();
     notifyListeners();
   }
@@ -1723,6 +1742,9 @@ class AppState extends ChangeNotifier {
       _toolbarCollapsed = setting('toolbarCollapsed') is bool
           ? setting('toolbarCollapsed') as bool
           : _toolbarCollapsed;
+      _autoCheckUpdates = setting('autoCheckUpdates') is bool
+          ? setting('autoCheckUpdates') as bool
+          : _autoCheckUpdates;
       _fontFamily = setting('fontFamily')?.toString() ?? _fontFamily;
       _fontLegendSize = setting('fontLegendSize') is num
           ? (setting('fontLegendSize') as num).toInt()
@@ -1829,6 +1851,7 @@ class AppState extends ChangeNotifier {
         'interactionMode': _interactionMode,
         'themeMode': _themeMode,
         'toolbarCollapsed': _toolbarCollapsed,
+        'autoCheckUpdates': _autoCheckUpdates,
         'fontFamily': _fontFamily,
         'fontLegendSize': _fontLegendSize,
         'fontAxisSize': _fontAxisSize,
@@ -3334,6 +3357,7 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    markStartupInitializationComplete();
     prepareForExit();
     _shotCtrl.dispose();
     shotFocusNode.dispose();

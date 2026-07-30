@@ -9,10 +9,19 @@ import 'services/stylus_mode_channel.dart';
 import 'services/theme_channel.dart';
 import 'theme/mdslens_theme.dart';
 import 'pages/main_page.dart';
+import 'widgets/dialogs/about.dart';
 import 'widgets/network_permission_gate.dart';
 
+typedef AutomaticUpdateChecker = Future<void> Function(BuildContext context);
+
 class MDSLensApp extends StatefulWidget {
-  const MDSLensApp({super.key});
+  const MDSLensApp({
+    super.key,
+    this.automaticUpdateChecker,
+  });
+
+  final AutomaticUpdateChecker? automaticUpdateChecker;
+
   @override
   State<MDSLensApp> createState() => _MDSLensAppState();
 }
@@ -42,9 +51,19 @@ class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scheduleThemeCalibration();
+      unawaited(_checkForUpdatesOnStartup());
     });
     // Global Shift key tracking for Shift+drag pan
     HardwareKeyboard.instance.addHandler(_onAppKey);
+  }
+
+  Future<void> _checkForUpdatesOnStartup() async {
+    final app = context.read<AppState>();
+    await app.preferencesReady;
+    await app.startupInitializationReady;
+    if (!mounted || !app.autoCheckUpdates) return;
+    await (widget.automaticUpdateChecker ??
+        AboutDialogWidget.checkAutomatically)(context);
   }
 
   void _scheduleThemeCalibration() {

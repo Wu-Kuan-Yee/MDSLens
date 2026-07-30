@@ -1093,6 +1093,7 @@ void main() {
     first.interactionMode = 1;
     first.themeMode = 0;
     first.toolbarCollapsed = true;
+    first.setAutoCheckUpdates(false);
     first.shotText = '163701';
     first.applyFontSettings(
       'Courier New',
@@ -1118,6 +1119,7 @@ void main() {
     expect(second.interactionMode, 1);
     expect(second.themeMode, 0);
     expect(second.toolbarCollapsed, isTrue);
+    expect(second.autoCheckUpdates, isFalse);
     expect(second.shotText, '163701');
     expect(second.fontFamily, 'Courier New');
     expect(second.fontLegendSize, 17);
@@ -1136,6 +1138,10 @@ void main() {
       'Courier New',
     );
     expect(jsonDecode(await settingsFile.readAsString())['iconSize'], 30);
+    expect(
+      jsonDecode(await settingsFile.readAsString())['autoCheckUpdates'],
+      isFalse,
+    );
     final legacy = await SharedPreferences.getInstance();
     expect(legacy.containsKey('shotHistory'), isFalse);
   });
@@ -4374,7 +4380,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    expect(find.byType(PopupMenuDivider), findsNWidgets(4));
+    expect(find.byType(PopupMenuDivider), findsNWidgets(5));
   });
 
   testWidgets('Shot history uses the polished compact dropdown', (
@@ -5038,7 +5044,162 @@ void main() {
     expect(find.byIcon(Icons.language_rounded), findsOneWidget);
     expect(find.byIcon(Icons.dashboard_customize_rounded), findsOneWidget);
     expect(find.byIcon(Icons.font_download_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.update_rounded), findsOneWidget);
     expect(find.byIcon(Icons.info_outline_rounded), findsOneWidget);
+  });
+
+  testWidgets('Automatic update checks are enabled by default and configurable',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    expect(app.autoCheckUpdates, isTrue);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<CheckedPopupMenuItem<String>>(
+            find.byKey(const ValueKey('settings-auto-update-check')),
+          )
+          .checked,
+      isTrue,
+    );
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('settings-auto-update-check')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('settings-auto-update-check')),
+    );
+    await tester.pumpAndSettle();
+    expect(app.autoCheckUpdates, isFalse);
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<CheckedPopupMenuItem<String>>(
+            find.byKey(const ValueKey('settings-auto-update-check')),
+          )
+          .checked,
+      isFalse,
+    );
+  });
+
+  testWidgets('Startup update check waits for application initialization',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    var checks = 0;
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(
+          automaticUpdateChecker: (context) async {
+            checks++;
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(checks, 0);
+
+    app.markStartupInitializationComplete();
+    await tester.pump();
+    expect(checks, 1);
+  });
+
+  testWidgets('Disabled startup update check does not run', (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    app.setAutoCheckUpdates(false);
+    addTearDown(app.dispose);
+    var checks = 0;
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(
+          automaticUpdateChecker: (context) async {
+            checks++;
+          },
+        ),
+      ),
+    );
+    app.markStartupInitializationComplete();
+    await tester.pump();
+    expect(checks, 0);
+  });
+
+  testWidgets('Automatic update failures remain silent', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () => AboutDialogWidget.checkAutomatically(
+              context,
+              versionLoader: () async => '0.0.1',
+              updateChecker: () async => throw Exception('offline'),
+            ),
+            child: const Text('Check silently'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Check silently'));
+    await tester.pumpAndSettle();
+    expect(find.text('Update check failed'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Automatic update checks offer release, direct update, or cancel',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () => AboutDialogWidget.checkAutomatically(
+              context,
+              versionLoader: () async => '0.0.1',
+              updateChecker: () async => const ReleaseUpdate(
+                latestVersion: 'v1.0.0',
+                releaseUrl:
+                    'https://github.com/Wu-Kuan-Yee/MDSLens/releases/tag/v1.0.0',
+                updateAvailable: true,
+                assets: [
+                  ReleaseAssetLocation(
+                    name: 'update-manifest.json',
+                    url: 'https://example.invalid/update-manifest.json',
+                    size: 1,
+                  ),
+                ],
+              ),
+            ),
+            child: const Text('Check automatically'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Check automatically'));
+    await tester.pumpAndSettle();
+    expect(find.text('Update available'), findsOneWidget);
+    expect(find.text('Cancel'), findsOneWidget);
+    expect(find.text('Open Release'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('install-update-directly')),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Update available'), findsNothing);
   });
 
   testWidgets('Internal web pages use separated polished list items', (

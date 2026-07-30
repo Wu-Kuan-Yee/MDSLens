@@ -17,6 +17,42 @@ typedef ApplicationExitRequester = Future<void> Function();
 
 enum _UpdateChoice { release, direct }
 
+Future<_UpdateChoice?> _showUpdateChoiceDialog(
+  BuildContext context,
+  ReleaseUpdate result,
+) {
+  final supportsDirectUpdate = directUpdateSupported &&
+      result.assetNamed('update-manifest.json') != null;
+  return showDialog<_UpdateChoice>(
+    context: context,
+    builder: (context) => KeyboardSafeDialog(
+      title: const Text('Update available'),
+      content: Text(
+        supportsDirectUpdate
+            ? 'MDSLens ${result.latestVersion} is available. You can download the correct package for this device or inspect the release first.'
+            : 'MDSLens ${result.latestVersion} is available. Open the release page?',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        OutlinedButton(
+          onPressed: () => Navigator.pop(context, _UpdateChoice.release),
+          child: const Text('Open Release'),
+        ),
+        if (supportsDirectUpdate)
+          FilledButton.icon(
+            key: const ValueKey('install-update-directly'),
+            onPressed: () => Navigator.pop(context, _UpdateChoice.direct),
+            icon: const Icon(Icons.system_update_alt_rounded),
+            label: Text(directUpdateActionLabel),
+          ),
+      ],
+    ),
+  );
+}
+
 class AboutDialogWidget extends StatefulWidget {
   final ExternalUriOpener? urlOpener;
   final ReleaseUpdateChecker? updateChecker;
@@ -25,6 +61,8 @@ class AboutDialogWidget extends StatefulWidget {
   final AppVersionLoader? versionLoader;
   final GitVersionLoader? gitVersionLoader;
   final ApplicationExitRequester? applicationExitRequester;
+  final ReleaseUpdate? initialUpdate;
+  final bool installInitialUpdate;
 
   const AboutDialogWidget({
     super.key,
@@ -35,10 +73,57 @@ class AboutDialogWidget extends StatefulWidget {
     this.versionLoader,
     this.gitVersionLoader,
     this.applicationExitRequester,
+    this.initialUpdate,
+    this.installInitialUpdate = false,
   });
 
-  static void show(BuildContext context) {
-    showDialog(context: context, builder: (ctx) => const AboutDialogWidget());
+  static Future<void> show(BuildContext context) {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => const AboutDialogWidget(),
+    );
+  }
+
+  static Future<void> checkAutomatically(
+    BuildContext context, {
+    ExternalUriOpener? urlOpener,
+    ReleaseUpdateChecker? updateChecker,
+    ReleaseUpdateInstaller? updateInstaller,
+    RuntimeSystemInfoLoader? systemInfoLoader,
+    AppVersionLoader? versionLoader,
+    GitVersionLoader? gitVersionLoader,
+    ApplicationExitRequester? applicationExitRequester,
+  }) async {
+    try {
+      final currentVersion = await (versionLoader ?? loadMDSLensVersion)();
+      final result = await (updateChecker != null
+          ? updateChecker()
+          : checkLatestMDSLensRelease(currentVersion));
+      if (!context.mounted || !result.updateAvailable) return;
+      final choice = await _showUpdateChoiceDialog(context, result);
+      if (!context.mounted) return;
+      if (choice == _UpdateChoice.release) {
+        await openExternalWebUrl(result.releaseUrl, opener: urlOpener);
+      } else if (choice == _UpdateChoice.direct) {
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AboutDialogWidget(
+            urlOpener: urlOpener,
+            updateChecker: updateChecker,
+            updateInstaller: updateInstaller,
+            systemInfoLoader: systemInfoLoader,
+            versionLoader: versionLoader,
+            gitVersionLoader: gitVersionLoader,
+            applicationExitRequester: applicationExitRequester,
+            initialUpdate: result,
+            installInitialUpdate: true,
+          ),
+        );
+      }
+    } catch (_) {
+      // Automatic checks are deliberately quiet. A transient network or
+      // release-service failure must never interrupt application startup.
+    }
   }
 
   @override
@@ -54,6 +139,7 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
   late RuntimeSystemInfo _systemInfo;
   String _mdsLensVersion = 'Loading...';
   String _gitVersion = 'Loading...';
+  bool _initialInstallStarted = false;
 
   @override
   void initState() {
@@ -80,6 +166,12 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
       _mdsLensVersion = values[1] as String;
       _gitVersion = values[2] as String;
     });
+    if (widget.installInitialUpdate &&
+        widget.initialUpdate != null &&
+        !_initialInstallStarted) {
+      _initialInstallStarted = true;
+      await _installUpdate(widget.initialUpdate!);
+    }
   }
 
   Future<bool> _openUrl(String url) async {
@@ -112,36 +204,7 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
         _checkingUpdate = false;
         _updateStatus = '${result.latestVersion} is available';
       });
-      final supportsDirectUpdate = directUpdateSupported &&
-          result.assetNamed('update-manifest.json') != null;
-      final choice = await showDialog<_UpdateChoice>(
-        context: context,
-        builder: (context) => KeyboardSafeDialog(
-          title: const Text('Update available'),
-          content: Text(
-            supportsDirectUpdate
-                ? 'MDSLens ${result.latestVersion} is available. You can download the correct package for this device or inspect the release first.'
-                : 'MDSLens ${result.latestVersion} is available. Open the release page?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            OutlinedButton(
-              onPressed: () => Navigator.pop(context, _UpdateChoice.release),
-              child: const Text('Open Release'),
-            ),
-            if (supportsDirectUpdate)
-              FilledButton.icon(
-                key: const ValueKey('install-update-directly'),
-                onPressed: () => Navigator.pop(context, _UpdateChoice.direct),
-                icon: const Icon(Icons.system_update_alt_rounded),
-                label: Text(directUpdateActionLabel),
-              ),
-          ],
-        ),
-      );
+      final choice = await _showUpdateChoiceDialog(context, result);
       if (choice == _UpdateChoice.release) {
         await _openUrl(result.releaseUrl);
       } else if (choice == _UpdateChoice.direct) {
