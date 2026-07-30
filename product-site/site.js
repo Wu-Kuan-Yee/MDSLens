@@ -210,9 +210,12 @@
 
   canvas.addEventListener("pointerdown", (event) => {
     const point = pointerCoordinates(event);
-    canvas.setPointerCapture(event.pointerId);
+    if (event.pointerType !== "touch") {
+      canvas.setPointerCapture(event.pointerId);
+    }
     drag = {
       pointerId: event.pointerId,
+      pointerType: event.pointerType,
       startX: point.clientX,
       startY: point.clientY,
       startPan: state.pan,
@@ -241,8 +244,12 @@
       return;
     }
 
+    const zoomDistance =
+      drag.pointerType === "touch"
+        ? point.clientX - drag.startX
+        : drag.startY - point.clientY;
     const nextZoom = clamp(
-      drag.startZoom * Math.exp((drag.startY - point.clientY) * 0.012),
+      drag.startZoom * Math.exp(zoomDistance * 0.012),
       1,
       8,
     );
@@ -271,6 +278,8 @@
 
   canvas.addEventListener("pointerup", endInteraction);
   canvas.addEventListener("pointercancel", endInteraction);
+  window.addEventListener("pointerup", endInteraction, { passive: true });
+  window.addEventListener("pointercancel", endInteraction, { passive: true });
   canvas.addEventListener("lostpointercapture", () => {
     drag = null;
   });

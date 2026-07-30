@@ -48,6 +48,8 @@ def main() -> int:
             "@media (max-width: 1080px)",
             "@media (max-width: 720px)",
             "@media (prefers-reduced-motion: reduce)",
+            "--safe-area-top: env(safe-area-inset-top, 0px)",
+            "touch-action: pan-y pinch-zoom",
         ),
     )
     require_text(
@@ -57,6 +59,7 @@ def main() -> int:
             "requestAnimationFrame",
             "ResizeObserver",
             "setPointerCapture",
+            'event.pointerType !== "touch"',
         ),
     )
 
