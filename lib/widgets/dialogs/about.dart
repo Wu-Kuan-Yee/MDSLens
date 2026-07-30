@@ -2,14 +2,24 @@ import 'package:flutter/material.dart';
 
 import '../../services/external_url_launcher.dart';
 import '../../services/runtime_build_info.dart';
+import '../../services/update_installer.dart';
 import '../../services/update_service.dart';
 import 'keyboard_safe_dialog.dart';
 
 typedef ReleaseUpdateChecker = Future<ReleaseUpdate> Function();
+typedef ReleaseUpdateInstaller = Future<UpdateInstallResult> Function(
+  ReleaseUpdate release,
+  RuntimeSystemInfo systemInfo, {
+  required UpdateDownloadController controller,
+  UpdateProgressCallback? onProgress,
+});
+
+enum _UpdateChoice { release, direct }
 
 class AboutDialogWidget extends StatefulWidget {
   final ExternalUriOpener? urlOpener;
   final ReleaseUpdateChecker? updateChecker;
+  final ReleaseUpdateInstaller? updateInstaller;
   final RuntimeSystemInfoLoader? systemInfoLoader;
   final AppVersionLoader? versionLoader;
   final GitVersionLoader? gitVersionLoader;
@@ -18,6 +28,7 @@ class AboutDialogWidget extends StatefulWidget {
     super.key,
     this.urlOpener,
     this.updateChecker,
+    this.updateInstaller,
     this.systemInfoLoader,
     this.versionLoader,
     this.gitVersionLoader,
@@ -34,6 +45,9 @@ class AboutDialogWidget extends StatefulWidget {
 class _AboutDialogWidgetState extends State<AboutDialogWidget> {
   String _updateStatus = '';
   bool _checkingUpdate = false;
+  bool _installingUpdate = false;
+  UpdateDownloadProgress? _updateProgress;
+  UpdateDownloadController? _updateController;
   late RuntimeSystemInfo _systemInfo;
   String _mdsLensVersion = 'Loading...';
   String _gitVersion = 'Loading...';
@@ -43,6 +57,12 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
     super.initState();
     _systemInfo = RuntimeSystemInfo.fallback();
     _loadBuildInformation();
+  }
+
+  @override
+  void dispose() {
+    _updateController?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadBuildInformation() async {
@@ -89,26 +109,41 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
         _checkingUpdate = false;
         _updateStatus = '${result.latestVersion} is available';
       });
-      final openRelease = await showDialog<bool>(
+      final supportsDirectUpdate = directUpdateSupported &&
+          result.assetNamed('update-manifest.json') != null;
+      final choice = await showDialog<_UpdateChoice>(
         context: context,
         builder: (context) => KeyboardSafeDialog(
           title: const Text('Update available'),
           content: Text(
-            'MDSLens ${result.latestVersion} is available. Open the release page?',
+            supportsDirectUpdate
+                ? 'MDSLens ${result.latestVersion} is available. You can download the correct package for this device or inspect the release first.'
+                : 'MDSLens ${result.latestVersion} is available. Open the release page?',
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.pop(context),
               child: const Text('Cancel'),
             ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
+            OutlinedButton(
+              onPressed: () => Navigator.pop(context, _UpdateChoice.release),
               child: const Text('Open Release'),
             ),
+            if (supportsDirectUpdate)
+              FilledButton.icon(
+                key: const ValueKey('install-update-directly'),
+                onPressed: () => Navigator.pop(context, _UpdateChoice.direct),
+                icon: const Icon(Icons.system_update_alt_rounded),
+                label: Text(directUpdateActionLabel),
+              ),
           ],
         ),
       );
-      if (openRelease == true) await _openUrl(result.releaseUrl);
+      if (choice == _UpdateChoice.release) {
+        await _openUrl(result.releaseUrl);
+      } else if (choice == _UpdateChoice.direct) {
+        await _installUpdate(result);
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -135,6 +170,72 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
         ),
       );
       if (openReleases == true) await _openUrl(mdsLensReleasesUrl);
+    }
+  }
+
+  Future<void> _installUpdate(ReleaseUpdate release) async {
+    final controller = UpdateDownloadController();
+    _updateController = controller;
+    setState(() {
+      _installingUpdate = true;
+      _updateProgress = null;
+      _updateStatus = 'Preparing ${release.latestVersion}...';
+    });
+    try {
+      final result =
+          await (widget.updateInstaller ?? installLatestReleaseUpdate)(
+        release,
+        _systemInfo,
+        controller: controller,
+        onProgress: (progress) {
+          if (!mounted || controller.isCancelled) return;
+          setState(() {
+            _updateProgress = progress;
+            final fraction = progress.fraction;
+            _updateStatus = fraction == null
+                ? 'Downloading update...'
+                : 'Downloading update ${(fraction * 100).clamp(0, 100).toStringAsFixed(0)}%';
+          });
+        },
+      );
+      if (!mounted) return;
+      setState(() => _updateStatus = result.message);
+    } on UpdateCancelledException {
+      if (!mounted) return;
+      setState(() => _updateStatus = 'Update download cancelled');
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _updateStatus = 'Could not download or install update');
+      final openRelease = await showDialog<bool>(
+        context: context,
+        builder: (context) => KeyboardSafeDialog(
+          title: const Text('Update failed'),
+          content: const Text(
+            'The update could not be downloaded, verified, or handed to the system installer. No unverified package was opened.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Close'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Open Release'),
+            ),
+          ],
+        ),
+      );
+      if (openRelease == true) await _openUrl(release.releaseUrl);
+    } finally {
+      if (identical(_updateController, controller)) {
+        _updateController = null;
+      }
+      if (mounted) {
+        setState(() {
+          _installingUpdate = false;
+          _updateProgress = null;
+        });
+      }
     }
   }
 
@@ -383,19 +484,54 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
                   LayoutBuilder(
                     builder: (context, constraints) {
                       final updateButton = OutlinedButton(
-                        onPressed: _checkingUpdate ? null : _checkUpdate,
-                        child: Text(_checkingUpdate ? 'Checking...' : 'Update'),
+                        onPressed: _checkingUpdate || _installingUpdate
+                            ? null
+                            : _checkUpdate,
+                        child: Text(
+                          _checkingUpdate
+                              ? 'Checking...'
+                              : _installingUpdate
+                                  ? 'Updating...'
+                                  : 'Update',
+                        ),
                       );
                       final closeButton = FilledButton(
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: () {
+                          _updateController?.cancel();
+                          Navigator.pop(context);
+                        },
                         child: const Text('Close'),
                       );
-                      final status = Text(
-                        _updateStatus,
-                        softWrap: true,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
+                      final status = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _updateStatus,
+                            softWrap: true,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          if (_installingUpdate) ...[
+                            const SizedBox(height: 5),
+                            LinearProgressIndicator(
+                              key: const ValueKey('update-download-progress'),
+                              value: _updateProgress?.fraction,
+                            ),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton.icon(
+                                key: const ValueKey(
+                                  'cancel-update-download',
+                                ),
+                                onPressed: _updateController?.cancel,
+                                icon: const Icon(Icons.close_rounded),
+                                label: const Text('Cancel download'),
+                              ),
+                            ),
+                          ],
+                        ],
                       );
                       if (constraints.maxWidth < 390) {
                         return Column(

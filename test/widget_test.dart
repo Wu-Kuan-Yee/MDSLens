@@ -22,6 +22,7 @@ import 'package:mdslens/services/platform_file_dialog.dart';
 import 'package:mdslens/services/runtime_build_info.dart';
 import 'package:mdslens/services/simple_zip.dart';
 import 'package:mdslens/services/source_index.dart';
+import 'package:mdslens/services/update_installer.dart';
 import 'package:mdslens/services/update_service.dart';
 import 'package:mdslens/services/user_data_store.dart';
 import 'package:mdslens/theme/mdslens_theme.dart';
@@ -6101,5 +6102,73 @@ void main() {
       Uri.parse('https://github.com/Wu-Kuan-Yee/MDSLens/releases/tag/v99.0.0'),
     );
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('About downloads and installs a matching verified update', (
+    tester,
+  ) async {
+    var installerCalled = false;
+    const manifest = ReleaseAssetLocation(
+      name: 'update-manifest.json',
+      url:
+          'https://github.com/Wu-Kuan-Yee/MDSLens/releases/download/v1.0.0/update-manifest.json',
+      size: 1,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AboutDialogWidget(
+          systemInfoLoader: () async => const RuntimeSystemInfo(
+            name: 'macOS',
+            version: '26.2',
+            architecture: 'arm64',
+          ),
+          versionLoader: () async => '0.0.1',
+          gitVersionLoader: () async => '0.0.1.r1.g123456789',
+          updateChecker: () async => const ReleaseUpdate(
+            latestVersion: 'v1.0.0',
+            releaseUrl:
+                'https://github.com/Wu-Kuan-Yee/MDSLens/releases/tag/v1.0.0',
+            updateAvailable: true,
+            assets: [manifest],
+          ),
+          updateInstaller: (
+            release,
+            systemInfo, {
+            required controller,
+            onProgress,
+          }) async {
+            installerCalled = true;
+            onProgress?.call(
+              const UpdateDownloadProgress(received: 50, total: 100),
+            );
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+            onProgress?.call(
+              const UpdateDownloadProgress(received: 100, total: 100),
+            );
+            return const UpdateInstallResult(
+              status: UpdateLaunchStatus.launched,
+              message: 'The verified update installer is ready.',
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Update'));
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(const ValueKey('install-update-directly')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('install-update-directly')));
+    await tester.pump();
+    expect(
+        find.byKey(const ValueKey('update-download-progress')), findsOneWidget);
+    await tester.pumpAndSettle();
+
+    expect(installerCalled, isTrue);
+    expect(
+        find.text('The verified update installer is ready.'), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('update-download-progress')), findsNothing);
   });
 }
