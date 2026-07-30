@@ -8,10 +8,12 @@ import 'runtime_build_info.dart';
 import 'update_installer_models.dart';
 import 'update_service.dart';
 
-typedef UpdateAssetLauncher = Future<UpdateInstallResult> Function(
-    DownloadedUpdate update);
-typedef UpdateManifestLoader = Future<UpdateManifest> Function(
-    ReleaseUpdate release);
+typedef UpdateAssetLauncher =
+    Future<UpdateInstallResult> Function(DownloadedUpdate update);
+typedef UpdateManifestLoader =
+    Future<UpdateManifest> Function(ReleaseUpdate release);
+typedef DetachedCommandLauncher =
+    Future<void> Function(String executable, List<String> arguments);
 
 const _updaterChannel = MethodChannel('mdslens/updater');
 
@@ -29,8 +31,8 @@ bool get directUpdateSupported {
 }
 
 String get directUpdateActionLabel {
-  if (Platform.isMacOS) return 'Download & Open';
-  return 'Download & Install';
+  if (Platform.isAndroid) return 'Download & Install';
+  return 'Update & Restart';
 }
 
 Future<UpdateInstallResult> installLatestReleaseUpdate(
@@ -57,7 +59,8 @@ Future<UpdateInstallResult> installLatestReleaseUpdate(
   if (controller.isCancelled) throw const UpdateCancelledException();
   final platform = platformOverride ?? Platform.operatingSystem;
   final architecture = architectureOverride ?? systemInfo.architecture;
-  final linuxFormat = linuxFormatOverride ??
+  final linuxFormat =
+      linuxFormatOverride ??
       (platform == 'linux' ? await _preferredLinuxPackageFormat() : null);
   final asset = selectUpdateAsset(
     manifest,
@@ -79,7 +82,7 @@ Future<UpdateInstallResult> installLatestReleaseUpdate(
     downloadDirectory: downloadDirectory,
   );
   if (controller.isCancelled) throw const UpdateCancelledException();
-  return await (launcher ?? _launchUpdateAsset)(downloaded);
+  return await (launcher ?? launchVerifiedUpdateAsset)(downloaded);
 }
 
 Future<DownloadedUpdate> downloadVerifiedUpdateAsset(
@@ -99,7 +102,8 @@ Future<DownloadedUpdate> downloadVerifiedUpdateAsset(
   final ownedClient = client == null;
   final activeClient = client ?? http.Client();
   controller.bind(activeClient.close);
-  final directory = downloadDirectory ??
+  final directory =
+      downloadDirectory ??
       Directory(
         '${Directory.systemTemp.path}${Platform.pathSeparator}mdslens-updates',
       );
@@ -113,9 +117,9 @@ Future<DownloadedUpdate> downloadVerifiedUpdateAsset(
     if (partial.existsSync()) await partial.delete();
     final request = http.Request('GET', Uri.parse(asset.url));
     request.headers['Accept'] = 'application/octet-stream';
-    final response = await activeClient.send(request).timeout(
-          const Duration(seconds: 30),
-        );
+    final response = await activeClient
+        .send(request)
+        .timeout(const Duration(seconds: 30));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(
         'GitHub returned HTTP ${response.statusCode} for ${asset.name}',
@@ -176,10 +180,18 @@ Future<DownloadedUpdate> downloadVerifiedUpdateAsset(
   }
 }
 
-Future<UpdateInstallResult> _launchUpdateAsset(
-  DownloadedUpdate update,
-) async {
-  if (Platform.isAndroid) {
+Future<void> _startDetached(String executable, List<String> arguments) async {
+  await Process.start(executable, arguments, mode: ProcessStartMode.detached);
+}
+
+Future<UpdateInstallResult> launchVerifiedUpdateAsset(
+  DownloadedUpdate update, {
+  String? platformOverride,
+  DetachedCommandLauncher? commandLauncher,
+}) async {
+  final platform = platformOverride ?? Platform.operatingSystem;
+  final launch = commandLauncher ?? _startDetached;
+  if (platform == 'android') {
     final status = await _updaterChannel.invokeMethod<String>(
       'installApk',
       update.path,
@@ -194,27 +206,33 @@ Future<UpdateInstallResult> _launchUpdateAsset(
       downloaded: update,
     );
   }
-  if (Platform.isWindows) {
+  if (platform == 'windows') {
     if (update.asset.format == 'msi') {
-      await Process.start(
-        'msiexec.exe',
-        ['/i', update.path],
-        mode: ProcessStartMode.detached,
-      );
-    } else {
-      await Process.start(
+      await launch('msiexec.exe', [
+        '/i',
         update.path,
-        const [],
-        mode: ProcessStartMode.detached,
-      );
+        '/qn',
+        '/norestart',
+        'REBOOT=ReallySuppress',
+      ]);
+    } else {
+      await launch(update.path, const [
+        '/VERYSILENT',
+        '/SUPPRESSMSGBOXES',
+        '/NORESTART',
+        '/CLOSEAPPLICATIONS',
+        '/RESTARTAPPLICATIONS',
+        '/SP-',
+      ]);
     }
     return UpdateInstallResult(
       status: UpdateLaunchStatus.launched,
-      message: 'The Windows installer is ready.',
+      message: 'Installing the update. MDSLens will restart automatically.',
       downloaded: update,
+      closeApplication: true,
     );
   }
-  if (Platform.isMacOS) {
+  if (platform == 'macos') {
     final result = await Process.run('open', [update.path]);
     if (result.exitCode != 0) {
       throw Exception('macOS could not open the downloaded update.');
@@ -225,7 +243,7 @@ Future<UpdateInstallResult> _launchUpdateAsset(
       downloaded: update,
     );
   }
-  if (Platform.isLinux) {
+  if (platform == 'linux') {
     final currentAppImage = (Platform.environment['APPIMAGE'] ?? '').trim();
     if (update.asset.format == 'AppImage' && currentAppImage.isNotEmpty) {
       if (await replaceAppImageForUpdate(update, currentAppImage)) {
@@ -240,11 +258,7 @@ Future<UpdateInstallResult> _launchUpdateAsset(
     if (update.asset.format == 'AppImage') {
       await Process.run('chmod', ['+x', update.path]);
     }
-    await Process.start(
-      'xdg-open',
-      [update.path],
-      mode: ProcessStartMode.detached,
-    );
+    await launch('xdg-open', [update.path]);
     return UpdateInstallResult(
       status: UpdateLaunchStatus.launched,
       message: 'The downloaded package is open in the system installer.',
@@ -317,12 +331,14 @@ Future<String> _preferredLinuxPackageFormat() async {
   }
   try {
     final source = (await File('/etc/os-release').readAsString()).toLowerCase();
-    if (RegExp(r'(?:^|\s)(?:id|id_like)=[^\n]*(?:debian|ubuntu)')
-        .hasMatch(source)) {
+    if (RegExp(
+      r'(?:^|\s)(?:id|id_like)=[^\n]*(?:debian|ubuntu)',
+    ).hasMatch(source)) {
       return 'deb';
     }
-    if (RegExp(r'(?:^|\s)(?:id|id_like)=[^\n]*(?:fedora|rhel|centos|suse)')
-        .hasMatch(source)) {
+    if (RegExp(
+      r'(?:^|\s)(?:id|id_like)=[^\n]*(?:fedora|rhel|centos|suse)',
+    ).hasMatch(source)) {
       return 'rpm';
     }
   } catch (_) {}

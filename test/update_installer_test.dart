@@ -23,39 +23,38 @@ void main() {
     );
   }
 
-  test('verified update downloads stream to a file and report progress',
-      () async {
-    final bytes = utf8.encode('verified update');
-    final progress = <UpdateDownloadProgress>[];
-    final controller = UpdateDownloadController();
-    final client = MockClient.streaming((request, bodyStream) async {
-      return http.StreamedResponse(
-        Stream.fromIterable([
-          bytes.sublist(0, 4),
-          bytes.sublist(4),
-        ]),
-        200,
-        contentLength: bytes.length,
+  test(
+    'verified update downloads stream to a file and report progress',
+    () async {
+      final bytes = utf8.encode('verified update');
+      final progress = <UpdateDownloadProgress>[];
+      final controller = UpdateDownloadController();
+      final client = MockClient.streaming((request, bodyStream) async {
+        return http.StreamedResponse(
+          Stream.fromIterable([bytes.sublist(0, 4), bytes.sublist(4)]),
+          200,
+          contentLength: bytes.length,
+        );
+      });
+      final directory = await Directory.systemTemp.createTemp(
+        'mdslens-update-test-',
       );
-    });
-    final directory = await Directory.systemTemp.createTemp(
-      'mdslens-update-test-',
-    );
-    addTearDown(() => directory.delete(recursive: true));
+      addTearDown(() => directory.delete(recursive: true));
 
-    final downloaded = await downloadVerifiedUpdateAsset(
-      assetFor(bytes),
-      controller: controller,
-      client: client,
-      downloadDirectory: directory,
-      onProgress: progress.add,
-    );
+      final downloaded = await downloadVerifiedUpdateAsset(
+        assetFor(bytes),
+        controller: controller,
+        client: client,
+        downloadDirectory: directory,
+        onProgress: progress.add,
+      );
 
-    expect(await File(downloaded.path).readAsBytes(), bytes);
-    expect(progress.first.received, 0);
-    expect(progress.last.received, bytes.length);
-    expect(progress.last.fraction, 1);
-  });
+      expect(await File(downloaded.path).readAsBytes(), bytes);
+      expect(progress.first.received, 0);
+      expect(progress.last.received, bytes.length);
+      expect(progress.last.fraction, 1);
+    },
+  );
 
   test('a corrupt update is deleted before it can be launched', () async {
     final expected = utf8.encode('expected');
@@ -97,10 +96,7 @@ void main() {
         controller: controller,
         client: MockClient.streaming((request, bodyStream) async {
           return http.StreamedResponse(
-            Stream.fromIterable([
-              bytes.sublist(0, 4),
-              bytes.sublist(4),
-            ]),
+            Stream.fromIterable([bytes.sublist(0, 4), bytes.sublist(4)]),
             200,
             contentLength: bytes.length,
           );
@@ -141,9 +137,73 @@ void main() {
     expect(await replaceAppImageForUpdate(update, current.path), isTrue);
     expect(await current.readAsString(), 'new');
     expect(downloaded.existsSync(), isFalse);
-    expect(
-      File('${current.path}.mdslens-backup').existsSync(),
-      isFalse,
-    );
+    expect(File('${current.path}.mdslens-backup').existsSync(), isFalse);
   });
+
+  test(
+    'Windows EXE updates run silently and request application shutdown',
+    () async {
+      final commands = <(String, List<String>)>[];
+      final update = DownloadedUpdate(
+        asset: assetFor(utf8.encode('installer')),
+        path: r'C:\Temp\mdslens-update.exe',
+      );
+
+      final result = await launchVerifiedUpdateAsset(
+        update,
+        platformOverride: 'windows',
+        commandLauncher: (executable, arguments) async {
+          commands.add((executable, arguments));
+        },
+      );
+
+      expect(commands, hasLength(1));
+      expect(commands.single.$1, update.path);
+      expect(
+        commands.single.$2,
+        containsAll(<String>[
+          '/VERYSILENT',
+          '/SUPPRESSMSGBOXES',
+          '/NORESTART',
+          '/CLOSEAPPLICATIONS',
+          '/RESTARTAPPLICATIONS',
+        ]),
+      );
+      expect(result.status, UpdateLaunchStatus.launched);
+      expect(result.closeApplication, isTrue);
+    },
+  );
+
+  test(
+    'Windows MSI fallback uses the non-interactive Windows Installer mode',
+    () async {
+      final commands = <(String, List<String>)>[];
+      final update = DownloadedUpdate(
+        asset: UpdateManifestAsset(
+          name: 'mdslens-windows-x64.msi',
+          url: 'https://example.invalid/mdslens.msi',
+          platform: 'windows',
+          architecture: 'x64',
+          format: 'msi',
+          strategy: 'launch-installer',
+          size: 1,
+          sha256:
+              'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        ),
+        path: r'C:\Temp\mdslens-update.msi',
+      );
+
+      final result = await launchVerifiedUpdateAsset(
+        update,
+        platformOverride: 'windows',
+        commandLauncher: (executable, arguments) async {
+          commands.add((executable, arguments));
+        },
+      );
+
+      expect(commands.single.$1, 'msiexec.exe');
+      expect(commands.single.$2, containsAll(<String>['/qn', '/norestart']));
+      expect(result.closeApplication, isTrue);
+    },
+  );
 }

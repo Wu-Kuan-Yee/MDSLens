@@ -27,7 +27,7 @@ platform action:
 
 | Platform | Update action |
 |---|---|
-| Windows | Downloads the matching x64/ARM64 setup EXE, verifies it, and starts the Windows installer |
+| Windows | Downloads and verifies the matching x64/ARM64 setup EXE, installs it without wizard pages, closes the old process and restarts MDSLens |
 | macOS | Downloads the matching or Universal unsigned DMG, verifies it, and opens the disk image |
 | Linux | Atomically replaces a writable running AppImage for the next launch; otherwise downloads the distribution's DEB/RPM and opens the system installer |
 | Android | Downloads a matching APK, verifies it, and opens Android's package installer |
@@ -36,9 +36,13 @@ platform action:
 
 Downloads are streamed to a temporary file, can be cancelled, and are not
 opened unless the byte count and SHA-256 digest match the release manifest.
-Installation is intentionally not silent: Windows elevation/SmartScreen,
-Android's per-source installation permission, Linux administrator
-authentication, and macOS Gatekeeper remain in control.
+Windows updates use the installer's silent mode after verification. Wizard
+pages and installer message boxes are suppressed, and Restart Manager closes
+and reopens MDSLens. Windows elevation and SmartScreen remain in control when
+the installation location or package trust requires them; a normal application
+must not bypass either protection. Android's per-source installation
+permission, Linux administrator authentication, and macOS Gatekeeper likewise
+remain in control.
 
 The installation identity must also match the installed copy. In particular,
 Android updates require every release to use the same release keystore.

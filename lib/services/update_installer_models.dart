@@ -22,10 +22,7 @@ class UpdateDownloadController {
 }
 
 class UpdateDownloadProgress {
-  const UpdateDownloadProgress({
-    required this.received,
-    required this.total,
-  });
+  const UpdateDownloadProgress({required this.received, required this.total});
 
   final int received;
   final int total;
@@ -34,10 +31,7 @@ class UpdateDownloadProgress {
 }
 
 class DownloadedUpdate {
-  const DownloadedUpdate({
-    required this.asset,
-    required this.path,
-  });
+  const DownloadedUpdate({required this.asset, required this.path});
 
   final UpdateManifestAsset asset;
   final String path;
@@ -57,11 +51,13 @@ class UpdateInstallResult {
     required this.status,
     required this.message,
     this.downloaded,
+    this.closeApplication = false,
   });
 
   final UpdateLaunchStatus status;
   final String message;
   final DownloadedUpdate? downloaded;
+  final bool closeApplication;
 }
 
 class UpdateCancelledException implements Exception {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../services/external_url_launcher.dart';
 import '../../services/runtime_build_info.dart';
@@ -7,12 +8,14 @@ import '../../services/update_service.dart';
 import 'keyboard_safe_dialog.dart';
 
 typedef ReleaseUpdateChecker = Future<ReleaseUpdate> Function();
-typedef ReleaseUpdateInstaller = Future<UpdateInstallResult> Function(
-  ReleaseUpdate release,
-  RuntimeSystemInfo systemInfo, {
-  required UpdateDownloadController controller,
-  UpdateProgressCallback? onProgress,
-});
+typedef ReleaseUpdateInstaller =
+    Future<UpdateInstallResult> Function(
+      ReleaseUpdate release,
+      RuntimeSystemInfo systemInfo, {
+      required UpdateDownloadController controller,
+      UpdateProgressCallback? onProgress,
+    });
+typedef ApplicationExitRequester = Future<void> Function();
 
 enum _UpdateChoice { release, direct }
 
@@ -23,6 +26,7 @@ class AboutDialogWidget extends StatefulWidget {
   final RuntimeSystemInfoLoader? systemInfoLoader;
   final AppVersionLoader? versionLoader;
   final GitVersionLoader? gitVersionLoader;
+  final ApplicationExitRequester? applicationExitRequester;
 
   const AboutDialogWidget({
     super.key,
@@ -32,6 +36,7 @@ class AboutDialogWidget extends StatefulWidget {
     this.systemInfoLoader,
     this.versionLoader,
     this.gitVersionLoader,
+    this.applicationExitRequester,
   });
 
   static void show(BuildContext context) {
@@ -109,7 +114,8 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
         _checkingUpdate = false;
         _updateStatus = '${result.latestVersion} is available';
       });
-      final supportsDirectUpdate = directUpdateSupported &&
+      final supportsDirectUpdate =
+          directUpdateSupported &&
           result.assetNamed('update-manifest.json') != null;
       final choice = await showDialog<_UpdateChoice>(
         context: context,
@@ -182,8 +188,7 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
       _updateStatus = 'Preparing ${release.latestVersion}...';
     });
     try {
-      final result =
-          await (widget.updateInstaller ?? installLatestReleaseUpdate)(
+      final result = await (widget.updateInstaller ?? installLatestReleaseUpdate)(
         release,
         _systemInfo,
         controller: controller,
@@ -200,6 +205,10 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
       );
       if (!mounted) return;
       setState(() => _updateStatus = result.message);
+      if (result.closeApplication) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        await (widget.applicationExitRequester ?? SystemNavigator.pop)();
+      }
     } on UpdateCancelledException {
       if (!mounted) return;
       setState(() => _updateStatus = 'Update download cancelled');
@@ -491,8 +500,8 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
                           _checkingUpdate
                               ? 'Checking...'
                               : _installingUpdate
-                                  ? 'Updating...'
-                                  : 'Update',
+                              ? 'Updating...'
+                              : 'Update',
                         ),
                       );
                       final closeButton = FilledButton(
@@ -522,9 +531,7 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
                             Align(
                               alignment: Alignment.centerRight,
                               child: TextButton.icon(
-                                key: const ValueKey(
-                                  'cancel-update-download',
-                                ),
+                                key: const ValueKey('cancel-update-download'),
                                 onPressed: _updateController?.cancel,
                                 icon: const Icon(Icons.close_rounded),
                                 label: const Text('Cancel download'),
