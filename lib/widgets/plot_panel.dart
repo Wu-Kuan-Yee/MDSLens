@@ -2954,25 +2954,37 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                           ),
                           Padding(
                             padding: const EdgeInsets.only(right: 4),
-                            child: _AutocompleteField(
+                            child: KeyedSubtree(
                               key: ValueKey('data-tree-$i'),
-                              controller: _rows[i].tree,
-                              options: _treeOptionsFor(_rows[i]),
-                              label: 'Tree',
-                              onChanged: () {
-                                _updateSignalOptions(_rows[i]);
-                                setState(() {});
-                              },
+                              child: _AutocompleteField(
+                                key: _rows[i].treeAutocompleteKey,
+                                controller: _rows[i].tree,
+                                options: _treeOptionsFor(_rows[i]),
+                                label: 'Tree',
+                                onChanged: () {
+                                  _updateSignalOptions(_rows[i]);
+                                  setState(() {});
+                                },
+                                onSelected: (_) => _rows[i]
+                                    .signalAutocompleteKey
+                                    .currentState
+                                    ?.requestFocus(),
+                              ),
                             ),
                           ),
                           Padding(
                             padding: const EdgeInsets.only(right: 4),
-                            child: _AutocompleteField(
+                            child: KeyedSubtree(
                               key: ValueKey('data-signal-$i'),
-                              controller: _rows[i].y,
-                              options: _rows[i]._signalOptions,
-                              label: 'Signal',
-                              onChanged: () => setState(() {}),
+                              child: _AutocompleteField(
+                                key: _rows[i].signalAutocompleteKey,
+                                controller: _rows[i].y,
+                                options: _rows[i]._signalOptions,
+                                label: 'Signal',
+                                onChanged: () => setState(() {}),
+                                onSelected: (_) =>
+                                    _showReverseTreeSuggestions(_rows[i]),
+                              ),
                             ),
                           ),
                           Padding(
@@ -3106,6 +3118,19 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
     setState(() => row._signalOptions = sigs);
   }
 
+  void _showReverseTreeSuggestions(_DSRow row) {
+    if (row.tree.text.trim().isNotEmpty ||
+        _treeOptionsFor(row).isEmpty ||
+        !mounted) {
+      return;
+    }
+    setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || row.tree.text.trim().isNotEmpty) return;
+      row.treeAutocompleteKey.currentState?.showSuggestions();
+    });
+  }
+
   void _save() {
     widget.signals.clear();
     for (final r in _rows) {
@@ -3138,12 +3163,14 @@ class _AutocompleteField extends StatefulWidget {
   final List<String> options;
   final String label;
   final VoidCallback? onChanged;
+  final ValueChanged<String>? onSelected;
   const _AutocompleteField({
     super.key,
     required this.controller,
     required this.options,
     required this.label,
     this.onChanged,
+    this.onSelected,
   });
   @override
   State<_AutocompleteField> createState() => _AutocompleteFieldState();
@@ -3155,6 +3182,7 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
   final _tapRegionGroup = Object();
   OverlayEntry? _overlay;
   final _layerLink = LayerLink();
+  List<String> _hints = const [];
 
   @override
   void initState() {
@@ -3203,6 +3231,7 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
     );
     _removeOverlay();
     widget.onChanged?.call();
+    widget.onSelected?.call(hint);
   }
 
   void _update() {
@@ -3213,13 +3242,18 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
     final hints = v.isNotEmpty && matchingHints.length > 128
         ? matchingHints.sublist(0, 128)
         : matchingHints;
-    _removeOverlay();
-    if (hints.isNotEmpty && _node.hasFocus) {
-      // Don't show if there's exactly one hint that matches the current text exactly
-      if (hints.length == 1 && hints[0].toLowerCase() == v) return;
+    final exactOnly = hints.length == 1 && hints[0].toLowerCase() == v;
+    if (hints.isEmpty || !_node.hasFocus || exactOnly) {
+      _hints = const [];
+      _removeOverlay();
+      return;
+    }
+    _hints = hints;
+    if (_overlay == null) {
       _overlay = OverlayEntry(
         builder: (overlayContext) {
           final theme = Theme.of(overlayContext);
+          final visibleHints = _hints;
           return Positioned(
             width: 220,
             child: CompositedTransformFollower(
@@ -3250,7 +3284,7 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
                         controller: _scrollController,
                         padding: const EdgeInsets.symmetric(vertical: 6),
                         shrinkWrap: true,
-                        itemCount: hints.length,
+                        itemCount: visibleHints.length,
                         separatorBuilder: (_, __) => Divider(
                           height: 1,
                           color: theme.dividerColor.withValues(alpha: 0.55),
@@ -3266,7 +3300,7 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
                                 event.kind == PointerDeviceKind.stylus ||
                                 event.kind ==
                                     PointerDeviceKind.invertedStylus) {
-                              _selectHint(hints[i]);
+                              _selectHint(visibleHints[i]);
                             }
                           },
                           child: ListTile(
@@ -3278,10 +3312,10 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
                               color: theme.colorScheme.primary,
                             ),
                             title: Text(
-                              hints[i],
+                              visibleHints[i],
                               style: const TextStyle(fontSize: 12),
                             ),
-                            onTap: () => _selectHint(hints[i]),
+                            onTap: () => _selectHint(visibleHints[i]),
                           ),
                         ),
                       ),
@@ -3294,7 +3328,18 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
         },
       );
       Overlay.of(context).insert(_overlay!);
+    } else {
+      _overlay!.markNeedsBuild();
     }
+  }
+
+  void requestFocus() => _node.requestFocus();
+
+  void showSuggestions() {
+    _node.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _update();
+    });
   }
 
   @override
@@ -3498,6 +3543,8 @@ class _HsvPainter extends CustomPainter {
 
 class _DSRow {
   final TextEditingController shot, y, legend, tree, server;
+  final treeAutocompleteKey = GlobalKey<_AutocompleteFieldState>();
+  final signalAutocompleteKey = GlobalKey<_AutocompleteFieldState>();
   final String xExpr;
   int hideMode = signalHideModeVisible;
   int readMode = 0;

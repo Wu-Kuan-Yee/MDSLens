@@ -4716,6 +4716,14 @@ void main() {
     await tester.tap(signalTextField);
     await tester.enterText(signalTextField, r'\pcrl');
     await tester.pumpAndSettle();
+    final stableSignalMenuElement = tester.element(signalMenu);
+    await tester.enterText(signalTextField, r'\pcrl0');
+    await tester.pump();
+    expect(
+      tester.element(signalMenu),
+      same(stableSignalMenuElement),
+      reason: 'typing should update the existing completion overlay in place',
+    );
     final signalOption = find.text(r'\PCRL01');
     expect(signalOption, findsOneWidget);
     final signalOptionCenter = tester.getCenter(signalOption);
@@ -4727,6 +4735,37 @@ void main() {
       r'\PCRL01',
     );
     await tester.sendEventToBinding(mouse.up());
+
+    await tester.tap(treeTextField);
+    await tester.enterText(treeTextField, '');
+    await tester.tap(signalTextField);
+    await tester.enterText(signalTextField, r'\prad_axu');
+    await tester.pumpAndSettle();
+    final ambiguousSignal = find.text(r'\PRAD_AXUV');
+    expect(ambiguousSignal, findsOneWidget);
+    await tester.tap(ambiguousSignal);
+    await tester.pumpAndSettle();
+
+    expect(treeMenu, findsOneWidget);
+    expect(find.text('analysis'), findsOneWidget);
+    expect(find.text('prad_east'), findsOneWidget);
+    expect(
+      tester.widget<TextField>(treeTextField).focusNode?.hasFocus,
+      isTrue,
+      reason: 'an ambiguous signal should hand focus to its Tree choices',
+    );
+
+    await tester.tap(find.text('analysis'));
+    await tester.pump();
+    expect(
+      tester.widget<TextField>(treeTextField).controller?.text,
+      'analysis',
+    );
+    expect(
+      tester.widget<TextField>(signalTextField).focusNode?.hasFocus,
+      isTrue,
+      reason: 'choosing a reverse Tree match should return focus to Signal',
+    );
     expect(tester.takeException(), isNull);
   });
 
