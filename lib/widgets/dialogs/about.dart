@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -55,6 +57,292 @@ Future<_UpdateChoice?> _showUpdateChoiceDialog(
   );
 }
 
+Future<void> _showUpdateDownloadDialog(
+  BuildContext context,
+  ReleaseUpdate release, {
+  ReleaseUpdateInstaller? updateInstaller,
+  RuntimeSystemInfo? systemInfo,
+  RuntimeSystemInfoLoader? systemInfoLoader,
+  ExternalUriOpener? urlOpener,
+  ApplicationExitRequester? applicationExitRequester,
+}) {
+  return showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => _UpdateDownloadDialog(
+      release: release,
+      updateInstaller: updateInstaller,
+      systemInfo: systemInfo,
+      systemInfoLoader: systemInfoLoader,
+      urlOpener: urlOpener,
+      applicationExitRequester: applicationExitRequester,
+    ),
+  );
+}
+
+class _UpdateDownloadDialog extends StatefulWidget {
+  const _UpdateDownloadDialog({
+    required this.release,
+    this.updateInstaller,
+    this.systemInfo,
+    this.systemInfoLoader,
+    this.urlOpener,
+    this.applicationExitRequester,
+  });
+
+  final ReleaseUpdate release;
+  final ReleaseUpdateInstaller? updateInstaller;
+  final RuntimeSystemInfo? systemInfo;
+  final RuntimeSystemInfoLoader? systemInfoLoader;
+  final ExternalUriOpener? urlOpener;
+  final ApplicationExitRequester? applicationExitRequester;
+
+  @override
+  State<_UpdateDownloadDialog> createState() => _UpdateDownloadDialogState();
+}
+
+class _UpdateDownloadDialogState extends State<_UpdateDownloadDialog> {
+  final _controller = UpdateDownloadController();
+  UpdateDownloadProgress? _progress;
+  String _status = 'Preparing a secure download...';
+  bool _running = true;
+  bool _failed = false;
+  bool _dismissed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_installUpdate());
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.cancel();
+    super.dispose();
+  }
+
+  Future<void> _installUpdate() async {
+    try {
+      final systemInfo = widget.systemInfo ??
+          await (widget.systemInfoLoader ?? loadRuntimeSystemInfo)();
+      if (!mounted || _controller.isCancelled) return;
+      final result =
+          await (widget.updateInstaller ?? installLatestReleaseUpdate)(
+        widget.release,
+        systemInfo,
+        controller: _controller,
+        onProgress: (progress) {
+          if (!mounted || _controller.isCancelled) return;
+          setState(() {
+            _progress = progress;
+            final fraction = progress.fraction;
+            _status = fraction == null
+                ? 'Downloading the update...'
+                : fraction >= 1
+                    ? 'Verifying and preparing the update...'
+                    : 'Downloading ${(fraction * 100).clamp(0, 100).toStringAsFixed(0)}%';
+          });
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _running = false;
+        _status = result.message;
+      });
+      if (result.closeApplication) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        await (widget.applicationExitRequester ??
+            requestApplicationExitForUpdate)();
+      }
+    } on UpdateCancelledException {
+      if (mounted && !_dismissed) {
+        _dismissed = true;
+        Navigator.of(context).pop();
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _running = false;
+        _failed = true;
+        _status =
+            'The update could not be downloaded, verified, or handed to the system installer. No unverified package was opened.';
+      });
+    }
+  }
+
+  void _cancelDownload() {
+    if (!_running) return;
+    _dismissed = true;
+    _controller.cancel();
+    Navigator.of(context).pop();
+  }
+
+  Future<void> _openRelease() async {
+    await openExternalWebUrl(
+      widget.release.releaseUrl,
+      opener: widget.urlOpener,
+    );
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    final kib = bytes / 1024;
+    if (kib < 1024) return '${kib.toStringAsFixed(kib < 10 ? 1 : 0)} KB';
+    final mib = kib / 1024;
+    if (mib < 1024) return '${mib.toStringAsFixed(mib < 10 ? 1 : 0)} MB';
+    final gib = mib / 1024;
+    return '${gib.toStringAsFixed(gib < 10 ? 1 : 0)} GB';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final fraction = _progress?.fraction;
+    final progress = _progress;
+    final icon = _failed
+        ? Icons.error_outline_rounded
+        : _running
+            ? Icons.downloading_rounded
+            : Icons.check_circle_outline_rounded;
+    final accent = _failed
+        ? theme.colorScheme.error
+        : _running
+            ? theme.colorScheme.primary
+            : theme.colorScheme.tertiary;
+
+    return KeyboardSafeDialog(
+      key: const ValueKey('update-download-dialog'),
+      maxWidth: 480,
+      title: Row(
+        children: [
+          Icon(Icons.system_update_alt_rounded, color: accent),
+          const SizedBox(width: 10),
+          const Expanded(child: Text('MDSLens update')),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOutCubic,
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Icon(icon, color: accent, size: 34),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            _running
+                ? 'Downloading ${widget.release.latestVersion}'
+                : _failed
+                    ? 'Update could not be completed'
+                    : 'Update is ready',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _status,
+            textAlign: TextAlign.center,
+            softWrap: true,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          if (_running) ...[
+            const SizedBox(height: 20),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                key: const ValueKey('update-download-progress'),
+                value: fraction,
+                minHeight: 9,
+                backgroundColor: theme.colorScheme.surfaceContainerHighest,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    progress == null
+                        ? 'Connecting securely...'
+                        : progress.total > 0
+                            ? '${_formatBytes(progress.received)} of ${_formatBytes(progress.total)}'
+                            : _formatBytes(progress.received),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                if (fraction != null)
+                  Text(
+                    '${(fraction * 100).clamp(0, 100).toStringAsFixed(0)}%',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: accent,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.verified_user_outlined,
+                  size: 16,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    'The package is verified before it is opened.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        if (_running)
+          OutlinedButton.icon(
+            key: const ValueKey('cancel-update-download'),
+            onPressed: _cancelDownload,
+            icon: const Icon(Icons.close_rounded),
+            label: const Text('Cancel download'),
+          )
+        else ...[
+          TextButton.icon(
+            onPressed: _openRelease,
+            icon: const Icon(Icons.open_in_new_rounded),
+            label: const Text('View Details'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 class AboutDialogWidget extends StatefulWidget {
   final ExternalUriOpener? urlOpener;
   final ReleaseUpdateChecker? updateChecker;
@@ -63,8 +351,6 @@ class AboutDialogWidget extends StatefulWidget {
   final AppVersionLoader? versionLoader;
   final GitVersionLoader? gitVersionLoader;
   final ApplicationExitRequester? applicationExitRequester;
-  final ReleaseUpdate? initialUpdate;
-  final bool installInitialUpdate;
 
   const AboutDialogWidget({
     super.key,
@@ -75,8 +361,6 @@ class AboutDialogWidget extends StatefulWidget {
     this.versionLoader,
     this.gitVersionLoader,
     this.applicationExitRequester,
-    this.initialUpdate,
-    this.installInitialUpdate = false,
   });
 
   static Future<void> show(BuildContext context) {
@@ -120,19 +404,13 @@ class AboutDialogWidget extends StatefulWidget {
     if (choice == _UpdateChoice.release) {
       await openExternalWebUrl(result.releaseUrl, opener: urlOpener);
     } else if (choice == _UpdateChoice.direct) {
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AboutDialogWidget(
-          urlOpener: urlOpener,
-          updateChecker: updateChecker,
-          updateInstaller: updateInstaller,
-          systemInfoLoader: systemInfoLoader,
-          versionLoader: versionLoader,
-          gitVersionLoader: gitVersionLoader,
-          applicationExitRequester: applicationExitRequester,
-          initialUpdate: result,
-          installInitialUpdate: true,
-        ),
+      await _showUpdateDownloadDialog(
+        context,
+        result,
+        updateInstaller: updateInstaller,
+        systemInfoLoader: systemInfoLoader,
+        urlOpener: urlOpener,
+        applicationExitRequester: applicationExitRequester,
       );
     }
   }
@@ -144,25 +422,15 @@ class AboutDialogWidget extends StatefulWidget {
 class _AboutDialogWidgetState extends State<AboutDialogWidget> {
   String _updateStatus = '';
   bool _checkingUpdate = false;
-  bool _installingUpdate = false;
-  UpdateDownloadProgress? _updateProgress;
-  UpdateDownloadController? _updateController;
   late RuntimeSystemInfo _systemInfo;
   String _mdsLensVersion = 'Loading...';
   String _gitVersion = 'Loading...';
-  bool _initialInstallStarted = false;
 
   @override
   void initState() {
     super.initState();
     _systemInfo = RuntimeSystemInfo.fallback();
     _loadBuildInformation();
-  }
-
-  @override
-  void dispose() {
-    _updateController?.cancel();
-    super.dispose();
   }
 
   Future<void> _loadBuildInformation() async {
@@ -177,12 +445,6 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
       _mdsLensVersion = values[1] as String;
       _gitVersion = values[2] as String;
     });
-    if (widget.installInitialUpdate &&
-        widget.initialUpdate != null &&
-        !_initialInstallStarted) {
-      _initialInstallStarted = true;
-      await _installUpdate(widget.initialUpdate!);
-    }
   }
 
   Future<bool> _openUrl(String url) async {
@@ -251,74 +513,14 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
   }
 
   Future<void> _installUpdate(ReleaseUpdate release) async {
-    final controller = UpdateDownloadController();
-    _updateController = controller;
-    setState(() {
-      _installingUpdate = true;
-      _updateProgress = null;
-      _updateStatus = 'Preparing ${release.latestVersion}...';
-    });
-    try {
-      final result =
-          await (widget.updateInstaller ?? installLatestReleaseUpdate)(
-        release,
-        _systemInfo,
-        controller: controller,
-        onProgress: (progress) {
-          if (!mounted || controller.isCancelled) return;
-          setState(() {
-            _updateProgress = progress;
-            final fraction = progress.fraction;
-            _updateStatus = fraction == null
-                ? 'Downloading update...'
-                : 'Downloading update ${(fraction * 100).clamp(0, 100).toStringAsFixed(0)}%';
-          });
-        },
-      );
-      if (!mounted) return;
-      setState(() => _updateStatus = result.message);
-      if (result.closeApplication) {
-        await Future<void>.delayed(const Duration(milliseconds: 250));
-        await (widget.applicationExitRequester ??
-            requestApplicationExitForUpdate)();
-      }
-    } on UpdateCancelledException {
-      if (!mounted) return;
-      setState(() => _updateStatus = 'Update download cancelled');
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _updateStatus = 'Could not download or install update');
-      final openRelease = await showDialog<bool>(
-        context: context,
-        builder: (context) => KeyboardSafeDialog(
-          title: const Text('Update failed'),
-          content: const Text(
-            'The update could not be downloaded, verified, or handed to the system installer. No unverified package was opened.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Close'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Open Release'),
-            ),
-          ],
-        ),
-      );
-      if (openRelease == true) await _openUrl(release.releaseUrl);
-    } finally {
-      if (identical(_updateController, controller)) {
-        _updateController = null;
-      }
-      if (mounted) {
-        setState(() {
-          _installingUpdate = false;
-          _updateProgress = null;
-        });
-      }
-    }
+    await _showUpdateDownloadDialog(
+      context,
+      release,
+      updateInstaller: widget.updateInstaller,
+      systemInfo: _systemInfo,
+      urlOpener: widget.urlOpener,
+      applicationExitRequester: widget.applicationExitRequester,
+    );
   }
 
   Widget _buildLink(String label, String url) {
@@ -597,52 +799,21 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
                   LayoutBuilder(
                     builder: (context, constraints) {
                       final updateButton = OutlinedButton(
-                        onPressed: _checkingUpdate || _installingUpdate
-                            ? null
-                            : _checkUpdate,
+                        onPressed: _checkingUpdate ? null : _checkUpdate,
                         child: Text(
-                          _checkingUpdate
-                              ? 'Checking...'
-                              : _installingUpdate
-                                  ? 'Updating...'
-                                  : 'Update',
+                          _checkingUpdate ? 'Checking...' : 'Update',
                         ),
                       );
                       final closeButton = FilledButton(
-                        onPressed: () {
-                          _updateController?.cancel();
-                          Navigator.pop(context);
-                        },
+                        onPressed: () => Navigator.pop(context),
                         child: const Text('Close'),
                       );
-                      final status = Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            _updateStatus,
-                            softWrap: true,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                          if (_installingUpdate) ...[
-                            const SizedBox(height: 5),
-                            LinearProgressIndicator(
-                              key: const ValueKey('update-download-progress'),
-                              value: _updateProgress?.fraction,
-                            ),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton.icon(
-                                key: const ValueKey('cancel-update-download'),
-                                onPressed: _updateController?.cancel,
-                                icon: const Icon(Icons.close_rounded),
-                                label: const Text('Cancel download'),
-                              ),
-                            ),
-                          ],
-                        ],
+                      final status = Text(
+                        _updateStatus,
+                        softWrap: true,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
                       );
                       if (constraints.maxWidth < 390) {
                         return Column(

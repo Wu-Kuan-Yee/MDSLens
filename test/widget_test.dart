@@ -6344,6 +6344,7 @@ void main() {
   ) async {
     var installerCalled = false;
     var exitRequested = false;
+    final finishInstallation = Completer<void>();
     const manifest = ReleaseAssetLocation(
       name: 'update-manifest.json',
       url:
@@ -6380,7 +6381,7 @@ void main() {
             onProgress?.call(
               const UpdateDownloadProgress(received: 50, total: 100),
             );
-            await Future<void>.delayed(const Duration(milliseconds: 10));
+            await finishInstallation.future;
             onProgress?.call(
               const UpdateDownloadProgress(received: 100, total: 100),
             );
@@ -6401,8 +6402,13 @@ void main() {
         find.byKey(const ValueKey('install-update-directly')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('install-update-directly')));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Update available'), findsNothing);
+    expect(
+        find.byKey(const ValueKey('update-download-dialog')), findsOneWidget);
     expect(
         find.byKey(const ValueKey('update-download-progress')), findsOneWidget);
+    finishInstallation.complete();
     await tester.pumpAndSettle();
 
     expect(installerCalled, isTrue);
@@ -6411,5 +6417,74 @@ void main() {
         find.text('The verified update installer is ready.'), findsOneWidget);
     expect(
         find.byKey(const ValueKey('update-download-progress')), findsNothing);
+  });
+
+  testWidgets('Dedicated update dialog cancels an active download', (
+    tester,
+  ) async {
+    var cancellationObserved = false;
+    const manifest = ReleaseAssetLocation(
+      name: 'update-manifest.json',
+      url:
+          'https://github.com/Wu-Kuan-Yee/MDSLens/releases/download/v1.0.0/update-manifest.json',
+      size: 1,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AboutDialogWidget(
+          systemInfoLoader: () async => const RuntimeSystemInfo(
+            name: 'macOS',
+            version: '26.2',
+            architecture: 'arm64',
+          ),
+          versionLoader: () async => '0.0.1',
+          gitVersionLoader: () async => '0.0.1.r1.g123456789',
+          updateChecker: () async => const ReleaseUpdate(
+            latestVersion: 'v1.0.0',
+            releaseUrl:
+                'https://github.com/Wu-Kuan-Yee/MDSLens/releases/tag/v1.0.0',
+            updateAvailable: true,
+            assets: [manifest],
+          ),
+          updateInstaller: (
+            release,
+            systemInfo, {
+            required controller,
+            onProgress,
+          }) async {
+            final cancelled = Completer<void>();
+            controller.bind(() {
+              cancellationObserved = true;
+              if (!cancelled.isCompleted) cancelled.complete();
+            });
+            onProgress?.call(
+              const UpdateDownloadProgress(received: 25, total: 100),
+            );
+            await cancelled.future;
+            controller.unbind();
+            throw const UpdateCancelledException();
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Update'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('install-update-directly')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+    expect(
+        find.byKey(const ValueKey('update-download-dialog')), findsOneWidget);
+    expect(find.text('25%'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('cancel-update-download')));
+    await tester.pumpAndSettle();
+
+    expect(cancellationObserved, isTrue);
+    expect(find.byKey(const ValueKey('update-download-dialog')), findsNothing);
+    expect(find.text('MDSLens Version'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }
