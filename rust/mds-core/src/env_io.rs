@@ -7,6 +7,8 @@
 
 use crate::types::{LayoutConfig, SignalHideMode};
 
+pub const TOML_ENVIRONMENT_VERSION: i64 = 1;
+
 fn toml_number_as_f64(value: &toml::Value) -> Option<f64> {
     value
         .as_float()
@@ -20,6 +22,91 @@ pub fn parse_environment(path: &str) -> LayoutConfig {
     } else {
         parse_webscp_environment(path)
     }
+}
+
+/// Validate and parse an environment file while preserving actionable errors.
+///
+/// The legacy [`parse_environment`] entry point remains available for callers
+/// that intentionally want a default configuration on failure.
+pub fn parse_environment_checked(path: &str) -> Result<LayoutConfig, String> {
+    if path.to_lowercase().ends_with(".toml") {
+        validate_toml_environment(path)?;
+        Ok(parse_toml_environment(path))
+    } else {
+        validate_webscp_environment(path)?;
+        Ok(parse_webscp_environment(path))
+    }
+}
+
+fn validate_toml_environment(path: &str) -> Result<(), String> {
+    let content = std::fs::read_to_string(path)
+        .map_err(|error| format!("Cannot read configuration file: {error}"))?;
+    let value: toml::Value = toml::from_str(&content)
+        .map_err(|error| format!("Invalid TOML configuration: {error}"))?;
+
+    match value.get("version") {
+        None => {}
+        Some(toml::Value::Integer(TOML_ENVIRONMENT_VERSION)) => {}
+        Some(toml::Value::Integer(version)) => {
+            return Err(format!(
+                "Unsupported TOML configuration version {version}; \
+                 this build supports version {TOML_ENVIRONMENT_VERSION}."
+            ));
+        }
+        Some(_) => {
+            return Err("TOML configuration field 'version' must be an integer.".into());
+        }
+    }
+
+    if let Some(panels) = value.get("panels") {
+        let panels = panels
+            .as_array()
+            .ok_or_else(|| "TOML configuration field 'panels' must be an array.".to_string())?;
+        for (index, panel) in panels.iter().enumerate() {
+            let panel = panel.as_table().ok_or_else(|| {
+                format!("TOML panel {} must be a table.", index + 1)
+            })?;
+            if let Some(signals) = panel.get("signals") {
+                let signals = signals.as_array().ok_or_else(|| {
+                    format!("TOML panel {} field 'signals' must be an array.", index + 1)
+                })?;
+                if signals.iter().any(|signal| !signal.is_table()) {
+                    return Err(format!(
+                        "Every signal in TOML panel {} must be a table.",
+                        index + 1
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_webscp_environment(path: &str) -> Result<(), String> {
+    std::fs::read_to_string(path)
+        .map_err(|error| format!("Cannot read configuration file: {error}"))?;
+    let map = read_key_value_file(path);
+    let recognizable = map.contains_key("cols")
+        || map.contains_key("shot_txt")
+        || map.keys().any(|key| key.ends_with(".rows"));
+    if !recognizable {
+        return Err(
+            "Invalid WebScope configuration: no layout fields were found.".into(),
+        );
+    }
+    if let Some(cols) = map.get("cols") {
+        cols.trim().parse::<usize>().map_err(|_| {
+            "WebScope configuration field 'cols' must be a non-negative integer.".to_string()
+        })?;
+    }
+    for (key, value) in &map {
+        if key.ends_with(".rows") {
+            value.trim().parse::<usize>().map_err(|_| {
+                format!("WebScope configuration field '{key}' must be a non-negative integer.")
+            })?;
+        }
+    }
+    Ok(())
 }
 
 /// Parse a TOML-format environment file.
@@ -943,5 +1030,48 @@ y = "\\pcrl01"
 
         assert_eq!(config.columns.len(), 1);
         assert!(config.columns[0].is_empty());
+    }
+
+    #[test]
+    fn test_checked_parser_accepts_empty_supported_layouts() {
+        let toml = std::env::temp_dir().join("mdslens_checked_empty.toml");
+        let webscp = std::env::temp_dir().join("mdslens_checked_empty.webscp");
+        std::fs::write(&toml, "version = 1\n").unwrap();
+        std::fs::write(&webscp, "cols:1\n1.rows:0\n").unwrap();
+
+        assert!(parse_environment_checked(toml.to_str().unwrap()).is_ok());
+        assert!(parse_environment_checked(webscp.to_str().unwrap()).is_ok());
+
+        std::fs::remove_file(toml).ok();
+        std::fs::remove_file(webscp).ok();
+    }
+
+    #[test]
+    fn test_checked_parser_rejects_future_toml_versions() {
+        let tmp = std::env::temp_dir().join("mdslens_future_layout.toml");
+        std::fs::write(&tmp, "version = 2\n").unwrap();
+
+        let error = parse_environment_checked(tmp.to_str().unwrap()).unwrap_err();
+
+        std::fs::remove_file(tmp).ok();
+        assert!(error.contains("Unsupported TOML configuration version 2"));
+        assert!(error.contains("supports version 1"));
+    }
+
+    #[test]
+    fn test_checked_parser_reports_malformed_files() {
+        let toml = std::env::temp_dir().join("mdslens_malformed.toml");
+        let webscp = std::env::temp_dir().join("mdslens_malformed.webscp");
+        std::fs::write(&toml, "version = [\n").unwrap();
+        std::fs::write(&webscp, "this is not a WebScope configuration\n").unwrap();
+
+        let toml_error = parse_environment_checked(toml.to_str().unwrap()).unwrap_err();
+        let webscp_error =
+            parse_environment_checked(webscp.to_str().unwrap()).unwrap_err();
+
+        std::fs::remove_file(toml).ok();
+        std::fs::remove_file(webscp).ok();
+        assert!(toml_error.contains("Invalid TOML configuration"));
+        assert!(webscp_error.contains("no layout fields were found"));
     }
 }

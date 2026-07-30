@@ -247,6 +247,10 @@ pub fn parse_environment(path: String) -> FrbLayoutConfig {
     mds_core::env_io::parse_environment(&path).into()
 }
 
+pub fn parse_environment_checked(path: String) -> Result<FrbLayoutConfig, String> {
+    mds_core::env_io::parse_environment_checked(&path).map(Into::into)
+}
+
 
 pub fn write_environment(config: FrbLayoutConfig, path: String) -> Result<(), String> {
     let mut rust = config.into_rust();

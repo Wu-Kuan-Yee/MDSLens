@@ -56,8 +56,10 @@ pub extern "C" fn mds_version() -> *mut c_char {
 #[no_mangle]
 pub extern "C" fn mds_parse_environment(path: *const c_char) -> *mut c_char {
     let path = to_rust(path);
-    let config = a::parse_environment(path);
-    ffi_string!(serde_json::to_string(&config).unwrap_or_default())
+    match a::parse_environment_checked(path) {
+        Ok(config) => ffi_string!(serde_json::to_string(&config).unwrap_or_default()),
+        Err(error) => ffi_string!(serde_json::json!({"error": error}).to_string()),
+    }
 }
 
 #[no_mangle]

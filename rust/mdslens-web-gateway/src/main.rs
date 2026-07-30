@@ -634,11 +634,7 @@ async fn parse_configuration(
             .map_err(|error| error.to_string())?;
         file.write_all(&bytes).map_err(|error| error.to_string())?;
         let path = file.path().to_string_lossy().into_owned();
-        let config = mds_bridge::api::parse_environment(path);
-        if config.columns.is_empty() || config.columns.iter().all(Vec::is_empty) {
-            return Err("The configuration contains no readable panels.".into());
-        }
-        Ok(config)
+        mds_bridge::api::parse_environment_checked(path)
     })
     .await
     .map_err(|error| ApiError::internal(format!("Configuration worker failed: {error}")))?

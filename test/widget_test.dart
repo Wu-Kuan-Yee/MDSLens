@@ -1511,6 +1511,26 @@ void main() {
     expect(app.plots, isEmpty);
   });
 
+  test('Configuration parser errors are shown without replacing the layout',
+      () async {
+    final app = AppState(
+      configOpenPicker: () async =>
+          ConfigOpenSelection(name: 'future.toml', bytes: Uint8List(0)),
+      configParser: (_) =>
+          '{"error":"Unsupported TOML configuration version 2; '
+          'this build supports version 1."}',
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    final previousColumns = app.columns;
+
+    await app.openFile();
+
+    expect(app.status, contains('Unsupported TOML configuration version 2'));
+    expect(app.columns, same(previousColumns));
+    expect(app.plots, isNotEmpty);
+  });
+
   test(
     'Imported shots are ignored by default at every configuration level',
     () async {

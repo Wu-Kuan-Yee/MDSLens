@@ -2232,6 +2232,10 @@ class AppState extends ChangeNotifier {
         return;
       }
       final json = jsonDecode(raw);
+      if (json is Map) {
+        final error = json['error']?.toString().trim() ?? '';
+        if (error.isNotEmpty) throw error;
+      }
       if (json is! Map || json['columns'] is! List) {
         _status = 'Invalid config format';
         notifyListeners();
