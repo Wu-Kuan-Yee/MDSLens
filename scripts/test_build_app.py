@@ -19,6 +19,44 @@ from scripts import build_msixbundle, verify_icons, verify_linux_portable  # noq
 
 
 class BuildAppTests(unittest.TestCase):
+    def test_release_version_prefers_ci_value_then_exact_tag(self) -> None:
+        with mock.patch.dict(
+            build_app.os.environ, {"MDSLENS_VERSION": "v1.2.3"}, clear=True
+        ):
+            self.assertEqual(build_app.project_version(), "1.2.3")
+
+        with mock.patch.dict(build_app.os.environ, {}, clear=True):
+            with mock.patch.object(
+                build_app, "capture", return_value=(0, "v2.4")
+            ):
+                self.assertEqual(build_app.project_version(), "2.4")
+
+    def test_release_build_number_is_monotonic(self) -> None:
+        self.assertEqual(build_app.release_build_number("v0.0.1"), 1)
+        self.assertEqual(build_app.release_build_number("0.1.0"), 1000)
+        self.assertEqual(build_app.release_build_number("1.2.3"), 1002003)
+        with self.assertRaisesRegex(SystemExit, "MINOR/PATCH"):
+            build_app.release_build_number("1.1000.0")
+
+    def test_flutter_build_receives_release_version(self) -> None:
+        with mock.patch.object(build_app, "project_version", return_value="1.2.3"):
+            with mock.patch.object(build_app, "run") as run:
+                build_app.flutter_build("macos")
+        self.assertEqual(
+            run.call_args_list[-1],
+            mock.call(
+                "flutter",
+                "build",
+                "macos",
+                "--release",
+                "--no-pub",
+                "--build-name",
+                "1.2.3",
+                "--build-number",
+                "1002003",
+            ),
+        )
+
     def test_packaged_application_icon_checks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

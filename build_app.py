@@ -530,6 +530,16 @@ def preflight(
 
 
 def project_version() -> str:
+    configured = os.environ.get("MDSLENS_VERSION", "").strip()
+    if configured:
+        return normalize_release_version(configured)
+
+    code, exact_tag = capture(
+        "git", "describe", "--tags", "--match", "v[0-9]*", "--exact-match"
+    )
+    if code == 0 and exact_tag:
+        return normalize_release_version(exact_tag)
+
     match = re.search(
         r"^version:\s*([^+\s]+)",
         (ROOT / "pubspec.yaml").read_text(encoding="utf-8"),
@@ -537,7 +547,36 @@ def project_version() -> str:
     )
     if match is None:
         fail("pubspec.yaml has no version")
-    return match.group(1)
+    return normalize_release_version(match.group(1))
+
+
+def normalize_release_version(value: str) -> str:
+    match = re.fullmatch(
+        r"v?(\d+)\.(\d+)(?:\.(\d+))?(?:\+\d+)?",
+        value.strip(),
+        re.IGNORECASE,
+    )
+    if match is None:
+        fail(
+            f"Invalid release version '{value}'. Expected vMAJOR.MINOR[.PATCH]."
+        )
+    patch = match.group(3)
+    return ".".join([match.group(1), match.group(2), *([patch] if patch else [])])
+
+
+def release_build_number(version: str) -> int:
+    parts = [int(part) for part in normalize_release_version(version).split(".")]
+    parts.extend([0] * (3 - len(parts)))
+    major, minor, patch = parts
+    if major > 2_147 or minor > 999 or patch > 999:
+        fail(
+            "Release versions must keep MAJOR <= 2147 and MINOR/PATCH <= 999 "
+            "so every platform receives a valid monotonic build number."
+        )
+    build_number = major * 1_000_000 + minor * 1_000 + patch
+    if build_number == 0:
+        fail("Release version 0.0.0 cannot produce a valid platform build number.")
+    return build_number
 
 
 def replace_tree(source: Path, destination: Path) -> None:
@@ -588,8 +627,20 @@ def selected(formats: set[str], name: str) -> bool:
 
 
 def flutter_build(target: str, *arguments: str) -> None:
+    version = project_version()
     run("flutter", "pub", "get")
-    run("flutter", "build", target, "--release", "--no-pub", *arguments)
+    run(
+        "flutter",
+        "build",
+        target,
+        "--release",
+        "--no-pub",
+        "--build-name",
+        version,
+        "--build-number",
+        str(release_build_number(version)),
+        *arguments,
+    )
 
 
 def prepare_macos_application(app: Path) -> None:
@@ -1233,20 +1284,30 @@ def package_android(formats: set[str], no_build: bool) -> None:
     apk_dir = ROOT / "build/app/outputs/flutter-apk"
     bundle_dir = ROOT / "build/app/outputs/bundle/release"
     if not no_build:
+        version = project_version()
+        version_arguments = (
+            "--build-name",
+            version,
+            "--build-number",
+            str(release_build_number(version)),
+        )
         run("flutter", "pub", "get")
         if selected(formats, "apk"):
             run(
                 "flutter", "build", "apk", "--release", "--no-pub", "--split-per-abi",
                 "--target-platform", "android-arm,android-arm64,android-x64",
+                *version_arguments,
             )
             run(
                 "flutter", "build", "apk", "--release", "--no-pub",
                 "--target-platform", "android-arm,android-arm64,android-x64",
+                *version_arguments,
             )
         if selected(formats, "aab") or selected(formats, "apks"):
             run(
                 "flutter", "build", "appbundle", "--release", "--no-pub",
                 "--target-platform", "android-arm,android-arm64,android-x64",
+                *version_arguments,
             )
 
     if selected(formats, "apk"):
