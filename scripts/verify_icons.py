@@ -3,7 +3,10 @@
 
 from __future__ import annotations
 
+import argparse
+import ctypes
 import json
+import plistlib
 import struct
 import sys
 import xml.etree.ElementTree as ElementTree
@@ -96,7 +99,41 @@ def verify_windows() -> int:
     return count + 3
 
 
-def main() -> None:
+def verify_windows_executable(path: Path) -> None:
+    check(path.is_file(), f"missing Windows executable: {path}")
+    check(path.read_bytes()[:2] == b"MZ", f"not a Windows executable: {path}")
+    if sys.platform != "win32":
+        return
+    count = ctypes.windll.shell32.ExtractIconExW(str(path), -1, None, None, 0)
+    check(count > 0, f"Windows executable has no embedded icon: {path}")
+
+
+def verify_macos_application(path: Path) -> None:
+    contents = path / "Contents"
+    info_path = contents / "Info.plist"
+    check(info_path.is_file(), f"missing macOS application Info.plist: {path}")
+    with info_path.open("rb") as stream:
+        info = plistlib.load(stream)
+    executable = contents / "MacOS" / str(info.get("CFBundleExecutable", ""))
+    check(executable.is_file() and executable.stat().st_size > 0,
+          f"missing macOS application executable: {executable}")
+    icon_name = str(
+        info.get("CFBundleIconName") or info.get("CFBundleIconFile") or ""
+    ).removesuffix(".icns")
+    check(bool(icon_name), f"macOS application has no configured icon: {path}")
+    icon = contents / "Resources" / f"{icon_name}.icns"
+    check(icon.is_file() and icon.stat().st_size > 0,
+          f"missing compiled macOS application icon: {icon}")
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(
+        description="Validate MDSLens source icons and packaged applications."
+    )
+    parser.add_argument("--windows-executable", type=Path)
+    parser.add_argument("--macos-app", action="append", default=[], type=Path)
+    args = parser.parse_args(argv)
+
     source = ROOT / "assets/app_icon.svg"
     check(source.is_file(), "missing source SVG")
     svg = ElementTree.parse(source).getroot()
@@ -116,6 +153,10 @@ def main() -> None:
         and "x-scheme-handler/mdslens" in desktop,
         "invalid Linux desktop integration metadata",
     )
+    if args.windows_executable is not None:
+        verify_windows_executable(args.windows_executable)
+    for app in args.macos_app:
+        verify_macos_application(app)
     print(f"Verified native icons: iOS {ios}, macOS {macos}, Android {android}, Windows {windows}, Linux 1")
 
 

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import plistlib
 import shutil
 import sys
 import tempfile
@@ -14,10 +15,33 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import build_app  # noqa: E402
-from scripts import build_msixbundle, verify_linux_portable  # noqa: E402
+from scripts import build_msixbundle, verify_icons, verify_linux_portable  # noqa: E402
 
 
 class BuildAppTests(unittest.TestCase):
+    def test_packaged_application_icon_checks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            windows_executable = root / "mdslens.exe"
+            windows_executable.write_bytes(b"MZpackaged")
+            verify_icons.verify_windows_executable(windows_executable)
+
+            app = root / "MDSLens.app"
+            contents = app / "Contents"
+            (contents / "MacOS").mkdir(parents=True)
+            (contents / "Resources").mkdir()
+            (contents / "MacOS/MDSLens").write_bytes(b"Mach-O")
+            (contents / "Resources/AppIcon.icns").write_bytes(b"icns")
+            with (contents / "Info.plist").open("wb") as stream:
+                plistlib.dump(
+                    {
+                        "CFBundleExecutable": "MDSLens",
+                        "CFBundleIconName": "AppIcon",
+                    },
+                    stream,
+                )
+            verify_icons.verify_macos_application(app)
+
     def test_format_names_are_validated_per_platform(self) -> None:
         self.assertEqual(
             build_app.normalize_formats(["windows"], ["zip", "tar.xz"]),

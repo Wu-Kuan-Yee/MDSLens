@@ -44,6 +44,11 @@ jobs:
         run: >-
           python build_app.py -p windows -a ${{ matrix.arch }}
           -f exe msi msix zip 7z tar.gz tar.xz tar.bz2
+      - name: Verify packaged application icon
+        run: >-
+          python scripts/verify_icons.py
+          --windows-executable
+          build/windows/${{ matrix.arch }}/runner/Release/mdslens.exe
       - uses: actions/upload-artifact@v4
         with:
           name: mdslens-windows-${{ matrix.arch }}
@@ -90,6 +95,10 @@ jobs:
           -f app dmg pkg xcarchive zip 7z tar.gz tar.xz tar.bz2
       - name: Verify the application bundle
         run: |
+          python3 scripts/verify_icons.py \
+            --macos-app build/dist/mdslens-macos-arm64-unsigned.app \
+            --macos-app build/dist/mdslens-macos-x64-unsigned.app \
+            --macos-app build/dist/mdslens-macos-universal-unsigned.app
           codesign --verify --deep --strict build/dist/mdslens-macos-arm64-unsigned.app
           codesign --verify --deep --strict build/dist/mdslens-macos-x64-unsigned.app
           codesign --verify --deep --strict build/dist/mdslens-macos-universal-unsigned.app
