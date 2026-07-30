@@ -1,0 +1,117 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:crypto/crypto.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:mdslens/services/update_installer.dart';
+import 'package:mdslens/services/update_service.dart';
+
+void main() {
+  UpdateManifestAsset assetFor(List<int> bytes) {
+    return UpdateManifestAsset(
+      name: 'mdslens-windows-x64-setup.exe',
+      url:
+          'https://github.com/Wu-Kuan-Yee/MDSLens/releases/download/v1.0.0/mdslens-windows-x64-setup.exe',
+      platform: 'windows',
+      architecture: 'x64',
+      format: 'exe',
+      strategy: 'launch-installer',
+      size: bytes.length,
+      sha256: sha256.convert(bytes).toString(),
+    );
+  }
+
+  test('verified update downloads stream to a file and report progress',
+      () async {
+    final bytes = utf8.encode('verified update');
+    final progress = <UpdateDownloadProgress>[];
+    final controller = UpdateDownloadController();
+    final client = MockClient.streaming((request, bodyStream) async {
+      return http.StreamedResponse(
+        Stream.fromIterable([
+          bytes.sublist(0, 4),
+          bytes.sublist(4),
+        ]),
+        200,
+        contentLength: bytes.length,
+      );
+    });
+    final directory = await Directory.systemTemp.createTemp(
+      'mdslens-update-test-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+
+    final downloaded = await downloadVerifiedUpdateAsset(
+      assetFor(bytes),
+      controller: controller,
+      client: client,
+      downloadDirectory: directory,
+      onProgress: progress.add,
+    );
+
+    expect(await File(downloaded.path).readAsBytes(), bytes);
+    expect(progress.first.received, 0);
+    expect(progress.last.received, bytes.length);
+    expect(progress.last.fraction, 1);
+  });
+
+  test('a corrupt update is deleted before it can be launched', () async {
+    final expected = utf8.encode('expected');
+    final received = utf8.encode('corrupt!');
+    final directory = await Directory.systemTemp.createTemp(
+      'mdslens-update-test-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+
+    await expectLater(
+      downloadVerifiedUpdateAsset(
+        assetFor(expected),
+        controller: UpdateDownloadController(),
+        client: MockClient.streaming((request, bodyStream) async {
+          return http.StreamedResponse(
+            Stream.value(received),
+            200,
+            contentLength: received.length,
+          );
+        }),
+        downloadDirectory: directory,
+      ),
+      throwsFormatException,
+    );
+    expect(directory.listSync(), isEmpty);
+  });
+
+  test('cancelled downloads remove partial files', () async {
+    final bytes = utf8.encode('cancel this update');
+    final controller = UpdateDownloadController();
+    final directory = await Directory.systemTemp.createTemp(
+      'mdslens-update-test-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+
+    await expectLater(
+      downloadVerifiedUpdateAsset(
+        assetFor(bytes),
+        controller: controller,
+        client: MockClient.streaming((request, bodyStream) async {
+          return http.StreamedResponse(
+            Stream.fromIterable([
+              bytes.sublist(0, 4),
+              bytes.sublist(4),
+            ]),
+            200,
+            contentLength: bytes.length,
+          );
+        }),
+        downloadDirectory: directory,
+        onProgress: (progress) {
+          if (progress.received >= 4) controller.cancel();
+        },
+      ),
+      throwsA(isA<UpdateCancelledException>()),
+    );
+    expect(directory.listSync(), isEmpty);
+  });
+}
