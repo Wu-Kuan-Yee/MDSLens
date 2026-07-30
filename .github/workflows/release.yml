@@ -441,6 +441,12 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+      - name: Generate update manifest
+        run: >-
+          python3 scripts/generate_update_manifest.py
+          --artifacts artifacts
+          --version "${GITHUB_REF_NAME}"
+          --output artifacts/update-manifest.json
       - name: Generate release checksums
         working-directory: artifacts
         run: find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' | sort | xargs sha256sum > SHA256SUMS
