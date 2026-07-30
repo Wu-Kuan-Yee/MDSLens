@@ -6,6 +6,16 @@ import '../widgets/configuration_drop_region.dart';
 import '../widgets/toolbar.dart';
 import '../widgets/plot_grid.dart';
 
+bool allowShortcutWhileEditing(
+  MdsShortcutCommand command, {
+  required bool shotInputFocused,
+}) =>
+    command == MdsShortcutCommand.exitPoint ||
+    (shotInputFocused &&
+        (command == MdsShortcutCommand.previousShot ||
+            command == MdsShortcutCommand.nextShot ||
+            command == MdsShortcutCommand.latestShot));
+
 class MainPage extends StatelessWidget {
   const MainPage({super.key});
 
@@ -97,9 +107,18 @@ class MainPage extends StatelessWidget {
       MdsShortcutCommand.showAllPanels: app.showAllPanels,
       MdsShortcutCommand.resetCurrentScale: app.resetSelectedView,
       MdsShortcutCommand.resetAllScales: app.resetAllViews,
-      MdsShortcutCommand.previousShot: () => app.loadRelativeShot(-1),
-      MdsShortcutCommand.nextShot: () => app.loadRelativeShot(1),
-      MdsShortcutCommand.latestShot: app.fetchLatestShot,
+      MdsShortcutCommand.previousShot: () {
+        _prepareShotNavigation(app);
+        app.loadRelativeShot(-1);
+      },
+      MdsShortcutCommand.nextShot: () {
+        _prepareShotNavigation(app);
+        app.loadRelativeShot(1);
+      },
+      MdsShortcutCommand.latestShot: () {
+        _prepareShotNavigation(app);
+        app.fetchLatestShot();
+      },
       MdsShortcutCommand.pointPrevious: () => _stepCrosshair(app, -1),
       MdsShortcutCommand.pointNext: () => _stepCrosshair(app, 1),
       MdsShortcutCommand.exitPoint: app.handleEscapeKey,
@@ -114,7 +133,11 @@ class MainPage extends StatelessWidget {
       if (action == null) continue;
       for (final stroke in entry.value.strokes) {
         bindings[stroke.activator] = () {
-          if (_editingText() && entry.key != MdsShortcutCommand.exitPoint) {
+          if (_editingText() &&
+              !allowShortcutWhileEditing(
+                entry.key,
+                shotInputFocused: app.shotFocusNode.hasFocus,
+              )) {
             return;
           }
           action();
@@ -129,6 +152,12 @@ class MainPage extends StatelessWidget {
     if (context == null) return false;
     return context.widget is EditableText ||
         context.findAncestorWidgetOfExactType<EditableText>() != null;
+  }
+
+  static void _prepareShotNavigation(AppState app) {
+    if (!app.shotFocusNode.hasFocus) return;
+    app.shotFocusNode.unfocus();
+    app.restoreDisplayedShotForNavigation();
   }
 
   static void _stepCrosshair(AppState app, int dir) {

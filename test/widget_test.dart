@@ -17,6 +17,7 @@ import 'package:mdslens/services/credential_store.dart';
 import 'package:mdslens/services/external_url_launcher.dart';
 import 'package:mdslens/services/identity_file_access.dart';
 import 'package:mdslens/services/incoming_configuration_service.dart';
+import 'package:mdslens/services/keyboard_shortcuts.dart';
 import 'package:mdslens/services/platform_file_dialog.dart';
 import 'package:mdslens/services/runtime_build_info.dart';
 import 'package:mdslens/services/simple_zip.dart';
@@ -993,6 +994,83 @@ void main() {
     );
     expect(tester.testTextInput.isVisible, isFalse);
   });
+
+  test('Only Shot navigation and Escape bypass focused text editing', () {
+    expect(
+      allowShortcutWhileEditing(
+        MdsShortcutCommand.previousShot,
+        shotInputFocused: true,
+      ),
+      isTrue,
+    );
+    expect(
+      allowShortcutWhileEditing(
+        MdsShortcutCommand.nextShot,
+        shotInputFocused: true,
+      ),
+      isTrue,
+    );
+    expect(
+      allowShortcutWhileEditing(
+        MdsShortcutCommand.latestShot,
+        shotInputFocused: true,
+      ),
+      isTrue,
+    );
+    expect(
+      allowShortcutWhileEditing(
+        MdsShortcutCommand.pointMode,
+        shotInputFocused: true,
+      ),
+      isFalse,
+    );
+    expect(
+      allowShortcutWhileEditing(
+        MdsShortcutCommand.previousShot,
+        shotInputFocused: false,
+      ),
+      isFalse,
+    );
+    expect(
+      allowShortcutWhileEditing(
+        MdsShortcutCommand.exitPoint,
+        shotInputFocused: false,
+      ),
+      isTrue,
+    );
+  });
+
+  test(
+    'Shot navigation discards a draft and advances from the displayed shot',
+    () async {
+      final requestedShots = <String>[];
+      final app = AppState(
+        signalFetchWorker: (configJson, _, __) async {
+          final config = jsonDecode(configJson) as Map<String, dynamic>;
+          final panel = (config['columns'] as List).first.first as Map;
+          requestedShots.add(panel['shot'].toString());
+          return '[{"column":0,"row":0,"signal":0,'
+              '"series":{"points":[[0,1],[1,2]],"error":""}}]';
+        },
+      );
+      await app.preferencesReady;
+      addTearDown(app.dispose);
+      app.setLoggedIn(true, 'test-token');
+      app.shotText = '163700';
+      app.startRefresh();
+      await Future<void>.delayed(Duration.zero);
+      expect(app.displayedShot, '163700');
+
+      app.shotText = '999999';
+      app.restoreDisplayedShotForNavigation();
+      app.loadRelativeShot(1);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(app.shotText, '163701');
+      expect(app.shotCtrl.text, '163701');
+      expect(requestedShots, ['163700', '163701']);
+    },
+  );
 
   test('Manual application settings survive an application restart', () async {
     final temporary = await Directory.systemTemp.createTemp(

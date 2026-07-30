@@ -2452,6 +2452,18 @@ class AppState extends ChangeNotifier {
     startRefresh();
   }
 
+  void restoreDisplayedShotForNavigation() {
+    final displayed = _displayedShot.trim();
+    if (displayed.isEmpty || displayed == _shotText.trim()) return;
+    _shotText = displayed;
+    _shotCtrl.value = TextEditingValue(
+      text: displayed,
+      selection: TextSelection.collapsed(offset: displayed.length),
+    );
+    savePreferences();
+    notifyListeners();
+  }
+
   Future<void> _loadPendingImportedConfiguration() async {
     final shot = _pendingImportedShot;
     if (shot == null || shot.isEmpty) return;
