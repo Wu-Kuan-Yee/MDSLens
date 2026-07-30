@@ -19,6 +19,35 @@ operating system's security protections globally just to run MDSLens.
 | iOS/iPadOS | Download the unsigned IPA and re-sign it, or install from source with Xcode | Unsigned IPA cannot be installed directly |
 | Web / PWA | Open the deployment's HTTPS URL | No local runtime or manual setup; the browser may offer Install App/Add to Home Screen |
 
+## In-app updates
+
+Open **Settings > About MDSLens > Update**. When a newer tagged release has a
+machine-readable update manifest, MDSLens offers both **Open Release** and a
+platform action:
+
+| Platform | Update action |
+|---|---|
+| Windows | Downloads the matching x64/ARM64 setup EXE, verifies it, and starts the Windows installer |
+| macOS | Downloads the matching or Universal unsigned DMG, verifies it, and opens the disk image |
+| Linux | Atomically replaces a writable running AppImage for the next launch; otherwise downloads the distribution's DEB/RPM and opens the system installer |
+| Android | Downloads a matching APK, verifies it, and opens Android's package installer |
+| iOS/iPadOS | Opens the release workflow because the unsigned IPA must be re-signed outside the running application |
+| Web/PWA | Reloads the page so the browser can activate the latest deployed Web bundle |
+
+Downloads are streamed to a temporary file, can be cancelled, and are not
+opened unless the byte count and SHA-256 digest match the release manifest.
+Installation is intentionally not silent: Windows elevation/SmartScreen,
+Android's per-source installation permission, Linux administrator
+authentication, and macOS Gatekeeper remain in control.
+
+The installation identity must also match the installed copy. In particular,
+Android updates require every release to use the same release keystore.
+Repository builds made without the Android signing secrets use a local test
+identity and may need the old test build to be uninstalled first. That normally
+removes its private application data. Current public macOS artifacts remain
+ad-hoc signed and unnotarized, so Update opens the verified DMG rather than
+replacing the running application.
+
 ## Runtime Dependency Summary
 
 The packaged application includes the Flutter engine, MDSLens assets and

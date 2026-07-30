@@ -6,7 +6,21 @@ the filename.
 
 Public releases should use numeric tags such as `v0.0.1`, `v0.0.2`, or `v0.1.0`.
 The displayed application version and Git version are derived automatically
-from the tag, so no source-file version edit is required before releasing.
+from the tag, and the tag is also propagated into each platform package, so no
+source-file version edit is required before releasing.
+
+Every tagged release also contains:
+
+- `update-manifest.json`, which maps supported update packages to platform,
+  architecture, format, byte size, SHA-256 digest, and installation strategy;
+- `SHA256SUMS`, covering all uploaded files, including the update manifest.
+
+MDSLens requires an exact platform and architecture match and verifies the
+downloaded byte count and SHA-256 digest before asking the operating system to
+open an update. Platform package signing remains a separate requirement:
+Android releases need one persistent release keystore, and public Windows or
+macOS packages should be Authenticode/Developer ID signed when those
+credentials become available.
 
 ## Windows
 

@@ -27,6 +27,9 @@ Source code, releases, and update checks are hosted in the
   while preserving those separate files.
 - Responsive layouts, configurable fonts, icon sizes and themes, internal web
   bookmarks, shot history management, and native system file/link integration.
+- In-app update checks with platform/architecture selection, cancellable
+  streaming downloads, SHA-256 verification, and handoff to the operating
+  system installer where the platform permits it.
 - Installable WebAssembly PWA support. Users open one HTTPS URL; browser-native
   pickers, drag-and-drop and downloads preserve the desktop file workflow,
   while a same-origin Rust gateway provides authenticated MDSip and SSH access
@@ -98,6 +101,9 @@ Use a numeric release tag such as `v0.0.2`. The application derives
 `MDSLens Version` from that tag without the leading `v`, while `Git Version`
 is generated as `<version>.r<commits-after-tag>.g<commit>`. Build-only labels
 such as `v0.0.1-build.1` are deliberately ignored as public versions.
+The same tag is propagated into the native package version and into a
+monotonically increasing Android build number, so a newer release is recognized
+as an upgrade by the operating system.
 The complete output list and unsupported-target boundary are documented in
 [Release Artifact Matrix](docs/RELEASE_ARTIFACTS.md).
 Web deployment is documented in
