@@ -923,4 +923,25 @@ y = "\\pcrl01"
         assert_eq!(plot.xmin, 0.0);
         assert_eq!(plot.xmax, 0.0);
     }
+
+    #[test]
+    fn test_parse_empty_toml_layout() {
+        let tmp = std::env::temp_dir().join("mdslens_empty_layout.toml");
+        std::fs::write(&tmp, "version = 1\n").unwrap();
+        let config = parse_toml_environment(tmp.to_str().unwrap());
+        std::fs::remove_file(&tmp).ok();
+
+        assert!(config.columns.is_empty());
+    }
+
+    #[test]
+    fn test_parse_empty_webscp_layout() {
+        let tmp = std::env::temp_dir().join("mdslens_empty_layout.webscp");
+        std::fs::write(&tmp, "cols:1\n1.rows:0\n").unwrap();
+        let config = parse_webscp_environment(tmp.to_str().unwrap());
+        std::fs::remove_file(&tmp).ok();
+
+        assert_eq!(config.columns.len(), 1);
+        assert!(config.columns[0].is_empty());
+    }
 }

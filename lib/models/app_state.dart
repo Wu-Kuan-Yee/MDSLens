@@ -992,7 +992,6 @@ class AppState extends ChangeNotifier {
   }
 
   void applyLayoutColumns(List<List<Map<String, dynamic>>> columns) {
-    if (columns.isEmpty || columns.every((column) => column.isEmpty)) return;
     _invalidateFetchForSettingsChange();
     _columns = columns
         .where((column) => column.isNotEmpty)
@@ -2082,7 +2081,7 @@ class AppState extends ChangeNotifier {
           return m;
         }).toList();
       }).toList();
-      if (cols.isEmpty || cols.every((c) => c.isEmpty)) return;
+      if (cols.every((column) => column.isEmpty)) cols.clear();
       final initialShot = _configurationInitialShot(json, cols);
       _makeConfigurationShotInheritable(cols, initialShot);
       _columns = cols;
@@ -2245,11 +2244,7 @@ class AppState extends ChangeNotifier {
           return m;
         }).toList();
       }).toList();
-      if (cols.isEmpty || cols.every((c) => c.isEmpty)) {
-        _status = 'No panels found in config';
-        notifyListeners();
-        return;
-      }
+      if (cols.every((column) => column.isEmpty)) cols.clear();
       _invalidateFetchForSettingsChange();
       final fileShot = _configurationInitialShot(json, cols);
       final useFileShot = fileShot.isNotEmpty &&
@@ -2283,7 +2278,8 @@ class AppState extends ChangeNotifier {
       }
       _status =
           'Loaded: ${selection.name} (${_columns.length} cols, ${_plots.length} panels)';
-      _pendingImportedShot = _shotText.trim().isEmpty ? null : _shotText.trim();
+      _pendingImportedShot =
+          _plots.isEmpty || _shotText.trim().isEmpty ? null : _shotText.trim();
       await savePreferences();
       notifyListeners();
       if (_pendingImportedShot != null) {

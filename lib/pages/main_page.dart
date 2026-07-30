@@ -46,7 +46,9 @@ class MainPage extends StatelessWidget {
                       child: app.columns.isEmpty
                           ? const Center(
                               child: SelectableText(
-                                'No environment loaded. Use Open to load a .toml or .webscp file.',
+                                'This configuration contains no panels. '
+                                'Use Settings > Layout Setup to add one.',
+                                textAlign: TextAlign.center,
                               ),
                             )
                           : const PlotGrid(),

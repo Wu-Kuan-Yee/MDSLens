@@ -1606,7 +1606,6 @@ class ToolbarWidget extends StatelessWidget {
   void _showLayoutSetup(BuildContext ctx, AppState app) {
     final openingColumns = _cloneLayoutColumns(app.columns);
     final draftColumns = _cloneLayoutColumns(openingColumns);
-    if (draftColumns.isEmpty) draftColumns.add([_emptyPanelConfig()]);
     final horizontalController = ScrollController();
     final verticalControllers = <int, ScrollController>{};
     final selectedPanels = Set<Map<String, dynamic>>.identity();
@@ -2087,10 +2086,14 @@ class ToolbarWidget extends StatelessWidget {
                               (column) => column.any(selectedPanels.contains),
                             );
                             animateLayoutChange(() {
-                              draftColumns[targetColumn < 0
-                                      ? draftColumns.length - 1
-                                      : targetColumn]
-                                  .add(_emptyPanelConfig());
+                              if (draftColumns.isEmpty) {
+                                draftColumns.add([_emptyPanelConfig()]);
+                              } else {
+                                draftColumns[targetColumn < 0
+                                        ? draftColumns.length - 1
+                                        : targetColumn]
+                                    .add(_emptyPanelConfig());
+                              }
                             });
                           },
                           icon: const Icon(Icons.add, size: 16),
@@ -2118,9 +2121,6 @@ class ToolbarWidget extends StatelessWidget {
                     draftColumns
                       ..clear()
                       ..addAll(_cloneLayoutColumns(openingColumns));
-                    if (draftColumns.isEmpty) {
-                      draftColumns.add([_emptyPanelConfig()]);
-                    }
                     selectedPanels.clear();
                   }),
                   icon: const Icon(Icons.restart_alt_rounded),
@@ -2135,9 +2135,6 @@ class ToolbarWidget extends StatelessWidget {
                               draftColumns,
                               selectedPanels,
                             );
-                            if (draftColumns.isEmpty) {
-                              draftColumns.add([_emptyPanelConfig()]);
-                            }
                           }),
                   style: FilledButton.styleFrom(
                     foregroundColor: Theme.of(ctx).colorScheme.error,
@@ -2155,8 +2152,8 @@ class ToolbarWidget extends StatelessWidget {
                 ),
                 TextButton(
                   onPressed: () {
-                    if (draftColumns.isNotEmpty) {
-                      app.applyLayoutColumns(draftColumns);
+                    app.applyLayoutColumns(draftColumns);
+                    if (app.plots.isNotEmpty) {
                       app.startRefresh();
                     }
                     Navigator.pop(ctx);

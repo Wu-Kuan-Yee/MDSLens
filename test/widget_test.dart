@@ -1469,6 +1469,48 @@ void main() {
     },
   );
 
+  test('Empty configurations remain valid editable workspaces', () async {
+    final app = AppState(
+      configOpenPicker: () async =>
+          ConfigOpenSelection(name: 'empty.toml', bytes: Uint8List(0)),
+      configParser: (_) => '{"shot":"163700","columns":[[]]}',
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+
+    await app.openFile();
+    expect(app.columns, isEmpty);
+    expect(app.plots, isEmpty);
+    expect(app.status, contains('0 panels'));
+
+    app.applyLayoutColumns([
+      [
+        {
+          'title': 'New panel',
+          'signal_specs': <Map<String, dynamic>>[],
+        },
+      ],
+    ]);
+    expect(app.columns, hasLength(1));
+    expect(app.plots, hasLength(1));
+
+    app.applyLayoutColumns([]);
+    expect(app.columns, isEmpty);
+    expect(app.plots, isEmpty);
+  });
+
+  test('An empty workspace survives application restart', () async {
+    SharedPreferences.setMockInitialValues({
+      'lastConfigJson': '{"shot":"","columns":[]}',
+    });
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+
+    expect(app.columns, isEmpty);
+    expect(app.plots, isEmpty);
+  });
+
   test(
     'Imported shots are ignored by default at every configuration level',
     () async {
