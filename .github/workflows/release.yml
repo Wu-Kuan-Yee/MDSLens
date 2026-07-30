@@ -437,6 +437,7 @@ jobs:
     needs: [windows, windows-msixbundle, macos, linux, linux-flatpak, linux-portable-runtime, android, apple-mobile, web, web-container]
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
