@@ -27,10 +27,11 @@ hosts respectively. CI uses the matching GitHub-hosted runner for each one.
 
 ## Icon Coverage
 
-A single 1024-pixel rust-textured master at `assets/app_icon_master.png`
-feeds `scripts/generate_icons.sh`. Separate vector foreground and monochrome
-sources preserve Android adaptive and themed-icon requirements. The generator
-produces:
+A resolution-independent rust-textured master at `assets/app_icon_master.svg`
+feeds `scripts/generate_icons.sh`. It contains no embedded raster image;
+`assets/app_icon_master.png` is its generated 1024-pixel reference preview.
+Separate vector foreground and monochrome sources preserve Android adaptive
+and themed-icon requirements. The generator produces:
 
 - Windows 16/24/32/48/64/128/256-pixel multi-layer ICO for EXE, taskbar, shortcuts, and Start Menu;
 - macOS 16–1024-pixel Asset Catalog for APP, Dock, Finder, and application menus;

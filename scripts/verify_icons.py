@@ -151,11 +151,29 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--macos-app", action="append", default=[], type=Path)
     args = parser.parse_args(argv)
 
-    source = ROOT / "assets/app_icon_master.png"
-    check(source.is_file(), "missing source PNG")
-    width, height, color_type = png_info(source)
-    check((width, height) == (1024, 1024), "source PNG must be 1024x1024")
-    check(color_type in {4, 6}, "source PNG must preserve transparent corners")
+    source = ROOT / "assets/app_icon_master.svg"
+    check(source.is_file(), "missing source SVG")
+    source_svg = ElementTree.parse(source).getroot()
+    source_view_box = [
+        float(value) for value in source_svg.attrib.get("viewBox", "").split()
+    ]
+    check(
+        source_view_box == [0, 0, 1024, 1024],
+        "source SVG must have a 1024x1024 viewBox",
+    )
+    svg_namespace = "{http://www.w3.org/2000/svg}"
+    check(
+        not list(source_svg.iter(f"{svg_namespace}image")),
+        "source SVG must not embed raster images",
+    )
+    preview = ROOT / "assets/app_icon_master.png"
+    check(preview.is_file(), "missing generated source preview")
+    width, height, color_type = png_info(preview)
+    check((width, height) == (1024, 1024), "source preview must be 1024x1024")
+    check(
+        color_type in {4, 6},
+        "source preview must preserve transparent corners",
+    )
     for relative in (
         "assets/app_icon_foreground.svg",
         "assets/app_icon_monochrome.svg",

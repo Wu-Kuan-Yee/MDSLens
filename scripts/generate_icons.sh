@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SOURCE_ICON="$ROOT_DIR/assets/app_icon_master.png"
+SOURCE_ICON="$ROOT_DIR/assets/app_icon_master.svg"
 FOREGROUND_ICON="$ROOT_DIR/assets/app_icon_foreground.svg"
 MONOCHROME_ICON="$ROOT_DIR/assets/app_icon_monochrome.svg"
 
@@ -36,7 +36,8 @@ render_opaque() {
   rm -rf "$temporary_dir"
 }
 
-# Flutter/About dialog and Linux desktop/window icon.
+# Generated reference preview, Flutter/About dialog, and Linux icon.
+render "$SOURCE_ICON" 1024 "$ROOT_DIR/assets/app_icon_master.png"
 render "$SOURCE_ICON" 256 "$ROOT_DIR/assets/app_icon.png"
 render "$SOURCE_ICON" 512 "$ROOT_DIR/linux/runner/app_icon.png"
 render "$SOURCE_ICON" 256 "$ROOT_DIR/product-site/mdslens-icon.png"
@@ -111,4 +112,4 @@ render "$SOURCE_ICON" 150 \
 render "$SOURCE_ICON" 50 \
   "$ROOT_DIR/windows/runner/resources/msix/StoreLogo.png"
 
-echo "MDSLens platform icons regenerated from assets/app_icon_master.png"
+echo "MDSLens platform icons regenerated from assets/app_icon_master.svg"

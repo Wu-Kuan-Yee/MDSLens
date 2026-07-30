@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="panel" x1="158" y1="112" x2="850" y2="914" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#182536"/>
+      <stop offset="0.52" stop-color="#101b29"/>
+      <stop offset="1" stop-color="#09111d"/>
+    </linearGradient>
+    <radialGradient id="panelGlow" cx="0" cy="0" r="1" gradientTransform="translate(410 350) rotate(50) scale(540)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#26384b" stop-opacity="0.7"/>
+      <stop offset="0.62" stop-color="#152233" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#07101c" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="steel" x1="112" y1="72" x2="912" y2="960" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#81909b"/>
+      <stop offset="0.12" stop-color="#364552"/>
+      <stop offset="0.28" stop-color="#7c8992"/>
+      <stop offset="0.48" stop-color="#273541"/>
+      <stop offset="0.68" stop-color="#697782"/>
+      <stop offset="0.86" stop-color="#2a3741"/>
+      <stop offset="1" stop-color="#75818a"/>
+    </linearGradient>
+    <linearGradient id="cyanSignal" x1="190" y1="610" x2="850" y2="300" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00b7df"/>
+      <stop offset="0.5" stop-color="#20d7ef"/>
+      <stop offset="1" stop-color="#18c7e7"/>
+    </linearGradient>
+    <linearGradient id="orangeSignal" x1="215" y1="695" x2="815" y2="310" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ff7916"/>
+      <stop offset="0.55" stop-color="#ff6508"/>
+      <stop offset="1" stop-color="#ff8b24"/>
+    </linearGradient>
+    <g id="rustCluster">
+      <path d="M2 22c8-15 24-19 39-10 10 6 17 3 27-3 12-7 29-1 32 12-15 13-27 11-40 7-12-4-22 10-37 7-9-2-16-6-21-13z" fill="#85371d"/>
+      <path d="M14 17c8-7 18-8 27-2-3 8-13 13-24 10z" fill="#ca6b35"/>
+      <path d="M53 18c8-6 18-4 25 3-3 8-13 10-23 5z" fill="#b24d23"/>
+      <path d="M78 8c6-4 14-1 17 5-4 6-11 7-18 3z" fill="#e18a4c"/>
+      <circle cx="8" cy="41" r="4" fill="#291713"/>
+      <circle cx="49" cy="38" r="3" fill="#d2763e"/>
+      <circle cx="91" cy="35" r="5" fill="#3a1d16"/>
+    </g>
+    <filter id="outerShadow" x="-20%" y="-20%" width="140%" height="150%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000814" flood-opacity="0.72"/>
+    </filter>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="150%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#00040a" flood-opacity="0.65"/>
+    </filter>
+    <clipPath id="outerRimClip">
+      <path fill-rule="evenodd" d="M224 36h576c104 0 188 84 188 188v576c0 104-84 188-188 188H224C120 988 36 904 36 800V224C36 120 120 36 224 36zm0 72c-64 0-116 52-116 116v576c0 64 52 116 116 116h576c64 0 116-52 116-116V224c0-64-52-116-116-116z"/>
+    </clipPath>
+  </defs>
+
+  <!-- Transparent outside corners keep the icon usable on every desktop shell. -->
+  <g filter="url(#outerShadow)">
+    <rect x="48" y="48" width="928" height="928" rx="178" fill="url(#panel)" stroke="url(#steel)" stroke-width="48"/>
+    <rect x="82" y="82" width="860" height="860" rx="148" fill="url(#panelGlow)" stroke="#08111c" stroke-width="17"/>
+    <rect x="97" y="97" width="830" height="830" rx="132" fill="none" stroke="#7f8b94" stroke-opacity="0.55" stroke-width="7"/>
+  </g>
+
+  <!-- Irregular vector rust deposits are clipped to the metal rim. -->
+  <g clip-path="url(#outerRimClip)">
+    <g opacity="0.82">
+      <use href="#rustCluster" transform="translate(108 54) rotate(-8) scale(1.2)"/>
+      <use href="#rustCluster" transform="translate(355 61) rotate(5) scale(0.72)"/>
+      <use href="#rustCluster" transform="translate(626 54) rotate(-3) scale(1.35)"/>
+      <use href="#rustCluster" transform="translate(914 174) rotate(88) scale(1.1)"/>
+      <use href="#rustCluster" transform="translate(932 511) rotate(92) scale(0.82)"/>
+      <use href="#rustCluster" transform="translate(854 858) rotate(146) scale(1.28)"/>
+      <use href="#rustCluster" transform="translate(546 922) rotate(177) scale(0.8)"/>
+      <use href="#rustCluster" transform="translate(221 932) rotate(184) scale(1.35)"/>
+      <use href="#rustCluster" transform="translate(66 803) rotate(-93) scale(0.9)"/>
+      <use href="#rustCluster" transform="translate(51 464) rotate(-88) scale(1.2)"/>
+      <use href="#rustCluster" transform="translate(67 235) rotate(-76) scale(0.72)"/>
+    </g>
+    <path d="M102 101c63-42 132-30 184-10 55 21 97-24 151-9 39 10 68 34 105 27 57-11 84-46 147-23 46 17 77 4 129 16" fill="none" stroke="#d1783d" stroke-width="18" stroke-linecap="round" opacity="0.64"/>
+    <path d="M889 143c22 67-7 106 9 158 14 45 54 66 28 128-18 43 12 79 5 126-7 49-38 71-28 125 8 43 28 80-9 139" fill="none" stroke="#8a391e" stroke-width="24" stroke-linecap="round" opacity="0.74"/>
+    <path d="M133 901c69-38 111 8 176-6 62-13 87-42 143-11 54 29 88-4 141 4 57 8 87 39 153 4 43-23 83-14 130 7" fill="none" stroke="#c05a29" stroke-width="22" stroke-linecap="round" opacity="0.72"/>
+    <path d="M92 183c32 49 11 95 16 142 5 54 31 80 8 136-20 48 10 84 1 132-10 52-37 80-12 134 17 38-3 75-8 115" fill="none" stroke="#73301c" stroke-width="27" stroke-linecap="round" opacity="0.82"/>
+    <g fill="#111a22" stroke="#9c4b29" stroke-width="4">
+      <circle cx="314" cy="66" r="12"/>
+      <circle cx="446" cy="86" r="7"/>
+      <circle cx="770" cy="69" r="10"/>
+      <circle cx="948" cy="325" r="9"/>
+      <circle cx="919" cy="656" r="6"/>
+      <circle cx="744" cy="950" r="11"/>
+      <circle cx="395" cy="958" r="7"/>
+      <circle cx="65" cy="684" r="10"/>
+      <circle cx="76" cy="333" r="6"/>
+    </g>
+  </g>
+
+  <!-- Sparse vector oxidation keeps the dark panel from looking artificially flat. -->
+  <rect x="118" y="118" width="788" height="788" rx="112" fill="none" stroke="#8b4325" stroke-opacity="0.22" stroke-width="9"/>
+  <g fill="#a74c27" opacity="0.22">
+    <path d="M151 291c31-15 64-9 78 8-25 15-51 17-78 7z"/>
+    <path d="M760 170c31-16 63-8 79 11-21 17-53 17-79 5z"/>
+    <path d="M715 864c37-17 77-7 93 16-33 14-61 12-93 1z"/>
+    <path d="M139 744c30-10 57-2 70 17-28 11-49 7-70-2z"/>
+  </g>
+
+  <!-- Plot frame and grid, with rust sitting on top of the metal. -->
+  <g filter="url(#softShadow)">
+    <path d="M208 218v586h626" fill="none" stroke="url(#steel)" stroke-width="31" stroke-linecap="round" stroke-linejoin="round"/>
+    <g fill="none" stroke="url(#steel)" stroke-width="11" stroke-linecap="round">
+      <path d="M365 218v586M520 218v586M675 218v586"/>
+      <path d="M208 355h626M208 505h626M208 655h626"/>
+    </g>
+  </g>
+  <g fill="none" stroke-linecap="round" opacity="0.78">
+    <path d="M208 218v586h626" stroke="#91401f" stroke-width="12" stroke-dasharray="42 96 17 61 8 118"/>
+    <path d="M365 218v586" stroke="#b85a29" stroke-width="6" stroke-dasharray="27 112 8 83"/>
+    <path d="M520 218v586" stroke="#79331d" stroke-width="7" stroke-dasharray="64 137 13 91"/>
+    <path d="M675 218v586" stroke="#c56a35" stroke-width="6" stroke-dasharray="16 126 47 104"/>
+    <path d="M208 355h626" stroke="#9a4321" stroke-width="7" stroke-dasharray="72 153 19 89"/>
+    <path d="M208 505h626" stroke="#c26831" stroke-width="6" stroke-dasharray="21 102 55 164"/>
+    <path d="M208 655h626" stroke="#77321c" stroke-width="7" stroke-dasharray="84 118 12 146"/>
+    <use href="#rustCluster" transform="translate(190 195) rotate(48) scale(0.34)"/>
+    <use href="#rustCluster" transform="translate(782 786) rotate(188) scale(0.4)"/>
+  </g>
+  <g fill="#bc5a2b" opacity="0.88">
+    <circle cx="208" cy="356" r="10"/>
+    <circle cx="365" cy="505" r="8"/>
+    <circle cx="520" cy="655" r="11"/>
+    <circle cx="675" cy="355" r="8"/>
+    <circle cx="804" cy="804" r="10"/>
+  </g>
+
+  <!-- The two signals remain clean and saturated against the aged instrument. -->
+  <path d="M205 582C278 393 350 438 424 548c58 87 103 63 150-12 55-89 112-67 156-35 42 31 91-46 113-176" fill="none" stroke="#06101a" stroke-opacity="0.55" stroke-width="70" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M205 582C278 393 350 438 424 548c58 87 103 63 150-12 55-89 112-67 156-35 42 31 91-46 113-176" fill="none" stroke="url(#cyanSignal)" stroke-width="57" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M220 690h112l64-364 64 364h115l63-300 68 300h116" fill="none" stroke="#170b05" stroke-opacity="0.52" stroke-width="65" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M220 690h112l64-364 64 364h115l63-300 68 300h116" fill="none" stroke="url(#orangeSignal)" stroke-width="49" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="520" cy="532" r="39" fill="#f8fafc" stroke="#dce5ed" stroke-width="4"/>
+  <circle cx="638" cy="390" r="31" fill="#ff7611"/>
+</svg>
