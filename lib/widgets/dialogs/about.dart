@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../models/app_state.dart';
 import '../../services/external_url_launcher.dart';
 import '../../services/runtime_build_info.dart';
 import '../../services/update_installer.dart';
@@ -390,6 +392,7 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final app = context.watch<AppState?>();
     final theme = Theme.of(context);
     final screenSize = MediaQuery.sizeOf(context);
     final maxHeight = (screenSize.height - 32).clamp(240.0, 720.0);
@@ -552,6 +555,36 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  if (app != null) ...[
+                    Material(
+                      color: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.5),
+                      shape: RoundedRectangleBorder(
+                        side: BorderSide(color: theme.dividerColor),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: CheckboxListTile(
+                        key: const ValueKey('about-auto-update-check'),
+                        value: app.autoCheckUpdates,
+                        onChanged: (value) =>
+                            app.setAutoCheckUpdates(value ?? false),
+                        secondary: Icon(
+                          Icons.update_rounded,
+                          color: theme.colorScheme.primary,
+                        ),
+                        title: const Text('Check for updates automatically'),
+                        subtitle: const Text(
+                          'Check quietly when MDSLens starts.',
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 4,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   LayoutBuilder(
                     builder: (context, constraints) {
                       final updateButton = OutlinedButton(

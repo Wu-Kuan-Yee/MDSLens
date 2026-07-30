@@ -1014,9 +1014,6 @@ class ToolbarWidget extends StatelessWidget {
           case 'shortcuts':
             KeyboardShortcutsDialog.show(ctx);
             break;
-          case 'auto_updates':
-            app.setAutoCheckUpdates(!app.autoCheckUpdates);
-            break;
           case 'about':
             AboutDialogWidget.show(ctx);
             break;
@@ -1042,18 +1039,6 @@ class ToolbarWidget extends StatelessWidget {
           value: 'shortcuts',
           icon: Icons.keyboard_alt_outlined,
           label: 'Keyboard shortcuts',
-        ),
-        CheckedPopupMenuItem<String>(
-          key: const ValueKey('settings-auto-update-check'),
-          value: 'auto_updates',
-          checked: app.autoCheckUpdates,
-          child: const Row(
-            children: [
-              Icon(Icons.update_rounded, size: 21),
-              SizedBox(width: 12),
-              Expanded(child: Text('Check for updates automatically')),
-            ],
-          ),
         ),
         _settingsMenuItem(
           value: 'about',

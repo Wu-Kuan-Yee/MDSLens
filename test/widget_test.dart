@@ -4380,7 +4380,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    expect(find.byType(PopupMenuDivider), findsNWidgets(5));
+    expect(find.byType(PopupMenuDivider), findsNWidgets(4));
   });
 
   testWidgets('Shot history uses the polished compact dropdown', (
@@ -5044,7 +5044,10 @@ void main() {
     expect(find.byIcon(Icons.language_rounded), findsOneWidget);
     expect(find.byIcon(Icons.dashboard_customize_rounded), findsOneWidget);
     expect(find.byIcon(Icons.font_download_outlined), findsOneWidget);
-    expect(find.byIcon(Icons.update_rounded), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('settings-auto-update-check')),
+      findsNothing,
+    );
     expect(find.byIcon(Icons.info_outline_rounded), findsOneWidget);
   });
 
@@ -5064,30 +5067,40 @@ void main() {
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
     expect(
+      find.byKey(const ValueKey('settings-auto-update-check')),
+      findsNothing,
+    );
+    await tester.tap(find.text('About MDSLens'));
+    await tester.pumpAndSettle();
+    expect(
       tester
-          .widget<CheckedPopupMenuItem<String>>(
-            find.byKey(const ValueKey('settings-auto-update-check')),
+          .widget<CheckboxListTile>(
+            find.byKey(const ValueKey('about-auto-update-check')),
           )
-          .checked,
+          .value,
       isTrue,
     );
     await tester.ensureVisible(
-      find.byKey(const ValueKey('settings-auto-update-check')),
+      find.byKey(const ValueKey('about-auto-update-check')),
     );
     await tester.tap(
-      find.byKey(const ValueKey('settings-auto-update-check')),
+      find.byKey(const ValueKey('about-auto-update-check')),
     );
     await tester.pumpAndSettle();
     expect(app.autoCheckUpdates, isFalse);
 
+    await tester.tap(find.widgetWithText(FilledButton, 'Close'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('About MDSLens'));
     await tester.pumpAndSettle();
     expect(
       tester
-          .widget<CheckedPopupMenuItem<String>>(
-            find.byKey(const ValueKey('settings-auto-update-check')),
+          .widget<CheckboxListTile>(
+            find.byKey(const ValueKey('about-auto-update-check')),
           )
-          .checked,
+          .value,
       isFalse,
     );
   });
