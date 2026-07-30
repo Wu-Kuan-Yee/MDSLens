@@ -95,36 +95,45 @@ class AboutDialogWidget extends StatefulWidget {
     AppVersionLoader? versionLoader,
     GitVersionLoader? gitVersionLoader,
     ApplicationExitRequester? applicationExitRequester,
+    List<Duration> retryDelays = const [
+      Duration(seconds: 3),
+      Duration(seconds: 15),
+    ],
   }) async {
-    try {
-      final currentVersion = await (versionLoader ?? loadMDSLensVersion)();
-      final result = await (updateChecker != null
-          ? updateChecker()
-          : checkLatestMDSLensRelease(currentVersion));
-      if (!context.mounted || !result.updateAvailable) return;
-      final choice = await _showUpdateChoiceDialog(context, result);
-      if (!context.mounted) return;
-      if (choice == _UpdateChoice.release) {
-        await openExternalWebUrl(result.releaseUrl, opener: urlOpener);
-      } else if (choice == _UpdateChoice.direct) {
-        await showDialog<void>(
-          context: context,
-          builder: (context) => AboutDialogWidget(
-            urlOpener: urlOpener,
-            updateChecker: updateChecker,
-            updateInstaller: updateInstaller,
-            systemInfoLoader: systemInfoLoader,
-            versionLoader: versionLoader,
-            gitVersionLoader: gitVersionLoader,
-            applicationExitRequester: applicationExitRequester,
-            initialUpdate: result,
-            installInitialUpdate: true,
-          ),
-        );
+    ReleaseUpdate? result;
+    for (var attempt = 0; attempt <= retryDelays.length; attempt++) {
+      try {
+        final currentVersion = await (versionLoader ?? loadMDSLensVersion)();
+        result = await (updateChecker != null
+            ? updateChecker()
+            : checkLatestMDSLensRelease(currentVersion));
+        break;
+      } catch (_) {
+        if (attempt >= retryDelays.length) return;
+        await Future<void>.delayed(retryDelays[attempt]);
+        if (!context.mounted) return;
       }
-    } catch (_) {
-      // Automatic checks are deliberately quiet. A transient network or
-      // release-service failure must never interrupt application startup.
+    }
+    if (!context.mounted || result == null || !result.updateAvailable) return;
+    final choice = await _showUpdateChoiceDialog(context, result);
+    if (!context.mounted) return;
+    if (choice == _UpdateChoice.release) {
+      await openExternalWebUrl(result.releaseUrl, opener: urlOpener);
+    } else if (choice == _UpdateChoice.direct) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AboutDialogWidget(
+          urlOpener: urlOpener,
+          updateChecker: updateChecker,
+          updateInstaller: updateInstaller,
+          systemInfoLoader: systemInfoLoader,
+          versionLoader: versionLoader,
+          gitVersionLoader: gitVersionLoader,
+          applicationExitRequester: applicationExitRequester,
+          initialUpdate: result,
+          installInitialUpdate: true,
+        ),
+      );
     }
   }
 

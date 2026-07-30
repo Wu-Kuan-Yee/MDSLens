@@ -14,6 +14,8 @@ import 'widgets/network_permission_gate.dart';
 
 typedef AutomaticUpdateChecker = Future<void> Function(BuildContext context);
 
+const _startupUpdateInitializationGracePeriod = Duration(seconds: 2);
+
 class MDSLensApp extends StatefulWidget {
   const MDSLensApp({
     super.key,
@@ -30,6 +32,7 @@ class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
   bool _sysDark = false;
   int _themeEventRevision = 0;
   Timer? _themeCalibrationTimer;
+  Timer? _startupUpdateGraceTimer;
   StreamSubscription<bool>? _themeSubscription;
 
   @override
@@ -60,7 +63,27 @@ class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
   Future<void> _checkForUpdatesOnStartup() async {
     final app = context.read<AppState>();
     await app.preferencesReady;
-    await app.startupInitializationReady;
+    if (!mounted || !app.autoCheckUpdates) return;
+
+    // Prefer checking after startup work has settled, but never let a slow
+    // permission prompt, login, SSH fallback, or waveform request block update
+    // discovery indefinitely.
+    final ready = Completer<void>();
+    final graceTimer = Timer(
+      _startupUpdateInitializationGracePeriod,
+      ready.complete,
+    );
+    _startupUpdateGraceTimer = graceTimer;
+    unawaited(
+      app.startupInitializationReady.then((_) {
+        graceTimer.cancel();
+        if (!ready.isCompleted) ready.complete();
+      }),
+    );
+    await ready.future;
+    if (identical(_startupUpdateGraceTimer, graceTimer)) {
+      _startupUpdateGraceTimer = null;
+    }
     if (!mounted || !app.autoCheckUpdates) return;
     await (widget.automaticUpdateChecker ??
         AboutDialogWidget.checkAutomatically)(context);
@@ -131,6 +154,7 @@ class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     HardwareKeyboard.instance.removeHandler(_onAppKey);
     _themeCalibrationTimer?.cancel();
+    _startupUpdateGraceTimer?.cancel();
     _themeSubscription?.cancel();
     StylusModeChannel.dispose();
     super.dispose();

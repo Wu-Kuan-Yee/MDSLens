@@ -5129,6 +5129,30 @@ void main() {
     expect(checks, 1);
   });
 
+  testWidgets('Startup update check is not blocked by slow initialization',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    var checks = 0;
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(
+          automaticUpdateChecker: (context) async {
+            checks++;
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(checks, 0);
+
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+    expect(checks, 1);
+  });
+
   testWidgets('Disabled startup update check does not run', (tester) async {
     final app = AppState();
     await app.preferencesReady;
@@ -5159,6 +5183,7 @@ void main() {
               context,
               versionLoader: () async => '0.0.1',
               updateChecker: () async => throw Exception('offline'),
+              retryDelays: const [],
             ),
             child: const Text('Check silently'),
           ),
@@ -5168,6 +5193,41 @@ void main() {
 
     await tester.tap(find.text('Check silently'));
     await tester.pumpAndSettle();
+    expect(find.text('Update check failed'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Automatic update checks retry transient lookup failures',
+      (tester) async {
+    var attempts = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () => AboutDialogWidget.checkAutomatically(
+              context,
+              versionLoader: () async => '0.2.0',
+              updateChecker: () async {
+                attempts++;
+                if (attempts == 1) throw Exception('temporarily offline');
+                return const ReleaseUpdate(
+                  latestVersion: 'v0.2.0',
+                  releaseUrl:
+                      'https://github.com/Wu-Kuan-Yee/MDSLens/releases/tag/v0.2.0',
+                  updateAvailable: false,
+                );
+              },
+              retryDelays: const [Duration.zero],
+            ),
+            child: const Text('Check with retry'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Check with retry'));
+    await tester.pumpAndSettle();
+    expect(attempts, 2);
     expect(find.text('Update check failed'), findsNothing);
     expect(tester.takeException(), isNull);
   });
