@@ -108,6 +108,8 @@ class _UpdateDownloadDialogState extends State<_UpdateDownloadDialog> {
   bool _running = true;
   bool _failed = false;
   bool _dismissed = false;
+  bool _canCancel = true;
+  bool _allowRouteExit = false;
 
   @override
   void initState() {
@@ -138,6 +140,7 @@ class _UpdateDownloadDialogState extends State<_UpdateDownloadDialog> {
           setState(() {
             _progress = progress;
             final fraction = progress.fraction;
+            if (fraction != null && fraction >= 1) _canCancel = false;
             _status = fraction == null
                 ? 'Downloading the update...'
                 : fraction >= 1
@@ -150,22 +153,28 @@ class _UpdateDownloadDialogState extends State<_UpdateDownloadDialog> {
       setState(() {
         _running = false;
         _status = result.message;
+        if (!result.closeApplication) _allowRouteExit = true;
       });
       if (result.closeApplication) {
         await Future<void>.delayed(const Duration(milliseconds: 250));
         await (widget.applicationExitRequester ??
             requestApplicationExitForUpdate)();
+        if (mounted) setState(() => _allowRouteExit = true);
       }
     } on UpdateCancelledException {
       if (mounted && !_dismissed) {
         _dismissed = true;
-        Navigator.of(context).pop();
+        setState(() => _allowRouteExit = true);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) Navigator.of(context).pop();
+        });
       }
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _running = false;
         _failed = true;
+        _allowRouteExit = true;
         _status =
             'The update could not be downloaded, verified, or handed to the system installer. No unverified package was opened.';
       });
@@ -173,10 +182,13 @@ class _UpdateDownloadDialogState extends State<_UpdateDownloadDialog> {
   }
 
   void _cancelDownload() {
-    if (!_running) return;
+    if (!_running || !_canCancel) return;
     _dismissed = true;
     _controller.cancel();
-    Navigator.of(context).pop();
+    setState(() => _allowRouteExit = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).pop();
+    });
   }
 
   Future<void> _openRelease() async {
@@ -212,133 +224,145 @@ class _UpdateDownloadDialogState extends State<_UpdateDownloadDialog> {
             ? theme.colorScheme.primary
             : theme.colorScheme.tertiary;
 
-    return KeyboardSafeDialog(
-      key: const ValueKey('update-download-dialog'),
-      maxWidth: 480,
-      title: Row(
-        children: [
-          Icon(Icons.system_update_alt_rounded, color: accent),
-          const SizedBox(width: 10),
-          const Expanded(child: Text('MDSLens update')),
-        ],
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeOutCubic,
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(20),
+    return PopScope(
+      canPop: _allowRouteExit,
+      child: KeyboardSafeDialog(
+        key: const ValueKey('update-download-dialog'),
+        maxWidth: 480,
+        title: Row(
+          children: [
+            Icon(Icons.system_update_alt_rounded, color: accent),
+            const SizedBox(width: 10),
+            const Expanded(child: Text('MDSLens update')),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOutCubic,
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Icon(icon, color: accent, size: 34),
               ),
-              child: Icon(icon, color: accent, size: 34),
             ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            _running
-                ? 'Downloading ${widget.release.latestVersion}'
-                : _failed
-                    ? 'Update could not be completed'
-                    : 'Update is ready',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _status,
-            textAlign: TextAlign.center,
-            softWrap: true,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          if (_running) ...[
-            const SizedBox(height: 20),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(999),
-              child: LinearProgressIndicator(
-                key: const ValueKey('update-download-progress'),
-                value: fraction,
-                minHeight: 9,
-                backgroundColor: theme.colorScheme.surfaceContainerHighest,
+            const SizedBox(height: 16),
+            Text(
+              _running
+                  ? 'Downloading ${widget.release.latestVersion}'
+                  : _failed
+                      ? 'Update could not be completed'
+                      : 'Update is ready',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    progress == null
-                        ? 'Connecting securely...'
-                        : progress.total > 0
-                            ? '${_formatBytes(progress.received)} of ${_formatBytes(progress.total)}'
-                            : _formatBytes(progress.received),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-                if (fraction != null)
-                  Text(
-                    '${(fraction * 100).clamp(0, 100).toStringAsFixed(0)}%',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: accent,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-              ],
+            Text(
+              _status,
+              textAlign: TextAlign.center,
+              softWrap: true,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.verified_user_outlined,
-                  size: 16,
-                  color: theme.colorScheme.onSurfaceVariant,
+            if (_running) ...[
+              const SizedBox(height: 20),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  key: const ValueKey('update-download-progress'),
+                  value: fraction,
+                  minHeight: 9,
+                  backgroundColor: theme.colorScheme.surfaceContainerHighest,
                 ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    'The package is verified before it is opened.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      progress == null
+                          ? 'Connecting securely...'
+                          : progress.total > 0
+                              ? '${_formatBytes(progress.received)} of ${_formatBytes(progress.total)}'
+                              : _formatBytes(progress.received),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                  if (fraction != null)
+                    Text(
+                      '${(fraction * 100).clamp(0, 100).toStringAsFixed(0)}%',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: accent,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.verified_user_outlined,
+                    size: 16,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      'The package is verified before it is opened.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          if (_running && _canCancel)
+            OutlinedButton.icon(
+              key: const ValueKey('cancel-update-download'),
+              onPressed: _cancelDownload,
+              icon: const Icon(Icons.close_rounded),
+              label: const Text('Cancel download'),
+            )
+          else if (!_allowRouteExit)
+            FilledButton.icon(
+              onPressed: null,
+              icon: const SizedBox.square(
+                dimension: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              label: const Text('Finishing update...'),
+            )
+          else ...[
+            TextButton.icon(
+              onPressed: _openRelease,
+              icon: const Icon(Icons.open_in_new_rounded),
+              label: const Text('View Details'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
             ),
           ],
         ],
       ),
-      actions: [
-        if (_running)
-          OutlinedButton.icon(
-            key: const ValueKey('cancel-update-download'),
-            onPressed: _cancelDownload,
-            icon: const Icon(Icons.close_rounded),
-            label: const Text('Cancel download'),
-          )
-        else ...[
-          TextButton.icon(
-            onPressed: _openRelease,
-            icon: const Icon(Icons.open_in_new_rounded),
-            label: const Text('View Details'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ],
     );
   }
 }

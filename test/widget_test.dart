@@ -6345,6 +6345,7 @@ void main() {
     var installerCalled = false;
     var exitRequested = false;
     final finishInstallation = Completer<void>();
+    final finishHandoff = Completer<void>();
     const manifest = ReleaseAssetLocation(
       name: 'update-manifest.json',
       url:
@@ -6385,6 +6386,7 @@ void main() {
             onProgress?.call(
               const UpdateDownloadProgress(received: 100, total: 100),
             );
+            await finishHandoff.future;
             return const UpdateInstallResult(
               status: UpdateLaunchStatus.launched,
               message: 'The verified update installer is ready.',
@@ -6409,6 +6411,15 @@ void main() {
     expect(
         find.byKey(const ValueKey('update-download-progress')), findsOneWidget);
     finishInstallation.complete();
+    await tester.pump();
+    expect(find.text('Finishing update...'), findsOneWidget);
+    expect(find.byKey(const ValueKey('cancel-update-download')), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(
+        find.byKey(const ValueKey('update-download-dialog')), findsOneWidget);
+
+    finishHandoff.complete();
     await tester.pumpAndSettle();
 
     expect(installerCalled, isTrue);
@@ -6478,6 +6489,21 @@ void main() {
     expect(
         find.byKey(const ValueKey('update-download-dialog')), findsOneWidget);
     expect(find.text('25%'), findsOneWidget);
+
+    await tester.tapAt(const Offset(2, 2));
+    await tester.pump();
+    expect(
+        find.byKey(const ValueKey('update-download-dialog')), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(
+        find.byKey(const ValueKey('update-download-dialog')), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(
+        find.byKey(const ValueKey('update-download-dialog')), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('cancel-update-download')));
     await tester.pumpAndSettle();
