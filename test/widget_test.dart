@@ -5159,7 +5159,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Automatic update checks offer release, direct update, or cancel',
+  testWidgets(
+      'Automatic update checks offer details, direct update, or not now',
       (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -5191,13 +5192,13 @@ void main() {
     await tester.tap(find.text('Check automatically'));
     await tester.pumpAndSettle();
     expect(find.text('Update available'), findsOneWidget);
-    expect(find.text('Cancel'), findsOneWidget);
-    expect(find.text('Open Release'), findsOneWidget);
+    expect(find.text('Not Now'), findsOneWidget);
+    expect(find.text('View Details'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('install-update-directly')),
       findsOneWidget,
     );
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(find.text('Not Now'));
     await tester.pumpAndSettle();
     expect(find.text('Update available'), findsNothing);
   });
@@ -6245,17 +6246,17 @@ void main() {
     await tester.ensureVisible(find.text('Update'));
     await tester.tap(find.text('Update'));
     await tester.pumpAndSettle();
-    expect(find.text('Open Release'), findsOneWidget);
+    expect(find.text('View Details'), findsOneWidget);
     final lastUrlBeforeUpdateChoice = openedUrls.last;
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(find.text('Not Now'));
     await tester.pumpAndSettle();
     expect(openedUrls.last, lastUrlBeforeUpdateChoice);
 
     await tester.ensureVisible(find.text('Update'));
     await tester.tap(find.text('Update'));
     await tester.pumpAndSettle();
-    expect(find.text('Open Release'), findsOneWidget);
-    await tester.tap(find.text('Open Release'));
+    expect(find.text('View Details'), findsOneWidget);
+    await tester.tap(find.text('View Details'));
     await tester.pumpAndSettle();
 
     expect(

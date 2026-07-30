@@ -35,11 +35,11 @@ Future<_UpdateChoice?> _showUpdateChoiceDialog(
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: const Text('Not Now'),
         ),
         OutlinedButton(
           onPressed: () => Navigator.pop(context, _UpdateChoice.release),
-          child: const Text('Open Release'),
+          child: const Text('View Details'),
         ),
         if (supportsDirectUpdate)
           FilledButton.icon(

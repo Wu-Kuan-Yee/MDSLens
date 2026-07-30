@@ -24,14 +24,14 @@ operating system's security protections globally just to run MDSLens.
 Automatic update checks are enabled by default. After startup initialization,
 MDSLens checks the latest tagged release in the background. A failed automatic
 check is silent; it never interrupts startup with an error dialog. When an
-update is available, the prompt offers **Open Release**, the platform's direct
-update action, and **Cancel**. Disable or re-enable this behavior with
+update is available, the prompt offers **View Details**, the platform's direct
+update action, and **Not Now**. Disable or re-enable this behavior with
 **Settings > Check for updates automatically**.
 
 For an immediate check, open **Settings > About MDSLens > Update**. A failed
 manual check is reported because it was explicitly requested. When a newer
 tagged release has a machine-readable update manifest, MDSLens offers both
-**Open Release** and a platform action:
+**View Details** and a platform action:
 
 | Platform | Update action |
 |---|---|
