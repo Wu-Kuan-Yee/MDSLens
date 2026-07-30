@@ -438,6 +438,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
+          # Docker Buildx also publishes internal *.dockerbuild records. They
+          # are not release packages and cannot be merged into this directory.
+          pattern: mdslens-*
           path: artifacts
           merge-multiple: true
       - name: Generate update manifest
