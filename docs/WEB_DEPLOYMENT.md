@@ -66,18 +66,14 @@ of remaining blank, but the application must still be served over HTTP/HTTPS.
 
 ## GitHub Pages
 
-Every tagged release deploys the exact static frontend from its Linux x64 Web
-release artifact to `https://wu-kuan-yee.github.io/MDSLens/`. The deployment
-uses the project subdirectory as Flutter's base path and does not replace the
-downloadable self-contained gateway archive.
+`https://wu-kuan-yee.github.io/MDSLens/` is the public MDSLens product website.
+It introduces the application and links to the repository and release
+downloads; it is not the deployable MDSLens Web application.
 
-GitHub Pages is a static host and cannot execute `mdslens-web-gateway`.
-Consequently, the Pages site presents the same interface and interaction flow,
-but a server operation ends with a normal connection failure when no
-same-origin Gateway is reachable. Browser-local configuration, editing,
-drag-and-drop and downloads continue to work. A split-DNS deployment can serve
-this same hostname from a private Gateway without exposing that Gateway
-publicly.
+Tagged releases continue to publish the complete, self-contained Web frontend
+and Gateway archives. Deploy one of those archives on an HTTPS server to run
+the actual Web application. GitHub Pages is a static host and cannot execute
+`mdslens-web-gateway`.
 
 ## Production
 

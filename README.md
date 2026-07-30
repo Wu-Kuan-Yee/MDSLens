@@ -8,6 +8,8 @@ and Rust.
 
 Source code, releases, and update checks are hosted in the
 [Wu-Kuan-Yee/MDSLens repository](https://github.com/Wu-Kuan-Yee/MDSLens).
+The project website is available at
+[wu-kuan-yee.github.io/MDSLens](https://wu-kuan-yee.github.io/MDSLens/).
 
 ## Features
 

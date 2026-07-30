@@ -10,6 +10,13 @@ env:
   FLUTTER_VERSION: 3.44.7
 
 jobs:
+  product-site:
+    name: Product site
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/verify_product_site.py
+
   flutter:
     runs-on: ubuntu-24.04
     steps:

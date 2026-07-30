@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#060a10" />
+    <meta
+      name="description"
+      content="MDSLens is an interactive, cross-platform MDSplus signal explorer."
+    />
+    <meta property="og:title" content="MDSLens" />
+    <meta
+      property="og:description"
+      content="Interactive, cross-platform MDSplus signal exploration."
+    />
+    <meta
+      property="og:image"
+      content="https://wu-kuan-yee.github.io/MDSLens/og.png"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="MDSLens" />
+    <meta
+      name="twitter:description"
+      content="Interactive, cross-platform MDSplus signal exploration."
+    />
+    <meta
+      name="twitter:image"
+      content="https://wu-kuan-yee.github.io/MDSLens/og.png"
+    />
+    <link rel="icon" href="./mdslens-icon.png" />
+    <link rel="stylesheet" href="./styles.css" />
+    <title>MDSLens</title>
+    <script>
+      (() => {
+        const theme = matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light";
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.dataset.themeMode = theme;
+      })();
+    </script>
+  </head>
+  <body>
+    <main id="top">
+      <div class="ambient-field" aria-hidden="true">
+        <span class="light-blob light-blob-one"></span>
+        <span class="light-blob light-blob-two"></span>
+        <span class="light-blob light-blob-three"></span>
+        <span class="pointer-light"></span>
+      </div>
+
+      <header class="site-header">
+        <a class="brand" href="./" aria-label="Reload MDSLens home">
+          <span class="brand-icon">
+            <img
+              src="./mdslens-icon.png"
+              alt="MDSLens application icon"
+              width="42"
+              height="42"
+            />
+          </span>
+          <span>MDSLens</span>
+        </a>
+
+        <div class="header-tools">
+          <div
+            class="theme-control"
+            data-theme-choice="light"
+            aria-label="Color theme"
+          >
+            <button
+              type="button"
+              data-theme-option="light"
+              aria-pressed="true"
+              aria-label="Use light theme"
+              title="Use light theme"
+            >
+              <span aria-hidden="true">☀</span>
+            </button>
+            <button
+              type="button"
+              data-theme-option="dark"
+              aria-pressed="false"
+              aria-label="Use dark theme"
+              title="Use dark theme"
+            >
+              <span aria-hidden="true">☾</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <section class="hero section-shell">
+        <div class="hero-copy">
+          <p class="eyebrow">
+            <span class="status-dot"></span>
+            MDSplus signal explorer
+          </p>
+          <h1><span>MDSLens</span></h1>
+
+          <div class="hero-actions">
+            <a
+              class="button button-secondary"
+              href="https://github.com/Wu-Kuan-Yee/MDSLens/releases"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Get MDSLens <span aria-hidden="true">↓</span>
+            </a>
+            <a
+              class="button button-secondary"
+              href="https://github.com/Wu-Kuan-Yee/MDSLens"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="View MDSLens on GitHub"
+            >
+              GitHub <span aria-hidden="true">↗</span>
+            </a>
+          </div>
+
+          <div class="platform-line">
+            <i></i>
+            <span>Windows</span>
+            <i></i>
+            <span>macOS</span>
+            <i></i>
+            <span>Linux</span>
+            <i></i>
+            <span>Mobile</span>
+            <i></i>
+            <span>Web</span>
+          </div>
+        </div>
+
+        <div class="hero-demo">
+          <div class="waveform-demo">
+            <div class="demo-toolbar">
+              <div class="window-controls" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <div
+                class="mode-switch"
+                data-waveform-mode="point"
+                aria-label="Waveform interaction mode"
+              >
+                <button type="button" data-waveform-option="move">
+                  <span>Move</span>
+                </button>
+                <button type="button" data-waveform-option="zoom">
+                  <span>Zoom</span>
+                </button>
+                <button
+                  class="active"
+                  type="button"
+                  data-waveform-option="point"
+                >
+                  <span>Point</span>
+                </button>
+              </div>
+            </div>
+            <canvas class="mode-point" aria-label="Interactive waveform"></canvas>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script src="./site.js"></script>
+  </body>
+</html>
