@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
 import android.provider.Settings
+import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileInputStream
 import io.flutter.embedding.android.FlutterActivity
@@ -103,6 +104,66 @@ class MainActivity: FlutterActivity() {
                 }
             } catch (error: Exception) {
                 result.error("READ_FAILED", error.message, null)
+            }
+        }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "mdslens/updater"
+        ).setMethodCallHandler { call, result ->
+            if (call.method != "installApk") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            val value = call.arguments as? String
+            if (value.isNullOrBlank()) {
+                result.error("INVALID_UPDATE", "The update path is empty.", null)
+                return@setMethodCallHandler
+            }
+            try {
+                val update = File(value).canonicalFile
+                val cache = cacheDir.canonicalFile
+                if (!update.isFile ||
+                    !update.name.endsWith(".apk", ignoreCase = true) ||
+                    !update.path.startsWith(cache.path + File.separator)
+                ) {
+                    result.error(
+                        "INVALID_UPDATE",
+                        "The update must be a verified APK in the application cache.",
+                        null
+                    )
+                    return@setMethodCallHandler
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                    !packageManager.canRequestPackageInstalls()
+                ) {
+                    startActivity(
+                        Intent(
+                            Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                            Uri.parse("package:$packageName")
+                        )
+                    )
+                    result.success("permission_required")
+                    return@setMethodCallHandler
+                }
+                val contentUri = FileProvider.getUriForFile(
+                    this,
+                    "$packageName.update_files",
+                    update
+                )
+                startActivity(
+                    Intent(Intent.ACTION_VIEW)
+                        .setDataAndType(
+                            contentUri,
+                            "application/vnd.android.package-archive"
+                        )
+                        .addFlags(
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                Intent.FLAG_ACTIVITY_NEW_TASK
+                        )
+                )
+                result.success("launched")
+            } catch (error: Exception) {
+                result.error("INSTALL_UPDATE_FAILED", error.message, null)
             }
         }
         openRequestsChannel = MethodChannel(

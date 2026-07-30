@@ -211,10 +211,11 @@ Future<UpdateInstallResult> _launchUpdateAsset(
     );
   }
   if (Platform.isLinux) {
-    final result = await Process.run('xdg-open', [update.path]);
-    if (result.exitCode != 0) {
-      throw Exception('Linux could not open the downloaded update package.');
-    }
+    await Process.start(
+      'xdg-open',
+      [update.path],
+      mode: ProcessStartMode.detached,
+    );
     return UpdateInstallResult(
       status: UpdateLaunchStatus.launched,
       message: 'The downloaded package is open in the system installer.',

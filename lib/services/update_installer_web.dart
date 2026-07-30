@@ -1,3 +1,5 @@
+import 'package:web/web.dart' as web;
+
 import 'runtime_build_info.dart';
 import 'update_installer_models.dart';
 import 'update_service.dart';
@@ -18,6 +20,7 @@ Future<UpdateInstallResult> installLatestReleaseUpdate(
   String? architectureOverride,
   String? linuxFormatOverride,
 }) async {
+  web.window.location.reload();
   return const UpdateInstallResult(
     status: UpdateLaunchStatus.reloaded,
     message: 'Reload the page to use the latest Web release.',
