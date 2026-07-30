@@ -114,4 +114,36 @@ void main() {
     );
     expect(directory.listSync(), isEmpty);
   });
+
+  test('verified AppImages atomically replace the running image', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'mdslens-appimage-test-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final current = File('${directory.path}/MDSLens.AppImage');
+    final downloaded = File('${directory.path}/downloaded.AppImage');
+    await current.writeAsString('old');
+    await downloaded.writeAsString('new');
+    final update = DownloadedUpdate(
+      asset: UpdateManifestAsset(
+        name: 'mdslens-linux-x64.AppImage',
+        url: 'https://example.invalid/AppImage',
+        platform: 'linux',
+        architecture: 'x64',
+        format: 'AppImage',
+        strategy: 'open-package',
+        size: 3,
+        sha256: sha256.convert(utf8.encode('new')).toString(),
+      ),
+      path: downloaded.path,
+    );
+
+    expect(await replaceAppImageForUpdate(update, current.path), isTrue);
+    expect(await current.readAsString(), 'new');
+    expect(downloaded.existsSync(), isFalse);
+    expect(
+      File('${current.path}.mdslens-backup').existsSync(),
+      isFalse,
+    );
+  });
 }

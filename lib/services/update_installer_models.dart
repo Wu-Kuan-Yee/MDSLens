@@ -45,6 +45,7 @@ class DownloadedUpdate {
 
 enum UpdateLaunchStatus {
   launched,
+  installed,
   permissionRequired,
   downloaded,
   reloaded,

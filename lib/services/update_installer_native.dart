@@ -211,6 +211,20 @@ Future<UpdateInstallResult> _launchUpdateAsset(
     );
   }
   if (Platform.isLinux) {
+    final currentAppImage = (Platform.environment['APPIMAGE'] ?? '').trim();
+    if (update.asset.format == 'AppImage' && currentAppImage.isNotEmpty) {
+      if (await replaceAppImageForUpdate(update, currentAppImage)) {
+        return UpdateInstallResult(
+          status: UpdateLaunchStatus.installed,
+          message:
+              'The AppImage was updated. Restart MDSLens to use the new version.',
+          downloaded: update,
+        );
+      }
+    }
+    if (update.asset.format == 'AppImage') {
+      await Process.run('chmod', ['+x', update.path]);
+    }
     await Process.start(
       'xdg-open',
       [update.path],
@@ -227,6 +241,59 @@ Future<UpdateInstallResult> _launchUpdateAsset(
     message: 'The update was downloaded to ${update.path}.',
     downloaded: update,
   );
+}
+
+Future<bool> replaceAppImageForUpdate(
+  DownloadedUpdate update,
+  String currentPath,
+) async {
+  File current;
+  try {
+    current = File(await File(currentPath).resolveSymbolicLinks());
+  } catch (_) {
+    return false;
+  }
+  if (FileSystemEntity.typeSync(current.path) != FileSystemEntityType.file) {
+    return false;
+  }
+  final staged = File('${current.path}.mdslens-update');
+  final backup = File('${current.path}.mdslens-backup');
+  try {
+    if (staged.existsSync()) await staged.delete();
+    if (backup.existsSync()) await backup.delete();
+    await File(update.path).copy(staged.path);
+    final chmod = await Process.run('chmod', ['+x', staged.path]);
+    if (chmod.exitCode != 0) {
+      await staged.delete();
+      return false;
+    }
+    await current.rename(backup.path);
+    try {
+      await staged.rename(current.path);
+    } catch (_) {
+      await backup.rename(current.path);
+      rethrow;
+    }
+    try {
+      await backup.delete();
+    } catch (_) {}
+    try {
+      if (File(update.path).existsSync()) await File(update.path).delete();
+    } catch (_) {}
+    return true;
+  } catch (_) {
+    if (!current.existsSync() && backup.existsSync()) {
+      try {
+        await backup.rename(current.path);
+      } catch (_) {}
+    }
+    if (staged.existsSync()) {
+      try {
+        await staged.delete();
+      } catch (_) {}
+    }
+    return false;
+  }
 }
 
 Future<String> _preferredLinuxPackageFormat() async {
