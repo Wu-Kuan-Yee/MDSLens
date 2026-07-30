@@ -1043,9 +1043,12 @@ def stage_linux_portable(bundle: Path, portable: Path) -> None:
     applications = portable / "share/applications"
     applications.mkdir(parents=True, exist_ok=True)
     shutil.copy2(ROOT / "packaging/linux/com.mdslens.app.desktop", applications)
-    icons = portable / "share/icons/hicolor/scalable/apps"
+    icons = portable / "share/icons/hicolor/512x512/apps"
     icons.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(ROOT / "assets/app_icon.svg", icons / "com.mdslens.app.svg")
+    shutil.copy2(
+        ROOT / "linux/runner/app_icon.png",
+        icons / "com.mdslens.app.png",
+    )
     mime_packages = portable / "share/mime/packages"
     mime_packages.mkdir(parents=True, exist_ok=True)
     shutil.copy2(
@@ -1066,9 +1069,12 @@ def stage_linux_root(bundle: Path, root: Path) -> None:
     applications = root / "usr/share/applications"
     applications.mkdir(parents=True, exist_ok=True)
     shutil.copy2(ROOT / "packaging/linux/com.mdslens.app.desktop", applications)
-    icons = root / "usr/share/icons/hicolor/scalable/apps"
+    icons = root / "usr/share/icons/hicolor/512x512/apps"
     icons.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(ROOT / "assets/app_icon.svg", icons / "com.mdslens.app.svg")
+    shutil.copy2(
+        ROOT / "linux/runner/app_icon.png",
+        icons / "com.mdslens.app.png",
+    )
     mime_packages = root / "usr/share/mime/packages"
     mime_packages.mkdir(parents=True, exist_ok=True)
     shutil.copy2(
@@ -1265,7 +1271,10 @@ def package_linux(formats: set[str], no_build: bool, arch: str, version: str) ->
                 replace_tree(portable, app_bundle)
                 os.symlink("usr/lib/mdslens/mdslens", app_dir / "AppRun")
                 shutil.copy2(ROOT / "packaging/linux/com.mdslens.app.desktop", app_dir)
-                shutil.copy2(ROOT / "assets/app_icon.svg", app_dir / "com.mdslens.app.svg")
+                shutil.copy2(
+                    ROOT / "linux/runner/app_icon.png",
+                    app_dir / "com.mdslens.app.png",
+                )
                 environment = dict(os.environ)
                 environment["ARCH"] = rpm_arch
                 log(f"Running: {appimagetool} {app_dir} {DIST / (base + '.AppImage')}")

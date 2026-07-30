@@ -17,7 +17,7 @@ cp -a %{_sourcedir}/root/. %{buildroot}/
 /usr/bin/mdslens
 /usr/lib/mdslens
 /usr/share/applications/com.mdslens.app.desktop
-/usr/share/icons/hicolor/scalable/apps/com.mdslens.app.svg
+/usr/share/icons/hicolor/512x512/apps/com.mdslens.app.png
 /usr/share/mime/packages/com.mdslens.configuration.xml
 
 %changelog

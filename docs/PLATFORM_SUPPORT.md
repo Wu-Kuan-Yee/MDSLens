@@ -27,13 +27,17 @@ hosts respectively. CI uses the matching GitHub-hosted runner for each one.
 
 ## Icon Coverage
 
-A single source asset at `assets/app_icon.svg` feeds `scripts/generate_icons.sh`, which produces:
+A single 1024-pixel rust-textured master at `assets/app_icon_master.png`
+feeds `scripts/generate_icons.sh`. Separate vector foreground and monochrome
+sources preserve Android adaptive and themed-icon requirements. The generator
+produces:
 
 - Windows 16/24/32/48/64/128/256-pixel multi-layer ICO for EXE, taskbar, shortcuts, and Start Menu;
 - macOS 16–1024-pixel Asset Catalog for APP, Dock, Finder, and application menus;
 - iPhone/iPad 20–1024-pixel all required slots, with transparency removed;
 - Android legacy, round, adaptive, and Android 13+ monochrome themed icons;
-- Linux 512-pixel window icon, scalable SVG, and `com.mdslens.app.desktop` menu metadata.
+- Linux 512-pixel window/menu icon and `com.mdslens.app.desktop` metadata;
+- Web/PWA favicon and installable icons, plus the GitHub Pages product-site icon.
 
 `scripts/verify_icons.py` automatically validates all slots and dimensions and runs on every CI commit. It proves resource structure completeness, but "visually identical on every third-party launcher, Linux theme, and vendor ROM" cannot be statically guaranteed by a single project; different systems may recompose icons with their own masks, corner radii, drop shadows, or theme colors. Android follows [Adaptive icons](https://developer.android.com/develop/ui/compose/system/icon_design_adaptive); Apple icons follow [App icons](https://developer.apple.com/design/human-interface-guidelines/app-icons/).
 

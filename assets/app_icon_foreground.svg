@@ -1,9 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-  <g stroke="#94a3b8" stroke-opacity="0.28" stroke-width="2.4">
+  <defs>
+    <linearGradient id="rustAxis" x1="51" y1="57" x2="207" y2="198" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#718096"/>
+      <stop offset="0.18" stop-color="#9a4f2d"/>
+      <stop offset="0.33" stop-color="#526174"/>
+      <stop offset="0.52" stop-color="#b45a2d"/>
+      <stop offset="0.7" stop-color="#64748b"/>
+      <stop offset="0.86" stop-color="#7e3f27"/>
+      <stop offset="1" stop-color="#718096"/>
+    </linearGradient>
+  </defs>
+  <g stroke="url(#rustAxis)" stroke-opacity="0.42" stroke-width="2.4">
     <path d="M90 57v141M129 57v141M168 57v141"/>
     <path d="M51 92h156M51 128h156M51 163h156"/>
   </g>
-  <path d="M51 57v141h156" fill="none" stroke="#64748b" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M51 57v141h156" fill="none" stroke="url(#rustAxis)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="#a84d29" opacity="0.9">
+    <circle cx="51" cy="91" r="2.2"/>
+    <circle cx="90" cy="128" r="2.1"/>
+    <circle cx="129" cy="163" r="2.4"/>
+    <circle cx="168" cy="92" r="2"/>
+    <circle cx="198" cy="198" r="2.3"/>
+  </g>
   <path d="M51 146C79 78 102 188 129 134C149 94 171 174 207 84" fill="none" stroke="#22d3ee" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M55 173H82L97 83L112 173H142L158 100L174 173H203" fill="none" stroke="#f97316" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
   <circle cx="129" cy="134" r="9" fill="#f8fafc"/>

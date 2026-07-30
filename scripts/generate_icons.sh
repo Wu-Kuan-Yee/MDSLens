@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SOURCE_ICON="$ROOT_DIR/assets/app_icon.svg"
+SOURCE_ICON="$ROOT_DIR/assets/app_icon_master.png"
 FOREGROUND_ICON="$ROOT_DIR/assets/app_icon_foreground.svg"
 MONOCHROME_ICON="$ROOT_DIR/assets/app_icon_monochrome.svg"
 
@@ -18,7 +18,11 @@ render() {
   local size="$2"
   local output="$3"
   mkdir -p "$(dirname "$output")"
-  rsvg-convert --width "$size" --height "$size" --output "$output" "$source"
+  if [[ "$source" == *.svg ]]; then
+    rsvg-convert --width "$size" --height "$size" --output "$output" "$source"
+  else
+    magick "$source" -filter Lanczos -resize "${size}x${size}!" "$output"
+  fi
 }
 
 render_opaque() {
@@ -35,6 +39,7 @@ render_opaque() {
 # Flutter/About dialog and Linux desktop/window icon.
 render "$SOURCE_ICON" 256 "$ROOT_DIR/assets/app_icon.png"
 render "$SOURCE_ICON" 512 "$ROOT_DIR/linux/runner/app_icon.png"
+render "$SOURCE_ICON" 256 "$ROOT_DIR/product-site/mdslens-icon.png"
 
 # Browser favicon and installable PWA icons.
 render "$SOURCE_ICON" 32 "$ROOT_DIR/web/favicon.png"
@@ -106,4 +111,4 @@ render "$SOURCE_ICON" 150 \
 render "$SOURCE_ICON" 50 \
   "$ROOT_DIR/windows/runner/resources/msix/StoreLogo.png"
 
-echo "MDSLens platform icons regenerated from assets/app_icon.svg"
+echo "MDSLens platform icons regenerated from assets/app_icon_master.png"

@@ -99,6 +99,23 @@ def verify_windows() -> int:
     return count + 3
 
 
+def verify_web_and_product_site() -> int:
+    count = 0
+    for relative, size in (
+        ("web/favicon.png", 32),
+        ("web/icons/Icon-192.png", 192),
+        ("web/icons/Icon-512.png", 512),
+        ("web/icons/Icon-maskable-192.png", 192),
+        ("web/icons/Icon-maskable-512.png", 512),
+        ("product-site/mdslens-icon.png", 256),
+    ):
+        path = ROOT / relative
+        check(path.is_file(), f"missing Web/product-site icon: {path}")
+        check(png_info(path)[:2] == (size, size), f"wrong icon size: {path}")
+        count += 1
+    return count
+
+
 def verify_windows_executable(path: Path) -> None:
     check(path.is_file(), f"missing Windows executable: {path}")
     check(path.read_bytes()[:2] == b"MZ", f"not a Windows executable: {path}")
@@ -134,18 +151,36 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--macos-app", action="append", default=[], type=Path)
     args = parser.parse_args(argv)
 
-    source = ROOT / "assets/app_icon.svg"
-    check(source.is_file(), "missing source SVG")
-    svg = ElementTree.parse(source).getroot()
-    view_box = [float(value) for value in svg.attrib.get("viewBox", "").split()]
-    check(len(view_box) == 4 and view_box[2] > 0 and view_box[2] == view_box[3], "source SVG must have a square viewBox")
+    source = ROOT / "assets/app_icon_master.png"
+    check(source.is_file(), "missing source PNG")
+    width, height, color_type = png_info(source)
+    check((width, height) == (1024, 1024), "source PNG must be 1024x1024")
+    check(color_type in {4, 6}, "source PNG must preserve transparent corners")
+    for relative in (
+        "assets/app_icon_foreground.svg",
+        "assets/app_icon_monochrome.svg",
+    ):
+        svg = ElementTree.parse(ROOT / relative).getroot()
+        view_box = [
+            float(value) for value in svg.attrib.get("viewBox", "").split()
+        ]
+        check(
+            len(view_box) == 4
+            and view_box[2] > 0
+            and view_box[2] == view_box[3],
+            f"{relative} must have a square viewBox",
+        )
     ios = verify_asset_catalog("ios/Runner/Assets.xcassets/AppIcon.appiconset", allow_alpha=False)
     macos = verify_asset_catalog("macos/Runner/Assets.xcassets/AppIcon.appiconset", allow_alpha=True)
     android = verify_android()
     windows = verify_windows()
+    web = verify_web_and_product_site()
     linux = ROOT / "linux/runner/app_icon.png"
     check(png_info(linux)[:2] == (512, 512), "Linux icon must be 512x512")
     desktop = (ROOT / "packaging/linux/com.mdslens.app.desktop").read_text(encoding="utf-8")
+    rpm_spec = (ROOT / "packaging/linux/mdslens.spec").read_text(
+        encoding="utf-8"
+    )
     check(
         "Icon=com.mdslens.app" in desktop
         and "StartupWMClass=com.mdslens.app" in desktop
@@ -153,11 +188,20 @@ def main(argv: list[str] | None = None) -> None:
         and "x-scheme-handler/mdslens" in desktop,
         "invalid Linux desktop integration metadata",
     )
+    check(
+        "/usr/share/icons/hicolor/512x512/apps/com.mdslens.app.png"
+        in rpm_spec,
+        "RPM package does not include the generated PNG icon",
+    )
     if args.windows_executable is not None:
         verify_windows_executable(args.windows_executable)
     for app in args.macos_app:
         verify_macos_application(app)
-    print(f"Verified native icons: iOS {ios}, macOS {macos}, Android {android}, Windows {windows}, Linux 1")
+    print(
+        "Verified icons: "
+        f"iOS {ios}, macOS {macos}, Android {android}, "
+        f"Windows {windows}, Linux 1, Web/product site {web}"
+    )
 
 
 if __name__ == "__main__":
