@@ -27,9 +27,10 @@ Source code, releases, and update checks are hosted in the
   while preserving those separate files.
 - Responsive layouts, configurable fonts, icon sizes and themes, internal web
   bookmarks, shot history management, and native system file/link integration.
-- In-app update checks with platform/architecture selection, cancellable
-  streaming downloads, SHA-256 verification, and handoff to the operating
-  system installer where the platform permits it.
+- Default-on, configurable startup update checks, plus manual checks,
+  platform/architecture selection, cancellable streaming downloads, SHA-256
+  verification, same-location replacement, and operating-system authorization
+  where the platform permits it.
 - Installable WebAssembly PWA support. Users open one HTTPS URL; browser-native
   pickers, drag-and-drop and downloads preserve the desktop file workflow,
   while a same-origin Rust gateway provides authenticated MDSip and SSH access

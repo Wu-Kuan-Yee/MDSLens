@@ -21,39 +21,56 @@ operating system's security protections globally just to run MDSLens.
 
 ## In-app updates
 
-Open **Settings > About MDSLens > Update**. When a newer tagged release has a
-machine-readable update manifest, MDSLens offers both **Open Release** and a
-platform action:
+Automatic update checks are enabled by default. After startup initialization,
+MDSLens checks the latest tagged release in the background. A failed automatic
+check is silent; it never interrupts startup with an error dialog. When an
+update is available, the prompt offers **Open Release**, the platform's direct
+update action, and **Cancel**. Disable or re-enable this behavior with
+**Settings > Check for updates automatically**.
+
+For an immediate check, open **Settings > About MDSLens > Update**. A failed
+manual check is reported because it was explicitly requested. When a newer
+tagged release has a machine-readable update manifest, MDSLens offers both
+**Open Release** and a platform action:
 
 | Platform | Update action |
 |---|---|
-| Windows | Downloads and verifies the matching x64/ARM64 setup EXE, installs it without wizard pages, closes the old process and restarts MDSLens |
-| macOS | Verifies and atomically replaces a writable application bundle from the matching ZIP, then restarts it; otherwise opens the verified DMG/archive |
-| Linux | Atomically replaces a writable running AppImage and restarts it; otherwise downloads the distribution's DEB/RPM and opens the system installer |
+| Windows | Detects the running executable's directory, passes that directory to the matching x64/ARM64 installer, installs without wizard pages, and restarts MDSLens |
+| macOS | Detects the running `.app`, verifies the matching ZIP, atomically replaces the same bundle, and restarts it |
+| Linux | Atomically replaces the running AppImage at the same path and restarts it; native DEB/RPM installations remain owned by the system package manager |
 | Android | Downloads a matching APK, verifies it, and opens Android's package installer |
 | iOS/iPadOS | Opens the release workflow because the unsigned IPA must be re-signed outside the running application |
 | Web/PWA | Reloads the page so the browser can activate the latest deployed Web bundle |
 
 Downloads are streamed to a temporary file, can be cancelled, and are not
 opened unless the byte count and SHA-256 digest match the release manifest.
-Windows updates use the installer's silent mode after verification. Wizard
-pages and installer message boxes are suppressed, and Windows Restart Manager
-gracefully closes and reopens MDSLens after installation. MDSLens remains open
-if elevation is cancelled or the installer cannot start. Windows elevation and
-SmartScreen remain in control when
-the installation location or package trust requires them; a normal application
-must not bypass either protection. Android's per-source installation
-permission, Linux administrator authentication, and macOS Gatekeeper likewise
-remain in control.
+Windows updates use the installer's silent mode after verification. The
+current executable directory is supplied as the destination instead of
+silently reverting to a default path. A writable per-user installation remains
+per-user; a protected installation requests normal UAC authorization and
+remains per-machine. MSI fallback is explicitly launched through the Windows
+elevation prompt. Wizard pages and installer message boxes are suppressed, and
+Windows Restart Manager gracefully closes and reopens MDSLens after
+installation. MDSLens remains open if elevation is cancelled or the installer
+cannot start. Windows elevation and SmartScreen remain in control; a normal
+application must not bypass either protection.
 
-On macOS, a silent self-update is attempted only when MDSLens is running from a
-real `.app` bundle whose parent directory is writable. The downloaded bundle
-must retain the expected `com.mdslens.app` identifier and pass strict code
-signature validation before it is staged. Replacement happens after the old
+On macOS, self-update is attempted only when MDSLens is running from a real
+`.app` bundle. The downloaded bundle must retain the expected
+`com.mdslens.app` identifier and pass strict code-signature validation before
+it is staged. Replacement happens at the existing bundle path after the old
 process exits, uses a same-directory atomic rename, keeps a rollback copy until
-the swap succeeds, and then reopens MDSLens. A read-only or administrator-owned
-installation falls back to the normal package workflow instead of requesting
-hidden privilege escalation.
+the swap succeeds, and then reopens MDSLens. If the bundle's parent directory
+is not writable, macOS displays its standard administrator authorization
+dialog; cancelling it leaves the running installation unchanged.
+
+A running Linux AppImage follows the same-path replacement and rollback model.
+If its directory is protected, MDSLens asks PolicyKit (`pkexec`) to display the
+desktop's administrator authorization dialog. If PolicyKit or a graphical
+authentication agent is unavailable, the verified package is handed to the
+normal system package workflow instead. Android's package installer updates the
+same application ID and presents any per-source installation permission it
+requires.
 
 The installation identity must also match the installed copy. In particular,
 Android updates require every release to use the same release keystore.
@@ -81,7 +98,7 @@ The remaining system or optional installation dependencies are:
 |---|---|---|
 | Windows | Supported Windows 10/11 system libraries and graphics driver | Microsoft Visual C++ v14 Redistributable if `VCRUNTIME`/`MSVCP` DLLs are reported missing |
 | macOS | A supported macOS release and Apple system frameworks | No runtime package; unsigned releases require a per-app Gatekeeper override or user re-signing |
-| Linux | glibc, GTK 3, GLib/GIO, libsecret, C++ runtime, X11/Wayland and EGL/OpenGL/Mesa stack | One of `zenity`, `kdialog`, or `qarma` for Open/Save/Export dialogs; a Secret Service provider for persistent credentials |
+| Linux | glibc, GTK 3, GLib/GIO, libsecret, C++ runtime, X11/Wayland and EGL/OpenGL/Mesa stack | One of `zenity`, `kdialog`, or `qarma` for Open/Save/Export dialogs; a Secret Service provider for persistent credentials; PolicyKit with a graphical agent for updating a protected AppImage in place |
 | Android | A supported Android system | Nothing for direct APK installation; Android SDK Platform Tools only for `adb` installation |
 | iOS/iPadOS | A supported iOS/iPadOS system and valid application signature | Xcode for self-signing; Apple Configurator is optional for installing an already signed IPA |
 | Web / PWA | A current browser with WebAssembly; JavaScript fallback is included | Nothing on the user's device; the deployment administrator runs the gateway |
