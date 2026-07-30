@@ -32,6 +32,7 @@ WizardStyle=modern
 ArchitecturesAllowed={#InstallerArchitecture}
 ArchitecturesInstallIn64BitMode={#InstallerArchitecture}
 PrivilegesRequired=admin
+PrivilegesRequiredOverridesAllowed=commandline
 CloseApplications=yes
 RestartApplications=yes
 
@@ -43,15 +44,15 @@ Name: "{autoprograms}\MDSLens"; Filename: "{app}\mdslens.exe"; AppUserModelID: "
 Name: "{autodesktop}\MDSLens"; Filename: "{app}\mdslens.exe"; Tasks: desktopicon
 
 [Registry]
-Root: HKCR; Subkey: "MDSLens.Configuration"; ValueType: string; ValueName: ""; ValueData: "MDSLens configuration"; Flags: uninsdeletekey
-Root: HKCR; Subkey: "MDSLens.Configuration\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\mdslens.exe"",0"
-Root: HKCR; Subkey: "MDSLens.Configuration\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\mdslens.exe"" ""%1"""
-Root: HKCR; Subkey: ".toml\OpenWithProgids"; ValueType: string; ValueName: "MDSLens.Configuration"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCR; Subkey: ".webscp"; ValueType: string; ValueName: ""; ValueData: "MDSLens.Configuration"; Flags: uninsdeletevalue
-Root: HKCR; Subkey: "mdslens"; ValueType: string; ValueName: ""; ValueData: "URL:MDSLens protocol"; Flags: uninsdeletekey
-Root: HKCR; Subkey: "mdslens"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
-Root: HKCR; Subkey: "mdslens\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\mdslens.exe"",0"
-Root: HKCR; Subkey: "mdslens\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\mdslens.exe"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\MDSLens.Configuration"; ValueType: string; ValueName: ""; ValueData: "MDSLens configuration"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\MDSLens.Configuration\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\mdslens.exe"",0"
+Root: HKA; Subkey: "Software\Classes\MDSLens.Configuration\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\mdslens.exe"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\.toml\OpenWithProgids"; ValueType: string; ValueName: "MDSLens.Configuration"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.webscp"; ValueType: string; ValueName: ""; ValueData: "MDSLens.Configuration"; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\mdslens"; ValueType: string; ValueName: ""; ValueData: "URL:MDSLens protocol"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\mdslens"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\mdslens\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\mdslens.exe"",0"
+Root: HKA; Subkey: "Software\Classes\mdslens\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\mdslens.exe"" ""%1"""
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"

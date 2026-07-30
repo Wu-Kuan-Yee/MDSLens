@@ -195,6 +195,92 @@ Future<ProcessResult> _runCommand(
 typedef CommandRunner = Future<ProcessResult> Function(
     String executable, List<String> arguments);
 
+const _macOSApplyUpdateScript = r'''
+set -u
+parent_pid="$1"
+current_bundle="$2"
+staged_bundle="$3"
+backup_bundle="$4"
+archive="$5"
+work_dir="$6"
+
+attempt=0
+while kill -0 "$parent_pid" 2>/dev/null; do
+  if [ "$attempt" -ge 3000 ]; then
+    /bin/rm -rf "$staged_bundle" "$work_dir"
+    exit 1
+  fi
+  attempt=$((attempt + 1))
+  sleep 0.1
+done
+
+if /bin/mv "$current_bundle" "$backup_bundle" &&
+   /bin/mv "$staged_bundle" "$current_bundle"; then
+  /bin/rm -rf "$backup_bundle"
+  /bin/rm -f "$archive"
+  /usr/bin/open "$current_bundle"
+  /bin/rm -rf "$work_dir"
+  exit 0
+fi
+
+if [ ! -e "$current_bundle" ] && [ -e "$backup_bundle" ]; then
+  /bin/mv "$backup_bundle" "$current_bundle"
+fi
+/bin/rm -rf "$staged_bundle"
+if [ -e "$current_bundle" ]; then
+  /usr/bin/open "$current_bundle"
+fi
+/bin/rm -rf "$work_dir"
+exit 1
+''';
+
+const _linuxApplyUpdateScript = r'''
+set -u
+parent_pid="$1"
+current_image="$2"
+staged_image="$3"
+backup_image="$4"
+downloaded_image="$5"
+
+attempt=0
+while kill -0 "$parent_pid" 2>/dev/null; do
+  if [ "$attempt" -ge 3000 ]; then
+    /bin/rm -f "$staged_image"
+    exit 1
+  fi
+  attempt=$((attempt + 1))
+  sleep 0.1
+done
+
+if /bin/mv "$current_image" "$backup_image" &&
+   /bin/mv "$staged_image" "$current_image"; then
+  /bin/rm -f "$backup_image" "$downloaded_image"
+  /bin/chmod +x "$current_image"
+  "$current_image" >/dev/null 2>&1 &
+  exit 0
+fi
+
+if [ ! -e "$current_image" ] && [ -e "$backup_image" ]; then
+  /bin/mv "$backup_image" "$current_image"
+fi
+/bin/rm -f "$staged_image"
+if [ -e "$current_image" ]; then
+  "$current_image" >/dev/null 2>&1 &
+fi
+exit 1
+''';
+
+const _linuxAuthorizeUpdateScript = r'''
+set -eu
+apply_script="$1"
+downloaded_image="$2"
+staged_image="$3"
+shift 3
+/bin/cp "$downloaded_image" "$staged_image"
+/bin/chmod +x "$staged_image"
+nohup /bin/sh -c "$apply_script" mdslens-updater "$@" >/dev/null 2>&1 &
+''';
+
 Future<void> requestApplicationExitForUpdate() async {
   exit(0);
 }
@@ -227,22 +313,44 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
     );
   }
   if (platform == 'windows') {
+    final currentExecutable =
+        currentExecutableOverride ?? Platform.resolvedExecutable;
+    final installDirectory =
+        Directory(windowsInstallDirectoryFromExecutable(currentExecutable));
+    final installDirectoryWritable =
+        await _directoryIsWritable(installDirectory);
+    final scopeArgument =
+        installDirectoryWritable ? '/CURRENTUSER' : '/ALLUSERS';
     if (update.asset.format == 'msi') {
-      await launch('msiexec.exe', [
+      final installerArguments = [
         '/i',
         update.path,
         '/qn',
         '/norestart',
         'REBOOT=ReallySuppress',
+        'INSTALLFOLDER=${installDirectory.path}',
+      ];
+      final quotedArguments =
+          installerArguments.map(_powerShellQuote).join(',');
+      await launch('powershell.exe', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-WindowStyle',
+        'Hidden',
+        '-Command',
+        "Start-Process -FilePath 'msiexec.exe' "
+            "-ArgumentList @($quotedArguments) -Verb RunAs",
       ]);
     } else {
-      await launch(update.path, const [
+      await launch(update.path, [
         '/VERYSILENT',
         '/SUPPRESSMSGBOXES',
         '/NORESTART',
         '/CLOSEAPPLICATIONS',
         '/RESTARTAPPLICATIONS',
         '/SP-',
+        scopeArgument,
+        '/DIR=${installDirectory.path}',
       ]);
     }
     return UpdateInstallResult(
@@ -292,6 +400,13 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
           closeApplication: true,
         );
       }
+      final elevated = await prepareElevatedAppImageUpdate(
+        update,
+        currentAppImage,
+        currentPid: currentPidOverride ?? pid,
+        commandRunner: run,
+      );
+      if (elevated != null) return elevated;
     }
     if (update.asset.format == 'AppImage') {
       await run('chmod', ['+x', update.path]);
@@ -309,6 +424,17 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
     downloaded: update,
   );
 }
+
+String windowsInstallDirectoryFromExecutable(String executablePath) {
+  final separator = [
+    executablePath.lastIndexOf('/'),
+    executablePath.lastIndexOf(r'\'),
+  ].reduce((left, right) => left > right ? left : right);
+  if (separator <= 0) return Directory.current.path;
+  return executablePath.substring(0, separator);
+}
+
+String _powerShellQuote(String value) => "'${value.replaceAll("'", "''")}'";
 
 String? macOSBundlePathFromExecutable(String executablePath) {
   final executable = File(executablePath);
@@ -345,9 +471,7 @@ Future<String> _preferredMacOSPackageFormat() async {
     final resolved =
         await File(Platform.resolvedExecutable).resolveSymbolicLinks();
     final bundlePath = macOSBundlePathFromExecutable(resolved);
-    if (bundlePath != null &&
-        await Directory(bundlePath).exists() &&
-        await _directoryIsWritable(Directory(bundlePath).parent)) {
+    if (bundlePath != null && await Directory(bundlePath).exists()) {
       return 'zip';
     }
   } catch (_) {}
@@ -360,6 +484,7 @@ Future<UpdateInstallResult?> prepareMacOSApplicationUpdate(
   required int currentPid,
   required DetachedCommandLauncher commandLauncher,
   required CommandRunner commandRunner,
+  bool? parentWritableOverride,
 }) async {
   String resolvedExecutable;
   try {
@@ -370,10 +495,9 @@ Future<UpdateInstallResult?> prepareMacOSApplicationUpdate(
   final bundlePath = macOSBundlePathFromExecutable(resolvedExecutable);
   if (bundlePath == null) return null;
   final currentBundle = Directory(bundlePath);
-  if (!await currentBundle.exists() ||
-      !await _directoryIsWritable(currentBundle.parent)) {
-    return null;
-  }
+  if (!await currentBundle.exists()) return null;
+  final parentWritable = parentWritableOverride ??
+      await _directoryIsWritable(currentBundle.parent);
 
   final nonce = '$currentPid-${DateTime.now().microsecondsSinceEpoch}';
   final stagedBundle = Directory('$bundlePath.mdslens-update-$nonce');
@@ -385,7 +509,7 @@ Future<UpdateInstallResult?> prepareMacOSApplicationUpdate(
   final candidate = Directory(
     '${extracted.path}${Platform.pathSeparator}MDSLens.app',
   );
-  var helperLaunched = false;
+  var updateScheduled = false;
   try {
     await extracted.create();
     final unpack = await commandRunner('/usr/bin/ditto', [
@@ -415,72 +539,71 @@ Future<UpdateInstallResult?> prepareMacOSApplicationUpdate(
     ]);
     if (signature.exitCode != 0) return null;
 
-    final stage = await commandRunner('/usr/bin/ditto', [
-      candidate.path,
-      stagedBundle.path,
-    ]);
-    if (stage.exitCode != 0 || !await stagedBundle.exists()) return null;
-    final stagedSignature = await commandRunner('/usr/bin/codesign', [
-      '--verify',
-      '--deep',
-      '--strict',
-      stagedBundle.path,
-    ]);
-    if (stagedSignature.exitCode != 0) return null;
-
-    final helper = File(
-      '${work.path}${Platform.pathSeparator}apply-update.sh',
-    );
-    await helper.writeAsString(r'''#!/bin/sh
-set -u
-parent_pid="$1"
-current_bundle="$2"
-staged_bundle="$3"
-backup_bundle="$4"
-archive="$5"
-work_dir="$6"
-
-attempt=0
-while kill -0 "$parent_pid" 2>/dev/null; do
-  if [ "$attempt" -ge 3000 ]; then
-    /bin/rm -rf "$staged_bundle" "$work_dir"
-    exit 1
-  fi
-  attempt=$((attempt + 1))
-  sleep 0.1
-done
-
-if /bin/mv "$current_bundle" "$backup_bundle" &&
-   /bin/mv "$staged_bundle" "$current_bundle"; then
-  /bin/rm -rf "$backup_bundle"
-  /bin/rm -f "$archive"
-  /usr/bin/open "$current_bundle"
-  /bin/rm -rf "$work_dir"
-  exit 0
-fi
-
-if [ ! -e "$current_bundle" ] && [ -e "$backup_bundle" ]; then
-  /bin/mv "$backup_bundle" "$current_bundle"
-fi
-/bin/rm -rf "$staged_bundle"
-if [ -e "$current_bundle" ]; then
-  /usr/bin/open "$current_bundle"
-fi
-/bin/rm -rf "$work_dir"
-exit 1
-''');
-    final chmod = await commandRunner('/bin/chmod', ['700', helper.path]);
-    if (chmod.exitCode != 0) return null;
-    await commandLauncher('/bin/sh', [
-      helper.path,
+    final applyArguments = [
       '$currentPid',
       currentBundle.path,
       stagedBundle.path,
       backupBundle.path,
       update.path,
       work.path,
-    ]);
-    helperLaunched = true;
+    ];
+    if (parentWritable) {
+      final stage = await commandRunner('/usr/bin/ditto', [
+        candidate.path,
+        stagedBundle.path,
+      ]);
+      if (stage.exitCode != 0 || !await stagedBundle.exists()) return null;
+      final stagedSignature = await commandRunner('/usr/bin/codesign', [
+        '--verify',
+        '--deep',
+        '--strict',
+        stagedBundle.path,
+      ]);
+      if (stagedSignature.exitCode != 0) return null;
+      await commandLauncher('/bin/sh', [
+        '-c',
+        _macOSApplyUpdateScript,
+        'mdslens-updater',
+        ...applyArguments,
+      ]);
+    } else {
+      final privilegedCommand = [
+        '/usr/bin/ditto',
+        _shellQuote(candidate.path),
+        _shellQuote(stagedBundle.path),
+        '&&',
+        '/usr/bin/codesign',
+        '--verify',
+        '--deep',
+        '--strict',
+        _shellQuote(stagedBundle.path),
+        '&&',
+        '(',
+        '/bin/sh',
+        '-c',
+        _shellQuote(_macOSApplyUpdateScript),
+        _shellQuote('mdslens-updater'),
+        ...applyArguments.map(_shellQuote),
+        '>/dev/null',
+        '2>&1',
+        '&',
+        ')',
+      ].join(' ');
+      final authorization = await commandRunner('/usr/bin/osascript', [
+        '-e',
+        'do shell script "${_appleScriptQuote(privilegedCommand)}" '
+            'with administrator privileges',
+      ]);
+      if (authorization.exitCode != 0) {
+        return UpdateInstallResult(
+          status: UpdateLaunchStatus.permissionRequired,
+          message:
+              'Administrator authorization was not granted. The current installation was left unchanged.',
+          downloaded: update,
+        );
+      }
+    }
+    updateScheduled = true;
     return UpdateInstallResult(
       status: UpdateLaunchStatus.installed,
       message: 'The update is ready. MDSLens will restart automatically.',
@@ -491,7 +614,7 @@ exit 1
     // A successfully launched helper owns these paths and removes them after
     // the current process exits. On preparation failure no backup exists yet,
     // so cleaning only the unique staging paths is safe.
-    if (!helperLaunched) {
+    if (!updateScheduled) {
       try {
         if (await stagedBundle.exists()) {
           await stagedBundle.delete(recursive: true);
@@ -503,6 +626,11 @@ exit 1
     }
   }
 }
+
+String _shellQuote(String value) => "'${value.replaceAll("'", "'\\''")}'";
+
+String _appleScriptQuote(String value) =>
+    value.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
 
 Future<void> scheduleApplicationRelaunch(
   String executablePath, {
@@ -592,6 +720,63 @@ Future<bool> replaceAppImageForUpdate(
     }
     return false;
   }
+}
+
+Future<UpdateInstallResult?> prepareElevatedAppImageUpdate(
+  DownloadedUpdate update,
+  String currentPath, {
+  required int currentPid,
+  required CommandRunner commandRunner,
+  String? pkexecPathOverride,
+}) async {
+  String resolvedCurrent;
+  try {
+    resolvedCurrent = await File(currentPath).resolveSymbolicLinks();
+  } catch (_) {
+    return null;
+  }
+  if (FileSystemEntity.typeSync(resolvedCurrent) != FileSystemEntityType.file) {
+    return null;
+  }
+  final pkexec = pkexecPathOverride ??
+      (File('/usr/bin/pkexec').existsSync()
+          ? '/usr/bin/pkexec'
+          : File('/bin/pkexec').existsSync()
+              ? '/bin/pkexec'
+              : null);
+  if (pkexec == null) return null;
+
+  final nonce = '$currentPid-${DateTime.now().microsecondsSinceEpoch}';
+  final staged = '$resolvedCurrent.mdslens-update-$nonce';
+  final backup = '$resolvedCurrent.mdslens-backup-$nonce';
+  final authorization = await commandRunner(pkexec, [
+    '/bin/sh',
+    '-c',
+    _linuxAuthorizeUpdateScript,
+    'mdslens-authorizer',
+    _linuxApplyUpdateScript,
+    update.path,
+    staged,
+    '$currentPid',
+    resolvedCurrent,
+    staged,
+    backup,
+    update.path,
+  ]);
+  if (authorization.exitCode != 0) {
+    return UpdateInstallResult(
+      status: UpdateLaunchStatus.permissionRequired,
+      message:
+          'Administrator authorization was not granted. The current AppImage was left unchanged.',
+      downloaded: update,
+    );
+  }
+  return UpdateInstallResult(
+    status: UpdateLaunchStatus.installed,
+    message: 'The AppImage update is ready. MDSLens will restart now.',
+    downloaded: update,
+    closeApplication: true,
+  );
 }
 
 Future<String> _preferredLinuxPackageFormat() async {

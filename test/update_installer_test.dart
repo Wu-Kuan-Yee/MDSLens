@@ -143,6 +143,10 @@ void main() {
   test(
     'Windows EXE updates run silently and request application shutdown',
     () async {
+      final installDirectory = await Directory.systemTemp.createTemp(
+        'mdslens-windows-install-test-',
+      );
+      addTearDown(() => installDirectory.delete(recursive: true));
       final commands = <(String, List<String>)>[];
       final update = DownloadedUpdate(
         asset: assetFor(utf8.encode('installer')),
@@ -152,6 +156,8 @@ void main() {
       final result = await launchVerifiedUpdateAsset(
         update,
         platformOverride: 'windows',
+        currentExecutableOverride:
+            '${installDirectory.path}${Platform.pathSeparator}mdslens.exe',
         commandLauncher: (executable, arguments) async {
           commands.add((executable, arguments));
         },
@@ -167,6 +173,8 @@ void main() {
           '/NORESTART',
           '/CLOSEAPPLICATIONS',
           '/RESTARTAPPLICATIONS',
+          '/CURRENTUSER',
+          '/DIR=${installDirectory.path}',
         ]),
       );
       expect(result.status, UpdateLaunchStatus.launched);
@@ -196,13 +204,20 @@ void main() {
       final result = await launchVerifiedUpdateAsset(
         update,
         platformOverride: 'windows',
+        currentExecutableOverride: r'C:\Program Files\MDSLens\mdslens.exe',
         commandLauncher: (executable, arguments) async {
           commands.add((executable, arguments));
         },
       );
 
-      expect(commands.single.$1, 'msiexec.exe');
-      expect(commands.single.$2, containsAll(<String>['/qn', '/norestart']));
+      expect(commands.single.$1, 'powershell.exe');
+      expect(commands.single.$2, contains('-NonInteractive'));
+      expect(commands.single.$2.last, contains('-Verb RunAs'));
+      expect(commands.single.$2.last, contains("'/qn'"));
+      expect(
+        commands.single.$2.last,
+        contains(r"'INSTALLFOLDER=C:\Program Files\MDSLens'"),
+      );
       expect(result.closeApplication, isFalse);
     },
   );
@@ -215,6 +230,63 @@ void main() {
       '/Applications/MDSLens.app',
     );
     expect(macOSBundlePathFromExecutable('/usr/local/bin/mdslens'), isNull);
+  });
+
+  test('macOS protected installs request administrator authorization',
+      () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'mdslens-macos-authorization-test-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final executable = File(
+      '${directory.path}/MDSLens.app/Contents/MacOS/MDSLens',
+    );
+    await executable.create(recursive: true);
+    final archive = File('${directory.path}/update.zip');
+    await archive.writeAsString('archive');
+    final update = DownloadedUpdate(
+      asset: UpdateManifestAsset(
+        name: 'mdslens-macos-arm64-unsigned.zip',
+        url: 'https://example.invalid/update.zip',
+        platform: 'macos',
+        architecture: 'arm64',
+        format: 'zip',
+        strategy: 'self-replace',
+        size: 7,
+        sha256:
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      ),
+      path: archive.path,
+    );
+    final commands = <(String, List<String>)>[];
+
+    final result = await prepareMacOSApplicationUpdate(
+      update,
+      currentExecutable: executable.path,
+      currentPid: 12345,
+      parentWritableOverride: false,
+      commandLauncher: (executable, arguments) async {},
+      commandRunner: (command, arguments) async {
+        commands.add((command, arguments));
+        if (command == '/usr/bin/ditto' && arguments.first == '-x') {
+          await Directory('${arguments.last}/MDSLens.app').create(
+            recursive: true,
+          );
+        }
+        if (command == '/usr/bin/plutil') {
+          return ProcessResult(0, 0, 'com.mdslens.app\n', '');
+        }
+        if (command == '/usr/bin/osascript') {
+          return ProcessResult(0, 1, '', 'User canceled.');
+        }
+        return ProcessResult(0, 0, '', '');
+      },
+    );
+
+    expect(
+        commands.map((command) => command.$1), contains('/usr/bin/osascript'));
+    expect(result?.status, UpdateLaunchStatus.permissionRequired);
+    expect(result?.closeApplication, isFalse);
   });
 
   test(
@@ -267,4 +339,48 @@ void main() {
       expect(result.closeApplication, isTrue);
     },
   );
+
+  test('protected AppImages request PolicyKit authorization', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'mdslens-appimage-authorization-test-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final current = File('${directory.path}/MDSLens.AppImage');
+    final downloaded = File('${directory.path}/downloaded.AppImage');
+    await current.writeAsString('old');
+    await downloaded.writeAsString('new');
+    final update = DownloadedUpdate(
+      asset: UpdateManifestAsset(
+        name: 'mdslens-linux-x64.AppImage',
+        url: 'https://example.invalid/AppImage',
+        platform: 'linux',
+        architecture: 'x64',
+        format: 'AppImage',
+        strategy: 'self-replace',
+        size: 3,
+        sha256:
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      ),
+      path: downloaded.path,
+    );
+    final commands = <(String, List<String>)>[];
+
+    final result = await prepareElevatedAppImageUpdate(
+      update,
+      current.path,
+      currentPid: 12345,
+      pkexecPathOverride: '/usr/bin/pkexec',
+      commandRunner: (command, arguments) async {
+        commands.add((command, arguments));
+        if (command == '/usr/bin/pkexec') {
+          return ProcessResult(0, 126, '', 'Authorization dismissed.');
+        }
+        return ProcessResult(0, 0, '', '');
+      },
+    );
+
+    expect(commands.map((command) => command.$1), contains('/usr/bin/pkexec'));
+    expect(result?.status, UpdateLaunchStatus.permissionRequired);
+    expect(await current.readAsString(), 'old');
+  });
 }
