@@ -6108,6 +6108,7 @@ void main() {
     tester,
   ) async {
     var installerCalled = false;
+    var exitRequested = false;
     const manifest = ReleaseAssetLocation(
       name: 'update-manifest.json',
       url:
@@ -6124,6 +6125,9 @@ void main() {
           ),
           versionLoader: () async => '0.0.1',
           gitVersionLoader: () async => '0.0.1.r1.g123456789',
+          applicationExitRequester: () async {
+            exitRequested = true;
+          },
           updateChecker: () async => const ReleaseUpdate(
             latestVersion: 'v1.0.0',
             releaseUrl:
@@ -6148,6 +6152,7 @@ void main() {
             return const UpdateInstallResult(
               status: UpdateLaunchStatus.launched,
               message: 'The verified update installer is ready.',
+              closeApplication: true,
             );
           },
         ),
@@ -6166,6 +6171,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(installerCalled, isTrue);
+    expect(exitRequested, isTrue);
     expect(
         find.text('The verified update installer is ready.'), findsOneWidget);
     expect(

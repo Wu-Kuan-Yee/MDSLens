@@ -37,8 +37,10 @@ platform action:
 Downloads are streamed to a temporary file, can be cancelled, and are not
 opened unless the byte count and SHA-256 digest match the release manifest.
 Windows updates use the installer's silent mode after verification. Wizard
-pages and installer message boxes are suppressed, and Restart Manager closes
-and reopens MDSLens. Windows elevation and SmartScreen remain in control when
+pages and installer message boxes are suppressed, and Windows Restart Manager
+gracefully closes and reopens MDSLens after installation. MDSLens remains open
+if elevation is cancelled or the installer cannot start. Windows elevation and
+SmartScreen remain in control when
 the installation location or package trust requires them; a normal application
 must not bypass either protection. Android's per-source installation
 permission, Linux administrator authentication, and macOS Gatekeeper likewise

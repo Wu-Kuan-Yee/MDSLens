@@ -249,7 +249,6 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
       status: UpdateLaunchStatus.launched,
       message: 'Installing the update. MDSLens will restart automatically.',
       downloaded: update,
-      closeApplication: true,
     );
   }
   if (platform == 'macos') {

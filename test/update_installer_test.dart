@@ -170,7 +170,7 @@ void main() {
         ]),
       );
       expect(result.status, UpdateLaunchStatus.launched);
-      expect(result.closeApplication, isTrue);
+      expect(result.closeApplication, isFalse);
     },
   );
 
@@ -203,7 +203,7 @@ void main() {
 
       expect(commands.single.$1, 'msiexec.exe');
       expect(commands.single.$2, containsAll(<String>['/qn', '/norestart']));
-      expect(result.closeApplication, isTrue);
+      expect(result.closeApplication, isFalse);
     },
   );
 

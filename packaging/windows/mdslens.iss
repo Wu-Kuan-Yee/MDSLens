@@ -32,6 +32,8 @@ WizardStyle=modern
 ArchitecturesAllowed={#InstallerArchitecture}
 ArchitecturesInstallIn64BitMode={#InstallerArchitecture}
 PrivilegesRequired=admin
+CloseApplications=yes
+RestartApplications=yes
 
 [Files]
 Source: "{#BundleDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
