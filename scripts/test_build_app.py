@@ -121,6 +121,16 @@ class BuildAppTests(unittest.TestCase):
             self.assertIn('Version="7.0.0.0"', manifest)
             self.assertIn('Executable="mdslens.exe"', manifest)
 
+    def test_windows_installer_rejects_the_wrong_native_architecture(self) -> None:
+        self.assertEqual(
+            build_app.windows_installer_architecture("x64"),
+            "x64compatible",
+        )
+        self.assertEqual(
+            build_app.windows_installer_architecture("arm64"),
+            "arm64",
+        )
+
     def test_msixbundle_finds_versioned_windows_sdk_makeappx(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             program_files = Path(temporary) / "Program Files (x86)"

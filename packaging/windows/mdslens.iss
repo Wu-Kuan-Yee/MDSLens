@@ -10,6 +10,9 @@
 #ifndef AppVersion
   #define AppVersion "0.0.1"
 #endif
+#ifndef InstallerArchitecture
+  #define InstallerArchitecture "x64compatible"
+#endif
 
 [Setup]
 AppId={{B9EA2350-BC49-4C8A-B91C-DB57C721A999}
@@ -26,8 +29,8 @@ UninstallDisplayIcon={app}\mdslens.exe
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
-ArchitecturesAllowed=x64compatible arm64
-ArchitecturesInstallIn64BitMode=x64compatible arm64
+ArchitecturesAllowed={#InstallerArchitecture}
+ArchitecturesInstallIn64BitMode={#InstallerArchitecture}
 PrivilegesRequired=admin
 
 [Files]

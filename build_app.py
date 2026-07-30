@@ -719,6 +719,10 @@ def windows_msix_version() -> str:
     return ".".join(str(value) for value in (parts + [0, 0, 0, 0])[:4])
 
 
+def windows_installer_architecture(arch: str) -> str:
+    return {"x64": "x64compatible", "arm64": "arm64"}[arch]
+
+
 def stage_windows_msix(bundle: Path, staging: Path, arch: str) -> None:
     replace_tree(bundle, staging)
     assets = staging / "Assets"
@@ -807,6 +811,7 @@ def package_windows(formats: set[str], no_build: bool, arch: str) -> None:
                 f"/DOutputDir={DIST}",
                 f"/DOutputBase={base}-setup",
                 f"/DAppVersion={project_version()}",
+                f"/DInstallerArchitecture={windows_installer_architecture(arch)}",
                 str(ROOT / "packaging/windows/mdslens.iss"),
             )
     if selected(formats, "msi"):
