@@ -14,12 +14,67 @@ class ReleaseUpdate {
   final String latestVersion;
   final String releaseUrl;
   final bool updateAvailable;
+  final List<ReleaseAssetLocation> assets;
 
   const ReleaseUpdate({
     required this.latestVersion,
     required this.releaseUrl,
     required this.updateAvailable,
+    this.assets = const [],
   });
+
+  ReleaseAssetLocation? assetNamed(String name) {
+    for (final asset in assets) {
+      if (asset.name == name) return asset;
+    }
+    return null;
+  }
+}
+
+class ReleaseAssetLocation {
+  const ReleaseAssetLocation({
+    required this.name,
+    required this.url,
+    required this.size,
+  });
+
+  final String name;
+  final String url;
+  final int size;
+}
+
+class UpdateManifest {
+  const UpdateManifest({
+    required this.version,
+    required this.releaseUrl,
+    required this.assets,
+  });
+
+  final String version;
+  final String releaseUrl;
+  final List<UpdateManifestAsset> assets;
+}
+
+class UpdateManifestAsset {
+  const UpdateManifestAsset({
+    required this.name,
+    required this.url,
+    required this.platform,
+    required this.architecture,
+    required this.format,
+    required this.strategy,
+    required this.size,
+    required this.sha256,
+  });
+
+  final String name;
+  final String url;
+  final String platform;
+  final String architecture;
+  final String format;
+  final String strategy;
+  final int size;
+  final String sha256;
 }
 
 Future<ReleaseUpdate> checkLatestMDSLensRelease(String currentVersion) async {
@@ -41,13 +96,188 @@ Future<ReleaseUpdate> checkLatestMDSLensRelease(String currentVersion) async {
     throw const FormatException('Invalid release version');
   }
   final releaseUrl = decoded['html_url']?.toString().trim();
+  final assets = <ReleaseAssetLocation>[];
+  final rawAssets = decoded['assets'];
+  if (rawAssets is List) {
+    for (final rawAsset in rawAssets) {
+      if (rawAsset is! Map) continue;
+      final name = rawAsset['name']?.toString().trim() ?? '';
+      final url = rawAsset['browser_download_url']?.toString().trim() ?? '';
+      final size = _integer(rawAsset['size']);
+      if (name.isEmpty ||
+          !_isTrustedGitHubDownload(url) ||
+          size == null ||
+          size < 0) {
+        continue;
+      }
+      assets.add(ReleaseAssetLocation(name: name, url: url, size: size));
+    }
+  }
   return ReleaseUpdate(
     latestVersion: latest,
     releaseUrl: releaseUrl == null || releaseUrl.isEmpty
         ? mdsLensReleasesUrl
         : releaseUrl,
     updateAvailable: compareVersions(latest, currentVersion) > 0,
+    assets: List.unmodifiable(assets),
   );
+}
+
+Future<UpdateManifest> fetchUpdateManifest(
+  ReleaseUpdate release, {
+  http.Client? client,
+}) async {
+  final location = release.assetNamed('update-manifest.json');
+  if (location == null) {
+    throw const FormatException('This release has no update manifest');
+  }
+  final ownedClient = client == null;
+  final activeClient = client ?? http.Client();
+  try {
+    final response = await activeClient.get(
+      Uri.parse(location.url),
+      headers: const {'Accept': 'application/json'},
+    ).timeout(const Duration(seconds: 15));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'GitHub returned HTTP ${response.statusCode} for the update manifest',
+      );
+    }
+    return parseUpdateManifest(
+      utf8.decode(response.bodyBytes),
+      release: release,
+    );
+  } finally {
+    if (ownedClient) activeClient.close();
+  }
+}
+
+UpdateManifest parseUpdateManifest(
+  String source, {
+  required ReleaseUpdate release,
+}) {
+  final decoded = jsonDecode(source);
+  if (decoded is! Map || _integer(decoded['schema_version']) != 1) {
+    throw const FormatException('Unsupported update manifest');
+  }
+  final version = decoded['version']?.toString().trim() ?? '';
+  if (!_parseVersion(version).isValid ||
+      compareVersions(version, release.latestVersion) != 0) {
+    throw const FormatException(
+        'Update manifest version does not match release');
+  }
+  final releaseUrl = decoded['release_url']?.toString().trim() ?? '';
+  if (!_isTrustedRepositoryUrl(releaseUrl)) {
+    throw const FormatException('Update manifest has an untrusted release URL');
+  }
+  final rawAssets = decoded['assets'];
+  if (rawAssets is! List) {
+    throw const FormatException('Update manifest has no asset list');
+  }
+  final assets = <UpdateManifestAsset>[];
+  for (final rawAsset in rawAssets) {
+    if (rawAsset is! Map) continue;
+    final name = rawAsset['name']?.toString().trim() ?? '';
+    final location = release.assetNamed(name);
+    final platform =
+        rawAsset['platform']?.toString().trim().toLowerCase() ?? '';
+    final architecture =
+        rawAsset['architecture']?.toString().trim().toLowerCase() ?? '';
+    final format = rawAsset['format']?.toString().trim() ?? '';
+    final strategy = rawAsset['strategy']?.toString().trim() ?? '';
+    final size = _integer(rawAsset['size']);
+    final sha256 = rawAsset['sha256']?.toString().trim().toLowerCase() ?? '';
+    if (location == null ||
+        size == null ||
+        size <= 0 ||
+        location.size != size ||
+        !RegExp(r'^[0-9a-f]{64}$').hasMatch(sha256) ||
+        !const {
+          'windows',
+          'macos',
+          'linux',
+          'android',
+          'ios',
+          'ipados',
+        }.contains(platform) ||
+        !const {'x64', 'arm64', 'armv7', 'universal'}.contains(architecture) ||
+        !const {
+          'launch-installer',
+          'open-package',
+          'system-installer',
+          'manual',
+        }.contains(strategy)) {
+      continue;
+    }
+    assets.add(
+      UpdateManifestAsset(
+        name: name,
+        url: location.url,
+        platform: platform,
+        architecture: architecture,
+        format: format,
+        strategy: strategy,
+        size: size,
+        sha256: sha256,
+      ),
+    );
+  }
+  if (assets.isEmpty) {
+    throw const FormatException('Update manifest has no usable assets');
+  }
+  return UpdateManifest(
+    version: version,
+    releaseUrl: releaseUrl,
+    assets: List.unmodifiable(assets),
+  );
+}
+
+UpdateManifestAsset? selectUpdateAsset(
+  UpdateManifest manifest, {
+  required String platform,
+  required String architecture,
+  String? preferredLinuxFormat,
+}) {
+  final normalizedPlatform =
+      platform.toLowerCase() == 'ipados' ? 'ipados' : platform.toLowerCase();
+  final normalizedArchitecture = switch (architecture.toLowerCase()) {
+    'x86_64' || 'amd64' => 'x64',
+    'aarch64' || 'arm64-v8a' => 'arm64',
+    'armeabi-v7a' => 'armv7',
+    final value => value,
+  };
+  final candidates = manifest.assets
+      .where((asset) => asset.platform == normalizedPlatform)
+      .toList();
+  if (candidates.isEmpty) return null;
+
+  int rank(UpdateManifestAsset asset) {
+    final architectureRank = asset.architecture == normalizedArchitecture
+        ? 0
+        : asset.architecture == 'universal'
+            ? 1
+            : 100;
+    if (architectureRank == 100) return 1000;
+    final formatRank = switch (normalizedPlatform) {
+      'windows' => asset.format == 'exe'
+          ? 0
+          : asset.format == 'msi'
+              ? 1
+              : 10,
+      'macos' => asset.format == 'dmg' ? 0 : 10,
+      'android' => asset.architecture == 'universal' ? 0 : architectureRank,
+      'linux' => asset.format == preferredLinuxFormat
+          ? 0
+          : asset.format == 'AppImage'
+              ? 1
+              : 5,
+      _ => 0,
+    };
+    return architectureRank * 10 + formatRank;
+  }
+
+  candidates.sort((left, right) => rank(left).compareTo(rank(right)));
+  return rank(candidates.first) >= 1000 ? null : candidates.first;
 }
 
 int compareVersions(String left, String right) {
@@ -76,4 +306,28 @@ int compareVersions(String left, String right) {
       (index) => int.parse(match.group(index + 1) ?? '0'),
     ),
   );
+}
+
+int? _integer(Object? value) {
+  if (value is int) return value;
+  if (value is num && value.isFinite && value == value.roundToDouble()) {
+    return value.toInt();
+  }
+  return int.tryParse(value?.toString() ?? '');
+}
+
+bool _isTrustedGitHubDownload(String value) {
+  final uri = Uri.tryParse(value);
+  return uri != null &&
+      uri.scheme == 'https' &&
+      uri.host.toLowerCase() == 'github.com' &&
+      uri.path.startsWith('/Wu-Kuan-Yee/MDSLens/releases/download/');
+}
+
+bool _isTrustedRepositoryUrl(String value) {
+  final uri = Uri.tryParse(value);
+  return uri != null &&
+      uri.scheme == 'https' &&
+      uri.host.toLowerCase() == 'github.com' &&
+      uri.path.startsWith('/Wu-Kuan-Yee/MDSLens/releases/');
 }
