@@ -48,6 +48,10 @@ removes its private application data. Current public macOS artifacts remain
 ad-hoc signed and unnotarized, so Update opens the verified DMG rather than
 replacing the running application.
 
+Flatpak and Snap installations deliberately do not show the direct-install
+action. Those package systems own their installed files and should deliver the
+update through their configured remote or store.
+
 ## Runtime Dependency Summary
 
 The packaged application includes the Flutter engine, MDSLens assets and

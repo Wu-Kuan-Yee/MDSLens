@@ -15,11 +15,18 @@ typedef UpdateManifestLoader = Future<UpdateManifest> Function(
 
 const _updaterChannel = MethodChannel('mdslens/updater');
 
-bool get directUpdateSupported =>
-    Platform.isWindows ||
-    Platform.isMacOS ||
-    Platform.isLinux ||
-    Platform.isAndroid;
+bool get directUpdateSupported {
+  if (Platform.isLinux &&
+      ((Platform.environment['FLATPAK_ID'] ?? '').isNotEmpty ||
+          (Platform.environment['SNAP'] ?? '').isNotEmpty ||
+          File('/.flatpak-info').existsSync())) {
+    return false;
+  }
+  return Platform.isWindows ||
+      Platform.isMacOS ||
+      Platform.isLinux ||
+      Platform.isAndroid;
+}
 
 String get directUpdateActionLabel {
   if (Platform.isMacOS) return 'Download & Open';
