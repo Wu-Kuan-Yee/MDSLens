@@ -26,6 +26,9 @@ bool get directUpdateSupported => nativeDirectUpdateSupported(
       linuxOsRelease: _linuxOsReleaseSync(),
       linuxPortableRootExists:
           linuxPortableRootFromExecutable(Platform.resolvedExecutable) != null,
+      windowsPortableRootExists:
+          windowsPortableRootFromExecutable(Platform.resolvedExecutable) !=
+              null,
     );
 
 bool nativeDirectUpdateSupported({
@@ -35,6 +38,7 @@ bool nativeDirectUpdateSupported({
   bool flatpakInfoExists = false,
   String linuxOsRelease = '',
   bool linuxPortableRootExists = false,
+  bool windowsPortableRootExists = false,
 }) {
   switch (platform.toLowerCase()) {
     case 'android':
@@ -45,10 +49,11 @@ bool nativeDirectUpdateSupported({
       // An MSIX package lives in the protected WindowsApps directory and must
       // be serviced by Windows/App Installer using the package identity. The
       // unsigned standalone EXE/MSI updater must never create a second install.
-      return !resolvedExecutable
-          .replaceAll('/', r'\')
-          .toLowerCase()
-          .contains(r'\windowsapps\');
+      return windowsPortableRootExists ||
+          !resolvedExecutable
+              .replaceAll('/', r'\')
+              .toLowerCase()
+              .contains(r'\windowsapps\');
     case 'linux':
       if ((environment['FLATPAK_ID'] ?? '').isNotEmpty ||
           (environment['SNAP'] ?? '').isNotEmpty ||
@@ -90,6 +95,7 @@ Future<UpdateInstallResult> installLatestReleaseUpdate(
   String? architectureOverride,
   String? linuxFormatOverride,
   String? macOSFormatOverride,
+  String? windowsFormatOverride,
 }) async {
   if (!directUpdateSupported && platformOverride == null) {
     return const UpdateInstallResult(
@@ -106,12 +112,15 @@ Future<UpdateInstallResult> installLatestReleaseUpdate(
       (platform == 'linux' ? await _preferredLinuxPackageFormat() : null);
   final macOSFormat = macOSFormatOverride ??
       (platform == 'macos' ? await _preferredMacOSPackageFormat() : null);
+  final windowsFormat = windowsFormatOverride ??
+      (platform == 'windows' ? _preferredWindowsPackageFormat() : null);
   final asset = selectUpdateAsset(
     manifest,
     platform: platform,
     architecture: architecture,
     preferredLinuxFormat: linuxFormat,
     preferredMacOSFormat: macOSFormat,
+    preferredWindowsFormat: windowsFormat,
   );
   if (asset == null || asset.strategy == 'manual') {
     return const UpdateInstallResult(
@@ -639,6 +648,69 @@ rmdir /S /Q "%WorkDirectory%" >NUL 2>&1
 endlocal
 ''';
 
+const _windowsPortableApplyUpdateScript = r'''
+$ErrorActionPreference = 'Stop'
+$parentPid = [int]$args[0]
+$currentRoot = [IO.Path]::GetFullPath($args[1])
+$stagedRoot = [IO.Path]::GetFullPath($args[2])
+$backupRoot = [IO.Path]::GetFullPath($args[3])
+$archive = $args[4]
+$workRoot = $args[5]
+$readyFile = $args[6]
+$previousRoot = "$currentRoot.mdslens-previous"
+
+if ($currentRoot -eq [IO.Path]::GetPathRoot($currentRoot)) { exit 1 }
+if (-not $stagedRoot.StartsWith("$currentRoot.mdslens-update-")) { exit 1 }
+if (-not $backupRoot.StartsWith("$currentRoot.mdslens-backup-")) { exit 1 }
+if (-not (Test-Path -LiteralPath $stagedRoot -PathType Container)) { exit 1 }
+if (Test-Path -LiteralPath $backupRoot) { exit 1 }
+Set-Content -LiteralPath $readyFile -Value 'ready' -Encoding Ascii
+
+for ($attempt = 0; $attempt -lt 300; $attempt++) {
+  if (-not (Get-Process -Id $parentPid -ErrorAction SilentlyContinue)) { break }
+  Start-Sleep -Milliseconds 100
+}
+if (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) { exit 1 }
+
+try {
+  Move-Item -LiteralPath $currentRoot -Destination $backupRoot
+  Move-Item -LiteralPath $stagedRoot -Destination $currentRoot
+  $target = Join-Path $currentRoot 'mdslens.exe'
+  $process = Start-Process -FilePath $target -WorkingDirectory $currentRoot -PassThru
+  Start-Sleep -Seconds 3
+  $process.Refresh()
+  if ($process.HasExited) { throw 'The replacement exited during startup.' }
+
+  $previousOwned = $false
+  $previousMarker = Join-Path $previousRoot '.mdslens-portable.json'
+  if (Test-Path -LiteralPath $previousMarker -PathType Leaf) {
+    try {
+      $metadata = Get-Content -LiteralPath $previousMarker -Raw | ConvertFrom-Json
+      $previousOwned = $metadata.product -eq 'com.mdslens.app' -and
+        $metadata.platform -eq 'windows'
+    } catch {}
+  }
+  if ($previousOwned) { Remove-Item -LiteralPath $previousRoot -Recurse -Force }
+  if (-not (Test-Path -LiteralPath $previousRoot)) {
+    Move-Item -LiteralPath $backupRoot -Destination $previousRoot
+  }
+  Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
+  exit 0
+} catch {
+  if (Test-Path -LiteralPath $currentRoot) {
+    Remove-Item -LiteralPath $currentRoot -Recurse -Force
+  }
+  if (Test-Path -LiteralPath $backupRoot) {
+    Move-Item -LiteralPath $backupRoot -Destination $currentRoot
+    Start-Process -FilePath (Join-Path $currentRoot 'mdslens.exe') `
+      -WorkingDirectory $currentRoot
+  }
+  Remove-Item -LiteralPath $stagedRoot -Recurse -Force -ErrorAction SilentlyContinue
+  exit 1
+}
+''';
+
 Future<void> requestApplicationExitForUpdate() async {
   exit(0);
 }
@@ -709,6 +781,16 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
   if (platform == 'windows') {
     final currentExecutable =
         currentExecutableOverride ?? Platform.resolvedExecutable;
+    final portableRoot = windowsPortableRootFromExecutable(currentExecutable);
+    if (update.asset.format == 'zip' && portableRoot != null) {
+      return await prepareWindowsPortableUpdate(
+        update,
+        portableRoot: portableRoot,
+        currentPid: currentPidOverride ?? pid,
+        commandLauncher: launch,
+        commandRunner: run,
+      );
+    }
     final installDirectory =
         Directory(windowsInstallDirectoryFromExecutable(currentExecutable));
     final installDirectoryWritable = await _directoryIsWritable(
@@ -869,6 +951,183 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
   );
 }
 
+Future<UpdateInstallResult> prepareWindowsPortableUpdate(
+  DownloadedUpdate update, {
+  required String portableRoot,
+  required int currentPid,
+  required DetachedCommandLauncher commandLauncher,
+  required CommandRunner commandRunner,
+  String? nonceOverride,
+  int helperReadyAttempts = 50,
+}) async {
+  final currentRoot = Directory(portableRoot);
+  if (!await currentRoot.exists() ||
+      windowsPortableRootFromExecutable(
+            '${currentRoot.path}${Platform.pathSeparator}mdslens.exe',
+          ) !=
+          currentRoot.path) {
+    return const UpdateInstallResult(
+      status: UpdateLaunchStatus.unsupported,
+      message: 'The Windows portable installation marker is invalid.',
+    );
+  }
+  final expectedTopLevel = update.asset.name.substring(
+    0,
+    update.asset.name.length - '.zip'.length,
+  );
+  if (!RegExp(r'^mdslens-windows-(x64|arm64)$').hasMatch(expectedTopLevel)) {
+    return UpdateInstallResult(
+      status: UpdateLaunchStatus.unsupported,
+      message: 'The Windows portable update name is invalid.',
+      downloaded: update,
+    );
+  }
+
+  final work = await Directory.systemTemp.createTemp(
+    'mdslens-windows-portable-update-',
+  );
+  final extracted = Directory(
+    '${work.path}${Platform.pathSeparator}extracted',
+  );
+  final candidate = Directory(
+    '${extracted.path}${Platform.pathSeparator}$expectedTopLevel',
+  );
+  final nonceBase =
+      nonceOverride ?? '$currentPid-${DateTime.now().microsecondsSinceEpoch}';
+  Directory? staged;
+  Directory? backup;
+  for (var attempt = 0; attempt < 100; attempt++) {
+    final nonce = attempt == 0 ? nonceBase : '$nonceBase-$attempt';
+    final proposedStage =
+        Directory('${currentRoot.path}.mdslens-update-$nonce');
+    final proposedBackup =
+        Directory('${currentRoot.path}.mdslens-backup-$nonce');
+    if (!await _fileSystemEntryExists(proposedStage.path) &&
+        !await _fileSystemEntryExists(proposedBackup.path)) {
+      staged = proposedStage;
+      backup = proposedBackup;
+      break;
+    }
+  }
+  if (staged == null || backup == null) {
+    await work.delete(recursive: true);
+    return UpdateInstallResult(
+      status: UpdateLaunchStatus.unsupported,
+      message: 'No safe staging path was available for the update.',
+      downloaded: update,
+    );
+  }
+
+  var scheduled = false;
+  try {
+    final unpack = await commandRunner('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      r'Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force',
+      update.path,
+      extracted.path,
+    ]);
+    final marker = File(
+      '${candidate.path}${Platform.pathSeparator}.mdslens-portable.json',
+    );
+    final executable = File(
+      '${candidate.path}${Platform.pathSeparator}mdslens.exe',
+    );
+    if (unpack.exitCode != 0 ||
+        !await executable.exists() ||
+        !await _validWindowsPortableMarker(
+          marker,
+          architecture: update.asset.architecture,
+        )) {
+      return UpdateInstallResult(
+        status: UpdateLaunchStatus.unsupported,
+        message: 'The verified Windows portable archive is not valid.',
+        downloaded: update,
+      );
+    }
+    final stage = await commandRunner('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      r'Copy-Item -LiteralPath $args[0] -Destination $args[1] -Recurse',
+      candidate.path,
+      staged.path,
+    ]);
+    if (stage.exitCode != 0 || !await Directory(staged.path).exists()) {
+      return UpdateInstallResult(
+        status: UpdateLaunchStatus.unsupported,
+        message: 'The Windows portable update could not be staged.',
+        downloaded: update,
+      );
+    }
+    final helper = File(
+      '${work.path}${Platform.pathSeparator}apply-update.ps1',
+    );
+    final ready = File(
+      '${work.path}${Platform.pathSeparator}helper-ready',
+    );
+    await helper.writeAsString(_windowsPortableApplyUpdateScript);
+    await commandLauncher('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      helper.path,
+      '$currentPid',
+      currentRoot.path,
+      staged.path,
+      backup.path,
+      update.path,
+      work.path,
+      ready.path,
+    ]);
+    if (!await _waitForFile(ready, attempts: helperReadyAttempts)) {
+      return UpdateInstallResult(
+        status: UpdateLaunchStatus.unsupported,
+        message:
+            'Windows did not start the portable update helper, so MDSLens stayed open.',
+        downloaded: update,
+      );
+    }
+    scheduled = true;
+    return UpdateInstallResult(
+      status: UpdateLaunchStatus.installed,
+      message:
+          'The portable update is ready. MDSLens will restart automatically.',
+      downloaded: update,
+      closeApplication: true,
+    );
+  } finally {
+    if (!scheduled) {
+      try {
+        if (await staged.exists()) await staged.delete(recursive: true);
+      } catch (_) {}
+      try {
+        if (await work.exists()) await work.delete(recursive: true);
+      } catch (_) {}
+    }
+  }
+}
+
+Future<bool> _validWindowsPortableMarker(
+  File marker, {
+  String? architecture,
+}) async {
+  try {
+    final metadata = jsonDecode(await marker.readAsString());
+    return metadata is Map &&
+        metadata['schema_version'] == 1 &&
+        metadata['product'] == 'com.mdslens.app' &&
+        metadata['platform'] == 'windows' &&
+        metadata['executable'] == 'mdslens.exe' &&
+        (architecture == null || metadata['architecture'] == architecture);
+  } catch (_) {
+    return false;
+  }
+}
+
 Future<bool> _waitForFile(
   File file, {
   int attempts = 50,
@@ -990,6 +1249,35 @@ String windowsInstallDirectoryFromExecutable(String executablePath) {
   ].reduce((left, right) => left > right ? left : right);
   if (separator <= 0) return Directory.current.path;
   return executablePath.substring(0, separator);
+}
+
+String? windowsPortableRootFromExecutable(String executablePath) {
+  if (executablePath.trim().isEmpty) return null;
+  final directory = File(executablePath).parent;
+  final marker = File(
+    '${directory.path}${Platform.pathSeparator}.mdslens-portable.json',
+  );
+  try {
+    if (!marker.existsSync()) return null;
+    final metadata = jsonDecode(marker.readAsStringSync());
+    if (metadata is Map &&
+        metadata['schema_version'] == 1 &&
+        metadata['product'] == 'com.mdslens.app' &&
+        metadata['platform'] == 'windows' &&
+        metadata['executable'] == 'mdslens.exe' &&
+        File(
+          '${directory.path}${Platform.pathSeparator}mdslens.exe',
+        ).existsSync()) {
+      return directory.path;
+    }
+  } catch (_) {}
+  return null;
+}
+
+String _preferredWindowsPackageFormat() {
+  return windowsPortableRootFromExecutable(Platform.resolvedExecutable) != null
+      ? 'zip'
+      : 'exe';
 }
 
 String? linuxPortableRootFromExecutable(String executablePath) {

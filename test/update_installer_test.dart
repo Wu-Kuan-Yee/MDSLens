@@ -308,6 +308,93 @@ void main() {
     },
   );
 
+  test('Windows portable updates stage a complete bundle and wait for handoff',
+      () async {
+    final root = await Directory.systemTemp.createTemp(
+      'mdslens-windows-portable-test-',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    final current = Directory('${root.path}/mdslens-windows-x64');
+    await current.create();
+    await File('${current.path}/mdslens.exe').writeAsString('old');
+    await File('${current.path}/.mdslens-portable.json').writeAsString(
+      jsonEncode({
+        'schema_version': 1,
+        'product': 'com.mdslens.app',
+        'platform': 'windows',
+        'version': '0.3.1',
+        'architecture': 'x64',
+        'executable': 'mdslens.exe',
+      }),
+    );
+    final archive = File('${root.path}/mdslens-windows-x64.zip');
+    await archive.writeAsString('archive');
+    final update = DownloadedUpdate(
+      asset: UpdateManifestAsset(
+        name: 'mdslens-windows-x64.zip',
+        url: 'https://example.invalid/windows.zip',
+        platform: 'windows',
+        architecture: 'x64',
+        format: 'zip',
+        strategy: 'self-replace',
+        size: await archive.length(),
+        sha256: sha256.convert(await archive.readAsBytes()).toString(),
+      ),
+      path: archive.path,
+    );
+    List<String>? launchedArguments;
+
+    final result = await prepareWindowsPortableUpdate(
+      update,
+      portableRoot: current.path,
+      currentPid: 12345,
+      nonceOverride: 'test',
+      commandRunner: (executable, arguments) async {
+        final script = arguments[3];
+        if (script.startsWith('Expand-Archive')) {
+          final candidate = Directory(
+            '${arguments.last}/mdslens-windows-x64',
+          );
+          await candidate.create(recursive: true);
+          await File('${candidate.path}/mdslens.exe').writeAsString('new');
+          await File('${candidate.path}/.mdslens-portable.json').writeAsString(
+            jsonEncode({
+              'schema_version': 1,
+              'product': 'com.mdslens.app',
+              'platform': 'windows',
+              'version': '0.3.2',
+              'architecture': 'x64',
+              'executable': 'mdslens.exe',
+            }),
+          );
+        } else if (script.startsWith('Copy-Item')) {
+          final source = Directory(arguments[4]);
+          final destination = Directory(arguments[5]);
+          await destination.create();
+          for (final entity in source.listSync()) {
+            if (entity is File) {
+              await entity.copy(
+                '${destination.path}/${entity.uri.pathSegments.last}',
+              );
+            }
+          }
+        }
+        return ProcessResult(0, 0, '', '');
+      },
+      commandLauncher: (executable, arguments) async {
+        launchedArguments = arguments;
+        await File(arguments.last).create(recursive: true);
+      },
+    );
+
+    expect(result.closeApplication, isTrue);
+    expect(launchedArguments?[5], endsWith('apply-update.ps1'));
+    final helper = File(launchedArguments![5]);
+    final script = await helper.readAsString();
+    expect(script, contains('The replacement exited during startup.'));
+    expect(script, contains('Move-Item -LiteralPath \$backupRoot'));
+  });
+
   test('macOS bundle paths are derived only from application executables', () {
     expect(
       macOSBundlePathFromExecutable(

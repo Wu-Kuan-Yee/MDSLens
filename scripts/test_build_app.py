@@ -20,6 +20,26 @@ from scripts import build_msixbundle, verify_icons, verify_linux_portable  # noq
 
 
 class BuildAppTests(unittest.TestCase):
+    def test_windows_portable_stage_contains_update_channel_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = root / "bundle"
+            bundle.mkdir()
+            (bundle / "mdslens.exe").write_bytes(b"application")
+            portable = root / "mdslens-windows-x64"
+
+            build_app.stage_windows_portable(bundle, portable, "0.3.2", "x64")
+
+            metadata = json.loads(
+                (portable / ".mdslens-portable.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(metadata["product"], "com.mdslens.app")
+            self.assertEqual(metadata["platform"], "windows")
+            self.assertEqual(metadata["architecture"], "x64")
+            self.assertEqual(metadata["executable"], "mdslens.exe")
+
     def test_linux_portable_stage_contains_update_channel_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -48,6 +48,11 @@ def classify_asset(name: str) -> dict[str, str] | None:
             "launch-installer",
         ),
         (
+            re.compile(r"^mdslens-windows-(x64|arm64)\.zip$"),
+            "windows",
+            "self-replace",
+        ),
+        (
             re.compile(r"^mdslens-macos-(arm64|x64|universal)-unsigned\.zip$"),
             "macos",
             "self-replace",

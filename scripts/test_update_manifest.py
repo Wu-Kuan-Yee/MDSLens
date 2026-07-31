@@ -23,7 +23,7 @@ class UpdateManifestTests(unittest.TestCase):
                 "mdslens-linux-arm64.tar.gz": b"portable-linux",
                 "mdslens-android-universal.apk": b"android",
                 "mdslens-ios-arm64-unsigned.ipa": b"ios",
-                "mdslens-windows-x64.zip": b"ignored",
+                "mdslens-windows-x64.zip": b"portable-windows",
             }
             for name, contents in files.items():
                 (root / name).write_bytes(contents)
@@ -33,7 +33,10 @@ class UpdateManifestTests(unittest.TestCase):
         self.assertEqual(manifest["schema_version"], 1)
         self.assertEqual(manifest["version"], "1.2.3")
         assets = {asset["name"]: asset for asset in manifest["assets"]}
-        self.assertNotIn("mdslens-windows-x64.zip", assets)
+        self.assertEqual(
+            assets["mdslens-windows-x64.zip"]["strategy"],
+            "self-replace",
+        )
         self.assertEqual(
             assets["mdslens-windows-x64-setup.exe"]["strategy"],
             "launch-installer",

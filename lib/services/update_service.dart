@@ -275,6 +275,7 @@ UpdateManifestAsset? selectUpdateAsset(
   required String architecture,
   String? preferredLinuxFormat,
   String? preferredMacOSFormat,
+  String? preferredWindowsFormat,
 }) {
   final normalizedPlatform =
       platform.toLowerCase() == 'ipados' ? 'ipados' : platform.toLowerCase();
@@ -297,11 +298,13 @@ UpdateManifestAsset? selectUpdateAsset(
             : 100;
     if (architectureRank == 100) return 1000;
     final formatRank = switch (normalizedPlatform) {
-      'windows' => asset.format == 'exe'
+      'windows' => asset.format == preferredWindowsFormat
           ? 0
-          : asset.format == 'msi'
+          : asset.format == 'exe'
               ? 1
-              : 10,
+              : asset.format == 'msi'
+                  ? 2
+                  : 10,
       'macos' => asset.format == preferredMacOSFormat
           ? 0
           : asset.format == 'zip'

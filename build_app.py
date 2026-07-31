@@ -825,6 +825,27 @@ def stage_windows_msix(bundle: Path, staging: Path, arch: str) -> None:
     )
 
 
+def stage_windows_portable(
+    bundle: Path, portable: Path, version: str, arch: str
+) -> None:
+    replace_tree(bundle, portable)
+    (portable / ".mdslens-portable.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "product": "com.mdslens.app",
+                "platform": "windows",
+                "version": version,
+                "architecture": arch,
+                "executable": "mdslens.exe",
+            },
+            indent=2,
+            sort_keys=True,
+        ) + "\n",
+        encoding="utf-8",
+    )
+
+
 def package_windows(formats: set[str], no_build: bool, arch: str) -> None:
     if host_platform() != "windows":
         fail("Windows packages can only be built on Windows")
@@ -842,17 +863,19 @@ def package_windows(formats: set[str], no_build: bool, arch: str) -> None:
     if not (bundle / "mdslens.exe").is_file():
         fail(f"Windows application bundle not found: {bundle}")
     base = f"mdslens-windows-{arch}"
-
-    if selected(formats, "zip"):
-        make_zip(bundle, DIST / f"{base}.zip", base)
-    if selected(formats, "7z"):
-        make_7z(bundle, DIST / f"{base}.7z", base, formats)
-    if selected(formats, "tar.gz"):
-        make_tar(bundle, DIST / f"{base}.tar.gz", base, "w:gz")
-    if selected(formats, "tar.xz"):
-        make_tar(bundle, DIST / f"{base}.tar.xz", base, "w:xz")
-    if selected(formats, "tar.bz2"):
-        make_tar(bundle, DIST / f"{base}.tar.bz2", base, "w:bz2")
+    with tempfile.TemporaryDirectory(prefix="mdslens-windows-portable-") as temporary:
+        portable = Path(temporary) / base
+        stage_windows_portable(bundle, portable, project_version(), arch)
+        if selected(formats, "zip"):
+            make_zip(portable, DIST / f"{base}.zip", base)
+        if selected(formats, "7z"):
+            make_7z(portable, DIST / f"{base}.7z", base, formats)
+        if selected(formats, "tar.gz"):
+            make_tar(portable, DIST / f"{base}.tar.gz", base, "w:gz")
+        if selected(formats, "tar.xz"):
+            make_tar(portable, DIST / f"{base}.tar.xz", base, "w:xz")
+        if selected(formats, "tar.bz2"):
+            make_tar(portable, DIST / f"{base}.tar.bz2", base, "w:bz2")
     if selected(formats, "exe"):
         iscc = format_tool("ISCC", formats, "exe")
         if iscc is not None:

@@ -35,7 +35,7 @@ tagged release has a machine-readable update manifest, MDSLens offers both
 
 | Platform | Update action |
 |---|---|
-| Windows | Detects the running executable's directory, passes that directory to the matching x64/ARM64 installer, installs without wizard pages, and restarts MDSLens |
+| Windows | Installer builds update silently in place; marked portable bundles atomically replace the complete directory, verify the restarted process, and roll back on failure |
 | macOS | Detects the running `.app`, verifies the matching ZIP, atomically replaces the same bundle, and restarts it |
 | Linux | Atomically replaces the running AppImage at the same path and restarts it; native DEB/RPM installations remain owned by the system package manager |
 | Android | Downloads a matching APK, verifies it, and opens Android's package installer |
@@ -58,6 +58,15 @@ helper and installer diagnostics are retained in
 `%LOCALAPPDATA%\MDSLens\updates\latest-update.log` and the adjacent
 `.installer.log`. Windows elevation, antivirus policy, and SmartScreen remain
 in control; a normal application must not bypass those protections.
+
+ZIP, 7z, and tar Windows portable downloads contain an update-channel marker.
+A running marked bundle downloads the canonical ZIP update, extracts and
+validates the complete replacement before exiting, then swaps sibling
+directories without converting the portable copy into an installed program.
+The new executable must remain alive during its startup health window. If it
+exits early, the helper restores and launches the old directory. After success,
+one owned previous bundle remains beside the installation for recovery; an
+unrelated directory with the same name is never removed.
 
 On macOS, self-update is attempted only when MDSLens is running from a real
 `.app` bundle. The downloaded bundle must retain the expected

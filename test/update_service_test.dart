@@ -103,6 +103,28 @@ void main() {
               'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
         ),
         UpdateManifestAsset(
+          name: 'windows-x64.exe',
+          url: 'https://example.invalid/windows.exe',
+          platform: 'windows',
+          architecture: 'x64',
+          format: 'exe',
+          strategy: 'launch-installer',
+          size: 1,
+          sha256:
+              '1111111111111111111111111111111111111111111111111111111111111111',
+        ),
+        UpdateManifestAsset(
+          name: 'windows-x64.zip',
+          url: 'https://example.invalid/windows.zip',
+          platform: 'windows',
+          architecture: 'x64',
+          format: 'zip',
+          strategy: 'self-replace',
+          size: 1,
+          sha256:
+              '2222222222222222222222222222222222222222222222222222222222222222',
+        ),
+        UpdateManifestAsset(
           name: 'android-universal.apk',
           url: 'https://example.invalid/apk',
           platform: 'android',
@@ -169,8 +191,18 @@ void main() {
         manifest,
         platform: 'windows',
         architecture: 'x64',
-      ),
-      isNull,
+        preferredWindowsFormat: 'exe',
+      )?.format,
+      'exe',
+    );
+    expect(
+      selectUpdateAsset(
+        manifest,
+        platform: 'windows',
+        architecture: 'x64',
+        preferredWindowsFormat: 'zip',
+      )?.format,
+      'zip',
     );
     expect(
       selectUpdateAsset(
