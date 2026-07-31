@@ -414,6 +414,7 @@ class AboutDialogWidget extends StatefulWidget {
     AppVersionLoader? versionLoader,
     GitVersionLoader? gitVersionLoader,
     ApplicationExitRequester? applicationExitRequester,
+    Future<void> Function(Duration duration)? retryWaiter,
     List<Duration> retryDelays = const [
       Duration(seconds: 3),
       Duration(seconds: 15),
@@ -429,7 +430,9 @@ class AboutDialogWidget extends StatefulWidget {
         break;
       } catch (_) {
         if (attempt >= retryDelays.length) return;
-        await Future<void>.delayed(retryDelays[attempt]);
+        await (retryWaiter != null
+            ? retryWaiter(retryDelays[attempt])
+            : Future<void>.delayed(retryDelays[attempt]));
         if (!context.mounted) return;
       }
     }

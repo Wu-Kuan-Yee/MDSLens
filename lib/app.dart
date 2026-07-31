@@ -31,6 +31,7 @@ class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
   int _themeEventRevision = 0;
   Timer? _themeCalibrationTimer;
   StreamSubscription<bool>? _themeSubscription;
+  final Map<Timer, Completer<void>> _updateRetryWaiters = {};
 
   @override
   void initState() {
@@ -64,8 +65,25 @@ class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
     // Update discovery is an independent startup task. It must not wait for
     // permission prompts, automatic login, SSH fallback, waveform loading, or
     // the deliberate absence of a login attempt.
-    await (widget.automaticUpdateChecker ??
-        AboutDialogWidget.checkAutomatically)(context);
+    if (widget.automaticUpdateChecker != null) {
+      await widget.automaticUpdateChecker!(context);
+    } else {
+      await AboutDialogWidget.checkAutomatically(
+        context,
+        retryWaiter: _waitForUpdateRetry,
+      );
+    }
+  }
+
+  Future<void> _waitForUpdateRetry(Duration duration) {
+    final completer = Completer<void>();
+    late final Timer timer;
+    timer = Timer(duration, () {
+      _updateRetryWaiters.remove(timer);
+      if (!completer.isCompleted) completer.complete();
+    });
+    _updateRetryWaiters[timer] = completer;
+    return completer.future;
   }
 
   void _scheduleThemeCalibration() {
@@ -134,6 +152,11 @@ class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
     HardwareKeyboard.instance.removeHandler(_onAppKey);
     _themeCalibrationTimer?.cancel();
     _themeSubscription?.cancel();
+    for (final entry in _updateRetryWaiters.entries) {
+      entry.key.cancel();
+      if (!entry.value.isCompleted) entry.value.complete();
+    }
+    _updateRetryWaiters.clear();
     StylusModeChannel.dispose();
     super.dispose();
   }
