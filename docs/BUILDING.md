@@ -241,8 +241,12 @@ python build_app.py -p android -f apk aab apks
 ```
 
 CI uses corresponding encrypted GitHub secrets; private keys are not stored in
-the repository. Keep the same release keystore for the lifetime of the Android
-application. Android will reject an in-place update signed by a different key.
+the repository. Tagged releases fail instead of falling back to a temporary
+test key when any signing secret is absent. The public certificate fingerprint
+in `android/release-signing-certificate.sha256` is checked against every
+generated APK and every APK inside the APKS archive. Keep the same release
+keystore for the lifetime of the Android application. Android will reject an
+in-place update signed by a different key.
 
 ## Release versions and update metadata
 

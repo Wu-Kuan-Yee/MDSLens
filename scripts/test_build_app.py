@@ -218,6 +218,61 @@ class BuildAppTests(unittest.TestCase):
             self.assertIn(f"--bundle={bundle}", command)
             self.assertIn(f"--output={dist / 'mdslens-android.apks'}", command)
 
+    def test_android_apks_use_password_files_for_release_signing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = root / "build/app/outputs/bundle/release/app-release.aab"
+            bundle.parent.mkdir(parents=True)
+            bundle.write_bytes(b"bundle")
+            tool = root / "bundletool.jar"
+            tool.write_bytes(b"jar")
+            keystore = root / "release.jks"
+            keystore.write_bytes(b"keystore")
+            dist = root / "dist"
+            dist.mkdir()
+            observed: dict[str, object] = {}
+
+            def inspect_command(*command: str, **_: object) -> None:
+                observed["command"] = command
+                store_argument = next(
+                    value for value in command if value.startswith("--ks-pass=")
+                )
+                key_argument = next(
+                    value for value in command if value.startswith("--key-pass=")
+                )
+                store_file = Path(store_argument.removeprefix("--ks-pass=file:"))
+                key_file = Path(key_argument.removeprefix("--key-pass=file:"))
+                observed["store_password"] = store_file.read_text()
+                observed["key_password"] = key_file.read_text()
+                observed["store_mode"] = store_file.stat().st_mode & 0o777
+                observed["key_mode"] = key_file.stat().st_mode & 0o777
+
+            with mock.patch.object(build_app, "ROOT", root):
+                with mock.patch.object(build_app, "DIST", dist):
+                    with mock.patch.dict(
+                        build_app.os.environ,
+                        {
+                            "BUNDLETOOL_JAR": str(tool),
+                            "MDSLENS_ANDROID_KEYSTORE": str(keystore),
+                            "MDSLENS_ANDROID_KEY_ALIAS": "mdslens",
+                            "MDSLENS_ANDROID_STORE_PASSWORD": "store-secret",
+                            "MDSLENS_ANDROID_KEY_PASSWORD": "key-secret",
+                        },
+                        clear=True,
+                    ):
+                        with mock.patch.object(
+                            build_app, "run", side_effect=inspect_command
+                        ):
+                            build_app.package_android({"apks"}, no_build=True)
+
+            command = observed["command"]
+            self.assertIn(f"--ks={keystore}", command)
+            self.assertIn("--ks-key-alias=mdslens", command)
+            self.assertEqual(observed["store_password"], "store-secret")
+            self.assertEqual(observed["key_password"], "key-secret")
+            self.assertEqual(observed["store_mode"], 0o600)
+            self.assertEqual(observed["key_mode"], 0o600)
+
     def test_linux_portable_keeps_base_and_display_abis_on_target_system(
         self,
     ) -> None:

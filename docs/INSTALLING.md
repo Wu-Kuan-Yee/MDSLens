@@ -74,12 +74,17 @@ requires.
 
 The installation identity must also match the installed copy. In particular,
 Android updates require every release to use the same release keystore.
-Repository builds made without the Android signing secrets use a local test
-identity and may need the old test build to be uninstalled first. That normally
-removes its private application data. Current public macOS artifacts remain
-ad-hoc signed and unnotarized. The updater therefore verifies the release hash,
-bundle identifier, and ad-hoc code-signature integrity itself; it does not
-claim that the package has a trusted Developer ID or Apple notarization ticket.
+Older repository releases made before the persistent Android release key was
+configured used independent temporary test identities. Those builds cannot
+upgrade to one another or to the stable signing line in place. Export any
+configuration you need, uninstall the old test-signed copy once, and install a
+current release APK. That uninstall normally removes the application's private
+data. Releases on the stable signing line can then update in place.
+
+Current public macOS artifacts remain ad-hoc signed and unnotarized. The updater
+therefore verifies the release hash, bundle identifier, and ad-hoc
+code-signature integrity itself; it does not claim that the package has a
+trusted Developer ID or Apple notarization ticket.
 
 Flatpak and Snap installations deliberately do not show the direct-install
 action. Those package systems own their installed files and should deliver the

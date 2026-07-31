@@ -1353,13 +1353,40 @@ def package_android(formats: set[str], no_build: bool) -> None:
             keystore = os.environ.get("MDSLENS_ANDROID_KEYSTORE", "").strip()
             alias = os.environ.get("MDSLENS_ANDROID_KEY_ALIAS", "").strip()
             if keystore and alias:
-                command.extend([
-                    f"--ks={keystore}",
-                    f"--ks-key-alias={alias}",
-                    "--ks-pass=env:MDSLENS_ANDROID_STORE_PASSWORD",
-                    "--key-pass=env:MDSLENS_ANDROID_KEY_PASSWORD",
-                ])
-            run(*command)
+                store_password = os.environ.get(
+                    "MDSLENS_ANDROID_STORE_PASSWORD", ""
+                )
+                key_password = os.environ.get(
+                    "MDSLENS_ANDROID_KEY_PASSWORD", ""
+                )
+                if not store_password or not key_password:
+                    fail(
+                        "Android keystore and alias require both signing "
+                        "password variables"
+                    )
+                with tempfile.TemporaryDirectory(
+                    prefix="mdslens-bundletool-signing-"
+                ) as temporary:
+                    password_dir = Path(temporary)
+                    store_password_file = password_dir / "store-password"
+                    key_password_file = password_dir / "key-password"
+                    store_password_file.write_text(
+                        store_password, encoding="utf-8"
+                    )
+                    key_password_file.write_text(
+                        key_password, encoding="utf-8"
+                    )
+                    store_password_file.chmod(0o600)
+                    key_password_file.chmod(0o600)
+                    command.extend([
+                        f"--ks={keystore}",
+                        f"--ks-key-alias={alias}",
+                        f"--ks-pass=file:{store_password_file}",
+                        f"--key-pass=file:{key_password_file}",
+                    ])
+                    run(*command)
+            else:
+                run(*command)
 
 
 def remove_apple_signing_material(bundle: Path) -> None:

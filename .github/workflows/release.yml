@@ -299,18 +299,52 @@ jobs:
           curl -fL https://github.com/google/bundletool/releases/download/1.18.3/bundletool-all-1.18.3.jar \
             -o "$RUNNER_TEMP/bundletool-all-1.18.3.jar"
           echo "BUNDLETOOL_JAR=$RUNNER_TEMP/bundletool-all-1.18.3.jar" >> "$GITHUB_ENV"
-      - name: Install Android release key when configured
+      - name: Install the required Android release key
         shell: bash
         run: |
-          if [[ -n "$ANDROID_KEYSTORE_BASE64" ]]; then
-            keystore="$RUNNER_TEMP/mdslens-release.jks"
-            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
-            echo "MDSLENS_ANDROID_KEYSTORE=$keystore" >> "$GITHUB_ENV"
-          else
-            echo "::warning::Android signing secrets are absent; APKs will use the local test identity."
+          if [[ -z "$ANDROID_KEYSTORE_BASE64" ||
+                -z "$MDSLENS_ANDROID_STORE_PASSWORD" ||
+                -z "$MDSLENS_ANDROID_KEY_ALIAS" ||
+                -z "$MDSLENS_ANDROID_KEY_PASSWORD" ]]; then
+            echo "::error::Android release signing secrets are required for tag builds."
+            exit 1
           fi
+          keystore="$RUNNER_TEMP/mdslens-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          chmod 600 "$keystore"
+          echo "MDSLENS_ANDROID_KEYSTORE=$keystore" >> "$GITHUB_ENV"
       - name: Build APKs and Android App Bundle
         run: python3 build_app.py -p android -f apk aab apks
+      - name: Verify the stable Android signing identity
+        shell: bash
+        run: |
+          expected="$(
+            tr -d '[:space:]' < android/release-signing-certificate.sha256 |
+              tr '[:upper:]' '[:lower:]'
+          )"
+          apksigner="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          verify_apk() {
+            local apk="$1"
+            "$apksigner" verify --verbose "$apk"
+            local actual
+            actual="$(
+              "$apksigner" verify --print-certs "$apk" |
+                sed -n 's/^Signer #1 certificate SHA-256 digest: //p' |
+                tr '[:upper:]' '[:lower:]'
+            )"
+            if [[ "$actual" != "$expected" ]]; then
+              echo "::error file=$apk::Unexpected Android signing certificate: $actual"
+              exit 1
+            fi
+          }
+          for apk in build/dist/mdslens-android-*.apk; do
+            verify_apk "$apk"
+          done
+          split_dir="$RUNNER_TEMP/mdslens-release-apks"
+          unzip -q build/dist/mdslens-android.apks -d "$split_dir"
+          while IFS= read -r -d '' apk; do
+            verify_apk "$apk"
+          done < <(find "$split_dir" -type f -name '*.apk' -print0)
       - uses: actions/upload-artifact@v4
         with:
           name: mdslens-android
