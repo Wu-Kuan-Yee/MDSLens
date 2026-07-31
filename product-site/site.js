@@ -76,6 +76,17 @@
   let drag = null;
   let drawFrame = 0;
 
+  // The demo is a self-contained interaction surface. In particular, mobile
+  // browsers must not turn a vertical waveform gesture into page scrolling.
+  // Keep this listener in addition to CSS `touch-action: none` for older
+  // WebKit versions and embedded browsers whose Pointer Events support is
+  // incomplete.
+  document.querySelector(".waveform-demo").addEventListener(
+    "touchmove",
+    (event) => event.preventDefault(),
+    { passive: false },
+  );
+
   function clamp(value, minimum, maximum) {
     return Math.max(minimum, Math.min(maximum, value));
   }
@@ -286,8 +297,8 @@
   canvas.addEventListener(
     "wheel",
     (event) => {
-      if (state.mode !== "zoom") return;
       event.preventDefault();
+      if (state.mode !== "zoom") return;
       const bounds = canvas.getBoundingClientRect();
       const anchor = clamp(
         (event.clientX - bounds.left) / Math.max(1, bounds.width),

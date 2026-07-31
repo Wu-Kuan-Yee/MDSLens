@@ -49,7 +49,8 @@ def main() -> int:
             "@media (max-width: 720px)",
             "@media (prefers-reduced-motion: reduce)",
             "--safe-area-top: env(safe-area-inset-top, 0px)",
-            "touch-action: pan-y pinch-zoom",
+            "overscroll-behavior: contain",
+            "touch-action: none",
         ),
     )
     require_text(
@@ -60,6 +61,8 @@ def main() -> int:
             "ResizeObserver",
             "setPointerCapture",
             'event.pointerType !== "touch"',
+            'document.querySelector(".waveform-demo").addEventListener(',
+            '"touchmove"',
         ),
     )
 
