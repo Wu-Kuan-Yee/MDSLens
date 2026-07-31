@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import plistlib
 import shutil
@@ -19,6 +20,42 @@ from scripts import build_msixbundle, verify_icons, verify_linux_portable  # noq
 
 
 class BuildAppTests(unittest.TestCase):
+    def test_linux_portable_stage_contains_update_channel_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = root / "bundle"
+            bundle.mkdir()
+            (bundle / "mdslens").write_bytes(b"ELF")
+            portable = root / "mdslens-linux-x64"
+            with mock.patch.object(build_app, "is_elf", return_value=True):
+                with mock.patch.object(
+                    build_app, "copy_linux_portable_dependencies"
+                ):
+                    with mock.patch.object(build_app, "patch_linux_runtime_paths"):
+                        with mock.patch.object(build_app, "ROOT", root):
+                            (root / "packaging/linux").mkdir(parents=True)
+                            (root / "packaging/linux/com.mdslens.app.desktop").touch()
+                            (
+                                root
+                                / "packaging/linux/com.mdslens.configuration.xml"
+                            ).touch()
+                            (root / "linux/runner").mkdir(parents=True)
+                            (root / "linux/runner/app_icon.png").touch()
+                            build_app.stage_linux_portable(
+                                bundle,
+                                portable,
+                                "1.2.3",
+                                "x64",
+                            )
+            marker = json.loads(
+                (portable / ".mdslens-portable.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(marker["product"], "com.mdslens.app")
+            self.assertEqual(marker["version"], "1.2.3")
+            self.assertEqual(marker["architecture"], "x64")
+
     def test_release_version_prefers_ci_value_then_exact_tag(self) -> None:
         with mock.patch.dict(
             build_app.os.environ, {"MDSLENS_VERSION": "v1.2.3"}, clear=True

@@ -574,9 +574,10 @@ void main() {
         resolvedExecutable: '/home/user/Downloads/mdslens/mdslens',
         environment: const {},
         linuxOsRelease: 'ID=fedora',
+        linuxPortableRootExists: true,
       ),
-      isFalse,
-      reason: 'portable archives require a different replacement strategy',
+      isTrue,
+      reason: 'marked portable archives support directory replacement',
     );
     expect(
       nativeDirectUpdateSupported(
@@ -632,6 +633,134 @@ void main() {
       ),
       isFalse,
     );
+  });
+
+  test('marked Linux portable bundles prepare an in-place directory update',
+      () async {
+    final root = await Directory.systemTemp.createTemp(
+      'mdslens-portable-update-test-',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    final current = Directory('${root.path}/MDSLens');
+    await current.create();
+    await File('${current.path}/mdslens').writeAsString('old');
+    await File('${current.path}/.mdslens-portable.json').writeAsString(
+      jsonEncode({
+        'schema_version': 1,
+        'product': 'com.mdslens.app',
+        'version': '0.2.6',
+        'architecture': 'x64',
+        'executable': 'mdslens',
+      }),
+    );
+    expect(
+      linuxPortableRootFromExecutable('${current.path}/mdslens'),
+      current.path,
+    );
+
+    final payload = Directory('${root.path}/payload/mdslens-linux-x64');
+    await payload.create(recursive: true);
+    await File('${payload.path}/mdslens').writeAsString('new');
+    await File('${payload.path}/.mdslens-portable.json').writeAsString(
+      jsonEncode({
+        'schema_version': 1,
+        'product': 'com.mdslens.app',
+        'version': '0.2.7',
+        'architecture': 'x64',
+        'executable': 'mdslens',
+      }),
+    );
+    final archive = File('${root.path}/mdslens-linux-x64.tar.gz');
+    final packed = await Process.run('/usr/bin/tar', [
+      '-czf',
+      archive.path,
+      '-C',
+      '${root.path}/payload',
+      'mdslens-linux-x64',
+    ]);
+    expect(packed.exitCode, 0);
+    final launches = <(String, List<String>)>[];
+    final update = DownloadedUpdate(
+      asset: UpdateManifestAsset(
+        name: 'mdslens-linux-x64.tar.gz',
+        url: 'https://example.invalid/mdslens-linux-x64.tar.gz',
+        platform: 'linux',
+        architecture: 'x64',
+        format: 'tar.gz',
+        strategy: 'self-replace',
+        size: await archive.length(),
+        sha256: sha256.convert(await archive.readAsBytes()).toString(),
+      ),
+      path: archive.path,
+    );
+
+    final result = await prepareLinuxPortableUpdate(
+      update,
+      portableRoot: current.path,
+      currentPid: 12345,
+      parentWritableOverride: true,
+      commandLauncher: (executable, arguments) async {
+        launches.add((executable, arguments));
+      },
+      commandRunner: Process.run,
+    );
+
+    expect(result?.status, UpdateLaunchStatus.installed);
+    expect(result?.closeApplication, isTrue);
+    expect(launches.single.$1, '/bin/sh');
+    final stagedPath = launches.single.$2.lastWhere(
+      (argument) => argument.contains('.mdslens-update-'),
+    );
+    expect(await File('$stagedPath/mdslens').readAsString(), 'new');
+  });
+
+  test('Linux portable updates reject archive path traversal', () async {
+    final root = await Directory.systemTemp.createTemp(
+      'mdslens-portable-traversal-test-',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    final current = Directory('${root.path}/MDSLens');
+    await current.create();
+    await File('${current.path}/mdslens').writeAsString('old');
+    await File('${current.path}/.mdslens-portable.json').writeAsString(
+      jsonEncode({
+        'schema_version': 1,
+        'product': 'com.mdslens.app',
+        'architecture': 'x64',
+        'executable': 'mdslens',
+      }),
+    );
+    final archive = File('${root.path}/mdslens-linux-x64.tar.gz');
+    await archive.writeAsString('not used');
+    final update = DownloadedUpdate(
+      asset: UpdateManifestAsset(
+        name: 'mdslens-linux-x64.tar.gz',
+        url: 'https://example.invalid/mdslens-linux-x64.tar.gz',
+        platform: 'linux',
+        architecture: 'x64',
+        format: 'tar.gz',
+        strategy: 'self-replace',
+        size: 8,
+        sha256: List.filled(64, '0').join(),
+      ),
+      path: archive.path,
+    );
+
+    final result = await prepareLinuxPortableUpdate(
+      update,
+      portableRoot: current.path,
+      currentPid: 12345,
+      commandLauncher: (executable, arguments) async {},
+      commandRunner: (executable, arguments) async {
+        if (arguments.contains('-tzf')) {
+          return ProcessResult(0, 0, '../outside\n', '');
+        }
+        return ProcessResult(0, 1, '', 'unexpected command');
+      },
+    );
+
+    expect(result, isNull);
+    expect(File('${root.path}/outside').existsSync(), isFalse);
   });
 
   test('Arch packages install through PolicyKit and pacman', () async {

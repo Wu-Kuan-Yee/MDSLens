@@ -92,6 +92,17 @@ void main() {
               'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
         ),
         UpdateManifestAsset(
+          name: 'linux-x64.tar.gz',
+          url: 'https://example.invalid/portable.tar.gz',
+          platform: 'linux',
+          architecture: 'x64',
+          format: 'tar.gz',
+          strategy: 'self-replace',
+          size: 1,
+          sha256:
+              'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+        ),
+        UpdateManifestAsset(
           name: 'android-universal.apk',
           url: 'https://example.invalid/apk',
           platform: 'android',
@@ -135,6 +146,15 @@ void main() {
         preferredLinuxFormat: 'deb',
       )?.format,
       'deb',
+    );
+    expect(
+      selectUpdateAsset(
+        manifest,
+        platform: 'linux',
+        architecture: 'x86_64',
+        preferredLinuxFormat: 'tar.gz',
+      )?.format,
+      'tar.gz',
     );
     expect(
       selectUpdateAsset(

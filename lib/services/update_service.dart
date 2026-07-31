@@ -312,9 +312,11 @@ UpdateManifestAsset? selectUpdateAsset(
       'android' => asset.architecture == 'universal' ? 0 : architectureRank,
       'linux' => asset.format == preferredLinuxFormat
           ? 0
-          : asset.format == 'AppImage'
-              ? 1
-              : 5,
+          : preferredLinuxFormat == 'tar.gz' && asset.format == 'tar.gz'
+              ? 0
+              : asset.format == 'AppImage'
+                  ? 1
+                  : 5,
       _ => 0,
     };
     return architectureRank * 10 + formatRank;

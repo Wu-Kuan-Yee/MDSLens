@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -120,9 +121,18 @@ def needed_libraries(binary: Path) -> set[str]:
 def verify(root: Path, maximum_glibc: tuple[int, int], launch: bool) -> None:
     executable = root / "mdslens"
     library_dir = root / "lib"
-    for required in (executable, library_dir):
+    marker = root / ".mdslens-portable.json"
+    for required in (executable, library_dir, marker):
         if not required.exists():
             raise RuntimeError(f"Portable bundle is missing {required.relative_to(root)}")
+    metadata = json.loads(marker.read_text(encoding="utf-8"))
+    if (
+        metadata.get("schema_version") != 1
+        or metadata.get("product") != "com.mdslens.app"
+        or metadata.get("architecture") not in {"x64", "arm64"}
+        or metadata.get("executable") != "mdslens"
+    ):
+        raise RuntimeError("Portable update channel metadata is invalid")
     if not is_elf(executable):
         raise RuntimeError("Portable mdslens is not an ELF executable")
     if not os.access(executable, os.X_OK):

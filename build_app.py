@@ -1034,8 +1034,25 @@ def patch_linux_runtime_paths(root: Path) -> None:
         run(patchelf, "--set-rpath", runpath, str(binary))
 
 
-def stage_linux_portable(bundle: Path, portable: Path) -> None:
+def stage_linux_portable(
+    bundle: Path, portable: Path, version: str, architecture: str
+) -> None:
     replace_tree(bundle, portable)
+    (portable / ".mdslens-portable.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "product": "com.mdslens.app",
+                "version": version,
+                "architecture": architecture,
+                "executable": "mdslens",
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     executable = portable / "mdslens"
     if not is_elf(executable):
         fail(f"Linux application executable is not ELF: {executable}")
@@ -1197,7 +1214,7 @@ def package_linux(formats: set[str], no_build: bool, arch: str, version: str) ->
 
     with tempfile.TemporaryDirectory(prefix="mdslens-linux-") as temporary:
         portable = Path(temporary) / base
-        stage_linux_portable(bundle, portable)
+        stage_linux_portable(bundle, portable, version, arch)
         if selected(formats, "zip"):
             make_zip(portable, DIST / f"{base}.zip", base)
         if selected(formats, "7z"):

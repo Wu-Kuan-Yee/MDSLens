@@ -66,6 +66,15 @@ literally every Linux system: older glibc, non-glibc systems (such as
 Alpine/musl), obsolete kernels and missing/incompatible desktop or graphics
 runtimes require a different runtime baseline.
 
+Every ZIP, 7z, and tar portable archive contains the same
+`.mdslens-portable.json` channel marker. Once extracted, these variants share
+one verified in-place updater: it downloads the release `tar.gz`, stages the
+complete application beside the running directory, swaps directories only
+after MDSLens exits, restarts from the unchanged path, and restores the backup
+if the replacement cannot start. AppImage continues to use its single-file
+atomic updater. Read-only portable locations request PolicyKit authorization;
+Flatpak and Snap remain managed by their own package systems.
+
 ## HarmonyOS NEXT
 
 HarmonyOS NEXT is not an official upstream Flutter deployment target. This repository has no ArkUI/ArkTS project, DevEco Studio project, OpenHarmony Flutter fork integration, HAP signing configuration, or Rust target matching HarmonyOS, and therefore cannot currently produce a real `.hap`/`.app`.

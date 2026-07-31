@@ -77,6 +77,13 @@ For both `x64` and `arm64`:
 - `mdslens-linux-<arch>.tar.xz`
 - `mdslens-linux-<arch>.tar.bz2`
 
+All five archive formats unpack to the same marked portable directory.
+Automatic updates use the corresponding `tar.gz` release asset as the
+canonical payload regardless of the archive format originally downloaded.
+The updater verifies the release manifest and SHA-256, rejects unsafe archive
+paths and links, stages the full directory on the destination filesystem,
+keeps a rollback copy during restart, and preserves the original path.
+
 Linux x86-32, LoongArch64 and RISC-V are not upstream Flutter Linux desktop
 targets. A differently named archive cannot add an absent Flutter engine.
 

@@ -20,6 +20,7 @@ class UpdateManifestTests(unittest.TestCase):
                 "mdslens-macos-universal-unsigned.dmg": b"macos",
                 "mdslens-linux-arm64.AppImage": b"linux",
                 "mdslens-linux-arm64.pkg.tar.zst": b"arch-linux",
+                "mdslens-linux-arm64.tar.gz": b"portable-linux",
                 "mdslens-android-universal.apk": b"android",
                 "mdslens-ios-arm64-unsigned.ipa": b"ios",
                 "mdslens-windows-x64.zip": b"ignored",
@@ -52,6 +53,10 @@ class UpdateManifestTests(unittest.TestCase):
         self.assertEqual(
             assets["mdslens-linux-arm64.pkg.tar.zst"]["format"],
             "pkg.tar.zst",
+        )
+        self.assertEqual(
+            assets["mdslens-linux-arm64.tar.gz"]["strategy"],
+            "self-replace",
         )
         self.assertEqual(
             assets["mdslens-android-universal.apk"]["platform"],

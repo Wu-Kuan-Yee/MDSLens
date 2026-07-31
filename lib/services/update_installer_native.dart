@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -23,6 +24,8 @@ bool get directUpdateSupported => nativeDirectUpdateSupported(
       environment: Platform.environment,
       flatpakInfoExists: File('/.flatpak-info').existsSync(),
       linuxOsRelease: _linuxOsReleaseSync(),
+      linuxPortableRootExists:
+          linuxPortableRootFromExecutable(Platform.resolvedExecutable) != null,
     );
 
 bool nativeDirectUpdateSupported({
@@ -31,6 +34,7 @@ bool nativeDirectUpdateSupported({
   required Map<String, String> environment,
   bool flatpakInfoExists = false,
   String linuxOsRelease = '',
+  bool linuxPortableRootExists = false,
 }) {
   switch (platform.toLowerCase()) {
     case 'android':
@@ -52,10 +56,11 @@ bool nativeDirectUpdateSupported({
         return false;
       }
       if ((environment['APPIMAGE'] ?? '').trim().isNotEmpty) return true;
+      if (linuxPortableRootExists) return true;
       final executable = resolvedExecutable.replaceAll(r'\', '/');
-      // Native DEB/RPM packages install the executable below /usr. A portable
-      // archive has no atomic bundle updater yet, so it must use View Details
-      // rather than pretending an AppImage or system package can replace it.
+      // Native packages install below /usr. Marked portable directories and
+      // AppImages were handled above; unmarked extracted directories must not
+      // be overwritten because their ownership boundary is ambiguous.
       final systemInstall = executable == '/usr/bin/mdslens' ||
           executable.startsWith('/usr/lib/mdslens/');
       if (!systemInstall) return false;
@@ -318,6 +323,151 @@ shift 3
 nohup /bin/sh -c "$apply_script" mdslens-updater "$@" >/dev/null 2>&1 &
 ''';
 
+const _linuxPortableApplyUpdateScript = r'''
+set -u
+parent_pid="$1"
+current_root="$2"
+staged_root="$3"
+backup_root="$4"
+downloaded_archive="$5"
+work_dir="$6"
+
+attempt=0
+while kill -0 "$parent_pid" 2>/dev/null; do
+  if [ "$attempt" -ge 3000 ]; then
+    /bin/rm -rf "$staged_root" "$work_dir"
+    exit 1
+  fi
+  attempt=$((attempt + 1))
+  sleep 0.1
+done
+
+if /bin/mv "$current_root" "$backup_root" &&
+   /bin/mv "$staged_root" "$current_root"; then
+  "$current_root/mdslens" >/dev/null 2>&1 &
+  new_pid=$!
+  attempt=0
+  while [ "$attempt" -lt 30 ]; do
+    if ! kill -0 "$new_pid" 2>/dev/null; then
+      /bin/rm -rf "$current_root"
+      /bin/mv "$backup_root" "$current_root"
+      "$current_root/mdslens" >/dev/null 2>&1 &
+      /bin/rm -rf "$work_dir"
+      exit 1
+    fi
+    attempt=$((attempt + 1))
+    sleep 0.1
+  done
+  /bin/rm -rf "$backup_root"
+  /bin/rm -f "$downloaded_archive"
+  /bin/rm -rf "$work_dir"
+  exit 0
+fi
+
+if [ ! -e "$current_root" ] && [ -e "$backup_root" ]; then
+  /bin/mv "$backup_root" "$current_root"
+fi
+/bin/rm -rf "$staged_root"
+if [ -x "$current_root/mdslens" ]; then
+  "$current_root/mdslens" >/dev/null 2>&1 &
+fi
+/bin/rm -rf "$work_dir"
+exit 1
+''';
+
+const _linuxPortableAuthorizeScript = r'''
+set -eu
+candidate="$1"
+staged_root="$2"
+apply_script="$3"
+shift 3
+/bin/mkdir -p "$staged_root"
+/bin/cp -a "$candidate/." "$staged_root/"
+/bin/chmod +x "$staged_root/mdslens"
+nohup /bin/sh -c "$apply_script" mdslens-portable-updater "$@" \
+  >/dev/null 2>&1 &
+''';
+
+const _linuxPortablePrivilegedApplyScript = r'''
+set -u
+parent_pid="$1"
+current_root="$2"
+staged_root="$3"
+backup_root="$4"
+downloaded_archive="$5"
+work_dir="$6"
+ready_file="$7"
+healthy_file="$8"
+
+attempt=0
+while kill -0 "$parent_pid" 2>/dev/null; do
+  if [ "$attempt" -ge 3000 ]; then
+    /bin/rm -rf "$staged_root" "$work_dir"
+    exit 1
+  fi
+  attempt=$((attempt + 1))
+  sleep 0.1
+done
+
+if /bin/mv "$current_root" "$backup_root" &&
+   /bin/mv "$staged_root" "$current_root"; then
+  : > "$ready_file"
+  attempt=0
+  while [ "$attempt" -lt 300 ]; do
+    if [ -e "$healthy_file" ]; then
+      /bin/rm -rf "$backup_root"
+      /bin/rm -f "$downloaded_archive"
+      /bin/rm -rf "$work_dir"
+      exit 0
+    fi
+    attempt=$((attempt + 1))
+    sleep 0.1
+  done
+  /bin/rm -rf "$current_root"
+  /bin/mv "$backup_root" "$current_root"
+  /bin/rm -rf "$work_dir"
+  exit 1
+fi
+
+if [ ! -e "$current_root" ] && [ -e "$backup_root" ]; then
+  /bin/mv "$backup_root" "$current_root"
+fi
+/bin/rm -rf "$staged_root" "$work_dir"
+exit 1
+''';
+
+const _linuxPortableUserRelaunchScript = r'''
+set -u
+current_root="$1"
+ready_file="$2"
+healthy_file="$3"
+cancel_file="$4"
+
+attempt=0
+while [ "$attempt" -lt 300 ]; do
+  if [ -e "$cancel_file" ]; then
+    exit 1
+  fi
+  if [ -e "$ready_file" ]; then
+    "$current_root/mdslens" >/dev/null 2>&1 &
+    new_pid=$!
+    health_attempt=0
+    while [ "$health_attempt" -lt 30 ]; do
+      if ! kill -0 "$new_pid" 2>/dev/null; then
+        exit 1
+      fi
+      health_attempt=$((health_attempt + 1))
+      sleep 0.1
+    done
+    : > "$healthy_file"
+    exit 0
+  fi
+  attempt=$((attempt + 1))
+  sleep 0.1
+done
+exit 1
+''';
+
 const _windowsApplyUpdateScript = r'''
 param(
   [int]$ParentPid,
@@ -381,6 +531,7 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
   CommandRunner? commandRunner,
   String? currentExecutableOverride,
   String? currentAppImageOverride,
+  String? currentPortableRootOverride,
   int? currentPidOverride,
   String? linuxPackageManagerPathOverride,
   String? linuxPkexecPathOverride,
@@ -533,6 +684,27 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
       );
       if (elevated != null) return elevated;
     }
+    final portableRoot = currentPortableRootOverride ??
+        linuxPortableRootFromExecutable(
+          currentExecutableOverride ?? Platform.resolvedExecutable,
+        );
+    if (update.asset.format == 'tar.gz' && portableRoot != null) {
+      final prepared = await prepareLinuxPortableUpdate(
+        update,
+        portableRoot: portableRoot,
+        currentPid: currentPidOverride ?? pid,
+        commandLauncher: launch,
+        commandRunner: run,
+        pkexecPathOverride: linuxPkexecPathOverride,
+      );
+      if (prepared != null) return prepared;
+      return UpdateInstallResult(
+        status: UpdateLaunchStatus.unsupported,
+        message:
+            'The verified portable update could not be prepared safely. The current application was left unchanged.',
+        downloaded: update,
+      );
+    }
     if (const {'rpm', 'deb', 'pkg.tar.zst', 'pkg.tar.xz'}
         .contains(update.asset.format)) {
       final installed = await prepareLinuxSystemPackageUpdate(
@@ -673,6 +845,231 @@ String windowsInstallDirectoryFromExecutable(String executablePath) {
   ].reduce((left, right) => left > right ? left : right);
   if (separator <= 0) return Directory.current.path;
   return executablePath.substring(0, separator);
+}
+
+String? linuxPortableRootFromExecutable(String executablePath) {
+  if (executablePath.trim().isEmpty) return null;
+  Directory directory = File(executablePath).parent;
+  for (var depth = 0; depth < 6; depth++) {
+    final marker = File(
+      '${directory.path}${Platform.pathSeparator}.mdslens-portable.json',
+    );
+    try {
+      if (marker.existsSync()) {
+        final metadata = jsonDecode(marker.readAsStringSync());
+        if (metadata is Map &&
+            metadata['product'] == 'com.mdslens.app' &&
+            metadata['schema_version'] == 1 &&
+            File(
+              '${directory.path}${Platform.pathSeparator}mdslens',
+            ).existsSync()) {
+          return directory.path;
+        }
+        return null;
+      }
+    } catch (_) {
+      return null;
+    }
+    final parent = directory.parent;
+    if (parent.path == directory.path) break;
+    directory = parent;
+  }
+  return null;
+}
+
+Future<UpdateInstallResult?> prepareLinuxPortableUpdate(
+  DownloadedUpdate update, {
+  required String portableRoot,
+  required int currentPid,
+  required DetachedCommandLauncher commandLauncher,
+  required CommandRunner commandRunner,
+  String? pkexecPathOverride,
+  bool? parentWritableOverride,
+}) async {
+  if (update.asset.format != 'tar.gz') return null;
+  final currentRoot = Directory(portableRoot);
+  if (!await currentRoot.exists()) return null;
+  final marker = File(
+    '${currentRoot.path}${Platform.pathSeparator}.mdslens-portable.json',
+  );
+  if (!await _validLinuxPortableMarker(marker)) return null;
+  final tar = _firstExistingExecutable(const ['/bin/tar', '/usr/bin/tar']);
+  if (tar == null) return null;
+
+  final expectedTopLevel = update.asset.name
+      .substring(0, update.asset.name.length - '.tar.gz'.length);
+  if (!RegExp(r'^mdslens-linux-(x64|arm64)$').hasMatch(expectedTopLevel)) {
+    return null;
+  }
+  final listing = await commandRunner(tar, ['-tzf', update.path]);
+  if (listing.exitCode != 0) return null;
+  final entries = listing.stdout.toString().split('\n').where(
+        (entry) => entry.isNotEmpty,
+      );
+  for (final entry in entries) {
+    if (entry.startsWith('/') ||
+        entry.contains(r'\') ||
+        entry.split('/').contains('..') ||
+        (entry != expectedTopLevel &&
+            !entry.startsWith('$expectedTopLevel/'))) {
+      return null;
+    }
+  }
+  final detailed = await commandRunner(tar, ['-tvzf', update.path]);
+  if (detailed.exitCode != 0) return null;
+  for (final line in detailed.stdout
+      .toString()
+      .split('\n')
+      .where((line) => line.isNotEmpty)) {
+    if (line.startsWith('l') || line.startsWith('h')) return null;
+  }
+
+  final nonce = '$currentPid-${DateTime.now().microsecondsSinceEpoch}';
+  final stagedRoot = Directory('${currentRoot.path}.mdslens-update-$nonce');
+  final backupRoot = Directory('${currentRoot.path}.mdslens-backup-$nonce');
+  final work = await Directory.systemTemp.createTemp(
+    'mdslens-linux-portable-update-',
+  );
+  final extracted = Directory(
+    '${work.path}${Platform.pathSeparator}extracted',
+  );
+  final candidate = Directory(
+    '${extracted.path}${Platform.pathSeparator}$expectedTopLevel',
+  );
+  var scheduled = false;
+  try {
+    await extracted.create();
+    final unpack = await commandRunner(tar, [
+      '-xzf',
+      update.path,
+      '-C',
+      extracted.path,
+      '--no-same-owner',
+      '--no-same-permissions',
+    ]);
+    if (unpack.exitCode != 0 ||
+        !await File(
+          '${candidate.path}${Platform.pathSeparator}mdslens',
+        ).exists() ||
+        !await _validLinuxPortableMarker(
+          File(
+            '${candidate.path}${Platform.pathSeparator}.mdslens-portable.json',
+          ),
+          architecture: update.asset.architecture,
+        )) {
+      return null;
+    }
+
+    final parentWritable = parentWritableOverride ??
+        await _directoryIsWritable(currentRoot.parent);
+    final applyArguments = [
+      '$currentPid',
+      currentRoot.path,
+      stagedRoot.path,
+      backupRoot.path,
+      update.path,
+      work.path,
+    ];
+    if (parentWritable) {
+      await stagedRoot.create();
+      final copy = await commandRunner('/bin/cp', [
+        '-a',
+        '${candidate.path}/.',
+        '${stagedRoot.path}/',
+      ]);
+      if (copy.exitCode != 0 ||
+          !await File(
+            '${stagedRoot.path}${Platform.pathSeparator}mdslens',
+          ).exists()) {
+        return null;
+      }
+      final chmod = await commandRunner('/bin/chmod', [
+        '+x',
+        '${stagedRoot.path}${Platform.pathSeparator}mdslens',
+      ]);
+      if (chmod.exitCode != 0) return null;
+      await commandLauncher('/bin/sh', [
+        '-c',
+        _linuxPortableApplyUpdateScript,
+        'mdslens-portable-updater',
+        ...applyArguments,
+      ]);
+    } else {
+      final pkexec = pkexecPathOverride ??
+          _firstExistingExecutable(const ['/usr/bin/pkexec', '/bin/pkexec']);
+      if (pkexec == null) return null;
+      final readyFile = '${work.path}${Platform.pathSeparator}ready';
+      final healthyFile = '${work.path}${Platform.pathSeparator}healthy';
+      final cancelFile = '${work.path}${Platform.pathSeparator}cancel';
+      await commandLauncher('/bin/sh', [
+        '-c',
+        _linuxPortableUserRelaunchScript,
+        'mdslens-portable-relauncher',
+        currentRoot.path,
+        readyFile,
+        healthyFile,
+        cancelFile,
+      ]);
+      final authorization = await commandRunner(pkexec, [
+        '/bin/sh',
+        '-c',
+        _linuxPortableAuthorizeScript,
+        'mdslens-portable-authorizer',
+        candidate.path,
+        stagedRoot.path,
+        _linuxPortablePrivilegedApplyScript,
+        ...applyArguments,
+        readyFile,
+        healthyFile,
+      ]);
+      if (authorization.exitCode != 0) {
+        try {
+          await File(cancelFile).writeAsString('cancelled\n');
+        } catch (_) {}
+        return UpdateInstallResult(
+          status: UpdateLaunchStatus.permissionRequired,
+          message:
+              'Administrator authorization was not granted. The portable application was left unchanged.',
+          downloaded: update,
+        );
+      }
+    }
+    scheduled = true;
+    return UpdateInstallResult(
+      status: UpdateLaunchStatus.installed,
+      message:
+          'The portable application update is ready. MDSLens will restart automatically.',
+      downloaded: update,
+      closeApplication: true,
+    );
+  } finally {
+    if (!scheduled) {
+      try {
+        if (await stagedRoot.exists()) {
+          await stagedRoot.delete(recursive: true);
+        }
+      } catch (_) {}
+      try {
+        if (await work.exists()) await work.delete(recursive: true);
+      } catch (_) {}
+    }
+  }
+}
+
+Future<bool> _validLinuxPortableMarker(
+  File marker, {
+  String? architecture,
+}) async {
+  try {
+    final metadata = jsonDecode(await marker.readAsString());
+    return metadata is Map &&
+        metadata['schema_version'] == 1 &&
+        metadata['product'] == 'com.mdslens.app' &&
+        metadata['executable'] == 'mdslens' &&
+        (architecture == null || metadata['architecture'] == architecture);
+  } catch (_) {
+    return false;
+  }
 }
 
 String? macOSBundlePathFromExecutable(String executablePath) {
@@ -1021,6 +1418,9 @@ Future<UpdateInstallResult?> prepareElevatedAppImageUpdate(
 Future<String> _preferredLinuxPackageFormat() async {
   if ((Platform.environment['APPIMAGE'] ?? '').trim().isNotEmpty) {
     return 'AppImage';
+  }
+  if (linuxPortableRootFromExecutable(Platform.resolvedExecutable) != null) {
+    return 'tar.gz';
   }
   try {
     final source = (await File('/etc/os-release').readAsString()).toLowerCase();

@@ -66,6 +66,11 @@ def classify_asset(name: str) -> dict[str, str] | None:
             "open-package",
         ),
         (
+            re.compile(r"^mdslens-linux-(x64|arm64)\.(tar\.gz)$"),
+            "linux",
+            "self-replace",
+        ),
+        (
             re.compile(r"^mdslens-android-(universal|armv7|arm64|x64)\.apk$"),
             "android",
             "system-installer",
