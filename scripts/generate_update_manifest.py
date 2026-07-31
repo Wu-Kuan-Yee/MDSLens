@@ -58,7 +58,10 @@ def classify_asset(name: str) -> dict[str, str] | None:
             "open-package",
         ),
         (
-            re.compile(r"^mdslens-linux-(x64|arm64)\.(AppImage|deb|rpm)$"),
+            re.compile(
+                r"^mdslens-linux-(x64|arm64)\."
+                r"(AppImage|deb|rpm|pkg\.tar\.zst|pkg\.tar\.xz)$"
+            ),
             "linux",
             "open-package",
         ),

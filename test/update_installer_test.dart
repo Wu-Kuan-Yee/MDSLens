@@ -564,6 +564,7 @@ void main() {
         platform: 'linux',
         resolvedExecutable: '/usr/lib/mdslens/mdslens',
         environment: const {},
+        linuxOsRelease: 'ID=fedora\nID_LIKE="rhel centos"',
       ),
       isTrue,
     );
@@ -572,6 +573,7 @@ void main() {
         platform: 'linux',
         resolvedExecutable: '/home/user/Downloads/mdslens/mdslens',
         environment: const {},
+        linuxOsRelease: 'ID=fedora',
       ),
       isFalse,
       reason: 'portable archives require a different replacement strategy',
@@ -581,6 +583,7 @@ void main() {
         platform: 'linux',
         resolvedExecutable: '/app/lib/mdslens/mdslens',
         environment: const {'FLATPAK_ID': 'com.mdslens.app'},
+        linuxOsRelease: 'ID=fedora',
       ),
       isFalse,
     );
@@ -589,6 +592,7 @@ void main() {
         platform: 'linux',
         resolvedExecutable: '/snap/mdslens/current/mdslens',
         environment: const {'SNAP': '/snap/mdslens/current'},
+        linuxOsRelease: 'ID=ubuntu',
       ),
       isFalse,
     );
@@ -597,6 +601,7 @@ void main() {
         platform: 'linux',
         resolvedExecutable: '/tmp/.mount_MDSLens/mdslens',
         environment: const {'APPIMAGE': '/home/user/MDSLens.AppImage'},
+        linuxOsRelease: 'ID=unknown',
       ),
       isTrue,
     );
@@ -608,5 +613,76 @@ void main() {
       ),
       isFalse,
     );
+    expect(
+      nativeDirectUpdateSupported(
+        platform: 'linux',
+        resolvedExecutable: '/usr/lib/mdslens/mdslens',
+        environment: const {},
+        linuxOsRelease: 'ID=alpine',
+      ),
+      isFalse,
+      reason: 'unknown native package managers must not receive a fake update',
+    );
+    expect(
+      nativeDirectUpdateSupported(
+        platform: 'macos',
+        resolvedExecutable:
+            '/private/var/folders/AppTranslocation/MDSLens.app/Contents/MacOS/MDSLens',
+        environment: const {},
+      ),
+      isFalse,
+    );
+  });
+
+  test('Arch packages install through PolicyKit and pacman', () async {
+    final commands = <(String, List<String>)>[];
+    final update = DownloadedUpdate(
+      asset: UpdateManifestAsset(
+        name: 'mdslens-linux-x64.pkg.tar.zst',
+        url: 'https://example.invalid/mdslens.pkg.tar.zst',
+        platform: 'linux',
+        architecture: 'x64',
+        format: 'pkg.tar.zst',
+        strategy: 'open-package',
+        size: 1,
+        sha256:
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      ),
+      path: '/tmp/mdslens-linux-x64.pkg.tar.zst',
+    );
+
+    final result = await prepareLinuxSystemPackageUpdate(
+      update,
+      currentExecutable: '/usr/bin/mdslens',
+      currentPid: 12345,
+      packageManagerPathOverride: '/usr/bin/pacman',
+      pkexecPathOverride: '/usr/bin/pkexec',
+      commandLauncher: (executable, arguments) async {
+        commands.add((executable, arguments));
+      },
+      commandRunner: (executable, arguments) async {
+        commands.add((executable, arguments));
+        return ProcessResult(0, 0, '', '');
+      },
+    );
+
+    expect(commands.first.$1, '/usr/bin/pkexec');
+    expect(
+      commands.first.$2,
+      containsAllInOrder(<String>[
+        '/usr/bin/pacman',
+        '-U',
+        '--noconfirm',
+        update.path,
+      ]),
+    );
+    expect(result?.status, UpdateLaunchStatus.installed);
+    expect(result?.closeApplication, isTrue);
+    final helperWork = Directory(commands.last.$2.last);
+    addTearDown(() async {
+      if (await helperWork.exists()) {
+        await helperWork.delete(recursive: true);
+      }
+    });
   });
 }

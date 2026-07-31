@@ -22,6 +22,7 @@ bool get directUpdateSupported => nativeDirectUpdateSupported(
       resolvedExecutable: Platform.resolvedExecutable,
       environment: Platform.environment,
       flatpakInfoExists: File('/.flatpak-info').existsSync(),
+      linuxOsRelease: _linuxOsReleaseSync(),
     );
 
 bool nativeDirectUpdateSupported({
@@ -29,11 +30,13 @@ bool nativeDirectUpdateSupported({
   required String resolvedExecutable,
   required Map<String, String> environment,
   bool flatpakInfoExists = false,
+  String linuxOsRelease = '',
 }) {
   switch (platform.toLowerCase()) {
     case 'android':
-    case 'macos':
       return true;
+    case 'macos':
+      return !resolvedExecutable.contains('/AppTranslocation/');
     case 'windows':
       // An MSIX package lives in the protected WindowsApps directory and must
       // be serviced by Windows/App Installer using the package identity. The
@@ -53,8 +56,12 @@ bool nativeDirectUpdateSupported({
       // Native DEB/RPM packages install the executable below /usr. A portable
       // archive has no atomic bundle updater yet, so it must use View Details
       // rather than pretending an AppImage or system package can replace it.
-      return executable == '/usr/bin/mdslens' ||
+      final systemInstall = executable == '/usr/bin/mdslens' ||
           executable.startsWith('/usr/lib/mdslens/');
+      if (!systemInstall) return false;
+      return RegExp(
+        r'(?:^|\s)(?:id|id_like)=[^\n]*(?:debian|ubuntu|fedora|rhel|centos|suse|arch|manjaro)',
+      ).hasMatch(linuxOsRelease.toLowerCase());
     default:
       return false;
   }
@@ -526,7 +533,8 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
       );
       if (elevated != null) return elevated;
     }
-    if (update.asset.format == 'rpm' || update.asset.format == 'deb') {
+    if (const {'rpm', 'deb', 'pkg.tar.zst', 'pkg.tar.xz'}
+        .contains(update.asset.format)) {
       final installed = await prepareLinuxSystemPackageUpdate(
         update,
         currentExecutable:
@@ -566,7 +574,9 @@ Future<UpdateInstallResult?> prepareLinuxSystemPackageUpdate(
   String? pkexecPathOverride,
 }) async {
   final format = update.asset.format.toLowerCase();
-  if (format != 'rpm' && format != 'deb') return null;
+  if (!const {'rpm', 'deb', 'pkg.tar.zst', 'pkg.tar.xz'}.contains(format)) {
+    return null;
+  }
 
   final pkexec = pkexecPathOverride ??
       _firstExistingExecutable(const ['/usr/bin/pkexec', '/bin/pkexec']);
@@ -578,7 +588,9 @@ Future<UpdateInstallResult?> prepareLinuxSystemPackageUpdate(
                 '/usr/bin/dnf',
                 '/usr/bin/zypper',
               ]
-            : const ['/usr/bin/apt-get'],
+            : format == 'deb'
+                ? const ['/usr/bin/apt-get']
+                : const ['/usr/bin/pacman'],
       );
   if (pkexec == null || packageManager == null) return null;
 
@@ -601,6 +613,11 @@ Future<UpdateInstallResult?> prepareLinuxSystemPackageUpdate(
     'apt-get' => [
         'install',
         '-y',
+        update.path,
+      ],
+    'pacman' => [
+        '-U',
+        '--noconfirm',
         update.path,
       ],
     _ => null,
@@ -1017,6 +1034,20 @@ Future<String> _preferredLinuxPackageFormat() async {
     ).hasMatch(source)) {
       return 'rpm';
     }
+    if (RegExp(
+      r'(?:^|\s)(?:id|id_like)=[^\n]*(?:arch|manjaro)',
+    ).hasMatch(source)) {
+      return 'pkg.tar.zst';
+    }
   } catch (_) {}
   return 'AppImage';
+}
+
+String _linuxOsReleaseSync() {
+  if (!Platform.isLinux) return '';
+  try {
+    return File('/etc/os-release').readAsStringSync();
+  } catch (_) {
+    return '';
+  }
 }
