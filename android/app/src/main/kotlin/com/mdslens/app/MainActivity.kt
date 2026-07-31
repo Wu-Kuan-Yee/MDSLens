@@ -21,6 +21,7 @@ import org.xmlpull.v1.XmlPullParserFactory
 class MainActivity: FlutterActivity() {
     private var openRequestsChannel: MethodChannel? = null
     private val pendingOpenRequests = mutableListOf<String>()
+    private var pendingVerifiedUpdate: File? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -154,17 +155,13 @@ class MainActivity: FlutterActivity() {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
                     !packageManager.canRequestPackageInstalls()
                 ) {
+                    pendingVerifiedUpdate = update
                     openUnknownSourcesSettings()
                     result.success("permission_required")
                     return@setMethodCallHandler
                 }
-                val contentUri = FileProvider.getUriForFile(
-                    this,
-                    "$packageName.update_files",
-                    update
-                )
                 result.success(
-                    if (launchPackageInstaller(contentUri)) {
+                    if (launchVerifiedPackageInstaller(update)) {
                         "launched"
                     } else {
                         "installer_unavailable"
@@ -188,6 +185,20 @@ class MainActivity: FlutterActivity() {
             result.success(pending)
         }
         stageIntent(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val update = pendingVerifiedUpdate ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !packageManager.canRequestPackageInstalls()
+        ) {
+            return
+        }
+        pendingVerifiedUpdate = null
+        if (validateUpdatePackage(update) == "valid") {
+            launchVerifiedPackageInstaller(update)
+        }
     }
 
     private fun validateUpdatePackage(update: File): String {
@@ -297,6 +308,15 @@ class MainActivity: FlutterActivity() {
             }
         }
         return false
+    }
+
+    private fun launchVerifiedPackageInstaller(update: File): Boolean {
+        val contentUri = FileProvider.getUriForFile(
+            this,
+            "$packageName.update_files",
+            update
+        )
+        return launchPackageInstaller(contentUri)
     }
 
     override fun onNewIntent(intent: Intent) {
