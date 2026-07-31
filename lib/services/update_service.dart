@@ -7,8 +7,8 @@ const mdsLensSourceUrl = 'https://github.com/Wu-Kuan-Yee/MDSLens';
 const mdsLensMaintainerUrl = 'https://github.com/Wu-Kuan-Yee';
 const originalMdsScopeRepositoryUrl = 'https://github.com/wwktz/MdsScope';
 const mdsLensReleasesUrl = 'https://github.com/Wu-Kuan-Yee/MDSLens/releases';
-const mdsLensLatestReleaseApiUrl =
-    'https://api.github.com/repos/Wu-Kuan-Yee/MDSLens/releases/latest';
+const mdsLensReleasesApiUrl =
+    'https://api.github.com/repos/Wu-Kuan-Yee/MDSLens/releases?per_page=100';
 
 class ReleaseUpdate {
   final String latestVersion;
@@ -77,20 +77,56 @@ class UpdateManifestAsset {
   final String sha256;
 }
 
-Future<ReleaseUpdate> checkLatestMDSLensRelease(String currentVersion) async {
-  final response = await http.get(
-    Uri.parse(mdsLensLatestReleaseApiUrl),
-    headers: const {
-      'Accept': 'application/vnd.github+json',
-    },
-  ).timeout(const Duration(seconds: 10));
-  if (response.statusCode < 200 || response.statusCode >= 300) {
-    throw Exception('GitHub returned HTTP ${response.statusCode}');
+Future<ReleaseUpdate> checkLatestMDSLensRelease(
+  String currentVersion, {
+  http.Client? client,
+}) async {
+  final ownedClient = client == null;
+  final activeClient = client ?? http.Client();
+  try {
+    final response = await activeClient.get(
+      Uri.parse(mdsLensReleasesApiUrl),
+      headers: const {
+        'Accept': 'application/vnd.github+json',
+      },
+    ).timeout(const Duration(seconds: 10));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('GitHub returned HTTP ${response.statusCode}');
+    }
+    final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+    if (decoded is! List) {
+      throw const FormatException('Invalid release response');
+    }
+    Map<dynamic, dynamic>? selected;
+    for (final candidate in decoded) {
+      if (candidate is! Map ||
+          candidate['draft'] == true ||
+          candidate['prerelease'] == true) {
+        continue;
+      }
+      final tag = candidate['tag_name']?.toString().trim() ?? '';
+      if (!_parseVersion(tag).isValid) continue;
+      final selectedTag = selected?['tag_name']?.toString().trim();
+      if (selectedTag == null || compareVersions(tag, selectedTag) > 0) {
+        selected = candidate;
+      }
+    }
+    if (selected == null) {
+      throw const FormatException('No stable release version was found');
+    }
+    return _releaseUpdateFromGitHub(
+      selected,
+      currentVersion: currentVersion,
+    );
+  } finally {
+    if (ownedClient) activeClient.close();
   }
-  final decoded = jsonDecode(utf8.decode(response.bodyBytes));
-  if (decoded is! Map) {
-    throw const FormatException('Invalid release response');
-  }
+}
+
+ReleaseUpdate _releaseUpdateFromGitHub(
+  Map<dynamic, dynamic> decoded, {
+  required String currentVersion,
+}) {
   final latest = decoded['tag_name']?.toString().trim() ?? '';
   if (!_parseVersion(latest).isValid) {
     throw const FormatException('Invalid release version');

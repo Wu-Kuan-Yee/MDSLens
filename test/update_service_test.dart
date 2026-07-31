@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:mdslens/services/update_service.dart';
 
 void main() {
@@ -194,5 +196,50 @@ void main() {
         throwsFormatException,
       );
     }
+  });
+
+  test('automatic checks choose the highest stable semantic release', () async {
+    final response = jsonEncode([
+      {
+        'tag_name': 'v1.5.0',
+        'html_url':
+            'https://github.com/Wu-Kuan-Yee/MDSLens/releases/tag/v1.5.0',
+        'draft': false,
+        'prerelease': false,
+        'assets': const [],
+      },
+      {
+        'tag_name': 'v1.4.9',
+        'html_url':
+            'https://github.com/Wu-Kuan-Yee/MDSLens/releases/tag/v1.4.9',
+        'draft': false,
+        'prerelease': false,
+        'assets': const [],
+      },
+      {
+        'tag_name': 'v2.0.0-beta',
+        'draft': false,
+        'prerelease': true,
+        'assets': const [],
+      },
+      {
+        'tag_name': 'v1.6.0',
+        'draft': true,
+        'prerelease': false,
+        'assets': const [],
+      },
+    ]);
+    final client = MockClient((request) async {
+      expect(request.url.toString(), mdsLensReleasesApiUrl);
+      return http.Response(response, 200);
+    });
+
+    final update = await checkLatestMDSLensRelease(
+      '1.4.0',
+      client: client,
+    );
+
+    expect(update.latestVersion, 'v1.5.0');
+    expect(update.updateAvailable, isTrue);
   });
 }
