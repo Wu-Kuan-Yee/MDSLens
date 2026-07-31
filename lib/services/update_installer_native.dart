@@ -326,6 +326,7 @@ staged_image="$3"
 backup_image="$4"
 downloaded_image="$5"
 previous_image="${current_image}.mdslens-previous"
+previous_owner="${previous_image}.owner"
 
 case "$current_image" in ""|"/") exit 1 ;; esac
 case "$staged_image" in "${current_image}.mdslens-update-"*) ;; *) exit 1 ;; esac
@@ -359,8 +360,18 @@ if /bin/mv -T -- "$current_image" "$backup_image" &&
     attempt=$((attempt + 1))
     sleep 0.1
   done
-  /bin/rm -f "$previous_image"
-  /bin/mv -T -- "$backup_image" "$previous_image"
+  previous_owned=0
+  if [ -f "$previous_owner" ] &&
+     [ "$(/bin/cat "$previous_owner")" = "com.mdslens.app" ]; then
+    previous_owned=1
+  fi
+  if [ "$previous_owned" -eq 1 ]; then
+    /bin/rm -f "$previous_image" "$previous_owner"
+  fi
+  if [ ! -e "$previous_image" ]; then
+    /bin/mv -T -- "$backup_image" "$previous_image"
+    echo 'com.mdslens.app' > "$previous_owner"
+  fi
   /bin/rm -f "$downloaded_image"
   exit 0
 fi
@@ -387,6 +398,7 @@ healthy_file="$7"
 failed_file="$8"
 rollback_file="$9"
 previous_image="${current_image}.mdslens-previous"
+previous_owner="${previous_image}.owner"
 work_dir=$(/usr/bin/dirname "$ready_file")
 
 case "$current_image" in ""|"/") exit 1 ;; esac
@@ -409,8 +421,17 @@ if /bin/mv -T -- "$current_image" "$backup_image" &&
   attempt=0
   while [ "$attempt" -lt 300 ]; do
     if [ -e "$healthy_file" ]; then
+      previous_owned=0
+      if [ -f "$previous_owner" ] &&
+         [ "$(/bin/cat "$previous_owner")" = "com.mdslens.app" ]; then
+        previous_owned=1
+      fi
+      if [ "$previous_owned" -eq 1 ]; then
+        /bin/rm -f "$previous_image" "$previous_owner"
+      fi
       if [ ! -e "$previous_image" ]; then
         /bin/mv -T -- "$backup_image" "$previous_image"
+        echo 'com.mdslens.app' > "$previous_owner"
       fi
       /bin/rm -f "$downloaded_image"
       /bin/rm -rf "$work_dir"

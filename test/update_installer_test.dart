@@ -597,6 +597,10 @@ void main() {
         await File('${current.path}.mdslens-previous').readAsString(),
         '#!/bin/sh\nexit 0\n',
       );
+      expect(
+        await File('${current.path}.mdslens-previous.owner').readAsString(),
+        'com.mdslens.app\n',
+      );
       Process.killPid(int.parse(await launchedPid.readAsString()));
     },
   );
