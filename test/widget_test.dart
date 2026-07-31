@@ -5111,18 +5111,21 @@ void main() {
     await app.preferencesReady;
     addTearDown(app.dispose);
     var checks = 0;
+    var hasNavigator = false;
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
         value: app,
         child: MDSLensApp(
           automaticUpdateChecker: (context) async {
             checks++;
+            hasNavigator = Navigator.maybeOf(context) != null;
           },
         ),
       ),
     );
     await tester.pump();
     expect(checks, 1);
+    expect(hasNavigator, isTrue);
   });
 
   testWidgets('Startup update check does not wait for login or no-login path',

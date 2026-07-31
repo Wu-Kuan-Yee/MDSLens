@@ -27,6 +27,7 @@ class MDSLensApp extends StatefulWidget {
 }
 
 class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   bool _sysDark = false;
   int _themeEventRevision = 0;
   Timer? _themeCalibrationTimer;
@@ -62,14 +63,16 @@ class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
     final app = context.read<AppState>();
     await app.preferencesReady;
     if (!mounted || !app.autoCheckUpdates) return;
+    final navigatorContext = _navigatorKey.currentContext;
+    if (navigatorContext == null || !navigatorContext.mounted) return;
     // Update discovery is an independent startup task. It must not wait for
     // permission prompts, automatic login, SSH fallback, waveform loading, or
     // the deliberate absence of a login attempt.
     if (widget.automaticUpdateChecker != null) {
-      await widget.automaticUpdateChecker!(context);
+      await widget.automaticUpdateChecker!(navigatorContext);
     } else {
       await AboutDialogWidget.checkAutomatically(
-        context,
+        navigatorContext,
         retryWaiter: _waitForUpdateRetry,
       );
     }
@@ -170,6 +173,7 @@ class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
             ? true
             : _sysDark;
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'MDSLens',
       debugShowCheckedModeBanner: false,
       theme: MDSLensTheme.light(
