@@ -449,4 +449,94 @@ void main() {
     expect(result?.status, UpdateLaunchStatus.permissionRequired);
     expect(await current.readAsString(), 'old');
   });
+
+  test('Fedora RPM updates install through PolicyKit and restart', () async {
+    final commands = <(String, List<String>)>[];
+    final update = DownloadedUpdate(
+      asset: UpdateManifestAsset(
+        name: 'mdslens-linux-x64.rpm',
+        url: 'https://example.invalid/mdslens.rpm',
+        platform: 'linux',
+        architecture: 'x64',
+        format: 'rpm',
+        strategy: 'open-package',
+        size: 1,
+        sha256:
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      ),
+      path: '/tmp/mdslens-linux-x64.rpm',
+    );
+
+    final result = await launchVerifiedUpdateAsset(
+      update,
+      platformOverride: 'linux',
+      currentExecutableOverride: '/usr/bin/mdslens',
+      currentPidOverride: 12345,
+      linuxPackageManagerPathOverride: '/usr/bin/dnf5',
+      linuxPkexecPathOverride: '/usr/bin/pkexec',
+      commandRunner: (executable, arguments) async {
+        commands.add((executable, arguments));
+        return ProcessResult(0, 0, '', '');
+      },
+      commandLauncher: (executable, arguments) async {
+        commands.add((executable, arguments));
+      },
+    );
+
+    expect(commands.first.$1, '/usr/bin/pkexec');
+    expect(
+      commands.first.$2,
+      containsAllInOrder(<String>[
+        '/usr/bin/dnf5',
+        'install',
+        '-y',
+        '--nogpgcheck',
+        update.path,
+      ]),
+    );
+    expect(commands.last.$1, '/bin/sh');
+    expect(
+        commands.last.$2, containsAll(<String>['12345', '/usr/bin/mdslens']));
+    final helperWork = Directory(commands.last.$2.last);
+    addTearDown(() async {
+      if (await helperWork.exists()) {
+        await helperWork.delete(recursive: true);
+      }
+    });
+    expect(result.status, UpdateLaunchStatus.installed);
+    expect(result.closeApplication, isTrue);
+  });
+
+  test('cancelled Linux package authorization does not close the app',
+      () async {
+    final update = DownloadedUpdate(
+      asset: UpdateManifestAsset(
+        name: 'mdslens-linux-x64.rpm',
+        url: 'https://example.invalid/mdslens.rpm',
+        platform: 'linux',
+        architecture: 'x64',
+        format: 'rpm',
+        strategy: 'open-package',
+        size: 1,
+        sha256:
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      ),
+      path: '/tmp/mdslens-linux-x64.rpm',
+    );
+
+    final result = await prepareLinuxSystemPackageUpdate(
+      update,
+      currentExecutable: '/usr/bin/mdslens',
+      currentPid: 12345,
+      packageManagerPathOverride: '/usr/bin/dnf',
+      pkexecPathOverride: '/usr/bin/pkexec',
+      commandLauncher: (executable, arguments) async {},
+      commandRunner: (executable, arguments) async {
+        return ProcessResult(0, 126, '', 'Authorization dismissed.');
+      },
+    );
+
+    expect(result?.status, UpdateLaunchStatus.permissionRequired);
+    expect(result?.closeApplication, isFalse);
+  });
 }

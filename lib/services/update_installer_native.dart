@@ -345,6 +345,8 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
   String? currentExecutableOverride,
   String? currentAppImageOverride,
   int? currentPidOverride,
+  String? linuxPackageManagerPathOverride,
+  String? linuxPkexecPathOverride,
 }) async {
   final platform = platformOverride ?? Platform.operatingSystem;
   final launch = commandLauncher ?? _startDetached;
@@ -494,6 +496,19 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
       );
       if (elevated != null) return elevated;
     }
+    if (update.asset.format == 'rpm' || update.asset.format == 'deb') {
+      final installed = await prepareLinuxSystemPackageUpdate(
+        update,
+        currentExecutable:
+            currentExecutableOverride ?? Platform.resolvedExecutable,
+        currentPid: currentPidOverride ?? pid,
+        commandLauncher: launch,
+        commandRunner: run,
+        packageManagerPathOverride: linuxPackageManagerPathOverride,
+        pkexecPathOverride: linuxPkexecPathOverride,
+      );
+      if (installed != null) return installed;
+    }
     if (update.asset.format == 'AppImage') {
       await run('chmod', ['+x', update.path]);
     }
@@ -509,6 +524,99 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
     message: 'The update was downloaded to ${update.path}.',
     downloaded: update,
   );
+}
+
+Future<UpdateInstallResult?> prepareLinuxSystemPackageUpdate(
+  DownloadedUpdate update, {
+  required String currentExecutable,
+  required int currentPid,
+  required DetachedCommandLauncher commandLauncher,
+  required CommandRunner commandRunner,
+  String? packageManagerPathOverride,
+  String? pkexecPathOverride,
+}) async {
+  final format = update.asset.format.toLowerCase();
+  if (format != 'rpm' && format != 'deb') return null;
+
+  final pkexec = pkexecPathOverride ??
+      _firstExistingExecutable(const ['/usr/bin/pkexec', '/bin/pkexec']);
+  final packageManager = packageManagerPathOverride ??
+      _firstExistingExecutable(
+        format == 'rpm'
+            ? const [
+                '/usr/bin/dnf5',
+                '/usr/bin/dnf',
+                '/usr/bin/zypper',
+              ]
+            : const ['/usr/bin/apt-get'],
+      );
+  if (pkexec == null || packageManager == null) return null;
+
+  final managerName =
+      packageManager.substring(packageManager.lastIndexOf('/') + 1);
+  final arguments = switch (managerName) {
+    'dnf5' || 'dnf' => [
+        'install',
+        '-y',
+        '--nogpgcheck',
+        update.path,
+      ],
+    'zypper' => [
+        '--non-interactive',
+        '--no-gpg-checks',
+        'install',
+        '--allow-unsigned-rpm',
+        update.path,
+      ],
+    'apt-get' => [
+        'install',
+        '-y',
+        update.path,
+      ],
+    _ => null,
+  };
+  if (arguments == null) return null;
+
+  // The release manifest's size and SHA-256 have already been verified before
+  // this point. PolicyKit keeps the privilege boundary in the operating
+  // system, while invoking the package manager directly avoids GUI software
+  // centers refreshing unrelated repositories before installing a local file.
+  final installation = await commandRunner(
+    pkexec,
+    [packageManager, ...arguments],
+  );
+  if (installation.exitCode != 0) {
+    final authorizationDismissed =
+        installation.exitCode == 126 || installation.exitCode == 127;
+    return UpdateInstallResult(
+      status: authorizationDismissed
+          ? UpdateLaunchStatus.permissionRequired
+          : UpdateLaunchStatus.unsupported,
+      message: authorizationDismissed
+          ? 'Administrator authorization was not granted. The installed application was left unchanged.'
+          : 'The system package manager could not install the verified update. The installed application was left unchanged.',
+      downloaded: update,
+    );
+  }
+
+  await scheduleApplicationRelaunch(
+    currentExecutable,
+    currentPid: currentPid,
+    commandLauncher: commandLauncher,
+  );
+  return UpdateInstallResult(
+    status: UpdateLaunchStatus.installed,
+    message: 'The update was installed. MDSLens will restart now.',
+    downloaded: update,
+    closeApplication: true,
+  );
+}
+
+String? _firstExistingExecutable(List<String> candidates) {
+  for (final candidate in candidates) {
+    if (File(candidate).existsSync()) return candidate;
+  }
+  return null;
 }
 
 String windowsInstallDirectoryFromExecutable(String executablePath) {
