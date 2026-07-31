@@ -50,10 +50,14 @@ silently reverting to a default path. A writable per-user installation remains
 per-user; a protected installation requests normal UAC authorization and
 remains per-machine. MSI fallback is explicitly launched through the Windows
 elevation prompt. Wizard pages and installer message boxes are suppressed, and
-Windows Restart Manager gracefully closes and reopens MDSLens after
-installation. MDSLens remains open if elevation is cancelled or the installer
-cannot start. Windows elevation and SmartScreen remain in control; a normal
-application must not bypass either protection.
+the detached Windows update helper waits for the old process to exit before it
+installs and reopens MDSLens from the same path. MDSLens exits only after the
+helper confirms that it has taken ownership of the update; if the helper cannot
+start, the running application and installed files remain unchanged. The latest
+helper and installer diagnostics are retained in
+`%LOCALAPPDATA%\MDSLens\updates\latest-update.log` and the adjacent
+`.installer.log`. Windows elevation, antivirus policy, and SmartScreen remain
+in control; a normal application must not bypass those protections.
 
 On macOS, self-update is attempted only when MDSLens is running from a real
 `.app` bundle. The downloaded bundle must retain the expected

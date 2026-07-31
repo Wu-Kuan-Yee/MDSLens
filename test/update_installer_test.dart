@@ -198,29 +198,30 @@ void main() {
             '${installDirectory.path}${Platform.pathSeparator}mdslens.exe',
         commandLauncher: (executable, arguments) async {
           commands.add((executable, arguments));
+          await File(arguments[12]).create(recursive: true);
         },
       );
 
       expect(commands, hasLength(1));
-      expect(commands.single.$1, 'powershell.exe');
+      expect(commands.single.$1, 'cmd.exe');
       expect(
         commands.single.$2,
         containsAll(<String>[
-          '-File',
-          '-ParentPid',
+          '/d',
+          '/s',
+          '/c',
+          'call',
           '12345',
-          '-Installer',
           update.path,
           '/CURRENTUSER',
           installDirectory.path,
         ]),
       );
-      final helper = File(
-        commands.single.$2[commands.single.$2.indexOf('-File') + 1],
-      );
+      final helper = File(commands.single.$2[4]);
       final script = await helper.readAsString();
-      expect(script, contains('Wait-Process'));
-      expect(script, contains(r'$TargetExecutable'));
+      expect(script, contains(':wait_for_parent'));
+      expect(script, contains('Installer exit code'));
+      expect(script, contains('start "" "%TargetExecutable%"'));
       addTearDown(() async {
         if (await helper.parent.exists()) {
           await helper.parent.delete(recursive: true);
@@ -257,34 +258,53 @@ void main() {
         currentExecutableOverride: r'C:\Program Files\MDSLens\mdslens.exe',
         commandLauncher: (executable, arguments) async {
           commands.add((executable, arguments));
+          await File(arguments[12]).create(recursive: true);
         },
       );
 
-      expect(commands.single.$1, 'powershell.exe');
-      expect(commands.single.$2, contains('-NonInteractive'));
+      expect(commands.single.$1, 'cmd.exe');
       expect(
         commands.single.$2,
         containsAll(<String>[
-          '-Installer',
           update.path,
-          '-Format',
           'msi',
-          '-TargetExecutable',
           r'C:\Program Files\MDSLens\mdslens.exe',
         ]),
       );
-      final helper = File(
-        commands.single.$2[commands.single.$2.indexOf('-File') + 1],
-      );
+      final helper = File(commands.single.$2[4]);
       final script = await helper.readAsString();
-      expect(script, contains("if (\$Format -eq 'msi')"));
-      expect(script, contains(r'Start-Process -FilePath $TargetExecutable'));
+      expect(script, contains(':install_msi'));
+      expect(script, contains('start "" /wait msiexec.exe'));
+      expect(script, contains('start "" "%TargetExecutable%"'));
       addTearDown(() async {
         if (await helper.parent.exists()) {
           await helper.parent.delete(recursive: true);
         }
       });
       expect(result.closeApplication, isTrue);
+    },
+  );
+
+  test(
+    'Windows stays open when the update helper does not take ownership',
+    () async {
+      final update = DownloadedUpdate(
+        asset: assetFor(utf8.encode('installer')),
+        path: r'C:\Temp\mdslens-update.exe',
+      );
+
+      final result = await launchVerifiedUpdateAsset(
+        update,
+        platformOverride: 'windows',
+        currentPidOverride: 12345,
+        currentExecutableOverride: r'C:\Program Files\MDSLens\mdslens.exe',
+        windowsHelperReadyAttempts: 1,
+        commandLauncher: (executable, arguments) async {},
+      );
+
+      expect(result.status, UpdateLaunchStatus.unsupported);
+      expect(result.closeApplication, isFalse);
+      expect(result.message, contains('stayed open'));
     },
   );
 

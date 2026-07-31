@@ -469,55 +469,69 @@ exit 1
 ''';
 
 const _windowsApplyUpdateScript = r'''
-param(
-  [int]$ParentPid,
-  [string]$Installer,
-  [string]$InstallDirectory,
-  [string]$TargetExecutable,
-  [string]$Format,
-  [string]$Scope,
-  [string]$Elevate,
-  [string]$WorkDirectory
+@echo off
+setlocal EnableExtensions DisableDelayedExpansion
+set "ParentPid=%~1"
+set "Installer=%~2"
+set "InstallDirectory=%~3"
+set "TargetExecutable=%~4"
+set "Format=%~5"
+set "Scope=%~6"
+set "WorkDirectory=%~7"
+set "ReadyFile=%~8"
+set "LogFile=%~9"
+
+>"%ReadyFile%" echo ready
+>>"%LogFile%" echo [%date% %time%] Update helper started for PID %ParentPid%.
+
+set /a WaitAttempts=0
+:wait_for_parent
+%SystemRoot%\System32\tasklist.exe /FI "PID eq %ParentPid%" /NH 2>NUL | %SystemRoot%\System32\find.exe "%ParentPid%" >NUL
+if errorlevel 1 goto parent_exited
+set /a WaitAttempts+=1
+if %WaitAttempts% GEQ 300 goto parent_timeout
+%SystemRoot%\System32\ping.exe -n 2 127.0.0.1 >NUL
+goto wait_for_parent
+
+:parent_timeout
+>>"%LogFile%" echo [%date% %time%] Timed out waiting for MDSLens to exit.
+goto relaunch
+
+:parent_exited
+>>"%LogFile%" echo [%date% %time%] Installing "%Installer%".
+if /I "%Format%"=="msi" goto install_msi
+start "" /wait "%Installer%" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART ^
+  /CLOSEAPPLICATIONS /SP- %Scope% /DIR="%InstallDirectory%" ^
+  /LOG="%LogFile%.installer.log"
+set "InstallerExitCode=%errorlevel%"
+goto installation_finished
+
+:install_msi
+start "" /wait msiexec.exe /i "%Installer%" /qn /norestart ^
+  REBOOT=ReallySuppress INSTALLFOLDER="%InstallDirectory%" ^
+  /L*v "%LogFile%.installer.log"
+set "InstallerExitCode=%errorlevel%"
+
+:installation_finished
+>>"%LogFile%" echo [%date% %time%] Installer exit code: %InstallerExitCode%.
+if "%InstallerExitCode%"=="0" goto installation_succeeded
+if "%InstallerExitCode%"=="1641" goto installation_succeeded
+if "%InstallerExitCode%"=="3010" goto installation_succeeded
+goto relaunch
+
+:installation_succeeded
+del /F /Q "%Installer%" >NUL 2>&1
+
+:relaunch
+if exist "%TargetExecutable%" (
+  >>"%LogFile%" echo [%date% %time%] Relaunching "%TargetExecutable%".
+  start "" "%TargetExecutable%"
+) else (
+  >>"%LogFile%" echo [%date% %time%] Target executable is missing after update.
 )
-$ErrorActionPreference = 'Stop'
-$updated = $false
-try {
-  Wait-Process -Id $ParentPid -ErrorAction SilentlyContinue
-  $quotedInstaller = '"' + $Installer.Replace('"', '\"') + '"'
-  $quotedDirectory = '"' + $InstallDirectory.Replace('"', '\"') + '"'
-  if ($Format -eq 'msi') {
-    $filePath = 'msiexec.exe'
-    $argumentList = "/i $quotedInstaller /qn /norestart " +
-      "REBOOT=ReallySuppress INSTALLFOLDER=$quotedDirectory"
-  } else {
-    $filePath = $Installer
-    $argumentList = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART " +
-      "/CLOSEAPPLICATIONS /SP- $Scope /DIR=$quotedDirectory"
-  }
-  $parameters = @{
-    FilePath = $filePath
-    ArgumentList = $argumentList
-    Wait = $true
-    PassThru = $true
-  }
-  if ($Elevate -eq 'true') {
-    $parameters.Verb = 'RunAs'
-  }
-  $installerProcess = Start-Process @parameters
-  $updated = $installerProcess.ExitCode -in @(0, 1641, 3010)
-} catch {
-  $updated = $false
-} finally {
-  if (Test-Path -LiteralPath $TargetExecutable) {
-    Start-Process -FilePath $TargetExecutable
-  }
-  if ($updated) {
-    Remove-Item -LiteralPath $Installer -Force -ErrorAction SilentlyContinue
-  }
-  Start-Sleep -Milliseconds 250
-  Remove-Item -LiteralPath $WorkDirectory -Recurse -Force `
-    -ErrorAction SilentlyContinue
-}
+%SystemRoot%\System32\ping.exe -n 2 127.0.0.1 >NUL
+rmdir /S /Q "%WorkDirectory%" >NUL 2>&1
+endlocal
 ''';
 
 Future<void> requestApplicationExitForUpdate() async {
@@ -533,6 +547,7 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
   String? currentAppImageOverride,
   String? currentPortableRootOverride,
   int? currentPidOverride,
+  int windowsHelperReadyAttempts = 50,
   String? linuxPackageManagerPathOverride,
   String? linuxPkexecPathOverride,
 }) async {
@@ -591,43 +606,62 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
         currentExecutableOverride ?? Platform.resolvedExecutable;
     final installDirectory =
         Directory(windowsInstallDirectoryFromExecutable(currentExecutable));
-    final installDirectoryWritable =
-        await _directoryIsWritable(installDirectory);
+    final installDirectoryWritable = await _directoryIsWritable(
+      installDirectory,
+    );
     final scopeArgument =
         installDirectoryWritable ? '/CURRENTUSER' : '/ALLUSERS';
     final work = await Directory.systemTemp.createTemp(
       'mdslens-windows-update-',
     );
     final helper = File(
-      '${work.path}${Platform.pathSeparator}apply-update.ps1',
+      '${work.path}${Platform.pathSeparator}apply-update.cmd',
+    );
+    final ready = File(
+      '${work.path}${Platform.pathSeparator}helper-ready',
+    );
+    final localAppData = (Platform.environment['LOCALAPPDATA'] ?? '').trim();
+    final logDirectory = localAppData.isEmpty
+        ? Directory.systemTemp
+        : Directory(
+            '$localAppData${Platform.pathSeparator}MDSLens${Platform.pathSeparator}updates',
+          );
+    await logDirectory.create(recursive: true);
+    final log = File(
+      '${logDirectory.path}${Platform.pathSeparator}latest-update.log',
     );
     await helper.writeAsString(_windowsApplyUpdateScript);
-    await launch('powershell.exe', [
-      '-NoProfile',
-      '-NonInteractive',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-WindowStyle',
-      'Hidden',
-      '-File',
+    await launch('cmd.exe', [
+      '/d',
+      '/s',
+      '/c',
+      'call',
       helper.path,
-      '-ParentPid',
       '${currentPidOverride ?? pid}',
-      '-Installer',
       update.path,
-      '-InstallDirectory',
       installDirectory.path,
-      '-TargetExecutable',
       currentExecutable,
-      '-Format',
       update.asset.format,
-      '-Scope',
       scopeArgument,
-      '-Elevate',
-      '${!installDirectoryWritable}',
-      '-WorkDirectory',
       work.path,
+      ready.path,
+      log.path,
     ]);
+    final helperReady = await _waitForFile(
+      ready,
+      attempts: windowsHelperReadyAttempts,
+    );
+    if (!helperReady) {
+      try {
+        await work.delete(recursive: true);
+      } catch (_) {}
+      return UpdateInstallResult(
+        status: UpdateLaunchStatus.unsupported,
+        message:
+            'Windows did not start the update helper, so MDSLens stayed open and the installed version was left unchanged.',
+        downloaded: update,
+      );
+    }
     return UpdateInstallResult(
       status: UpdateLaunchStatus.installed,
       message: 'Installing the update. MDSLens will restart automatically.',
@@ -734,6 +768,18 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
     message: 'The update was downloaded to ${update.path}.',
     downloaded: update,
   );
+}
+
+Future<bool> _waitForFile(
+  File file, {
+  int attempts = 50,
+  Duration interval = const Duration(milliseconds: 100),
+}) async {
+  for (var attempt = 0; attempt < attempts; attempt++) {
+    if (await file.exists()) return true;
+    await Future<void>.delayed(interval);
+  }
+  return false;
 }
 
 Future<UpdateInstallResult?> prepareLinuxSystemPackageUpdate(
