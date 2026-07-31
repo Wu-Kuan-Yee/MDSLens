@@ -75,6 +75,14 @@ if the replacement cannot start. AppImage continues to use its single-file
 atomic updater. Read-only portable locations request PolicyKit authorization;
 Flatpak and Snap remain managed by their own package systems.
 
+Windows portable ZIP, 7z, and tar archives use the same channel-marker model.
+They update from the canonical ZIP without invoking an installer: the complete
+bundle is staged beside the running directory, the old process exits only after
+the helper accepts ownership, and the replacement is rolled back if its process
+does not survive startup. EXE and MSI installations continue to use their
+native transactional installer path, while MSIX/MSIXBundle remains serviced by
+Windows or its configured application-management channel.
+
 ## HarmonyOS NEXT
 
 HarmonyOS NEXT is not an official upstream Flutter deployment target. This repository has no ArkUI/ArkTS project, DevEco Studio project, OpenHarmony Flutter fork integration, HAP signing configuration, or Rust target matching HarmonyOS, and therefore cannot currently produce a real `.hap`/`.app`.

@@ -37,8 +37,8 @@ tagged release has a machine-readable update manifest, MDSLens offers both
 |---|---|
 | Windows | Installer builds update silently in place; marked portable bundles atomically replace the complete directory, verify the restarted process, and roll back on failure |
 | macOS | Detects the running `.app`, verifies the matching ZIP, atomically replaces the same bundle, and restarts it |
-| Linux | Atomically replaces the running AppImage at the same path and restarts it; native DEB/RPM installations remain owned by the system package manager |
-| Android | Downloads a matching APK, verifies it, and opens Android's package installer |
+| Linux | Atomically updates AppImage and marked portable bundles; DEB/RPM/Arch packages update through the native package manager; Flatpak and Snap remain system-managed |
+| Android | Downloads and verifies a matching APK, preserves a pending handoff across process recreation, and opens Android's package installer |
 | iOS/iPadOS | Opens the release workflow because the unsigned IPA must be re-signed outside the running application |
 | Web/PWA | Reloads the page so the browser can activate the latest deployed Web bundle |
 
@@ -81,9 +81,20 @@ A running Linux AppImage follows the same-path replacement and rollback model.
 If its directory is protected, MDSLens asks PolicyKit (`pkexec`) to display the
 desktop's administrator authorization dialog. If PolicyKit or a graphical
 authentication agent is unavailable, the verified package is handed to the
-normal system package workflow instead. Android's package installer updates the
-same application ID and presents any per-source installation permission it
-requires.
+normal system package workflow instead. Privileged file replacement never
+launches the graphical application as root: a helper in the signed-in user's
+session starts and checks the new AppImage, while the privileged helper retains
+the old file until that health check succeeds. Android's package installer
+updates the same application ID and presents any per-source installation
+permission it requires. The verified pending APK path survives activity and
+process recreation while the user grants permission, but Android still requires
+the user to approve installation and may prohibit automatic foreground launch.
+
+MSIX/MSIXBundle, Flatpak, Snap, AAB/APKS, iOS/iPadOS IPA, and Web Gateway
+deployments remain owned by their operating system, store, signing, or server
+deployment channel. MDSLens checks for releases and presents the appropriate
+system or release action, but does not bypass those security boundaries or
+claim that a handoff is a completed installation.
 
 Extracted Linux portable bundles are replaced as a complete directory. The
 restarted process explicitly changes into the new directory before launch, so

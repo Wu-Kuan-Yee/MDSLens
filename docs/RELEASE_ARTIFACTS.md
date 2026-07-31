@@ -38,7 +38,9 @@ For both `x64` and `arm64`:
 The workflow also combines both MSIX files into the unsigned
 `mdslens-windows.msixbundle`. Windows x86-32 is not an upstream Flutter
 desktop target. A portable Windows application is the complete archived
-directory; `mdslens.exe` alone is not a self-contained artifact.
+directory; `mdslens.exe` alone is not a self-contained artifact. All portable
+archive formats include `.mdslens-portable.json` and update transactionally
+from the canonical ZIP asset without changing into an installed application.
 
 ## macOS
 
