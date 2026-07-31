@@ -24,10 +24,12 @@ enum _UpdateChoice { release, direct }
 
 Future<_UpdateChoice?> _showUpdateChoiceDialog(
   BuildContext context,
-  ReleaseUpdate result,
-) {
-  final supportsDirectUpdate = directUpdateSupported &&
-      result.assetNamed('update-manifest.json') != null;
+  ReleaseUpdate result, {
+  bool? directUpdateSupportOverride,
+}) {
+  final supportsDirectUpdate =
+      (directUpdateSupportOverride ?? directUpdateSupported) &&
+          result.assetNamed('update-manifest.json') != null;
   return showDialog<_UpdateChoice>(
     context: context,
     builder: (context) => KeyboardSafeDialog(
@@ -386,6 +388,7 @@ class AboutDialogWidget extends StatefulWidget {
   final AppVersionLoader? versionLoader;
   final GitVersionLoader? gitVersionLoader;
   final ApplicationExitRequester? applicationExitRequester;
+  final bool? directUpdateSupportOverride;
 
   const AboutDialogWidget({
     super.key,
@@ -396,6 +399,7 @@ class AboutDialogWidget extends StatefulWidget {
     this.versionLoader,
     this.gitVersionLoader,
     this.applicationExitRequester,
+    this.directUpdateSupportOverride,
   });
 
   static Future<void> show(BuildContext context) {
@@ -414,6 +418,7 @@ class AboutDialogWidget extends StatefulWidget {
     AppVersionLoader? versionLoader,
     GitVersionLoader? gitVersionLoader,
     ApplicationExitRequester? applicationExitRequester,
+    bool? directUpdateSupportOverride,
     Future<void> Function(Duration duration)? retryWaiter,
     List<Duration> retryDelays = const [
       Duration(seconds: 3),
@@ -437,7 +442,11 @@ class AboutDialogWidget extends StatefulWidget {
       }
     }
     if (!context.mounted || result == null || !result.updateAvailable) return;
-    final choice = await _showUpdateChoiceDialog(context, result);
+    final choice = await _showUpdateChoiceDialog(
+      context,
+      result,
+      directUpdateSupportOverride: directUpdateSupportOverride,
+    );
     if (!context.mounted) return;
     if (choice == _UpdateChoice.release) {
       await openExternalWebUrl(result.releaseUrl, opener: urlOpener);
@@ -515,7 +524,11 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
         _checkingUpdate = false;
         _updateStatus = '${result.latestVersion} is available';
       });
-      final choice = await _showUpdateChoiceDialog(context, result);
+      final choice = await _showUpdateChoiceDialog(
+        context,
+        result,
+        directUpdateSupportOverride: widget.directUpdateSupportOverride,
+      );
       if (choice == _UpdateChoice.release) {
         await _openUrl(result.releaseUrl);
       } else if (choice == _UpdateChoice.direct) {

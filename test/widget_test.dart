@@ -5239,6 +5239,7 @@ void main() {
           builder: (context) => FilledButton(
             onPressed: () => AboutDialogWidget.checkAutomatically(
               context,
+              directUpdateSupportOverride: true,
               versionLoader: () async => '0.0.1',
               updateChecker: () async => const ReleaseUpdate(
                 latestVersion: 'v1.0.0',
@@ -6363,6 +6364,7 @@ void main() {
           applicationExitRequester: () async {
             exitRequested = true;
           },
+          directUpdateSupportOverride: true,
           updateChecker: () async => const ReleaseUpdate(
             latestVersion: 'v1.0.0',
             releaseUrl:
@@ -6448,6 +6450,7 @@ void main() {
           ),
           versionLoader: () async => '0.0.1',
           gitVersionLoader: () async => '0.0.1.r1.g123456789',
+          directUpdateSupportOverride: true,
           updateChecker: () async => const ReleaseUpdate(
             latestVersion: 'v1.0.0',
             releaseUrl:
