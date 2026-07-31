@@ -178,7 +178,7 @@ void main() {
   });
 
   test(
-    'Windows EXE updates run silently and request application shutdown',
+    'Windows EXE updates wait for shutdown, install, and relaunch',
     () async {
       final installDirectory = await Directory.systemTemp.createTemp(
         'mdslens-windows-install-test-',
@@ -193,6 +193,7 @@ void main() {
       final result = await launchVerifiedUpdateAsset(
         update,
         platformOverride: 'windows',
+        currentPidOverride: 12345,
         currentExecutableOverride:
             '${installDirectory.path}${Platform.pathSeparator}mdslens.exe',
         commandLauncher: (executable, arguments) async {
@@ -201,26 +202,37 @@ void main() {
       );
 
       expect(commands, hasLength(1));
-      expect(commands.single.$1, update.path);
+      expect(commands.single.$1, 'powershell.exe');
       expect(
         commands.single.$2,
         containsAll(<String>[
-          '/VERYSILENT',
-          '/SUPPRESSMSGBOXES',
-          '/NORESTART',
-          '/CLOSEAPPLICATIONS',
-          '/RESTARTAPPLICATIONS',
+          '-File',
+          '-ParentPid',
+          '12345',
+          '-Installer',
+          update.path,
           '/CURRENTUSER',
-          '/DIR=${installDirectory.path}',
+          installDirectory.path,
         ]),
       );
-      expect(result.status, UpdateLaunchStatus.launched);
-      expect(result.closeApplication, isFalse);
+      final helper = File(
+        commands.single.$2[commands.single.$2.indexOf('-File') + 1],
+      );
+      final script = await helper.readAsString();
+      expect(script, contains('Wait-Process'));
+      expect(script, contains(r'$TargetExecutable'));
+      addTearDown(() async {
+        if (await helper.parent.exists()) {
+          await helper.parent.delete(recursive: true);
+        }
+      });
+      expect(result.status, UpdateLaunchStatus.installed);
+      expect(result.closeApplication, isTrue);
     },
   );
 
   test(
-    'Windows MSI fallback uses the non-interactive Windows Installer mode',
+    'Windows MSI fallback uses the detached relaunch helper',
     () async {
       final commands = <(String, List<String>)>[];
       final update = DownloadedUpdate(
@@ -241,6 +253,7 @@ void main() {
       final result = await launchVerifiedUpdateAsset(
         update,
         platformOverride: 'windows',
+        currentPidOverride: 12345,
         currentExecutableOverride: r'C:\Program Files\MDSLens\mdslens.exe',
         commandLauncher: (executable, arguments) async {
           commands.add((executable, arguments));
@@ -249,13 +262,29 @@ void main() {
 
       expect(commands.single.$1, 'powershell.exe');
       expect(commands.single.$2, contains('-NonInteractive'));
-      expect(commands.single.$2.last, contains('-Verb RunAs'));
-      expect(commands.single.$2.last, contains("'/qn'"));
       expect(
-        commands.single.$2.last,
-        contains(r"'INSTALLFOLDER=C:\Program Files\MDSLens'"),
+        commands.single.$2,
+        containsAll(<String>[
+          '-Installer',
+          update.path,
+          '-Format',
+          'msi',
+          '-TargetExecutable',
+          r'C:\Program Files\MDSLens\mdslens.exe',
+        ]),
       );
-      expect(result.closeApplication, isFalse);
+      final helper = File(
+        commands.single.$2[commands.single.$2.indexOf('-File') + 1],
+      );
+      final script = await helper.readAsString();
+      expect(script, contains("if (\$Format -eq 'msi')"));
+      expect(script, contains(r'Start-Process -FilePath $TargetExecutable'));
+      addTearDown(() async {
+        if (await helper.parent.exists()) {
+          await helper.parent.delete(recursive: true);
+        }
+      });
+      expect(result.closeApplication, isTrue);
     },
   );
 

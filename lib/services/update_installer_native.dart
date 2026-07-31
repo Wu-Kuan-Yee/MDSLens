@@ -281,6 +281,58 @@ shift 3
 nohup /bin/sh -c "$apply_script" mdslens-updater "$@" >/dev/null 2>&1 &
 ''';
 
+const _windowsApplyUpdateScript = r'''
+param(
+  [int]$ParentPid,
+  [string]$Installer,
+  [string]$InstallDirectory,
+  [string]$TargetExecutable,
+  [string]$Format,
+  [string]$Scope,
+  [string]$Elevate,
+  [string]$WorkDirectory
+)
+$ErrorActionPreference = 'Stop'
+$updated = $false
+try {
+  Wait-Process -Id $ParentPid -ErrorAction SilentlyContinue
+  $quotedInstaller = '"' + $Installer.Replace('"', '\"') + '"'
+  $quotedDirectory = '"' + $InstallDirectory.Replace('"', '\"') + '"'
+  if ($Format -eq 'msi') {
+    $filePath = 'msiexec.exe'
+    $argumentList = "/i $quotedInstaller /qn /norestart " +
+      "REBOOT=ReallySuppress INSTALLFOLDER=$quotedDirectory"
+  } else {
+    $filePath = $Installer
+    $argumentList = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART " +
+      "/CLOSEAPPLICATIONS /SP- $Scope /DIR=$quotedDirectory"
+  }
+  $parameters = @{
+    FilePath = $filePath
+    ArgumentList = $argumentList
+    Wait = $true
+    PassThru = $true
+  }
+  if ($Elevate -eq 'true') {
+    $parameters.Verb = 'RunAs'
+  }
+  $installerProcess = Start-Process @parameters
+  $updated = $installerProcess.ExitCode -in @(0, 1641, 3010)
+} catch {
+  $updated = $false
+} finally {
+  if (Test-Path -LiteralPath $TargetExecutable) {
+    Start-Process -FilePath $TargetExecutable
+  }
+  if ($updated) {
+    Remove-Item -LiteralPath $Installer -Force -ErrorAction SilentlyContinue
+  }
+  Start-Sleep -Milliseconds 250
+  Remove-Item -LiteralPath $WorkDirectory -Recurse -Force `
+    -ErrorAction SilentlyContinue
+}
+''';
+
 Future<void> requestApplicationExitForUpdate() async {
   exit(0);
 }
@@ -353,42 +405,44 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
         await _directoryIsWritable(installDirectory);
     final scopeArgument =
         installDirectoryWritable ? '/CURRENTUSER' : '/ALLUSERS';
-    if (update.asset.format == 'msi') {
-      final installerArguments = [
-        '/i',
-        update.path,
-        '/qn',
-        '/norestart',
-        'REBOOT=ReallySuppress',
-        'INSTALLFOLDER=${installDirectory.path}',
-      ];
-      final quotedArguments =
-          installerArguments.map(_powerShellQuote).join(',');
-      await launch('powershell.exe', [
-        '-NoProfile',
-        '-NonInteractive',
-        '-WindowStyle',
-        'Hidden',
-        '-Command',
-        "Start-Process -FilePath 'msiexec.exe' "
-            "-ArgumentList @($quotedArguments) -Verb RunAs",
-      ]);
-    } else {
-      await launch(update.path, [
-        '/VERYSILENT',
-        '/SUPPRESSMSGBOXES',
-        '/NORESTART',
-        '/CLOSEAPPLICATIONS',
-        '/RESTARTAPPLICATIONS',
-        '/SP-',
-        scopeArgument,
-        '/DIR=${installDirectory.path}',
-      ]);
-    }
+    final work = await Directory.systemTemp.createTemp(
+      'mdslens-windows-update-',
+    );
+    final helper = File(
+      '${work.path}${Platform.pathSeparator}apply-update.ps1',
+    );
+    await helper.writeAsString(_windowsApplyUpdateScript);
+    await launch('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-WindowStyle',
+      'Hidden',
+      '-File',
+      helper.path,
+      '-ParentPid',
+      '${currentPidOverride ?? pid}',
+      '-Installer',
+      update.path,
+      '-InstallDirectory',
+      installDirectory.path,
+      '-TargetExecutable',
+      currentExecutable,
+      '-Format',
+      update.asset.format,
+      '-Scope',
+      scopeArgument,
+      '-Elevate',
+      '${!installDirectoryWritable}',
+      '-WorkDirectory',
+      work.path,
+    ]);
     return UpdateInstallResult(
-      status: UpdateLaunchStatus.launched,
+      status: UpdateLaunchStatus.installed,
       message: 'Installing the update. MDSLens will restart automatically.',
       downloaded: update,
+      closeApplication: true,
     );
   }
   if (platform == 'macos') {
@@ -465,8 +519,6 @@ String windowsInstallDirectoryFromExecutable(String executablePath) {
   if (separator <= 0) return Directory.current.path;
   return executablePath.substring(0, separator);
 }
-
-String _powerShellQuote(String value) => "'${value.replaceAll("'", "''")}'";
 
 String? macOSBundlePathFromExecutable(String executablePath) {
   final executable = File(executablePath);
