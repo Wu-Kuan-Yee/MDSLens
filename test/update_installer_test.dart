@@ -734,6 +734,101 @@ void main() {
     expect(await File('$stagedPath/mdslens').readAsString(), 'new');
   });
 
+  test(
+    'Linux portable update restarts inside the replacement directory and keeps one backup',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'mdslens-portable-swap-test-',
+      );
+      addTearDown(() async {
+        if (await root.exists()) await root.delete(recursive: true);
+      });
+      final current = Directory('${root.path}/MDSLens');
+      await current.create();
+      await File('${current.path}/mdslens')
+          .writeAsString('#!/bin/sh\nexit 0\n');
+      await File('${current.path}/.mdslens-portable.json').writeAsString(
+        jsonEncode({
+          'schema_version': 1,
+          'product': 'com.mdslens.app',
+          'version': '0.3.0',
+          'architecture': 'x64',
+          'executable': 'mdslens',
+        }),
+      );
+
+      final observedWorkingDirectory = File('${root.path}/new-process.cwd');
+      final payload = Directory('${root.path}/payload/mdslens-linux-x64');
+      await payload.create(recursive: true);
+      await File('${payload.path}/mdslens').writeAsString(
+        '#!/bin/sh\npwd > "${observedWorkingDirectory.path}"\nsleep 4\n',
+      );
+      await File('${payload.path}/.mdslens-portable.json').writeAsString(
+        jsonEncode({
+          'schema_version': 1,
+          'product': 'com.mdslens.app',
+          'version': '0.3.1',
+          'architecture': 'x64',
+          'executable': 'mdslens',
+        }),
+      );
+      final archive = File('${root.path}/mdslens-linux-x64.tar.gz');
+      final packed = await Process.run('/usr/bin/tar', [
+        '-czf',
+        archive.path,
+        '-C',
+        '${root.path}/payload',
+        'mdslens-linux-x64',
+      ]);
+      expect(packed.exitCode, 0);
+      final update = DownloadedUpdate(
+        asset: UpdateManifestAsset(
+          name: 'mdslens-linux-x64.tar.gz',
+          url: 'https://example.invalid/mdslens-linux-x64.tar.gz',
+          platform: 'linux',
+          architecture: 'x64',
+          format: 'tar.gz',
+          strategy: 'self-replace',
+          size: await archive.length(),
+          sha256: sha256.convert(await archive.readAsBytes()).toString(),
+        ),
+        path: archive.path,
+      );
+
+      final result = await prepareLinuxPortableUpdate(
+        update,
+        portableRoot: current.path,
+        currentPid: 2147483646,
+        parentWritableOverride: true,
+        commandLauncher: (executable, arguments) async {
+          await Process.start(
+            executable,
+            arguments,
+            mode: ProcessStartMode.detached,
+          );
+        },
+        commandRunner: Process.run,
+      );
+
+      expect(result?.closeApplication, isTrue);
+      final resolvedCurrent = await current.resolveSymbolicLinks();
+      for (var attempt = 0;
+          attempt < 60 && !observedWorkingDirectory.existsSync();
+          attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+      expect(
+          await observedWorkingDirectory.readAsString(), '$resolvedCurrent\n');
+      final previous = Directory('$resolvedCurrent.mdslens-previous');
+      for (var attempt = 0; attempt < 50 && !previous.existsSync(); attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+      expect(await File('$resolvedCurrent/mdslens').exists(), isTrue);
+      expect(await File('${previous.path}/mdslens').exists(), isTrue);
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+    },
+  );
+
   test('Linux portable updates reject archive path traversal', () async {
     final root = await Directory.systemTemp.createTemp(
       'mdslens-portable-traversal-test-',

@@ -331,6 +331,17 @@ staged_root="$3"
 backup_root="$4"
 downloaded_archive="$5"
 work_dir="$6"
+previous_root="${current_root}.mdslens-previous"
+
+case "$current_root" in ""|"/") exit 1 ;; esac
+case "$staged_root" in "${current_root}.mdslens-update-"*) ;; *) exit 1 ;; esac
+case "$backup_root" in "${current_root}.mdslens-backup-"*) ;; *) exit 1 ;; esac
+
+launch_from_root() {
+  root="$1"
+  (cd "$root" && exec ./mdslens) >/dev/null 2>&1 &
+  launched_pid=$!
+}
 
 attempt=0
 while kill -0 "$parent_pid" 2>/dev/null; do
@@ -344,21 +355,22 @@ done
 
 if /bin/mv "$current_root" "$backup_root" &&
    /bin/mv "$staged_root" "$current_root"; then
-  "$current_root/mdslens" >/dev/null 2>&1 &
-  new_pid=$!
+  launch_from_root "$current_root"
+  new_pid=$launched_pid
   attempt=0
   while [ "$attempt" -lt 30 ]; do
     if ! kill -0 "$new_pid" 2>/dev/null; then
       /bin/rm -rf "$current_root"
       /bin/mv "$backup_root" "$current_root"
-      "$current_root/mdslens" >/dev/null 2>&1 &
+      launch_from_root "$current_root"
       /bin/rm -rf "$work_dir"
       exit 1
     fi
     attempt=$((attempt + 1))
     sleep 0.1
   done
-  /bin/rm -rf "$backup_root"
+  /bin/rm -rf "$previous_root"
+  /bin/mv "$backup_root" "$previous_root"
   /bin/rm -f "$downloaded_archive"
   /bin/rm -rf "$work_dir"
   exit 0
@@ -369,7 +381,7 @@ if [ ! -e "$current_root" ] && [ -e "$backup_root" ]; then
 fi
 /bin/rm -rf "$staged_root"
 if [ -x "$current_root/mdslens" ]; then
-  "$current_root/mdslens" >/dev/null 2>&1 &
+  launch_from_root "$current_root"
 fi
 /bin/rm -rf "$work_dir"
 exit 1
@@ -398,6 +410,11 @@ downloaded_archive="$5"
 work_dir="$6"
 ready_file="$7"
 healthy_file="$8"
+previous_root="${current_root}.mdslens-previous"
+
+case "$current_root" in ""|"/") exit 1 ;; esac
+case "$staged_root" in "${current_root}.mdslens-update-"*) ;; *) exit 1 ;; esac
+case "$backup_root" in "${current_root}.mdslens-backup-"*) ;; *) exit 1 ;; esac
 
 attempt=0
 while kill -0 "$parent_pid" 2>/dev/null; do
@@ -415,7 +432,8 @@ if /bin/mv "$current_root" "$backup_root" &&
   attempt=0
   while [ "$attempt" -lt 300 ]; do
     if [ -e "$healthy_file" ]; then
-      /bin/rm -rf "$backup_root"
+      /bin/rm -rf "$previous_root"
+      /bin/mv "$backup_root" "$previous_root"
       /bin/rm -f "$downloaded_archive"
       /bin/rm -rf "$work_dir"
       exit 0
@@ -449,7 +467,7 @@ while [ "$attempt" -lt 300 ]; do
     exit 1
   fi
   if [ -e "$ready_file" ]; then
-    "$current_root/mdslens" >/dev/null 2>&1 &
+    (cd "$current_root" && exec ./mdslens) >/dev/null 2>&1 &
     new_pid=$!
     health_attempt=0
     while [ "$health_attempt" -lt 30 ]; do
@@ -933,8 +951,22 @@ Future<UpdateInstallResult?> prepareLinuxPortableUpdate(
   bool? parentWritableOverride,
 }) async {
   if (update.asset.format != 'tar.gz') return null;
-  final currentRoot = Directory(portableRoot);
+  Directory currentRoot;
+  try {
+    currentRoot = Directory(
+      await Directory(portableRoot).resolveSymbolicLinks(),
+    );
+  } catch (_) {
+    return null;
+  }
   if (!await currentRoot.exists()) return null;
+  final rootParent = currentRoot.parent;
+  if (currentRoot.path == rootParent.path ||
+      currentRoot.path == Platform.pathSeparator ||
+      !currentRoot.path
+          .startsWith('${rootParent.path}${Platform.pathSeparator}')) {
+    return null;
+  }
   final marker = File(
     '${currentRoot.path}${Platform.pathSeparator}.mdslens-portable.json',
   );
