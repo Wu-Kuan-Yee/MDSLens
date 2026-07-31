@@ -12,6 +12,9 @@ permissions:
 
 env:
   FLUTTER_VERSION: 3.44.7
+  # Tag checkouts can be shallow and do not reliably expose the annotated tag
+  # to `git describe`. Pass the release version explicitly to every packager.
+  MDSLENS_VERSION: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
 
 jobs:
   windows:
