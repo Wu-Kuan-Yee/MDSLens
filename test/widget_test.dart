@@ -5105,7 +5105,7 @@ void main() {
     );
   });
 
-  testWidgets('Startup update check waits for application initialization',
+  testWidgets('Startup update check runs independently of initialization',
       (tester) async {
     final app = AppState();
     await app.preferencesReady;
@@ -5121,36 +5121,31 @@ void main() {
         ),
       ),
     );
-    await tester.pump();
-    expect(checks, 0);
-
-    app.markStartupInitializationComplete();
     await tester.pump();
     expect(checks, 1);
   });
 
-  testWidgets('Startup update check is not blocked by slow initialization',
+  testWidgets('Startup update check does not wait for login or no-login path',
       (tester) async {
     final app = AppState();
     await app.preferencesReady;
     addTearDown(app.dispose);
-    var checks = 0;
+    final updateStarted = Completer<void>();
+    final updateMayFinish = Completer<void>();
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
         value: app,
         child: MDSLensApp(
           automaticUpdateChecker: (context) async {
-            checks++;
+            updateStarted.complete();
+            await updateMayFinish.future;
           },
         ),
       ),
     );
     await tester.pump();
-    expect(checks, 0);
-
-    await tester.pump(const Duration(seconds: 2));
-    await tester.pump();
-    expect(checks, 1);
+    await expectLater(updateStarted.future, completes);
+    updateMayFinish.complete();
   });
 
   testWidgets('Disabled startup update check does not run', (tester) async {
