@@ -809,6 +809,121 @@ try {
 }
 ''';
 
+const _windowsPortablePrivilegedUpdateScript = r'''
+$ErrorActionPreference = 'Stop'
+$parentPid = [int]$args[0]
+$archive = [IO.Path]::GetFullPath($args[1])
+$expectedTopLevel = $args[2]
+$expectedSha256 = $args[3]
+$currentRoot = [IO.Path]::GetFullPath($args[4])
+$stagedRoot = [IO.Path]::GetFullPath($args[5])
+$backupRoot = [IO.Path]::GetFullPath($args[6])
+$preparedFile = $args[7]
+$swapReadyFile = $args[8]
+$healthyFile = $args[9]
+$failedFile = $args[10]
+$rollbackReadyFile = $args[11]
+$previousRoot = "$currentRoot.mdslens-previous"
+$extractionRoot = "$stagedRoot-extracted"
+trap {
+  Remove-Item -LiteralPath $stagedRoot -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $extractionRoot -Recurse -Force -ErrorAction SilentlyContinue
+  exit 1
+}
+
+if ($currentRoot -eq [IO.Path]::GetPathRoot($currentRoot)) { exit 1 }
+if ([IO.Path]::GetDirectoryName($stagedRoot) -ne [IO.Path]::GetDirectoryName($currentRoot)) { exit 1 }
+if ([IO.Path]::GetDirectoryName($backupRoot) -ne [IO.Path]::GetDirectoryName($currentRoot)) { exit 1 }
+if (-not $stagedRoot.StartsWith("$currentRoot.mdslens-update-")) { exit 1 }
+if (-not $backupRoot.StartsWith("$currentRoot.mdslens-backup-")) { exit 1 }
+if ($expectedTopLevel -notmatch '^mdslens-windows-(x64|arm64)$') { exit 1 }
+$expectedArchitecture = if ($expectedTopLevel.EndsWith('-arm64')) { 'arm64' } else { 'x64' }
+if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expectedSha256.ToLowerInvariant()) { exit 1 }
+if ((Test-Path -LiteralPath $stagedRoot) -or (Test-Path -LiteralPath $backupRoot) -or (Test-Path -LiteralPath $extractionRoot)) { exit 1 }
+Expand-Archive -LiteralPath $archive -DestinationPath $extractionRoot
+$candidateRoot = Join-Path $extractionRoot $expectedTopLevel
+$marker = Join-Path $candidateRoot '.mdslens-portable.json'
+$target = Join-Path $candidateRoot 'mdslens.exe'
+if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { exit 1 }
+$metadata = Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json
+if ($metadata.product -ne 'com.mdslens.app' -or $metadata.platform -ne 'windows' -or $metadata.architecture -ne $expectedArchitecture -or $metadata.executable -ne 'mdslens.exe') { exit 1 }
+Move-Item -LiteralPath $candidateRoot -Destination $stagedRoot
+Remove-Item -LiteralPath $extractionRoot -Recurse -Force -ErrorAction SilentlyContinue
+Set-Content -LiteralPath $preparedFile -Value 'prepared' -Encoding Ascii
+for ($attempt = 0; $attempt -lt 600; $attempt++) {
+  if (-not (Get-Process -Id $parentPid -ErrorAction SilentlyContinue)) { break }
+  Start-Sleep -Milliseconds 100
+}
+if (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) { exit 1 }
+
+try {
+  Move-Item -LiteralPath $currentRoot -Destination $backupRoot
+  Move-Item -LiteralPath $stagedRoot -Destination $currentRoot
+  Set-Content -LiteralPath $swapReadyFile -Value 'ready' -Encoding Ascii
+  for ($attempt = 0; $attempt -lt 300; $attempt++) {
+    if (Test-Path -LiteralPath $healthyFile) { break }
+    if (Test-Path -LiteralPath $failedFile) { throw 'Replacement failed health check.' }
+    Start-Sleep -Milliseconds 100
+  }
+  if (-not (Test-Path -LiteralPath $healthyFile)) { throw 'Replacement health check timed out.' }
+
+  $previousOwned = $false
+  $previousMarker = Join-Path $previousRoot '.mdslens-portable.json'
+  if (Test-Path -LiteralPath $previousMarker -PathType Leaf) {
+    try {
+      $previousMetadata = Get-Content -LiteralPath $previousMarker -Raw | ConvertFrom-Json
+      $previousOwned = $previousMetadata.product -eq 'com.mdslens.app' -and $previousMetadata.platform -eq 'windows'
+    } catch {}
+  }
+  if ($previousOwned) { Remove-Item -LiteralPath $previousRoot -Recurse -Force }
+  if (-not (Test-Path -LiteralPath $previousRoot)) { Move-Item -LiteralPath $backupRoot -Destination $previousRoot }
+  exit 0
+} catch {
+  if (Test-Path -LiteralPath $currentRoot) { Remove-Item -LiteralPath $currentRoot -Recurse -Force }
+  if (Test-Path -LiteralPath $backupRoot) { Move-Item -LiteralPath $backupRoot -Destination $currentRoot }
+  Remove-Item -LiteralPath $stagedRoot -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $extractionRoot -Recurse -Force -ErrorAction SilentlyContinue
+  Set-Content -LiteralPath $rollbackReadyFile -Value 'ready' -Encoding Ascii
+  exit 1
+}
+''';
+
+const _windowsPortableUserRelaunchScript = r'''
+$ErrorActionPreference = 'SilentlyContinue'
+$currentRoot = [IO.Path]::GetFullPath($args[0])
+$swapReadyFile = $args[1]
+$healthyFile = $args[2]
+$failedFile = $args[3]
+$rollbackReadyFile = $args[4]
+$archive = $args[5]
+$workRoot = $args[6]
+for ($attempt = 0; $attempt -lt 600; $attempt++) {
+  if (Test-Path -LiteralPath $swapReadyFile) { break }
+  Start-Sleep -Milliseconds 100
+}
+if (-not (Test-Path -LiteralPath $swapReadyFile)) { exit 1 }
+$target = Join-Path $currentRoot 'mdslens.exe'
+$process = Start-Process -FilePath $target -WorkingDirectory $currentRoot -PassThru
+Start-Sleep -Seconds 3
+$process.Refresh()
+if (-not $process.HasExited) {
+  Set-Content -LiteralPath $healthyFile -Value 'healthy' -Encoding Ascii
+  Start-Sleep -Seconds 1
+  Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
+  exit 0
+}
+Set-Content -LiteralPath $failedFile -Value 'failed' -Encoding Ascii
+for ($attempt = 0; $attempt -lt 300; $attempt++) {
+  if (Test-Path -LiteralPath $rollbackReadyFile) { break }
+  Start-Sleep -Milliseconds 100
+}
+if (Test-Path -LiteralPath (Join-Path $currentRoot 'mdslens.exe')) {
+  Start-Process -FilePath (Join-Path $currentRoot 'mdslens.exe') -WorkingDirectory $currentRoot
+}
+exit 1
+''';
+
 Future<void> requestApplicationExitForUpdate() async {
   exit(0);
 }
@@ -1058,6 +1173,8 @@ Future<UpdateInstallResult> prepareWindowsPortableUpdate(
   required CommandRunner commandRunner,
   String? nonceOverride,
   int helperReadyAttempts = 50,
+  int authorizationReadyAttempts = 600,
+  bool? parentWritableOverride,
 }) async {
   final currentRoot = Directory(portableRoot);
   if (!await currentRoot.exists() ||
@@ -1145,6 +1262,23 @@ Future<UpdateInstallResult> prepareWindowsPortableUpdate(
         downloaded: update,
       );
     }
+    final parentWritable = parentWritableOverride ??
+        await _directoryIsWritable(currentRoot.parent);
+    if (!parentWritable) {
+      final result = await _prepareProtectedWindowsPortableUpdate(
+        update,
+        currentRoot: currentRoot,
+        staged: staged,
+        backup: backup,
+        work: work,
+        currentPid: currentPid,
+        commandLauncher: commandLauncher,
+        commandRunner: commandRunner,
+        helperReadyAttempts: authorizationReadyAttempts,
+      );
+      scheduled = result.closeApplication;
+      return result;
+    }
     final stage = await commandRunner('powershell.exe', [
       '-NoProfile',
       '-NonInteractive',
@@ -1208,6 +1342,111 @@ Future<UpdateInstallResult> prepareWindowsPortableUpdate(
       } catch (_) {}
     }
   }
+}
+
+Future<UpdateInstallResult> _prepareProtectedWindowsPortableUpdate(
+  DownloadedUpdate update, {
+  required Directory currentRoot,
+  required Directory staged,
+  required Directory backup,
+  required Directory work,
+  required int currentPid,
+  required DetachedCommandLauncher commandLauncher,
+  required CommandRunner commandRunner,
+  required int helperReadyAttempts,
+}) async {
+  final privilegedHelper = File(
+    '${work.path}${Platform.pathSeparator}apply-update-elevated.ps1',
+  );
+  final userHelper = File(
+    '${work.path}${Platform.pathSeparator}relaunch-update.ps1',
+  );
+  final bootstrap = File(
+    '${work.path}${Platform.pathSeparator}request-elevation.ps1',
+  );
+  final prepared = File('${work.path}${Platform.pathSeparator}prepared');
+  final swapReady = File('${work.path}${Platform.pathSeparator}swap-ready');
+  final healthy = File('${work.path}${Platform.pathSeparator}healthy');
+  final failed = File('${work.path}${Platform.pathSeparator}failed');
+  final rollbackReady =
+      File('${work.path}${Platform.pathSeparator}rollback-ready');
+  await privilegedHelper.writeAsString(_windowsPortablePrivilegedUpdateScript);
+  await userHelper.writeAsString(_windowsPortableUserRelaunchScript);
+  await bootstrap.writeAsString(r'''
+$ErrorActionPreference = 'Stop'
+try {
+  $quoted = $args | ForEach-Object { '"' + $_ + '"' }
+  $arguments = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File') + $quoted
+  Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList $arguments
+  exit 0
+} catch {
+  exit 1223
+}
+''');
+
+  final elevatedArguments = <String>[
+    privilegedHelper.path,
+    '$currentPid',
+    update.path,
+    update.asset.name.substring(0, update.asset.name.length - 4),
+    update.asset.sha256,
+    currentRoot.path,
+    staged.path,
+    backup.path,
+    prepared.path,
+    swapReady.path,
+    healthy.path,
+    failed.path,
+    rollbackReady.path,
+  ];
+  final elevation = await commandRunner('powershell.exe', [
+    '-NoProfile',
+    '-NonInteractive',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    bootstrap.path,
+    ...elevatedArguments,
+  ]);
+  if (elevation.exitCode != 0) {
+    return UpdateInstallResult(
+      status: UpdateLaunchStatus.permissionRequired,
+      message:
+          'Administrator permission was not granted, so MDSLens stayed open.',
+      downloaded: update,
+    );
+  }
+  if (!await _waitForFile(prepared, attempts: helperReadyAttempts)) {
+    return UpdateInstallResult(
+      status: UpdateLaunchStatus.permissionRequired,
+      message:
+          'Windows did not authorize the protected portable update, so MDSLens stayed open.',
+      downloaded: update,
+    );
+  }
+
+  await commandLauncher('powershell.exe', [
+    '-NoProfile',
+    '-NonInteractive',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    userHelper.path,
+    currentRoot.path,
+    swapReady.path,
+    healthy.path,
+    failed.path,
+    rollbackReady.path,
+    update.path,
+    work.path,
+  ]);
+  return UpdateInstallResult(
+    status: UpdateLaunchStatus.installed,
+    message:
+        'The protected portable update is authorized. MDSLens will restart as the current user.',
+    downloaded: update,
+    closeApplication: true,
+  );
 }
 
 Future<bool> _validWindowsPortableMarker(

@@ -349,6 +349,7 @@ void main() {
       portableRoot: current.path,
       currentPid: 12345,
       nonceOverride: 'test',
+      parentWritableOverride: true,
       commandRunner: (executable, arguments) async {
         final script = arguments[3];
         if (script.startsWith('Expand-Archive')) {
@@ -393,6 +394,159 @@ void main() {
     final script = await helper.readAsString();
     expect(script, contains('The replacement exited during startup.'));
     expect(script, contains('Move-Item -LiteralPath \$backupRoot'));
+  });
+
+  test('protected Windows portable updates request UAC and relaunch as user',
+      () async {
+    final root = await Directory.systemTemp.createTemp(
+      'mdslens-windows-protected-test-',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    final current = Directory('${root.path}/mdslens-windows-x64');
+    await current.create();
+    await File('${current.path}/mdslens.exe').writeAsString('old');
+    await File('${current.path}/.mdslens-portable.json').writeAsString(
+      jsonEncode({
+        'schema_version': 1,
+        'product': 'com.mdslens.app',
+        'platform': 'windows',
+        'version': '0.3.1',
+        'architecture': 'x64',
+        'executable': 'mdslens.exe',
+      }),
+    );
+    final archive = File('${root.path}/mdslens-windows-x64.zip');
+    await archive.writeAsString('archive');
+    final update = DownloadedUpdate(
+      asset: UpdateManifestAsset(
+        name: 'mdslens-windows-x64.zip',
+        url: 'https://example.invalid/windows.zip',
+        platform: 'windows',
+        architecture: 'x64',
+        format: 'zip',
+        strategy: 'self-replace',
+        size: await archive.length(),
+        sha256: sha256.convert(await archive.readAsBytes()).toString(),
+      ),
+      path: archive.path,
+    );
+    List<String>? userHelperArguments;
+    String? bootstrapScript;
+    String? privilegedScript;
+
+    final result = await prepareWindowsPortableUpdate(
+      update,
+      portableRoot: current.path,
+      currentPid: 12345,
+      nonceOverride: 'protected',
+      parentWritableOverride: false,
+      commandRunner: (executable, arguments) async {
+        if (arguments[3].startsWith('Expand-Archive')) {
+          final candidate = Directory(
+            '${arguments.last}/mdslens-windows-x64',
+          );
+          await candidate.create(recursive: true);
+          await File('${candidate.path}/mdslens.exe').writeAsString('new');
+          await File('${candidate.path}/.mdslens-portable.json').writeAsString(
+            jsonEncode({
+              'schema_version': 1,
+              'product': 'com.mdslens.app',
+              'platform': 'windows',
+              'version': '0.3.2',
+              'architecture': 'x64',
+              'executable': 'mdslens.exe',
+            }),
+          );
+        } else if (arguments.contains('-File')) {
+          bootstrapScript = await File(arguments[5]).readAsString();
+          privilegedScript = await File(arguments[6]).readAsString();
+          await File(arguments[14]).create(recursive: true);
+        }
+        return ProcessResult(0, 0, '', '');
+      },
+      commandLauncher: (executable, arguments) async {
+        userHelperArguments = arguments;
+      },
+    );
+
+    expect(result.closeApplication, isTrue);
+    expect(bootstrapScript, contains('-Verb RunAs'));
+    expect(privilegedScript, contains('Replacement health check timed out.'));
+    expect(privilegedScript, contains('rollbackReadyFile'));
+    expect(userHelperArguments?[5], endsWith('relaunch-update.ps1'));
+    final userScript = await File(userHelperArguments![5]).readAsString();
+    expect(userScript, contains("Start-Process -FilePath \$target"));
+    expect(userScript, isNot(contains('-Verb RunAs')));
+  });
+
+  test('declining Windows portable UAC keeps the current app open', () async {
+    final root = await Directory.systemTemp.createTemp(
+      'mdslens-windows-uac-declined-test-',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    final current = Directory('${root.path}/mdslens-windows-x64');
+    await current.create();
+    await File('${current.path}/mdslens.exe').writeAsString('old');
+    await File('${current.path}/.mdslens-portable.json').writeAsString(
+      jsonEncode({
+        'schema_version': 1,
+        'product': 'com.mdslens.app',
+        'platform': 'windows',
+        'version': '0.3.1',
+        'architecture': 'x64',
+        'executable': 'mdslens.exe',
+      }),
+    );
+    final archive = File('${root.path}/mdslens-windows-x64.zip');
+    await archive.writeAsString('archive');
+    final update = DownloadedUpdate(
+      asset: UpdateManifestAsset(
+        name: 'mdslens-windows-x64.zip',
+        url: 'https://example.invalid/windows.zip',
+        platform: 'windows',
+        architecture: 'x64',
+        format: 'zip',
+        strategy: 'self-replace',
+        size: await archive.length(),
+        sha256: sha256.convert(await archive.readAsBytes()).toString(),
+      ),
+      path: archive.path,
+    );
+
+    final result = await prepareWindowsPortableUpdate(
+      update,
+      portableRoot: current.path,
+      currentPid: 12345,
+      parentWritableOverride: false,
+      commandRunner: (executable, arguments) async {
+        if (arguments[3].startsWith('Expand-Archive')) {
+          final candidate = Directory(
+            '${arguments.last}/mdslens-windows-x64',
+          );
+          await candidate.create(recursive: true);
+          await File('${candidate.path}/mdslens.exe').writeAsString('new');
+          await File('${candidate.path}/.mdslens-portable.json').writeAsString(
+            jsonEncode({
+              'schema_version': 1,
+              'product': 'com.mdslens.app',
+              'platform': 'windows',
+              'version': '0.3.2',
+              'architecture': 'x64',
+              'executable': 'mdslens.exe',
+            }),
+          );
+          return ProcessResult(0, 0, '', '');
+        }
+        return ProcessResult(0, 1223, '', 'cancelled');
+      },
+      commandLauncher: (executable, arguments) async {
+        fail('The relaunch helper must not start after UAC is declined.');
+      },
+    );
+
+    expect(result.status, UpdateLaunchStatus.permissionRequired);
+    expect(result.closeApplication, isFalse);
+    expect(await File('${current.path}/mdslens.exe').readAsString(), 'old');
   });
 
   test('macOS bundle paths are derived only from application executables', () {

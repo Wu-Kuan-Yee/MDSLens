@@ -63,6 +63,10 @@ ZIP, 7z, and tar Windows portable downloads contain an update-channel marker.
 A running marked bundle downloads the canonical ZIP update, extracts and
 validates the complete replacement before exiting, then swaps sibling
 directories without converting the portable copy into an installed program.
+If the portable bundle's parent directory is protected, Windows displays the
+standard UAC prompt. The elevated helper re-verifies the archive and performs
+only the transactional file replacement; the replacement application is
+started separately with the original user's privileges.
 The new executable must remain alive during its startup health window. If it
 exits early, the helper restores and launches the old directory. After success,
 one owned previous bundle remains beside the installation for recovery; an
