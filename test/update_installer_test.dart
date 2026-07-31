@@ -685,6 +685,9 @@ void main() {
       current.path,
       currentPid: 12345,
       pkexecPathOverride: '/usr/bin/pkexec',
+      commandLauncher: (command, arguments) async {
+        commands.add((command, arguments));
+      },
       commandRunner: (command, arguments) async {
         commands.add((command, arguments));
         if (command == '/usr/bin/pkexec') {

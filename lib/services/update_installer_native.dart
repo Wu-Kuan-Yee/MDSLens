@@ -318,42 +318,6 @@ fi
 exit 1
 ''';
 
-const _linuxApplyUpdateScript = r'''
-set -u
-parent_pid="$1"
-current_image="$2"
-staged_image="$3"
-backup_image="$4"
-downloaded_image="$5"
-
-attempt=0
-while kill -0 "$parent_pid" 2>/dev/null; do
-  if [ "$attempt" -ge 3000 ]; then
-    /bin/rm -f "$staged_image"
-    exit 1
-  fi
-  attempt=$((attempt + 1))
-  sleep 0.1
-done
-
-if /bin/mv "$current_image" "$backup_image" &&
-   /bin/mv "$staged_image" "$current_image"; then
-  /bin/rm -f "$backup_image" "$downloaded_image"
-  /bin/chmod +x "$current_image"
-  "$current_image" >/dev/null 2>&1 &
-  exit 0
-fi
-
-if [ ! -e "$current_image" ] && [ -e "$backup_image" ]; then
-  /bin/mv "$backup_image" "$current_image"
-fi
-/bin/rm -f "$staged_image"
-if [ -e "$current_image" ]; then
-  "$current_image" >/dev/null 2>&1 &
-fi
-exit 1
-''';
-
 const _linuxAppImageApplyUpdateScript = r'''
 set -u
 parent_pid="$1"
@@ -408,6 +372,110 @@ fi
 if [ -x "$current_image" ]; then
   "$current_image" >/dev/null 2>&1 &
 fi
+exit 1
+''';
+
+const _linuxAppImagePrivilegedApplyScript = r'''
+set -u
+parent_pid="$1"
+current_image="$2"
+staged_image="$3"
+backup_image="$4"
+downloaded_image="$5"
+ready_file="$6"
+healthy_file="$7"
+failed_file="$8"
+rollback_file="$9"
+previous_image="${current_image}.mdslens-previous"
+work_dir=$(/usr/bin/dirname "$ready_file")
+
+case "$current_image" in ""|"/") exit 1 ;; esac
+case "$staged_image" in "${current_image}.mdslens-update-"*) ;; *) exit 1 ;; esac
+case "$backup_image" in "${current_image}.mdslens-backup-"*) ;; *) exit 1 ;; esac
+[ -e "$backup_image" ] && exit 1
+[ -L "$backup_image" ] && exit 1
+
+attempt=0
+while kill -0 "$parent_pid" 2>/dev/null; do
+  if [ "$attempt" -ge 3000 ]; then exit 1; fi
+  attempt=$((attempt + 1))
+  sleep 0.1
+done
+
+if /bin/mv -T -- "$current_image" "$backup_image" &&
+   /bin/mv -T -- "$staged_image" "$current_image"; then
+  /bin/chmod +x "$current_image"
+  : > "$ready_file"
+  attempt=0
+  while [ "$attempt" -lt 300 ]; do
+    if [ -e "$healthy_file" ]; then
+      if [ ! -e "$previous_image" ]; then
+        /bin/mv -T -- "$backup_image" "$previous_image"
+      fi
+      /bin/rm -f "$downloaded_image"
+      /bin/rm -rf "$work_dir"
+      exit 0
+    fi
+    if [ -e "$failed_file" ]; then break; fi
+    attempt=$((attempt + 1))
+    sleep 0.1
+  done
+  /bin/rm -f "$current_image"
+  /bin/mv -T -- "$backup_image" "$current_image"
+  : > "$rollback_file"
+  sleep 1
+  /bin/rm -rf "$work_dir"
+  exit 1
+fi
+
+if [ ! -e "$current_image" ] && [ -e "$backup_image" ]; then
+  /bin/mv -T -- "$backup_image" "$current_image"
+fi
+: > "$rollback_file"
+sleep 1
+/bin/rm -rf "$work_dir"
+exit 1
+''';
+
+const _linuxAppImageUserRelaunchScript = r'''
+set -u
+current_image="$1"
+ready_file="$2"
+healthy_file="$3"
+failed_file="$4"
+rollback_file="$5"
+cancel_file="$6"
+
+attempt=0
+while [ "$attempt" -lt 300 ]; do
+  [ -e "$cancel_file" ] && exit 1
+  if [ -e "$ready_file" ]; then
+    "$current_image" >/dev/null 2>&1 &
+    new_pid=$!
+    health_attempt=0
+    while [ "$health_attempt" -lt 30 ]; do
+      if ! kill -0 "$new_pid" 2>/dev/null; then
+        : > "$failed_file"
+        rollback_attempt=0
+        while [ "$rollback_attempt" -lt 300 ]; do
+          if [ -e "$rollback_file" ]; then
+            "$current_image" >/dev/null 2>&1 &
+            exit 1
+          fi
+          rollback_attempt=$((rollback_attempt + 1))
+          sleep 0.1
+        done
+        exit 1
+      fi
+      health_attempt=$((health_attempt + 1))
+      sleep 0.1
+    done
+    : > "$healthy_file"
+    exit 0
+  fi
+  attempt=$((attempt + 1))
+  sleep 0.1
+done
 exit 1
 ''';
 
@@ -904,6 +972,7 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
         update,
         currentAppImage,
         currentPid: currentPidOverride ?? pid,
+        commandLauncher: launch,
         commandRunner: run,
       );
       if (elevated != null) return elevated;
@@ -1943,6 +2012,7 @@ Future<UpdateInstallResult?> prepareElevatedAppImageUpdate(
   DownloadedUpdate update,
   String currentPath, {
   required int currentPid,
+  required DetachedCommandLauncher commandLauncher,
   required CommandRunner commandRunner,
   String? pkexecPathOverride,
 }) async {
@@ -1966,12 +2036,35 @@ Future<UpdateInstallResult?> prepareElevatedAppImageUpdate(
   final nonce = '$currentPid-${DateTime.now().microsecondsSinceEpoch}';
   final staged = '$resolvedCurrent.mdslens-update-$nonce';
   final backup = '$resolvedCurrent.mdslens-backup-$nonce';
+  if (await _fileSystemEntryExists(staged) ||
+      await _fileSystemEntryExists(backup)) {
+    return null;
+  }
+  final work = await Directory.systemTemp.createTemp(
+    'mdslens-appimage-privileged-update-',
+  );
+  final ready = '${work.path}${Platform.pathSeparator}ready';
+  final healthy = '${work.path}${Platform.pathSeparator}healthy';
+  final failed = '${work.path}${Platform.pathSeparator}failed';
+  final rollback = '${work.path}${Platform.pathSeparator}rollback';
+  final cancel = '${work.path}${Platform.pathSeparator}cancel';
+  await commandLauncher('/bin/sh', [
+    '-c',
+    _linuxAppImageUserRelaunchScript,
+    'mdslens-appimage-relauncher',
+    resolvedCurrent,
+    ready,
+    healthy,
+    failed,
+    rollback,
+    cancel,
+  ]);
   final authorization = await commandRunner(pkexec, [
     '/bin/sh',
     '-c',
     _linuxAuthorizeUpdateScript,
     'mdslens-authorizer',
-    _linuxApplyUpdateScript,
+    _linuxAppImagePrivilegedApplyScript,
     update.path,
     staged,
     '$currentPid',
@@ -1979,8 +2072,15 @@ Future<UpdateInstallResult?> prepareElevatedAppImageUpdate(
     staged,
     backup,
     update.path,
+    ready,
+    healthy,
+    failed,
+    rollback,
   ]);
   if (authorization.exitCode != 0) {
+    try {
+      await File(cancel).writeAsString('cancelled\n');
+    } catch (_) {}
     return UpdateInstallResult(
       status: UpdateLaunchStatus.permissionRequired,
       message:
