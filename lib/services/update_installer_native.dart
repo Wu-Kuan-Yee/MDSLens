@@ -336,6 +336,8 @@ previous_root="${current_root}.mdslens-previous"
 case "$current_root" in ""|"/") exit 1 ;; esac
 case "$staged_root" in "${current_root}.mdslens-update-"*) ;; *) exit 1 ;; esac
 case "$backup_root" in "${current_root}.mdslens-backup-"*) ;; *) exit 1 ;; esac
+[ -e "$backup_root" ] && exit 1
+[ -L "$backup_root" ] && exit 1
 
 launch_from_root() {
   root="$1"
@@ -353,15 +355,15 @@ while kill -0 "$parent_pid" 2>/dev/null; do
   sleep 0.1
 done
 
-if /bin/mv "$current_root" "$backup_root" &&
-   /bin/mv "$staged_root" "$current_root"; then
+if /bin/mv -T -- "$current_root" "$backup_root" &&
+   /bin/mv -T -- "$staged_root" "$current_root"; then
   launch_from_root "$current_root"
   new_pid=$launched_pid
   attempt=0
   while [ "$attempt" -lt 30 ]; do
     if ! kill -0 "$new_pid" 2>/dev/null; then
       /bin/rm -rf "$current_root"
-      /bin/mv "$backup_root" "$current_root"
+      /bin/mv -T -- "$backup_root" "$current_root"
       launch_from_root "$current_root"
       /bin/rm -rf "$work_dir"
       exit 1
@@ -370,14 +372,14 @@ if /bin/mv "$current_root" "$backup_root" &&
     sleep 0.1
   done
   /bin/rm -rf "$previous_root"
-  /bin/mv "$backup_root" "$previous_root"
+  /bin/mv -T -- "$backup_root" "$previous_root"
   /bin/rm -f "$downloaded_archive"
   /bin/rm -rf "$work_dir"
   exit 0
 fi
 
 if [ ! -e "$current_root" ] && [ -e "$backup_root" ]; then
-  /bin/mv "$backup_root" "$current_root"
+  /bin/mv -T -- "$backup_root" "$current_root"
 fi
 /bin/rm -rf "$staged_root"
 if [ -x "$current_root/mdslens" ]; then
@@ -393,7 +395,9 @@ candidate="$1"
 staged_root="$2"
 apply_script="$3"
 shift 3
-/bin/mkdir -p "$staged_root"
+[ -e "$staged_root" ] && exit 1
+[ -L "$staged_root" ] && exit 1
+/bin/mkdir -- "$staged_root"
 /bin/cp -a "$candidate/." "$staged_root/"
 /bin/chmod +x "$staged_root/mdslens"
 nohup /bin/sh -c "$apply_script" mdslens-portable-updater "$@" \
@@ -415,6 +419,8 @@ previous_root="${current_root}.mdslens-previous"
 case "$current_root" in ""|"/") exit 1 ;; esac
 case "$staged_root" in "${current_root}.mdslens-update-"*) ;; *) exit 1 ;; esac
 case "$backup_root" in "${current_root}.mdslens-backup-"*) ;; *) exit 1 ;; esac
+[ -e "$backup_root" ] && exit 1
+[ -L "$backup_root" ] && exit 1
 
 attempt=0
 while kill -0 "$parent_pid" 2>/dev/null; do
@@ -426,14 +432,14 @@ while kill -0 "$parent_pid" 2>/dev/null; do
   sleep 0.1
 done
 
-if /bin/mv "$current_root" "$backup_root" &&
-   /bin/mv "$staged_root" "$current_root"; then
+if /bin/mv -T -- "$current_root" "$backup_root" &&
+   /bin/mv -T -- "$staged_root" "$current_root"; then
   : > "$ready_file"
   attempt=0
   while [ "$attempt" -lt 300 ]; do
     if [ -e "$healthy_file" ]; then
       /bin/rm -rf "$previous_root"
-      /bin/mv "$backup_root" "$previous_root"
+      /bin/mv -T -- "$backup_root" "$previous_root"
       /bin/rm -f "$downloaded_archive"
       /bin/rm -rf "$work_dir"
       exit 0
@@ -442,13 +448,13 @@ if /bin/mv "$current_root" "$backup_root" &&
     sleep 0.1
   done
   /bin/rm -rf "$current_root"
-  /bin/mv "$backup_root" "$current_root"
+  /bin/mv -T -- "$backup_root" "$current_root"
   /bin/rm -rf "$work_dir"
   exit 1
 fi
 
 if [ ! -e "$current_root" ] && [ -e "$backup_root" ]; then
-  /bin/mv "$backup_root" "$current_root"
+  /bin/mv -T -- "$backup_root" "$current_root"
 fi
 /bin/rm -rf "$staged_root" "$work_dir"
 exit 1
@@ -949,6 +955,7 @@ Future<UpdateInstallResult?> prepareLinuxPortableUpdate(
   required CommandRunner commandRunner,
   String? pkexecPathOverride,
   bool? parentWritableOverride,
+  String? nonceOverride,
 }) async {
   if (update.asset.format != 'tar.gz') return null;
   Directory currentRoot;
@@ -1002,9 +1009,24 @@ Future<UpdateInstallResult?> prepareLinuxPortableUpdate(
     if (line.startsWith('l') || line.startsWith('h')) return null;
   }
 
-  final nonce = '$currentPid-${DateTime.now().microsecondsSinceEpoch}';
-  final stagedRoot = Directory('${currentRoot.path}.mdslens-update-$nonce');
-  final backupRoot = Directory('${currentRoot.path}.mdslens-backup-$nonce');
+  final nonceBase =
+      nonceOverride ?? '$currentPid-${DateTime.now().microsecondsSinceEpoch}';
+  Directory? stagedRootCandidate;
+  Directory? backupRootCandidate;
+  for (var attempt = 0; attempt < 100; attempt++) {
+    final nonce = attempt == 0 ? nonceBase : '$nonceBase-$attempt';
+    final staged = Directory('${currentRoot.path}.mdslens-update-$nonce');
+    final backup = Directory('${currentRoot.path}.mdslens-backup-$nonce');
+    if (!await _fileSystemEntryExists(staged.path) &&
+        !await _fileSystemEntryExists(backup.path)) {
+      stagedRootCandidate = staged;
+      backupRootCandidate = backup;
+      break;
+    }
+  }
+  if (stagedRootCandidate == null || backupRootCandidate == null) return null;
+  final stagedRoot = stagedRootCandidate;
+  final backupRoot = backupRootCandidate;
   final work = await Directory.systemTemp.createTemp(
     'mdslens-linux-portable-update-',
   );
@@ -1132,6 +1154,14 @@ Future<UpdateInstallResult?> prepareLinuxPortableUpdate(
       } catch (_) {}
     }
   }
+}
+
+Future<bool> _fileSystemEntryExists(String path) async {
+  return await FileSystemEntity.type(
+        path,
+        followLinks: false,
+      ) !=
+      FileSystemEntityType.notFound;
 }
 
 Future<bool> _validLinuxPortableMarker(

@@ -82,7 +82,10 @@ it never inherits a working directory that is about to be retired. The previous
 complete bundle is retained beside the installation as
 `<directory>.mdslens-previous`; only that exact backup is replaced by a later
 successful update. Update paths are resolved and checked as sibling directories
-before any rename or removal is allowed.
+before any rename or removal is allowed. Unique staging and backup names skip
+every existing file, directory, or symbolic link, are checked again immediately
+before the swap, and use exact-target renames that cannot merge into a
+pre-existing directory.
 
 The installation identity must also match the installed copy. In particular,
 Android updates require every release to use the same release keystore.

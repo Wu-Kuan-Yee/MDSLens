@@ -700,6 +700,16 @@ void main() {
     ]);
     expect(packed.exitCode, 0);
     final launches = <(String, List<String>)>[];
+    final collidingStaged = Directory(
+      '${current.path}.mdslens-update-collision',
+    );
+    final collidingBackup = Directory(
+      '${current.path}.mdslens-backup-collision',
+    );
+    await collidingStaged.create();
+    await collidingBackup.create();
+    await File('${collidingStaged.path}/keep').writeAsString('staged');
+    await File('${collidingBackup.path}/keep').writeAsString('backup');
     final update = DownloadedUpdate(
       asset: UpdateManifestAsset(
         name: 'mdslens-linux-x64.tar.gz',
@@ -719,6 +729,7 @@ void main() {
       portableRoot: current.path,
       currentPid: 12345,
       parentWritableOverride: true,
+      nonceOverride: 'collision',
       commandLauncher: (executable, arguments) async {
         launches.add((executable, arguments));
       },
@@ -731,7 +742,13 @@ void main() {
     final stagedPath = launches.single.$2.lastWhere(
       (argument) => argument.contains('.mdslens-update-'),
     );
+    expect(stagedPath, endsWith('.mdslens-update-collision-1'));
     expect(await File('$stagedPath/mdslens').readAsString(), 'new');
+    expect(await File('${collidingStaged.path}/keep').readAsString(), 'staged');
+    expect(await File('${collidingBackup.path}/keep').readAsString(), 'backup');
+    final script = launches.single.$2[1];
+    expect(script, contains('/bin/mv -T --'));
+    expect(script, contains(r'[ -L "$backup_root" ] && exit 1'));
   });
 
   test(
@@ -758,10 +775,12 @@ void main() {
       );
 
       final observedWorkingDirectory = File('${root.path}/new-process.cwd');
+      final observedProcessId = File('${root.path}/new-process.pid');
       final payload = Directory('${root.path}/payload/mdslens-linux-x64');
       await payload.create(recursive: true);
       await File('${payload.path}/mdslens').writeAsString(
-        '#!/bin/sh\npwd > "${observedWorkingDirectory.path}"\nsleep 4\n',
+        '#!/bin/sh\npwd > "${observedWorkingDirectory.path}"\n'
+        'echo \$\$ > "${observedProcessId.path}"\nsleep 10\n',
       );
       await File('${payload.path}/.mdslens-portable.json').writeAsString(
         jsonEncode({
@@ -801,10 +820,29 @@ void main() {
         currentPid: 2147483646,
         parentWritableOverride: true,
         commandLauncher: (executable, arguments) async {
-          await Process.start(
+          final compatibleArguments = List<String>.of(arguments);
+          if (Platform.isMacOS) {
+            // The production path is Linux-only and deliberately uses GNU
+            // mv's exact-target flag. BSD mv lacks -T, so retain the
+            // end-to-end working-directory test while the separate script
+            // assertion above verifies that production keeps -T.
+            compatibleArguments[1] = compatibleArguments[1].replaceAll(
+              '/bin/mv -T --',
+              '/bin/mv',
+            );
+            compatibleArguments[1] = compatibleArguments[1].replaceFirst(
+              'set -u',
+              'set -ux',
+            );
+          }
+          final applied = await Process.run(
             executable,
-            arguments,
-            mode: ProcessStartMode.detached,
+            compatibleArguments,
+          );
+          expect(
+            applied.exitCode,
+            0,
+            reason: '${applied.stdout}\n${applied.stderr}',
           );
         },
         commandRunner: Process.run,
@@ -820,12 +858,10 @@ void main() {
       expect(
           await observedWorkingDirectory.readAsString(), '$resolvedCurrent\n');
       final previous = Directory('$resolvedCurrent.mdslens-previous');
-      for (var attempt = 0; attempt < 50 && !previous.existsSync(); attempt++) {
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-      }
       expect(await File('$resolvedCurrent/mdslens').exists(), isTrue);
       expect(await File('${previous.path}/mdslens').exists(), isTrue);
-      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      final launchedPid = int.parse(await observedProcessId.readAsString());
+      Process.killPid(launchedPid);
     },
   );
 
