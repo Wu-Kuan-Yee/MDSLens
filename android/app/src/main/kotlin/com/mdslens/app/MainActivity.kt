@@ -19,9 +19,44 @@ import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 
 class MainActivity: FlutterActivity() {
+    private val updatePreferences by lazy {
+        getSharedPreferences("mdslens-updater", MODE_PRIVATE)
+    }
     private var openRequestsChannel: MethodChannel? = null
     private val pendingOpenRequests = mutableListOf<String>()
     private var pendingVerifiedUpdate: File? = null
+
+    private fun rememberPendingUpdate(update: File?) {
+        pendingVerifiedUpdate = update
+        updatePreferences.edit().apply {
+            if (update == null) {
+                remove("pending_verified_apk")
+            } else {
+                putString("pending_verified_apk", update.absolutePath)
+            }
+        }.apply()
+    }
+
+    private fun restoredPendingUpdate(): File? {
+        val path = updatePreferences.getString("pending_verified_apk", null)
+            ?: return null
+        return try {
+            val update = File(path).canonicalFile
+            val cache = cacheDir.canonicalFile
+            if (update.isFile &&
+                update.name.endsWith(".apk", ignoreCase = true) &&
+                update.path.startsWith(cache.path + File.separator)
+            ) {
+                update
+            } else {
+                rememberPendingUpdate(null)
+                null
+            }
+        } catch (_: Exception) {
+            rememberPendingUpdate(null)
+            null
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -155,7 +190,7 @@ class MainActivity: FlutterActivity() {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
                     !packageManager.canRequestPackageInstalls()
                 ) {
-                    pendingVerifiedUpdate = update
+                    rememberPendingUpdate(update)
                     openUnknownSourcesSettings()
                     result.success("permission_required")
                     return@setMethodCallHandler
@@ -189,13 +224,13 @@ class MainActivity: FlutterActivity() {
 
     override fun onResume() {
         super.onResume()
-        val update = pendingVerifiedUpdate ?: return
+        val update = pendingVerifiedUpdate ?: restoredPendingUpdate() ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             !packageManager.canRequestPackageInstalls()
         ) {
             return
         }
-        pendingVerifiedUpdate = null
+        rememberPendingUpdate(null)
         if (validateUpdatePackage(update) == "valid") {
             launchVerifiedPackageInstaller(update)
         }
