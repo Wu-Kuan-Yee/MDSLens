@@ -539,4 +539,74 @@ void main() {
     expect(result?.status, UpdateLaunchStatus.permissionRequired);
     expect(result?.closeApplication, isFalse);
   });
+
+  test('direct update support follows the native installation channel', () {
+    expect(
+      nativeDirectUpdateSupported(
+        platform: 'windows',
+        resolvedExecutable: r'C:\Program Files\MDSLens\mdslens.exe',
+        environment: const {},
+      ),
+      isTrue,
+    );
+    expect(
+      nativeDirectUpdateSupported(
+        platform: 'windows',
+        resolvedExecutable:
+            r'C:\Program Files\WindowsApps\MDSLens_0.2.6_x64\mdslens.exe',
+        environment: const {},
+      ),
+      isFalse,
+      reason: 'unsigned EXE updates must not duplicate an MSIX install',
+    );
+    expect(
+      nativeDirectUpdateSupported(
+        platform: 'linux',
+        resolvedExecutable: '/usr/lib/mdslens/mdslens',
+        environment: const {},
+      ),
+      isTrue,
+    );
+    expect(
+      nativeDirectUpdateSupported(
+        platform: 'linux',
+        resolvedExecutable: '/home/user/Downloads/mdslens/mdslens',
+        environment: const {},
+      ),
+      isFalse,
+      reason: 'portable archives require a different replacement strategy',
+    );
+    expect(
+      nativeDirectUpdateSupported(
+        platform: 'linux',
+        resolvedExecutable: '/app/lib/mdslens/mdslens',
+        environment: const {'FLATPAK_ID': 'com.mdslens.app'},
+      ),
+      isFalse,
+    );
+    expect(
+      nativeDirectUpdateSupported(
+        platform: 'linux',
+        resolvedExecutable: '/snap/mdslens/current/mdslens',
+        environment: const {'SNAP': '/snap/mdslens/current'},
+      ),
+      isFalse,
+    );
+    expect(
+      nativeDirectUpdateSupported(
+        platform: 'linux',
+        resolvedExecutable: '/tmp/.mount_MDSLens/mdslens',
+        environment: const {'APPIMAGE': '/home/user/MDSLens.AppImage'},
+      ),
+      isTrue,
+    );
+    expect(
+      nativeDirectUpdateSupported(
+        platform: 'ios',
+        resolvedExecutable: '/private/var/containers/MDSLens',
+        environment: const {},
+      ),
+      isFalse,
+    );
+  });
 }

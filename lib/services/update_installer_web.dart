@@ -4,8 +4,11 @@ import 'runtime_build_info.dart';
 import 'update_installer_models.dart';
 import 'update_service.dart';
 
-bool get directUpdateSupported => true;
-String get directUpdateActionLabel => 'Reload Now';
+// Reloading refreshes browser resources, but it cannot replace the Web Gateway
+// deployed by the server administrator. Web builds still detect new releases
+// and offer View Details without claiming to perform an application update.
+bool get directUpdateSupported => false;
+String get directUpdateActionLabel => 'View Details';
 
 Future<void> requestApplicationExitForUpdate() async {}
 

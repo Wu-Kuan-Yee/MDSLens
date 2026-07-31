@@ -17,17 +17,47 @@ typedef DetachedCommandLauncher = Future<void> Function(
 
 const _updaterChannel = MethodChannel('mdslens/updater');
 
-bool get directUpdateSupported {
-  if (Platform.isLinux &&
-      ((Platform.environment['FLATPAK_ID'] ?? '').isNotEmpty ||
-          (Platform.environment['SNAP'] ?? '').isNotEmpty ||
-          File('/.flatpak-info').existsSync())) {
-    return false;
+bool get directUpdateSupported => nativeDirectUpdateSupported(
+      platform: Platform.operatingSystem,
+      resolvedExecutable: Platform.resolvedExecutable,
+      environment: Platform.environment,
+      flatpakInfoExists: File('/.flatpak-info').existsSync(),
+    );
+
+bool nativeDirectUpdateSupported({
+  required String platform,
+  required String resolvedExecutable,
+  required Map<String, String> environment,
+  bool flatpakInfoExists = false,
+}) {
+  switch (platform.toLowerCase()) {
+    case 'android':
+    case 'macos':
+      return true;
+    case 'windows':
+      // An MSIX package lives in the protected WindowsApps directory and must
+      // be serviced by Windows/App Installer using the package identity. The
+      // unsigned standalone EXE/MSI updater must never create a second install.
+      return !resolvedExecutable
+          .replaceAll('/', r'\')
+          .toLowerCase()
+          .contains(r'\windowsapps\');
+    case 'linux':
+      if ((environment['FLATPAK_ID'] ?? '').isNotEmpty ||
+          (environment['SNAP'] ?? '').isNotEmpty ||
+          flatpakInfoExists) {
+        return false;
+      }
+      if ((environment['APPIMAGE'] ?? '').trim().isNotEmpty) return true;
+      final executable = resolvedExecutable.replaceAll(r'\', '/');
+      // Native DEB/RPM packages install the executable below /usr. A portable
+      // archive has no atomic bundle updater yet, so it must use View Details
+      // rather than pretending an AppImage or system package can replace it.
+      return executable == '/usr/bin/mdslens' ||
+          executable.startsWith('/usr/lib/mdslens/');
+    default:
+      return false;
   }
-  return Platform.isWindows ||
-      Platform.isMacOS ||
-      Platform.isLinux ||
-      Platform.isAndroid;
 }
 
 String get directUpdateActionLabel {
@@ -365,7 +395,7 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
       'permission_required' => UpdateInstallResult(
           status: UpdateLaunchStatus.permissionRequired,
           message:
-              'Allow MDSLens to install apps, then choose Install Update again.',
+              'Allow MDSLens to install apps. The verified package will continue to the system installer when you return.',
           downloaded: update,
         ),
       'signature_mismatch' => UpdateInstallResult(
