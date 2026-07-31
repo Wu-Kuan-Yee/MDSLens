@@ -44,7 +44,8 @@ bool nativeDirectUpdateSupported({
     case 'android':
       return true;
     case 'macos':
-      return !resolvedExecutable.contains('/AppTranslocation/');
+      return !resolvedExecutable.contains('/AppTranslocation/') &&
+          !resolvedExecutable.startsWith('/Volumes/');
     case 'windows':
       // An MSIX package lives in the protected WindowsApps directory and must
       // be serviced by Windows/App Installer using the package identity. The
@@ -291,8 +292,16 @@ if /bin/mv "$current_bundle" "$backup_bundle" &&
     attempt=$((attempt + 1))
     sleep 0.1
   done
-  /bin/rm -rf "$previous_bundle"
-  /bin/mv "$backup_bundle" "$previous_bundle"
+  previous_owned=0
+  if [ -f "$previous_bundle/Contents/Info.plist" ]; then
+    previous_id=$(/usr/libexec/PlistBuddy -c 'Print:CFBundleIdentifier' \
+      "$previous_bundle/Contents/Info.plist" 2>/dev/null || true)
+    [ "$previous_id" = "com.mdslens.app" ] && previous_owned=1
+  fi
+  [ "$previous_owned" -eq 1 ] && /bin/rm -rf "$previous_bundle"
+  if [ ! -e "$previous_bundle" ]; then
+    /bin/mv "$backup_bundle" "$previous_bundle"
+  fi
   /bin/rm -f "$archive"
   /bin/rm -rf "$work_dir"
   exit 0

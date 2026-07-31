@@ -476,6 +476,7 @@ void main() {
     );
     expect(launchedArguments?[1], contains('/usr/bin/open -n -W'));
     expect(launchedArguments?[1], contains(r'kill -0 "$open_pid"'));
+    expect(launchedArguments?[1], contains('/usr/libexec/PlistBuddy'));
     expect(await collidingStage.exists(), isTrue);
     expect(await collidingBackup.exists(), isTrue);
   });
@@ -880,6 +881,16 @@ void main() {
         environment: const {},
       ),
       isFalse,
+    );
+    expect(
+      nativeDirectUpdateSupported(
+        platform: 'macos',
+        resolvedExecutable:
+            '/Volumes/MDSLens/MDSLens.app/Contents/MacOS/MDSLens',
+        environment: const {},
+      ),
+      isFalse,
+      reason: 'a read-only mounted disk image must not self-replace',
     );
   });
 
