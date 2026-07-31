@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -9,6 +10,8 @@ import 'package:mdslens/services/update_installer.dart';
 import 'package:mdslens/services/update_service.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   UpdateManifestAsset assetFor(List<int> bytes) {
     return UpdateManifestAsset(
       name: 'mdslens-windows-x64-setup.exe',
@@ -109,6 +112,40 @@ void main() {
       throwsA(isA<UpdateCancelledException>()),
     );
     expect(directory.listSync(), isEmpty);
+  });
+
+  test('Android updater explains a signing-key mismatch', () async {
+    const channel = MethodChannel('mdslens/updater');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      expect(call.method, 'installApk');
+      expect(call.arguments, '/cache/mdslens-updates/update.apk');
+      return 'signature_mismatch';
+    });
+    final update = DownloadedUpdate(
+      asset: UpdateManifestAsset(
+        name: 'mdslens-android-arm64.apk',
+        url: 'https://example.invalid/update.apk',
+        platform: 'android',
+        architecture: 'arm64',
+        format: 'apk',
+        strategy: 'system-installer',
+        size: 1,
+        sha256:
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      ),
+      path: '/cache/mdslens-updates/update.apk',
+    );
+
+    final result = await launchVerifiedUpdateAsset(
+      update,
+      platformOverride: 'android',
+    );
+
+    expect(result.status, UpdateLaunchStatus.unsupported);
+    expect(result.message, contains('different Android signing keys'));
   });
 
   test('verified AppImages atomically replace the running image', () async {

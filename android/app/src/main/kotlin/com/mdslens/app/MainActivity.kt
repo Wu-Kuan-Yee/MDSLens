@@ -1,6 +1,10 @@
 package com.mdslens.app
 
+import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Intent
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
@@ -133,15 +137,24 @@ class MainActivity: FlutterActivity() {
                     )
                     return@setMethodCallHandler
                 }
+                when (validateUpdatePackage(update)) {
+                    "invalid_package" -> {
+                        result.success("invalid_package")
+                        return@setMethodCallHandler
+                    }
+                    "signature_mismatch" -> {
+                        result.success("signature_mismatch")
+                        return@setMethodCallHandler
+                    }
+                    "not_newer" -> {
+                        result.success("not_newer")
+                        return@setMethodCallHandler
+                    }
+                }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
                     !packageManager.canRequestPackageInstalls()
                 ) {
-                    startActivity(
-                        Intent(
-                            Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                            Uri.parse("package:$packageName")
-                        )
-                    )
+                    openUnknownSourcesSettings()
                     result.success("permission_required")
                     return@setMethodCallHandler
                 }
@@ -150,18 +163,13 @@ class MainActivity: FlutterActivity() {
                     "$packageName.update_files",
                     update
                 )
-                startActivity(
-                    Intent(Intent.ACTION_VIEW)
-                        .setDataAndType(
-                            contentUri,
-                            "application/vnd.android.package-archive"
-                        )
-                        .addFlags(
-                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                                Intent.FLAG_ACTIVITY_NEW_TASK
-                        )
+                result.success(
+                    if (launchPackageInstaller(contentUri)) {
+                        "launched"
+                    } else {
+                        "installer_unavailable"
+                    }
                 )
-                result.success("launched")
             } catch (error: Exception) {
                 result.error("INSTALL_UPDATE_FAILED", error.message, null)
             }
@@ -180,6 +188,115 @@ class MainActivity: FlutterActivity() {
             result.success(pending)
         }
         stageIntent(intent)
+    }
+
+    private fun validateUpdatePackage(update: File): String {
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            @Suppress("DEPRECATION")
+            PackageManager.GET_SIGNATURES
+        }
+        val archive = packageManager.getPackageArchiveInfo(update.path, flags)
+            ?: return "invalid_package"
+        if (archive.packageName != packageName) return "invalid_package"
+        val installed = try {
+            packageManager.getPackageInfo(packageName, flags)
+        } catch (_: PackageManager.NameNotFoundException) {
+            return "invalid_package"
+        }
+        val installedSigners = signingCertificates(installed)
+        val archiveSigners = signingCertificates(archive)
+        if (installedSigners.isEmpty() ||
+            archiveSigners.isEmpty() ||
+            installedSigners.intersect(archiveSigners).isEmpty()
+        ) {
+            return "signature_mismatch"
+        }
+        val installedVersion = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            installed.longVersionCode
+        } else {
+            @Suppress("DEPRECATION")
+            installed.versionCode.toLong()
+        }
+        val archiveVersion = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            archive.longVersionCode
+        } else {
+            @Suppress("DEPRECATION")
+            archive.versionCode.toLong()
+        }
+        return if (archiveVersion > installedVersion) "valid" else "not_newer"
+    }
+
+    private fun signingCertificates(info: PackageInfo): Set<String> {
+        val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val signingInfo = info.signingInfo ?: return emptySet()
+            if (signingInfo.hasMultipleSigners()) {
+                signingInfo.apkContentsSigners
+            } else {
+                signingInfo.signingCertificateHistory
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            info.signatures
+        }
+        return signatures.orEmpty().map { it.toCharsString() }.toSet()
+    }
+
+    private fun openUnknownSourcesSettings() {
+        val intents = listOf(
+            Intent(
+                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                Uri.parse("package:$packageName")
+            ),
+            Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:$packageName")
+            ),
+            Intent(Settings.ACTION_SECURITY_SETTINGS)
+        )
+        for (candidate in intents) {
+            try {
+                startActivity(candidate)
+                return
+            } catch (_: ActivityNotFoundException) {
+                // Try the next settings surface supplied by this Android build.
+            } catch (_: SecurityException) {
+                // Some vendor builds restrict a settings intent; fall back.
+            }
+        }
+    }
+
+    private fun launchPackageInstaller(contentUri: Uri): Boolean {
+        val mimeType = "application/vnd.android.package-archive"
+        for (action in listOf(Intent.ACTION_INSTALL_PACKAGE, Intent.ACTION_VIEW)) {
+            val candidate = Intent(action)
+                .setDataAndType(contentUri, mimeType)
+                .addFlags(
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        Intent.FLAG_ACTIVITY_NEW_TASK
+                )
+            candidate.clipData = ClipData.newRawUri("MDSLens update", contentUri)
+            packageManager.queryIntentActivities(
+                candidate,
+                PackageManager.MATCH_DEFAULT_ONLY
+            ).forEach { target ->
+                grantUriPermission(
+                    target.activityInfo.packageName,
+                    contentUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            try {
+                startActivity(candidate)
+                return true
+            } catch (_: ActivityNotFoundException) {
+                // Try the legacy ACTION_VIEW path next.
+            } catch (_: SecurityException) {
+                // Try the legacy ACTION_VIEW path next.
+            }
+        }
+        return false
     }
 
     override fun onNewIntent(intent: Intent) {

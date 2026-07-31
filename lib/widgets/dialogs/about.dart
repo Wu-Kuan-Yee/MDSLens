@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/app_state.dart';
@@ -152,6 +153,7 @@ class _UpdateDownloadDialogState extends State<_UpdateDownloadDialog> {
       if (!mounted) return;
       setState(() {
         _running = false;
+        _failed = result.status == UpdateLaunchStatus.unsupported;
         _status = result.message;
         if (!result.closeApplication) _allowRouteExit = true;
       });
@@ -169,14 +171,23 @@ class _UpdateDownloadDialogState extends State<_UpdateDownloadDialog> {
           if (mounted) Navigator.of(context).pop();
         });
       }
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
         _running = false;
         _failed = true;
         _allowRouteExit = true;
-        _status =
-            'The update could not be downloaded, verified, or handed to the system installer. No unverified package was opened.';
+        final detail = switch (error) {
+          PlatformException(message: final message?)
+              when message.trim().isNotEmpty =>
+            message.trim(),
+          FormatException(message: final message) when message.isNotEmpty =>
+            message,
+          _ => '',
+        };
+        _status = detail.isEmpty
+            ? 'The update could not be downloaded, verified, or handed to the system installer. No unverified package was opened.'
+            : 'The update was not installed. $detail';
       });
     }
   }

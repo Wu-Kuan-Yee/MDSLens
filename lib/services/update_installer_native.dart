@@ -302,15 +302,47 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
       'installApk',
       update.path,
     );
-    return UpdateInstallResult(
-      status: status == 'permission_required'
-          ? UpdateLaunchStatus.permissionRequired
-          : UpdateLaunchStatus.launched,
-      message: status == 'permission_required'
-          ? 'Allow MDSLens to install apps, then choose Install Update again.'
-          : 'The Android system installer is ready.',
-      downloaded: update,
-    );
+    return switch (status) {
+      'launched' => UpdateInstallResult(
+          status: UpdateLaunchStatus.launched,
+          message: 'The Android system installer is ready.',
+          downloaded: update,
+        ),
+      'permission_required' => UpdateInstallResult(
+          status: UpdateLaunchStatus.permissionRequired,
+          message:
+              'Allow MDSLens to install apps, then choose Install Update again.',
+          downloaded: update,
+        ),
+      'signature_mismatch' => UpdateInstallResult(
+          status: UpdateLaunchStatus.unsupported,
+          message:
+              'This installed copy and the update use different Android signing keys. Export any configuration you need, uninstall this copy once, then install the latest release. Updates after that migration can install normally.',
+          downloaded: update,
+        ),
+      'not_newer' => UpdateInstallResult(
+          status: UpdateLaunchStatus.unsupported,
+          message:
+              'Android rejected this package because its version is not newer than the installed copy.',
+          downloaded: update,
+        ),
+      'invalid_package' => UpdateInstallResult(
+          status: UpdateLaunchStatus.unsupported,
+          message:
+              'The verified download is not a valid MDSLens Android package.',
+          downloaded: update,
+        ),
+      'installer_unavailable' => UpdateInstallResult(
+          status: UpdateLaunchStatus.unsupported,
+          message:
+              'No Android package installer is available for this device profile.',
+          downloaded: update,
+        ),
+      _ => throw PlatformException(
+          code: 'INSTALL_UPDATE_FAILED',
+          message: 'Android returned an unknown update status: $status',
+        ),
+    };
   }
   if (platform == 'windows') {
     final currentExecutable =
