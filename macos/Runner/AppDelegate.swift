@@ -54,6 +54,15 @@ class AppDelegate: FlutterAppDelegate {
   }
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
+    // Finder can launch an unsigned/ad-hoc distributed bundle without making
+    // its restored window key.  The process is then alive (and prevents the
+    // bundle from being moved to Trash), but it looks as though the double
+    // click did nothing.  Always surface the primary window for a normal GUI
+    // launch; `open` already performs this activation implicitly.
+    NSApp.setActivationPolicy(.regular)
+    NSApp.activate(ignoringOtherApps: true)
+    mainFlutterWindow?.makeKeyAndOrderFront(nil)
+
     guard let controller = mainFlutterWindow?.contentViewController as? FlutterViewController else { return }
     let channel = FlutterMethodChannel(name: "mdslens/theme", binaryMessenger: controller.engine.binaryMessenger)
     themeChannel = channel
