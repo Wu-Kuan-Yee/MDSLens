@@ -312,6 +312,63 @@ fi
 exit 1
 ''';
 
+const _linuxAppImageApplyUpdateScript = r'''
+set -u
+parent_pid="$1"
+current_image="$2"
+staged_image="$3"
+backup_image="$4"
+downloaded_image="$5"
+previous_image="${current_image}.mdslens-previous"
+
+case "$current_image" in ""|"/") exit 1 ;; esac
+case "$staged_image" in "${current_image}.mdslens-update-"*) ;; *) exit 1 ;; esac
+case "$backup_image" in "${current_image}.mdslens-backup-"*) ;; *) exit 1 ;; esac
+[ -e "$backup_image" ] && exit 1
+[ -L "$backup_image" ] && exit 1
+
+attempt=0
+while kill -0 "$parent_pid" 2>/dev/null; do
+  if [ "$attempt" -ge 3000 ]; then
+    /bin/rm -f "$staged_image"
+    exit 1
+  fi
+  attempt=$((attempt + 1))
+  sleep 0.1
+done
+
+if /bin/mv -T -- "$current_image" "$backup_image" &&
+   /bin/mv -T -- "$staged_image" "$current_image"; then
+  /bin/chmod +x "$current_image"
+  "$current_image" >/dev/null 2>&1 &
+  new_pid=$!
+  attempt=0
+  while [ "$attempt" -lt 30 ]; do
+    if ! kill -0 "$new_pid" 2>/dev/null; then
+      /bin/rm -f "$current_image"
+      /bin/mv -T -- "$backup_image" "$current_image"
+      "$current_image" >/dev/null 2>&1 &
+      exit 1
+    fi
+    attempt=$((attempt + 1))
+    sleep 0.1
+  done
+  /bin/rm -f "$previous_image"
+  /bin/mv -T -- "$backup_image" "$previous_image"
+  /bin/rm -f "$downloaded_image"
+  exit 0
+fi
+
+if [ ! -e "$current_image" ] && [ -e "$backup_image" ]; then
+  /bin/mv -T -- "$backup_image" "$current_image"
+fi
+/bin/rm -f "$staged_image"
+if [ -x "$current_image" ]; then
+  "$current_image" >/dev/null 2>&1 &
+fi
+exit 1
+''';
+
 const _linuxAuthorizeUpdateScript = r'''
 set -eu
 apply_script="$1"
@@ -721,19 +778,13 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
     final currentAppImage = currentAppImageOverride ??
         (Platform.environment['APPIMAGE'] ?? '').trim();
     if (update.asset.format == 'AppImage' && currentAppImage.isNotEmpty) {
-      if (await replaceAppImageForUpdate(update, currentAppImage)) {
-        await scheduleApplicationRelaunch(
-          currentAppImage,
-          currentPid: currentPidOverride ?? pid,
-          commandLauncher: launch,
-        );
-        return UpdateInstallResult(
-          status: UpdateLaunchStatus.installed,
-          message: 'The AppImage was updated. MDSLens will restart now.',
-          downloaded: update,
-          closeApplication: true,
-        );
-      }
+      final prepared = await prepareAppImageUpdate(
+        update,
+        currentAppImage,
+        currentPid: currentPidOverride ?? pid,
+        commandLauncher: launch,
+      );
+      if (prepared != null) return prepared;
       final elevated = await prepareElevatedAppImageUpdate(
         update,
         currentAppImage,
@@ -1411,6 +1462,81 @@ done
     executablePath,
     work.path,
   ]);
+}
+
+Future<UpdateInstallResult?> prepareAppImageUpdate(
+  DownloadedUpdate update,
+  String currentPath, {
+  required int currentPid,
+  required DetachedCommandLauncher commandLauncher,
+  String? nonceOverride,
+}) async {
+  String resolvedCurrent;
+  try {
+    resolvedCurrent = await File(currentPath).resolveSymbolicLinks();
+  } catch (_) {
+    return null;
+  }
+  final current = File(resolvedCurrent);
+  if (await FileSystemEntity.type(
+        current.path,
+        followLinks: false,
+      ) !=
+      FileSystemEntityType.file) {
+    return null;
+  }
+  if (!await _directoryIsWritable(current.parent)) return null;
+
+  final nonceBase =
+      nonceOverride ?? '$currentPid-${DateTime.now().microsecondsSinceEpoch}';
+  File? stagedCandidate;
+  File? backupCandidate;
+  for (var attempt = 0; attempt < 100; attempt++) {
+    final nonce = attempt == 0 ? nonceBase : '$nonceBase-$attempt';
+    final staged = File('${current.path}.mdslens-update-$nonce');
+    final backup = File('${current.path}.mdslens-backup-$nonce');
+    if (!await _fileSystemEntryExists(staged.path) &&
+        !await _fileSystemEntryExists(backup.path)) {
+      stagedCandidate = staged;
+      backupCandidate = backup;
+      break;
+    }
+  }
+  if (stagedCandidate == null || backupCandidate == null) return null;
+  final staged = stagedCandidate;
+  final backup = backupCandidate;
+  var scheduled = false;
+  try {
+    await File(update.path).copy(staged.path);
+    final chmod = await Process.run('/bin/chmod', ['+x', staged.path]);
+    if (chmod.exitCode != 0) return null;
+    await commandLauncher('/bin/sh', [
+      '-c',
+      _linuxAppImageApplyUpdateScript,
+      'mdslens-appimage-updater',
+      '$currentPid',
+      current.path,
+      staged.path,
+      backup.path,
+      update.path,
+    ]);
+    scheduled = true;
+    return UpdateInstallResult(
+      status: UpdateLaunchStatus.installed,
+      message:
+          'The AppImage update is ready. MDSLens will restart automatically.',
+      downloaded: update,
+      closeApplication: true,
+    );
+  } catch (_) {
+    return null;
+  } finally {
+    if (!scheduled) {
+      try {
+        if (await staged.exists()) await staged.delete();
+      } catch (_) {}
+    }
+  }
 }
 
 Future<bool> replaceAppImageForUpdate(

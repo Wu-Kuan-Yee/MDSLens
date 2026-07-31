@@ -376,7 +376,7 @@ void main() {
   });
 
   test(
-    'AppImage update schedules a relaunch and closes the old process',
+    'AppImage update swaps after exit, confirms launch, and keeps a backup',
     () async {
       final directory = await Directory.systemTemp.createTemp(
         'mdslens-appimage-relaunch-test-',
@@ -384,9 +384,13 @@ void main() {
       addTearDown(() => directory.delete(recursive: true));
       final current = File('${directory.path}/MDSLens.AppImage');
       final downloaded = File('${directory.path}/downloaded.AppImage');
-      await current.writeAsString('old');
-      await downloaded.writeAsString('new');
-      final commands = <(String, List<String>)>[];
+      await current.writeAsString('#!/bin/sh\nexit 0\n');
+      final launched = File('${directory.path}/launched');
+      final launchedPid = File('${directory.path}/launched.pid');
+      await downloaded.writeAsString(
+        '#!/bin/sh\necho launched > "${launched.path}"\n'
+        'echo \$\$ > "${launchedPid.path}"\nsleep 10\n',
+      );
       final update = DownloadedUpdate(
         asset: UpdateManifestAsset(
           name: 'mdslens-linux-x64.AppImage',
@@ -395,9 +399,8 @@ void main() {
           architecture: 'x64',
           format: 'AppImage',
           strategy: 'open-package',
-          size: 3,
-          sha256:
-              'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          size: await downloaded.length(),
+          sha256: sha256.convert(await downloaded.readAsBytes()).toString(),
         ),
         path: downloaded.path,
       );
@@ -406,25 +409,88 @@ void main() {
         update,
         platformOverride: 'linux',
         currentAppImageOverride: current.path,
-        currentPidOverride: 12345,
+        currentPidOverride: 2147483646,
         commandLauncher: (executable, arguments) async {
-          commands.add((executable, arguments));
+          final compatibleArguments = List<String>.of(arguments);
+          if (Platform.isMacOS) {
+            compatibleArguments[1] = compatibleArguments[1].replaceAll(
+              '/bin/mv -T --',
+              '/bin/mv',
+            );
+          }
+          final applied = await Process.run(executable, compatibleArguments);
+          expect(
+            applied.exitCode,
+            0,
+            reason: '${applied.stdout}\n${applied.stderr}',
+          );
         },
       );
 
-      expect(await current.readAsString(), 'new');
-      expect(commands.single.$1, '/bin/sh');
-      expect(commands.single.$2, containsAll(<String>['12345', current.path]));
-      final helperWork = Directory(commands.single.$2.last);
-      addTearDown(() async {
-        if (await helperWork.exists()) {
-          await helperWork.delete(recursive: true);
-        }
-      });
       expect(result.status, UpdateLaunchStatus.installed);
       expect(result.closeApplication, isTrue);
+      expect(await launched.readAsString(), 'launched\n');
+      expect(
+        await File('${current.path}.mdslens-previous').readAsString(),
+        '#!/bin/sh\nexit 0\n',
+      );
+      Process.killPid(int.parse(await launchedPid.readAsString()));
     },
   );
+
+  test('AppImage update rolls back when the replacement exits early', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'mdslens-appimage-rollback-test-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final current = File('${directory.path}/MDSLens.AppImage');
+    final downloaded = File('${directory.path}/downloaded.AppImage');
+    final rollbackMarker = File('${directory.path}/rollback-launched');
+    await current.writeAsString(
+      '#!/bin/sh\necho rollback > "${rollbackMarker.path}"\nsleep 10\n',
+    );
+    await Process.run('/bin/chmod', ['+x', current.path]);
+    await downloaded.writeAsString('#!/bin/sh\nexit 1\n');
+    final update = DownloadedUpdate(
+      asset: UpdateManifestAsset(
+        name: 'mdslens-linux-x64.AppImage',
+        url: 'https://example.invalid/AppImage',
+        platform: 'linux',
+        architecture: 'x64',
+        format: 'AppImage',
+        strategy: 'self-replace',
+        size: await downloaded.length(),
+        sha256: sha256.convert(await downloaded.readAsBytes()).toString(),
+      ),
+      path: downloaded.path,
+    );
+
+    final result = await prepareAppImageUpdate(
+      update,
+      current.path,
+      currentPid: 2147483646,
+      commandLauncher: (executable, arguments) async {
+        final compatibleArguments = List<String>.of(arguments);
+        if (Platform.isMacOS) {
+          compatibleArguments[1] = compatibleArguments[1].replaceAll(
+            '/bin/mv -T --',
+            '/bin/mv',
+          );
+        }
+        final applied = await Process.run(executable, compatibleArguments);
+        expect(applied.exitCode, 1);
+      },
+    );
+
+    expect(result?.closeApplication, isTrue);
+    expect(await current.readAsString(), contains('rollback-launched'));
+    for (var attempt = 0;
+        attempt < 30 && !rollbackMarker.existsSync();
+        attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    expect(rollbackMarker.existsSync(), isTrue);
+  });
 
   test('protected AppImages request PolicyKit authorization', () async {
     final directory = await Directory.systemTemp.createTemp(
