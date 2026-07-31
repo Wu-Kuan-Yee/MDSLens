@@ -161,7 +161,7 @@ button {
 }
 
 .site-header {
-  position: absolute;
+  position: fixed;
   z-index: 20;
   top: calc(18px + var(--safe-area-top));
   left: 50%;
@@ -733,10 +733,6 @@ button {
 }
 
 @media (max-width: 1080px) {
-  .site-header {
-    position: absolute;
-  }
-
   .hero {
     grid-template-columns: 1fr;
     gap: 48px;

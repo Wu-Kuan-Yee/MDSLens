@@ -49,6 +49,7 @@ def main() -> int:
             "@media (max-width: 720px)",
             "@media (prefers-reduced-motion: reduce)",
             "--safe-area-top: env(safe-area-inset-top, 0px)",
+            ".site-header {\n  position: fixed",
             "overscroll-behavior: contain",
             "touch-action: none",
         ),
