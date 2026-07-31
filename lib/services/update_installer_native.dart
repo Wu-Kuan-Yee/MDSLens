@@ -245,6 +245,16 @@ staged_bundle="$3"
 backup_bundle="$4"
 archive="$5"
 work_dir="$6"
+ready_file="$7"
+previous_bundle="${current_bundle}.mdslens-previous"
+
+case "$current_bundle" in ""|"/") exit 1 ;; esac
+case "$staged_bundle" in "${current_bundle}.mdslens-update-"*) ;; *) exit 1 ;; esac
+case "$backup_bundle" in "${current_bundle}.mdslens-backup-"*) ;; *) exit 1 ;; esac
+[ ! -d "$staged_bundle" ] && exit 1
+[ -e "$backup_bundle" ] && exit 1
+[ -L "$backup_bundle" ] && exit 1
+: > "$ready_file"
 
 attempt=0
 while kill -0 "$parent_pid" 2>/dev/null; do
@@ -258,9 +268,23 @@ done
 
 if /bin/mv "$current_bundle" "$backup_bundle" &&
    /bin/mv "$staged_bundle" "$current_bundle"; then
-  /bin/rm -rf "$backup_bundle"
+  /usr/bin/open -n -W "$current_bundle" >/dev/null 2>&1 &
+  open_pid=$!
+  attempt=0
+  while [ "$attempt" -lt 30 ]; do
+    if ! kill -0 "$open_pid" 2>/dev/null; then
+      /bin/rm -rf "$current_bundle"
+      /bin/mv "$backup_bundle" "$current_bundle"
+      /usr/bin/open "$current_bundle"
+      /bin/rm -rf "$work_dir"
+      exit 1
+    fi
+    attempt=$((attempt + 1))
+    sleep 0.1
+  done
+  /bin/rm -rf "$previous_bundle"
+  /bin/mv "$backup_bundle" "$previous_bundle"
   /bin/rm -f "$archive"
-  /usr/bin/open "$current_bundle"
   /bin/rm -rf "$work_dir"
   exit 0
 fi
@@ -1280,6 +1304,7 @@ Future<UpdateInstallResult?> prepareMacOSApplicationUpdate(
   required DetachedCommandLauncher commandLauncher,
   required CommandRunner commandRunner,
   bool? parentWritableOverride,
+  String? nonceOverride,
 }) async {
   String resolvedExecutable;
   try {
@@ -1294,10 +1319,26 @@ Future<UpdateInstallResult?> prepareMacOSApplicationUpdate(
   final parentWritable = parentWritableOverride ??
       await _directoryIsWritable(currentBundle.parent);
 
-  final nonce = '$currentPid-${DateTime.now().microsecondsSinceEpoch}';
-  final stagedBundle = Directory('$bundlePath.mdslens-update-$nonce');
-  final backupBundle = Directory('$bundlePath.mdslens-backup-$nonce');
+  final nonceBase =
+      nonceOverride ?? '$currentPid-${DateTime.now().microsecondsSinceEpoch}';
+  Directory? stagedCandidate;
+  Directory? backupCandidate;
+  for (var attempt = 0; attempt < 100; attempt++) {
+    final nonce = attempt == 0 ? nonceBase : '$nonceBase-$attempt';
+    final staged = Directory('$bundlePath.mdslens-update-$nonce');
+    final backup = Directory('$bundlePath.mdslens-backup-$nonce');
+    if (!await _fileSystemEntryExists(staged.path) &&
+        !await _fileSystemEntryExists(backup.path)) {
+      stagedCandidate = staged;
+      backupCandidate = backup;
+      break;
+    }
+  }
+  if (stagedCandidate == null || backupCandidate == null) return null;
+  final stagedBundle = stagedCandidate;
+  final backupBundle = backupCandidate;
   final work = await Directory.systemTemp.createTemp('mdslens-macos-update-');
+  final ready = File('${work.path}${Platform.pathSeparator}helper-ready');
   final extracted = Directory(
     '${work.path}${Platform.pathSeparator}extracted',
   );
@@ -1341,6 +1382,7 @@ Future<UpdateInstallResult?> prepareMacOSApplicationUpdate(
       backupBundle.path,
       update.path,
       work.path,
+      ready.path,
     ];
     if (parentWritable) {
       final stage = await commandRunner('/usr/bin/ditto', [
@@ -1397,6 +1439,14 @@ Future<UpdateInstallResult?> prepareMacOSApplicationUpdate(
           downloaded: update,
         );
       }
+    }
+    if (!await _waitForFile(ready)) {
+      return UpdateInstallResult(
+        status: UpdateLaunchStatus.unsupported,
+        message:
+            'macOS did not start the update helper, so MDSLens stayed open and the installed version was left unchanged.',
+        downloaded: update,
+      );
     }
     updateScheduled = true;
     return UpdateInstallResult(

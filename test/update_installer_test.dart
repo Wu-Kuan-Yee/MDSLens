@@ -318,6 +318,81 @@ void main() {
     expect(macOSBundlePathFromExecutable('/usr/local/bin/mdslens'), isNull);
   });
 
+  test('macOS update helper takes ownership and skips path collisions',
+      () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'mdslens-macos-update-test-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final executable = File(
+      '${directory.path}/MDSLens.app/Contents/MacOS/MDSLens',
+    );
+    await executable.create(recursive: true);
+    final archive = File('${directory.path}/update.zip');
+    await archive.writeAsString('archive');
+    final collidingStage = Directory(
+      '${directory.path}/MDSLens.app.mdslens-update-collision',
+    );
+    final collidingBackup = Directory(
+      '${directory.path}/MDSLens.app.mdslens-backup-collision',
+    );
+    await collidingStage.create();
+    await collidingBackup.create();
+    final update = DownloadedUpdate(
+      asset: UpdateManifestAsset(
+        name: 'mdslens-macos-arm64-unsigned.zip',
+        url: 'https://example.invalid/update.zip',
+        platform: 'macos',
+        architecture: 'arm64',
+        format: 'zip',
+        strategy: 'self-replace',
+        size: 7,
+        sha256: List.filled(64, 'a').join(),
+      ),
+      path: archive.path,
+    );
+    List<String>? launchedArguments;
+
+    final result = await prepareMacOSApplicationUpdate(
+      update,
+      currentExecutable: executable.path,
+      currentPid: 12345,
+      parentWritableOverride: true,
+      nonceOverride: 'collision',
+      commandLauncher: (command, arguments) async {
+        launchedArguments = arguments;
+        await File(arguments.last).create(recursive: true);
+      },
+      commandRunner: (command, arguments) async {
+        if (command == '/usr/bin/ditto' && arguments.first == '-x') {
+          await Directory('${arguments.last}/MDSLens.app').create(
+            recursive: true,
+          );
+        } else if (command == '/usr/bin/ditto') {
+          await Directory(arguments.last).create(recursive: true);
+        }
+        if (command == '/usr/bin/plutil') {
+          return ProcessResult(0, 0, 'com.mdslens.app\n', '');
+        }
+        return ProcessResult(0, 0, '', '');
+      },
+    );
+
+    expect(result?.closeApplication, isTrue);
+    expect(
+      launchedArguments?.any(
+        (argument) => argument.endsWith(
+          '/MDSLens.app.mdslens-update-collision-1',
+        ),
+      ),
+      isTrue,
+    );
+    expect(launchedArguments?[1], contains('/usr/bin/open -n -W'));
+    expect(launchedArguments?[1], contains(r'kill -0 "$open_pid"'));
+    expect(await collidingStage.exists(), isTrue);
+    expect(await collidingBackup.exists(), isTrue);
+  });
+
   test('macOS protected installs request administrator authorization',
       () async {
     final directory = await Directory.systemTemp.createTemp(
