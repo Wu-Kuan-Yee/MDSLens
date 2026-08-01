@@ -445,6 +445,34 @@ pub fn numeric_from_message(msg: &Message) -> Result<Vec<f64>, String> {
     }
 }
 
+/// Parse a numeric MDSIP message body directly into display-sized f32 values.
+///
+/// Full waveforms are stored as f32 by the plotting layer. Keeping this
+/// conversion in the wire parser avoids first allocating a same-sized Vec<f64>
+/// and then copying it into Vec<f32>.
+pub fn numeric_f32_from_message(msg: &Message) -> Result<Vec<f32>, String> {
+    if msg.body.is_empty() {
+        return Ok(Vec::new());
+    }
+    if msg.dtype == 14 {
+        return Err(String::from_utf8_lossy(&msg.body).trim().to_string());
+    }
+
+    match msg.dtype {
+        11 | 53 => parse_f64_be_to_f32(&msg.body),
+        10 | 52 => parse_f32_be_direct(&msg.body),
+        _ => {
+            if msg.body.len() % 8 == 0 {
+                parse_f64_be_to_f32(&msg.body)
+            } else if msg.body.len() % 4 == 0 {
+                parse_f32_be_direct(&msg.body)
+            } else {
+                Ok(Vec::new())
+            }
+        }
+    }
+}
+
 fn parse_f64_be(data: &[u8]) -> Result<Vec<f64>, String> {
     let mut values = Vec::with_capacity(data.len() / 8);
     for chunk in data.chunks_exact(8) {
@@ -454,11 +482,33 @@ fn parse_f64_be(data: &[u8]) -> Result<Vec<f64>, String> {
     Ok(values)
 }
 
+fn parse_f64_be_to_f32(data: &[u8]) -> Result<Vec<f32>, String> {
+    let mut values = Vec::with_capacity(data.len() / 8);
+    for chunk in data.chunks_exact(8) {
+        let value = f64::from_be_bytes(chunk.try_into().unwrap()) as f32;
+        if value.is_finite() {
+            values.push(value);
+        }
+    }
+    Ok(values)
+}
+
 fn parse_f32_be(data: &[u8]) -> Result<Vec<f64>, String> {
     let mut values = Vec::with_capacity(data.len() / 4);
     for chunk in data.chunks_exact(4) {
         let v = f32::from_be_bytes(chunk.try_into().unwrap());
         if v.is_finite() { values.push(v as f64); }
+    }
+    Ok(values)
+}
+
+fn parse_f32_be_direct(data: &[u8]) -> Result<Vec<f32>, String> {
+    let mut values = Vec::with_capacity(data.len() / 4);
+    for chunk in data.chunks_exact(4) {
+        let value = f32::from_be_bytes(chunk.try_into().unwrap());
+        if value.is_finite() {
+            values.push(value);
+        }
     }
     Ok(values)
 }
@@ -558,6 +608,24 @@ mod tests {
         assert_eq!(values.len(), 2);
         assert!((values[0] - 1.0).abs() < 1e-6);
         assert!((values[1] + 3.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_numeric_f32_from_message_keeps_float_storage() {
+        let body: Vec<u8> = 1.0f32.to_be_bytes().into_iter()
+            .chain((-3.0f32).to_be_bytes())
+            .collect();
+        let msg = Message { status: 0, length: 0, dtype: 10, body };
+        assert_eq!(numeric_f32_from_message(&msg).unwrap(), vec![1.0f32, -3.0f32]);
+    }
+
+    #[test]
+    fn test_numeric_f32_from_message_converts_doubles_directly() {
+        let body: Vec<u8> = 1.5f64.to_be_bytes().into_iter()
+            .chain((-2.25f64).to_be_bytes())
+            .collect();
+        let msg = Message { status: 0, length: 0, dtype: 11, body };
+        assert_eq!(numeric_f32_from_message(&msg).unwrap(), vec![1.5f32, -2.25f32]);
     }
 
     #[test]

@@ -1251,8 +1251,47 @@ fn series_from_msg_uniform(
     step: f64,
     _max: usize,
 ) -> SignalSeries {
-    let values = protocol::numeric_from_message(msg).unwrap_or_default();
-    series_from_values_uniform(name, values, start, step)
+    let values = protocol::numeric_f32_from_message(msg).unwrap_or_default();
+    series_from_f32_values_uniform(name, values, start, step)
+}
+
+fn series_from_f32_values_uniform(
+    name: String,
+    values: Vec<f32>,
+    start: f64,
+    step: f64,
+) -> SignalSeries {
+    if !start.is_finite() || !step.is_finite() || step == 0.0 {
+        return SignalSeries {
+            name,
+            error: "invalid uniform timebase".into(),
+            ..Default::default()
+        };
+    }
+    if values.is_empty() {
+        return SignalSeries {
+            name,
+            error: "empty signal".into(),
+            ..Default::default()
+        };
+    }
+
+    let mut min_y = f32::INFINITY;
+    let mut max_y = f32::NEG_INFINITY;
+    for &value in &values {
+        min_y = min_y.min(value);
+        max_y = max_y.max(value);
+    }
+
+    SignalSeries {
+        name,
+        uniform_y: values,
+        uniform_start: start,
+        uniform_step: step,
+        uniform_min_y: min_y as f64,
+        uniform_max_y: max_y as f64,
+        ..Default::default()
+    }
 }
 
 fn series_from_values_uniform(
