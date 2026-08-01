@@ -435,6 +435,12 @@ if /bin/mv "$current_bundle" "$backup_bundle" &&
   attempt=0
   while [ "$attempt" -lt 600 ]; do
     if ! kill -0 "$new_pid" 2>/dev/null; then
+      wait "$new_pid" 2>/dev/null
+      exit_code=$?
+      if [ "$exit_code" = "0" ]; then
+        /bin/rm -rf "$previous_bundle"
+        /bin/rm -f "$commit_marker" "$health_file"
+      fi
       /bin/rm -rf "$work_dir"
       exit 0
     fi
@@ -472,6 +478,16 @@ work_dir=$(/usr/bin/dirname "$health_file")
 previous_image="${current_image}.mdslens-previous"
 previous_owner="${previous_image}.owner"
 
+process_is_running() {
+  candidate_pid="$1"
+  kill -0 "$candidate_pid" 2>/dev/null || return 1
+  if [ -r "/proc/$candidate_pid/stat" ]; then
+    process_state=$(awk '{print $3}' "/proc/$candidate_pid/stat" 2>/dev/null || true)
+    [ "$process_state" = "Z" ] && return 1
+  fi
+  return 0
+}
+
 case "$current_image" in ""|"/") exit 1 ;; esac
 case "$staged_image" in "${current_image}.mdslens-update-"*) ;; *) exit 1 ;; esac
 case "$backup_image" in "${current_image}.mdslens-backup-"*) ;; *) exit 1 ;; esac
@@ -498,7 +514,7 @@ if /bin/mv -T -- "$current_image" "$backup_image" &&
   attempt=0
   healthy=0
   while [ "$attempt" -lt 1200 ]; do
-    if ! kill -0 "$new_pid" 2>/dev/null; then
+    if ! process_is_running "$new_pid"; then
       /bin/rm -f "$current_image"
       /bin/mv -T -- "$backup_image" "$current_image"
       "$current_image" >/dev/null 2>&1 &
@@ -537,7 +553,13 @@ if /bin/mv -T -- "$current_image" "$backup_image" &&
   fi
   attempt=0
   while [ "$attempt" -lt 600 ]; do
-    if ! kill -0 "$new_pid" 2>/dev/null; then
+    if ! process_is_running "$new_pid"; then
+      wait "$new_pid" 2>/dev/null
+      exit_code=$?
+      if [ "$exit_code" = "0" ]; then
+        /bin/rm -f "$previous_image" "$previous_owner" "$commit_marker" \
+          "$health_file"
+      fi
       /bin/rm -f "$downloaded_image"
       /bin/rm -rf "$work_dir"
       exit 0
@@ -578,6 +600,7 @@ healthy_file="${10}"
 failed_file="${11}"
 rollback_file="${12}"
 pid_file="${13}"
+exit_file="${14}"
 previous_image="${current_image}.mdslens-previous"
 previous_owner="${previous_image}.owner"
 work_dir=$(/usr/bin/dirname "$health_file")
@@ -623,6 +646,19 @@ if /bin/mv -T -- "$current_image" "$backup_image" &&
         stability_attempt=0
         while [ "$stability_attempt" -lt 600 ]; do
           if ! kill -0 "$new_pid" 2>/dev/null; then
+            exit_code=''
+            exit_attempt=0
+            while [ "$exit_attempt" -lt 50 ]; do
+              if [ -r "$exit_file" ]; then
+                exit_code=$(/bin/cat "$exit_file" 2>/dev/null || true)
+                break
+              fi
+              exit_attempt=$((exit_attempt + 1))
+              sleep 0.1
+            done
+            if [ "$exit_code" = "0" ]; then
+              /bin/rm -f "$previous_image" "$previous_owner" "$commit_marker"
+            fi
             /bin/rm -f "$downloaded_image"
             /bin/rm -rf "$work_dir"
             exit 0
@@ -668,6 +704,7 @@ cancel_file="$6"
 health_file="$7"
 health_token="$8"
 pid_file="$9"
+exit_file="${10}"
 
 attempt=0
 while [ "$attempt" -lt 300 ]; do
@@ -695,6 +732,8 @@ while [ "$attempt" -lt 300 ]; do
       if [ -f "$health_file" ] &&
          [ "$(/bin/cat "$health_file" 2>/dev/null || true)" = "$health_token" ]; then
         : > "$healthy_file"
+        wait "$new_pid" 2>/dev/null
+        printf '%s\n' "$?" > "$exit_file"
         exit 0
       fi
       health_attempt=$((health_attempt + 1))
@@ -808,6 +847,11 @@ if /bin/mv -T -- "$current_root" "$backup_root" &&
   stability_attempt=0
   while [ "$stability_attempt" -lt 600 ]; do
     if ! process_is_running "$new_pid"; then
+      wait "$new_pid" 2>/dev/null
+      exit_code=$?
+      if [ "$exit_code" = "0" ]; then
+        /bin/rm -rf "$previous_root" "$commit_marker"
+      fi
       /bin/rm -rf "$work_dir"
       exit 0
     fi
@@ -861,6 +905,7 @@ healthy_file="${11}"
 failed_file="${12}"
 pid_file="${13}"
 cancel_file="${14}"
+exit_file="${15}"
 previous_root="${current_root}.mdslens-previous"
 
 case "$current_root" in ""|"/") exit 1 ;; esac
@@ -911,6 +956,19 @@ if /bin/mv -T -- "$current_root" "$backup_root" &&
         stability_attempt=0
         while [ "$stability_attempt" -lt 600 ]; do
           if ! process_is_running "$new_pid"; then
+            exit_code=''
+            exit_attempt=0
+            while [ "$exit_attempt" -lt 50 ]; do
+              if [ -r "$exit_file" ]; then
+                exit_code=$(/bin/cat "$exit_file" 2>/dev/null || true)
+                break
+              fi
+              exit_attempt=$((exit_attempt + 1))
+              sleep 0.1
+            done
+            if [ "$exit_code" = "0" ]; then
+              /bin/rm -rf "$previous_root" "$commit_marker"
+            fi
             /bin/rm -rf "$work_dir"
             exit 0
           fi
@@ -950,6 +1008,7 @@ cancel_file="$5"
 pid_file="$6"
 health_file="$7"
 health_token="$8"
+exit_file="$9"
 
 attempt=0
 while [ "$attempt" -lt 1200 ]; do
@@ -972,6 +1031,8 @@ while [ "$attempt" -lt 1200 ]; do
       if [ -f "$health_file" ] &&
          [ "$(/bin/cat "$health_file" 2>/dev/null || true)" = "$health_token" ]; then
         : > "$healthy_file"
+        wait "$new_pid" 2>/dev/null
+        printf '%s\n' "$?" > "$exit_file"
         exit 0
       fi
       health_attempt=$((health_attempt + 1))
@@ -1152,6 +1213,13 @@ try {
   for ($attempt = 0; $attempt -lt 600; $attempt++) {
     $process.Refresh()
     if ($process.HasExited) {
+      if ($process.ExitCode -eq 0) {
+        if (Test-Path -LiteralPath $previousRoot) {
+          Remove-Item -LiteralPath $previousRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        Remove-Item -LiteralPath $commitMarker -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $healthFile -Force -ErrorAction SilentlyContinue
+      }
       Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
       exit 0
     }
@@ -1198,6 +1266,7 @@ $healthFile = $args[12]
 $healthToken = $args[13]
 $commitMarker = $args[14]
 $newPidFile = $args[15]
+$exitFile = $args[16]
 $previousRoot = "$currentRoot.mdslens-previous"
 $workRoot = Split-Path -Parent $preparedFile
 $extractionRoot = "$stagedRoot-extracted"
@@ -1270,6 +1339,22 @@ try {
   }
   for ($attempt = 0; $attempt -lt 600; $attempt++) {
     if (-not (Get-Process -Id $replacementPid -ErrorAction SilentlyContinue)) {
+      $exitCode = $null
+      for ($statusAttempt = 0; $statusAttempt -lt 50; $statusAttempt++) {
+        if (Test-Path -LiteralPath $exitFile) {
+          try {
+            $exitCode = [int](Get-Content -LiteralPath $exitFile -Raw).Trim()
+            break
+          } catch {}
+        }
+        Start-Sleep -Milliseconds 100
+      }
+      if ($exitCode -eq 0) {
+        if (Test-Path -LiteralPath $previousRoot) {
+          Remove-Item -LiteralPath $previousRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        Remove-Item -LiteralPath $commitMarker -Force -ErrorAction SilentlyContinue
+      }
       Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
       exit 0
     }
@@ -1305,6 +1390,7 @@ $workRoot = $args[6]
 $healthFile = $args[7]
 $healthToken = $args[8]
 $newPidFile = $args[9]
+$exitFile = $args[10]
 for ($attempt = 0; $attempt -lt 600; $attempt++) {
   if (Test-Path -LiteralPath $swapReadyFile) { break }
   Start-Sleep -Milliseconds 100
@@ -1326,6 +1412,8 @@ for ($attempt = 0; $attempt -lt 1200; $attempt++) {
       $reported = (Get-Content -LiteralPath $healthFile -Raw).Trim()
       if ($reported -eq $healthToken) {
         Set-Content -LiteralPath $healthyFile -Value 'healthy' -Encoding Ascii
+        $process.WaitForExit()
+        Set-Content -LiteralPath $exitFile -Value $process.ExitCode -Encoding Ascii
         exit 0
       }
     } catch {}
@@ -2109,6 +2197,7 @@ Future<UpdateInstallResult> _prepareProtectedWindowsPortableUpdate(
     commitMarker: '${currentRoot.path}.mdslens-update-committed',
   );
   final newPid = File('${work.path}${Platform.pathSeparator}new-pid');
+  final exitFile = File('${work.path}${Platform.pathSeparator}new-exit');
   await privilegedHelper.writeAsString(_windowsPortablePrivilegedUpdateScript);
   await userHelper.writeAsString(_windowsPortableUserRelaunchScript);
   await bootstrap.writeAsString(r'''
@@ -2142,6 +2231,7 @@ try {
     handshake.token,
     handshake.commitMarker,
     newPid.path,
+    exitFile.path,
   ];
   final elevation = await commandRunner(powershell, [
     '-NoProfile',
@@ -2186,6 +2276,7 @@ try {
     handshake.healthFile.path,
     handshake.token,
     newPid.path,
+    exitFile.path,
   ]);
   return UpdateInstallResult(
     status: UpdateLaunchStatus.installed,
@@ -2558,6 +2649,7 @@ Future<UpdateInstallResult?> prepareLinuxPortableUpdate(
       final failedFile = '${work.path}${Platform.pathSeparator}failed';
       final cancelFile = '${work.path}${Platform.pathSeparator}cancel';
       final pidFile = '${work.path}${Platform.pathSeparator}new-pid';
+      final exitFile = '${work.path}${Platform.pathSeparator}new-exit';
       await commandLauncher('/bin/sh', [
         '-c',
         _linuxPortableUserRelaunchScript,
@@ -2570,6 +2662,7 @@ Future<UpdateInstallResult?> prepareLinuxPortableUpdate(
         pidFile,
         handshake.healthFile.path,
         handshake.token,
+        exitFile,
       ]);
       final authorization = await commandRunner(pkexec, [
         '/bin/sh',
@@ -2585,6 +2678,7 @@ Future<UpdateInstallResult?> prepareLinuxPortableUpdate(
         failedFile,
         pidFile,
         cancelFile,
+        exitFile,
       ]);
       if (authorization.exitCode != 0) {
         try {
@@ -3121,6 +3215,7 @@ Future<UpdateInstallResult?> prepareElevatedAppImageUpdate(
     commitMarker: '$resolvedCurrent.mdslens-update-committed',
   );
   final pidFile = '${work.path}${Platform.pathSeparator}new-pid';
+  final exitFile = '${work.path}${Platform.pathSeparator}new-exit';
   await commandLauncher('/bin/sh', [
     '-c',
     _linuxAppImageUserRelaunchScript,
@@ -3134,6 +3229,7 @@ Future<UpdateInstallResult?> prepareElevatedAppImageUpdate(
     handshake.healthFile.path,
     handshake.token,
     pidFile,
+    exitFile,
   ]);
   final authorization = await commandRunner(pkexec, [
     '/bin/sh',
@@ -3156,6 +3252,7 @@ Future<UpdateInstallResult?> prepareElevatedAppImageUpdate(
     failed,
     rollback,
     pidFile,
+    exitFile,
   ]);
   if (authorization.exitCode != 0) {
     try {

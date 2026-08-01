@@ -785,7 +785,7 @@ void main() {
   });
 
   test(
-    'AppImage update swaps after exit, confirms launch, and keeps a backup',
+    'AppImage update removes rollback files after a clean exit',
     () async {
       final directory = await Directory.systemTemp.createTemp(
         'mdslens-appimage-relaunch-test-',
@@ -848,13 +848,14 @@ void main() {
       expect(result.status, UpdateLaunchStatus.installed);
       expect(result.closeApplication, isTrue);
       expect(await launched.readAsString(), 'launched\n');
+      expect(await File('${current.path}.mdslens-previous').exists(), isFalse);
       expect(
-        await File('${current.path}.mdslens-previous').readAsString(),
-        '#!/bin/sh\nexit 0\n',
+        await File('${current.path}.mdslens-previous.owner').exists(),
+        isFalse,
       );
       expect(
-        await File('${current.path}.mdslens-previous.owner').readAsString(),
-        'com.mdslens.app\n',
+        await File('${current.path}.mdslens-update-committed').exists(),
+        isFalse,
       );
       Process.killPid(int.parse(await launchedPid.readAsString()));
     },
@@ -1334,7 +1335,7 @@ void main() {
   });
 
   test(
-    'Linux portable update restarts inside the replacement directory and keeps one backup',
+    'Linux portable update restarts inside the replacement directory and cleans after exit',
     () async {
       final root = await Directory.systemTemp.createTemp(
         'mdslens-portable-swap-test-',
@@ -1450,7 +1451,11 @@ void main() {
           await observedWorkingDirectory.readAsString(), '$resolvedCurrent\n');
       final previous = Directory('$resolvedCurrent.mdslens-previous');
       expect(await File('$resolvedCurrent/mdslens').exists(), isTrue);
-      expect(await File('${previous.path}/mdslens').exists(), isTrue);
+      expect(await File('${previous.path}/mdslens').exists(), isFalse);
+      expect(
+        await File('$resolvedCurrent.mdslens-update-committed').exists(),
+        isFalse,
+      );
       final launchedPid = int.parse(await observedProcessId.readAsString());
       Process.killPid(launchedPid);
     },
