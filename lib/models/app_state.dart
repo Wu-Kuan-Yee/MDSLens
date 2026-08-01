@@ -921,7 +921,7 @@ class AppState extends ChangeNotifier {
   String shortcutText(MdsShortcutCommand command) {
     final binding = _keyboardShortcuts[command];
     if (binding == null) return '';
-    return binding.strokes.map((stroke) => stroke.displayText).join(' / ');
+    return binding.sequences.map((sequence) => sequence.displayText).join(' / ');
   }
 
   void applyFontSettings(

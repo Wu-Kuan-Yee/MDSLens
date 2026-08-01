@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -19,7 +21,7 @@ class KeyboardShortcutsDialog {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setState) {
-          final conflicts = _conflictingStrokes(draft);
+          final conflicts = _conflictingSequences(draft);
           return KeyboardSafeDialog(
             maxWidth: 760,
             maxHeight: 820,
@@ -55,10 +57,10 @@ class KeyboardShortcutsDialog {
                       binding: draft[definition.command] ??
                           const MdsShortcutBinding(),
                       conflicting: {
-                        for (final stroke in (draft[definition.command] ??
+                        for (final sequence in (draft[definition.command] ??
                                 const MdsShortcutBinding())
-                            .strokes)
-                          if (conflicts.contains(stroke)) stroke,
+                            .sequences)
+                          if (conflicts.contains(sequence)) sequence,
                       },
                       onChanged: (binding) => setState(() {
                         draft = Map.of(draft)..[definition.command] = binding;
@@ -113,25 +115,59 @@ class KeyboardShortcutsDialog {
 
 const _categories = [
   'General',
+  'Global',
   'Panel',
   'Shot',
   'Point tracking',
   'Panel navigation',
+  'Current panel',
+  'Popup menu navigation',
 ];
 
-Set<MdsShortcutStroke> _conflictingStrokes(
+Set<MdsShortcutSequence> _conflictingSequences(
   Map<MdsShortcutCommand, MdsShortcutBinding> bindings,
 ) {
-  final counts = <MdsShortcutStroke, int>{};
-  for (final binding in bindings.values) {
-    for (final stroke in binding.strokes) {
-      counts[stroke] = (counts[stroke] ?? 0) + 1;
+  final counts = <MdsShortcutSequence, int>{};
+  final definitions = {
+    for (final definition in mdsShortcutDefinitions)
+      definition.command: definition,
+  };
+  final entries = <(MdsShortcutCommand, MdsShortcutSequence)>[
+    for (final entry in bindings.entries)
+      for (final sequence in entry.value.sequences) (entry.key, sequence),
+  ];
+  for (var i = 0; i < entries.length; i++) {
+    for (var j = i + 1; j < entries.length; j++) {
+      if (_contextsAreExclusive(
+        definitions[entries[i].$1]!,
+        definitions[entries[j].$1]!,
+      )) {
+        continue;
+      }
+      if (entries[i].$2 == entries[j].$2) {
+        counts[entries[i].$2] = 2;
+      }
     }
   }
   return {
     for (final entry in counts.entries)
       if (entry.value > 1) entry.key,
   };
+}
+
+bool _contextsAreExclusive(
+  MdsShortcutDefinition first,
+  MdsShortcutDefinition second,
+) {
+  final firstMenu = first.category == 'Popup menu navigation';
+  final secondMenu = second.category == 'Popup menu navigation';
+  if (firstMenu != secondMenu) return true;
+  final firstPoint = first.category == 'Point tracking';
+  final secondPoint = second.category == 'Point tracking';
+  final firstPanelNavigation = first.category == 'Panel navigation';
+  final secondPanelNavigation = second.category == 'Panel navigation';
+  return (firstPoint && secondPanelNavigation) ||
+      (secondPoint && firstPanelNavigation);
 }
 
 class _ShortcutRow extends StatelessWidget {
@@ -145,7 +181,7 @@ class _ShortcutRow extends StatelessWidget {
 
   final MdsShortcutDefinition definition;
   final MdsShortcutBinding binding;
-  final Set<MdsShortcutStroke> conflicting;
+  final Set<MdsShortcutSequence> conflicting;
   final ValueChanged<MdsShortcutBinding> onChanged;
 
   @override
@@ -162,10 +198,10 @@ class _ShortcutRow extends StatelessWidget {
                   value: binding.primary,
                   conflicting: binding.primary != null &&
                       conflicting.contains(binding.primary),
-                  onChanged: (value) => onChanged(
-                    binding.copyWith(
-                        primary: value, clearPrimary: value == null),
-                  ),
+                  onChanged: (value) => onChanged(binding.copyWith(
+                    primary: value,
+                    clearPrimary: value == null,
+                  )),
                 ),
                 _ShortcutCapture(
                   key: ValueKey('${definition.id}-alternative'),
@@ -173,12 +209,10 @@ class _ShortcutRow extends StatelessWidget {
                   value: binding.alternative,
                   conflicting: binding.alternative != null &&
                       conflicting.contains(binding.alternative),
-                  onChanged: (value) => onChanged(
-                    binding.copyWith(
-                      alternative: value,
-                      clearAlternative: value == null,
-                    ),
-                  ),
+                  onChanged: (value) => onChanged(binding.copyWith(
+                    alternative: value,
+                    clearAlternative: value == null,
+                  )),
                 ),
               ];
               if (constraints.maxWidth < 520) {
@@ -218,9 +252,9 @@ class _ShortcutCapture extends StatefulWidget {
   });
 
   final String label;
-  final MdsShortcutStroke? value;
+  final MdsShortcutSequence? value;
   final bool conflicting;
-  final ValueChanged<MdsShortcutStroke?> onChanged;
+  final ValueChanged<MdsShortcutSequence?> onChanged;
 
   @override
   State<_ShortcutCapture> createState() => _ShortcutCaptureState();
@@ -228,32 +262,60 @@ class _ShortcutCapture extends StatefulWidget {
 
 class _ShortcutCaptureState extends State<_ShortcutCapture> {
   final _focusNode = FocusNode();
+  Timer? _commitTimer;
+  final _captured = <MdsShortcutStroke>[];
   bool _capturing = false;
 
   @override
   void dispose() {
+    _commitTimer?.cancel();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  void _finishCapture() {
+    _commitTimer?.cancel();
+    if (_captured.isNotEmpty) {
+      widget.onChanged(MdsShortcutSequence(_captured));
+    }
+    _captured.clear();
+    if (mounted) setState(() => _capturing = false);
+  }
+
+  void _cancelCapture() {
+    _commitTimer?.cancel();
+    _captured.clear();
+    if (mounted) setState(() => _capturing = false);
+  }
+
+  void _scheduleCommit() {
+    _commitTimer?.cancel();
+    _commitTimer = Timer(const Duration(milliseconds: 650), _finishCapture);
   }
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     if (!_capturing) return KeyEventResult.ignored;
     if (event is KeyDownEvent &&
         event.logicalKey == LogicalKeyboardKey.escape) {
-      setState(() => _capturing = false);
+      _cancelCapture();
       return KeyEventResult.handled;
     }
     if (event is KeyDownEvent &&
         (event.logicalKey == LogicalKeyboardKey.backspace ||
             event.logicalKey == LogicalKeyboardKey.delete)) {
       widget.onChanged(null);
-      setState(() => _capturing = false);
+      _cancelCapture();
       return KeyEventResult.handled;
     }
     final stroke = shortcutStrokeFromEvent(event);
     if (stroke == null) return KeyEventResult.handled;
-    widget.onChanged(stroke);
-    setState(() => _capturing = false);
+    _captured.add(stroke);
+    if (_captured.length >= 4) {
+      _finishCapture();
+    } else {
+      _scheduleCommit();
+      setState(() {});
+    }
     return KeyEventResult.handled;
   }
 
@@ -282,7 +344,9 @@ class _ShortcutCaptureState extends State<_ShortcutCapture> {
         ),
         label: Text(
           _capturing
-              ? 'Press keys…'
+              ? (_captured.isEmpty
+                  ? 'Press keys…'
+                  : '${_captured.map((stroke) => stroke.displayText).join(', ')} …')
               : '${widget.label}: ${widget.value?.displayText ?? 'None'}',
         ),
       ),

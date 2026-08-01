@@ -3,24 +3,42 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 enum MdsShortcutCommand {
+  openFile,
+  openWebMenu,
+  saveConfiguration,
+  globalRate,
+  globalLayout,
+  globalExport,
   pointMode,
   zoomMode,
   focusShot,
+  refreshData,
   toggleRefresh,
   maximizePanel,
   showAllPanels,
   resetCurrentScale,
   resetAllScales,
+  sameXScale,
+  sameYScale,
   previousShot,
   nextShot,
   latestShot,
   pointPrevious,
   pointNext,
+  panelRate,
+  panelSourceSetup,
+  panelExport,
+  panelSetup,
   panelLeft,
   panelDown,
   panelUp,
   panelRight,
   exitPoint,
+  menuLeft,
+  menuDown,
+  menuUp,
+  menuRight,
+  menuActivate,
 }
 
 class MdsShortcutDefinition {
@@ -33,6 +51,42 @@ class MdsShortcutDefinition {
 }
 
 const mdsShortcutDefinitions = <MdsShortcutDefinition>[
+  MdsShortcutDefinition(
+    MdsShortcutCommand.openFile,
+    'open_file',
+    'General',
+    'Open configuration',
+  ),
+  MdsShortcutDefinition(
+    MdsShortcutCommand.openWebMenu,
+    'open_web_menu',
+    'General',
+    'Open internal web pages',
+  ),
+  MdsShortcutDefinition(
+    MdsShortcutCommand.saveConfiguration,
+    'save_configuration',
+    'General',
+    'Save configuration',
+  ),
+  MdsShortcutDefinition(
+    MdsShortcutCommand.globalRate,
+    'global_rate',
+    'Global',
+    'Global rate',
+  ),
+  MdsShortcutDefinition(
+    MdsShortcutCommand.globalLayout,
+    'global_layout',
+    'Global',
+    'Layout setup',
+  ),
+  MdsShortcutDefinition(
+    MdsShortcutCommand.globalExport,
+    'global_export',
+    'Global',
+    'Export data',
+  ),
   MdsShortcutDefinition(
     MdsShortcutCommand.pointMode,
     'point_mode',
@@ -50,6 +104,12 @@ const mdsShortcutDefinitions = <MdsShortcutDefinition>[
     'focus_shot',
     'General',
     'Focus shot input',
+  ),
+  MdsShortcutDefinition(
+    MdsShortcutCommand.refreshData,
+    'refresh_data',
+    'General',
+    'Refresh data',
   ),
   MdsShortcutDefinition(
     MdsShortcutCommand.toggleRefresh,
@@ -80,6 +140,18 @@ const mdsShortcutDefinitions = <MdsShortcutDefinition>[
     'reset_all_scales',
     'Panel',
     'Reset all panel scales',
+  ),
+  MdsShortcutDefinition(
+    MdsShortcutCommand.sameXScale,
+    'same_x_scale',
+    'Panel',
+    'Use the same X scale',
+  ),
+  MdsShortcutDefinition(
+    MdsShortcutCommand.sameYScale,
+    'same_y_scale',
+    'Panel',
+    'Use the same Y scale',
   ),
   MdsShortcutDefinition(
     MdsShortcutCommand.previousShot,
@@ -118,6 +190,30 @@ const mdsShortcutDefinitions = <MdsShortcutDefinition>[
     'Lock or exit Point tracking',
   ),
   MdsShortcutDefinition(
+    MdsShortcutCommand.panelRate,
+    'panel_rate',
+    'Current panel',
+    'Current panel rate',
+  ),
+  MdsShortcutDefinition(
+    MdsShortcutCommand.panelSourceSetup,
+    'panel_source_setup',
+    'Current panel',
+    'Current panel data source',
+  ),
+  MdsShortcutDefinition(
+    MdsShortcutCommand.panelExport,
+    'panel_export',
+    'Current panel',
+    'Export current panel',
+  ),
+  MdsShortcutDefinition(
+    MdsShortcutCommand.panelSetup,
+    'panel_setup',
+    'Current panel',
+    'Current panel setup',
+  ),
+  MdsShortcutDefinition(
     MdsShortcutCommand.panelLeft,
     'panel_left',
     'Panel navigation',
@@ -140,6 +236,36 @@ const mdsShortcutDefinitions = <MdsShortcutDefinition>[
     'panel_right',
     'Panel navigation',
     'Select panel right',
+  ),
+  MdsShortcutDefinition(
+    MdsShortcutCommand.menuLeft,
+    'menu_left',
+    'Popup menu navigation',
+    'Move left / close submenu',
+  ),
+  MdsShortcutDefinition(
+    MdsShortcutCommand.menuDown,
+    'menu_down',
+    'Popup menu navigation',
+    'Move down',
+  ),
+  MdsShortcutDefinition(
+    MdsShortcutCommand.menuUp,
+    'menu_up',
+    'Popup menu navigation',
+    'Move up',
+  ),
+  MdsShortcutDefinition(
+    MdsShortcutCommand.menuRight,
+    'menu_right',
+    'Popup menu navigation',
+    'Move right / open submenu',
+  ),
+  MdsShortcutDefinition(
+    MdsShortcutCommand.menuActivate,
+    'menu_activate',
+    'Popup menu navigation',
+    'Activate selected item',
   ),
 ];
 
@@ -231,15 +357,67 @@ class MdsShortcutStroke {
   int get hashCode => Object.hash(key, control, alt, shift, meta);
 }
 
+/// A shortcut may contain up to four key combinations, matching the
+/// multi-stroke shortcuts supported by the desktop version.  A one-stroke
+/// sequence is used for the existing shortcuts and is encoded in the legacy
+/// stroke shape so older MDSLens settings remain readable.
+class MdsShortcutSequence {
+  MdsShortcutSequence(Iterable<MdsShortcutStroke> strokes)
+      : strokes = List.unmodifiable(strokes);
+
+  MdsShortcutSequence.single(MdsShortcutStroke stroke)
+      : strokes = List.unmodifiable(<MdsShortcutStroke>[stroke]);
+
+  final List<MdsShortcutStroke> strokes;
+
+  bool get isEmpty => strokes.isEmpty;
+  bool get isSingle => strokes.length == 1;
+
+  String get portableText =>
+      strokes.map((stroke) => stroke.portableText).join(', ');
+
+  String get displayText =>
+      strokes.map((stroke) => stroke.displayText).join(', ');
+
+  Map<String, dynamic> toJson() {
+    if (isSingle) return strokes.first.toJson();
+    return {
+      'strokes': [for (final stroke in strokes) stroke.toJson()],
+    };
+  }
+
+  static MdsShortcutSequence? fromJson(dynamic value) {
+    if (value is Map && value['strokes'] is List) {
+      final strokes = <MdsShortcutStroke>[];
+      for (final raw in value['strokes'] as List) {
+        final stroke = MdsShortcutStroke.fromJson(raw);
+        if (stroke == null) return null;
+        strokes.add(stroke);
+      }
+      return strokes.isEmpty ? null : MdsShortcutSequence(strokes);
+    }
+    final stroke = MdsShortcutStroke.fromJson(value);
+    return stroke == null ? null : MdsShortcutSequence.single(stroke);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is MdsShortcutSequence &&
+      listEquals(other.strokes, strokes);
+
+  @override
+  int get hashCode => Object.hashAll(strokes);
+}
+
 class MdsShortcutBinding {
   const MdsShortcutBinding({this.primary, this.alternative});
 
-  final MdsShortcutStroke? primary;
-  final MdsShortcutStroke? alternative;
+  final MdsShortcutSequence? primary;
+  final MdsShortcutSequence? alternative;
 
   MdsShortcutBinding copyWith({
-    MdsShortcutStroke? primary,
-    MdsShortcutStroke? alternative,
+    MdsShortcutSequence? primary,
+    MdsShortcutSequence? alternative,
     bool clearPrimary = false,
     bool clearAlternative = false,
   }) =>
@@ -249,8 +427,13 @@ class MdsShortcutBinding {
       );
 
   Iterable<MdsShortcutStroke> get strokes sync* {
-    if (primary != null) yield primary!;
-    if (alternative != null) yield alternative!;
+    if (primary != null) yield* primary!.strokes;
+    if (alternative != null) yield* alternative!.strokes;
+  }
+
+  Iterable<MdsShortcutSequence> get sequences sync* {
+    if (primary != null && !primary!.isEmpty) yield primary!;
+    if (alternative != null && !alternative!.isEmpty) yield alternative!;
   }
 
   Map<String, dynamic> toJson() => {
@@ -265,88 +448,196 @@ Map<MdsShortcutCommand, MdsShortcutBinding> defaultMdsShortcutBindings() {
   final linux = platform == TargetPlatform.linux;
   MdsShortcutStroke modified(LogicalKeyboardKey key, {bool shift = false}) =>
       MdsShortcutStroke(key, control: !mac, meta: mac, shift: shift);
+  MdsShortcutSequence single(MdsShortcutStroke stroke) =>
+      MdsShortcutSequence.single(stroke);
+  MdsShortcutSequence modifiedSequence(
+    LogicalKeyboardKey key, {
+    bool shift = false,
+  }) =>
+      single(modified(key, shift: shift));
+  MdsShortcutSequence chord(
+    LogicalKeyboardKey first,
+    LogicalKeyboardKey second, {
+    bool shift = false,
+  }) =>
+      MdsShortcutSequence([
+        modified(first, shift: shift),
+        MdsShortcutStroke(second),
+      ]);
+  MdsShortcutSequence popupNavigation(LogicalKeyboardKey key) =>
+      single(MdsShortcutStroke(key));
 
   return {
+    MdsShortcutCommand.openFile: MdsShortcutBinding(
+      primary: modifiedSequence(LogicalKeyboardKey.keyO),
+    ),
+    MdsShortcutCommand.openWebMenu: MdsShortcutBinding(
+      primary: modifiedSequence(LogicalKeyboardKey.keyW),
+    ),
+    MdsShortcutCommand.saveConfiguration: MdsShortcutBinding(
+      primary: modifiedSequence(LogicalKeyboardKey.keyS),
+    ),
+    MdsShortcutCommand.globalRate: MdsShortcutBinding(
+      primary: chord(LogicalKeyboardKey.keyG, LogicalKeyboardKey.keyR),
+    ),
+    MdsShortcutCommand.globalLayout: MdsShortcutBinding(
+      primary: chord(LogicalKeyboardKey.keyG, LogicalKeyboardKey.keyL),
+    ),
+    MdsShortcutCommand.globalExport: MdsShortcutBinding(
+      primary: modifiedSequence(LogicalKeyboardKey.keyE),
+    ),
     MdsShortcutCommand.pointMode: MdsShortcutBinding(
-      primary: modified(LogicalKeyboardKey.keyP),
+      primary: single(modified(LogicalKeyboardKey.keyP)),
     ),
     MdsShortcutCommand.zoomMode: MdsShortcutBinding(
-      primary: modified(LogicalKeyboardKey.keyZ),
+      primary: single(modified(LogicalKeyboardKey.keyZ)),
     ),
-    MdsShortcutCommand.focusShot: const MdsShortcutBinding(
-      primary: MdsShortcutStroke(LogicalKeyboardKey.keyI),
+    MdsShortcutCommand.focusShot: MdsShortcutBinding(
+      primary: MdsShortcutSequence.single(
+        MdsShortcutStroke(LogicalKeyboardKey.keyI),
+      ),
     ),
-    MdsShortcutCommand.toggleRefresh: const MdsShortcutBinding(
-      primary: MdsShortcutStroke(LogicalKeyboardKey.space),
+    MdsShortcutCommand.refreshData: MdsShortcutBinding(
+      primary: modifiedSequence(LogicalKeyboardKey.keyR, shift: true),
+    ),
+    MdsShortcutCommand.toggleRefresh: MdsShortcutBinding(
+      primary: MdsShortcutSequence.single(
+        MdsShortcutStroke(LogicalKeyboardKey.space),
+      ),
     ),
     MdsShortcutCommand.maximizePanel: MdsShortcutBinding(
-      primary: mac
-          ? const MdsShortcutStroke(
-              LogicalKeyboardKey.keyM,
-              control: true,
-            )
-          : modified(LogicalKeyboardKey.keyM),
+      primary: single(
+        mac
+            ? const MdsShortcutStroke(
+                LogicalKeyboardKey.keyM,
+                control: true,
+              )
+            : modified(LogicalKeyboardKey.keyM),
+      ),
     ),
     MdsShortcutCommand.showAllPanels: MdsShortcutBinding(
-      primary: modified(LogicalKeyboardKey.keyA),
+      primary: modifiedSequence(LogicalKeyboardKey.keyA),
     ),
     MdsShortcutCommand.resetCurrentScale: MdsShortcutBinding(
-      primary: modified(LogicalKeyboardKey.keyR),
+      primary: modifiedSequence(LogicalKeyboardKey.keyR),
     ),
     MdsShortcutCommand.resetAllScales: MdsShortcutBinding(
-      primary: modified(LogicalKeyboardKey.keyR, shift: true),
+      primary: chord(LogicalKeyboardKey.keyA, LogicalKeyboardKey.keyR),
+    ),
+    MdsShortcutCommand.sameXScale: MdsShortcutBinding(
+      primary: modifiedSequence(LogicalKeyboardKey.keyX),
+    ),
+    MdsShortcutCommand.sameYScale: MdsShortcutBinding(
+      primary: modifiedSequence(LogicalKeyboardKey.keyY),
     ),
     MdsShortcutCommand.previousShot: MdsShortcutBinding(
-      primary: modified(
-        linux ? LogicalKeyboardKey.keyH : LogicalKeyboardKey.arrowLeft,
+      primary: single(
+        modified(
+          linux ? LogicalKeyboardKey.keyH : LogicalKeyboardKey.arrowLeft,
+        ),
       ),
     ),
     MdsShortcutCommand.nextShot: MdsShortcutBinding(
-      primary: modified(
-        linux ? LogicalKeyboardKey.keyL : LogicalKeyboardKey.arrowRight,
+      primary: single(
+        modified(
+          linux ? LogicalKeyboardKey.keyL : LogicalKeyboardKey.arrowRight,
+        ),
       ),
     ),
     MdsShortcutCommand.latestShot: MdsShortcutBinding(
-      primary: modified(
-        linux ? LogicalKeyboardKey.keyL : LogicalKeyboardKey.arrowRight,
-        shift: true,
+      primary: single(
+        modified(
+          linux ? LogicalKeyboardKey.keyL : LogicalKeyboardKey.arrowRight,
+          shift: true,
+        ),
       ),
     ),
     MdsShortcutCommand.pointPrevious: MdsShortcutBinding(
-      primary: MdsShortcutStroke(
-        linux ? LogicalKeyboardKey.keyH : LogicalKeyboardKey.arrowLeft,
+      primary: single(
+        MdsShortcutStroke(
+          linux ? LogicalKeyboardKey.keyH : LogicalKeyboardKey.arrowLeft,
+        ),
       ),
     ),
     MdsShortcutCommand.pointNext: MdsShortcutBinding(
-      primary: MdsShortcutStroke(
-        linux ? LogicalKeyboardKey.keyL : LogicalKeyboardKey.arrowRight,
+      primary: single(
+        MdsShortcutStroke(
+          linux ? LogicalKeyboardKey.keyL : LogicalKeyboardKey.arrowRight,
+        ),
       ),
     ),
-    MdsShortcutCommand.exitPoint: const MdsShortcutBinding(
-      primary: MdsShortcutStroke(LogicalKeyboardKey.escape),
+    MdsShortcutCommand.exitPoint: MdsShortcutBinding(
+      primary: MdsShortcutSequence.single(
+        MdsShortcutStroke(LogicalKeyboardKey.escape),
+      ),
+    ),
+    MdsShortcutCommand.panelRate: MdsShortcutBinding(
+      primary: chord(LogicalKeyboardKey.keyT, LogicalKeyboardKey.keyR),
+    ),
+    MdsShortcutCommand.panelSourceSetup: MdsShortcutBinding(
+      primary: chord(LogicalKeyboardKey.keyT, LogicalKeyboardKey.keyS),
+    ),
+    MdsShortcutCommand.panelExport: MdsShortcutBinding(
+      primary: chord(LogicalKeyboardKey.keyT, LogicalKeyboardKey.keyE),
+    ),
+    MdsShortcutCommand.panelSetup: MdsShortcutBinding(
+      primary: chord(LogicalKeyboardKey.keyT, LogicalKeyboardKey.keyP),
     ),
     MdsShortcutCommand.panelLeft: MdsShortcutBinding(
-      primary: MdsShortcutStroke(
-        linux ? LogicalKeyboardKey.keyH : LogicalKeyboardKey.arrowLeft,
-        alt: true,
+      primary: single(
+        MdsShortcutStroke(
+          linux ? LogicalKeyboardKey.keyH : LogicalKeyboardKey.arrowLeft,
+          alt: true,
+        ),
       ),
     ),
     MdsShortcutCommand.panelDown: MdsShortcutBinding(
-      primary: MdsShortcutStroke(
-        linux ? LogicalKeyboardKey.keyJ : LogicalKeyboardKey.arrowDown,
-        alt: true,
+      primary: single(
+        MdsShortcutStroke(
+          linux ? LogicalKeyboardKey.keyJ : LogicalKeyboardKey.arrowDown,
+          alt: true,
+        ),
       ),
     ),
     MdsShortcutCommand.panelUp: MdsShortcutBinding(
-      primary: MdsShortcutStroke(
-        linux ? LogicalKeyboardKey.keyK : LogicalKeyboardKey.arrowUp,
-        alt: true,
+      primary: single(
+        MdsShortcutStroke(
+          linux ? LogicalKeyboardKey.keyK : LogicalKeyboardKey.arrowUp,
+          alt: true,
+        ),
       ),
     ),
     MdsShortcutCommand.panelRight: MdsShortcutBinding(
-      primary: MdsShortcutStroke(
+      primary: single(
+        MdsShortcutStroke(
+          linux ? LogicalKeyboardKey.keyL : LogicalKeyboardKey.arrowRight,
+          alt: true,
+        ),
+      ),
+    ),
+    MdsShortcutCommand.menuLeft: MdsShortcutBinding(
+      primary: popupNavigation(
+        linux ? LogicalKeyboardKey.keyH : LogicalKeyboardKey.arrowLeft,
+      ),
+    ),
+    MdsShortcutCommand.menuDown: MdsShortcutBinding(
+      primary: popupNavigation(
+        linux ? LogicalKeyboardKey.keyJ : LogicalKeyboardKey.arrowDown,
+      ),
+    ),
+    MdsShortcutCommand.menuUp: MdsShortcutBinding(
+      primary: popupNavigation(
+        linux ? LogicalKeyboardKey.keyK : LogicalKeyboardKey.arrowUp,
+      ),
+    ),
+    MdsShortcutCommand.menuRight: MdsShortcutBinding(
+      primary: popupNavigation(
         linux ? LogicalKeyboardKey.keyL : LogicalKeyboardKey.arrowRight,
-        alt: true,
+      ),
+    ),
+    MdsShortcutCommand.menuActivate: MdsShortcutBinding(
+      primary: MdsShortcutSequence.single(
+        MdsShortcutStroke(LogicalKeyboardKey.enter),
       ),
     ),
   };
@@ -367,15 +658,44 @@ Map<MdsShortcutCommand, MdsShortcutBinding> decodeMdsShortcutBindings(
 ) {
   final result = defaultMdsShortcutBindings();
   if (value is! Map) return result;
+  final hasRefreshBinding = value.containsKey('refresh_data');
   for (final definition in mdsShortcutDefinitions) {
     final raw = value[definition.id];
     if (raw is! Map) continue;
     result[definition.command] = MdsShortcutBinding(
-      primary: MdsShortcutStroke.fromJson(raw['primary']),
-      alternative: MdsShortcutStroke.fromJson(raw['alternative']),
+      primary: MdsShortcutSequence.fromJson(raw['primary']),
+      alternative: MdsShortcutSequence.fromJson(raw['alternative']),
     );
   }
+  // MDSLens used Ctrl/Cmd+Shift+R for Reset All before Refresh had its own
+  // command. Preserve that old setting as the new Refresh shortcut, while
+  // moving Reset All to the non-conflicting Ctrl/Cmd+A, R sequence. An
+  // explicitly saved refresh binding (including an empty one) always wins.
+  if (!hasRefreshBinding) {
+    final legacyReset = result[MdsShortcutCommand.resetAllScales]?.primary;
+    final legacyRefresh = _legacyRefreshSequence();
+    if (legacyReset == legacyRefresh && legacyRefresh != null) {
+      result[MdsShortcutCommand.refreshData] = MdsShortcutBinding(
+        primary: legacyRefresh,
+      );
+      result[MdsShortcutCommand.resetAllScales] =
+          defaultMdsShortcutBindings()[MdsShortcutCommand.resetAllScales]!;
+    }
+  }
   return result;
+}
+
+MdsShortcutSequence? _legacyRefreshSequence() {
+  final platform = defaultTargetPlatform;
+  final mac = platform == TargetPlatform.macOS;
+  return MdsShortcutSequence.single(
+    MdsShortcutStroke(
+      LogicalKeyboardKey.keyR,
+      control: !mac,
+      meta: mac,
+      shift: true,
+    ),
+  );
 }
 
 Map<String, dynamic> encodeMdsShortcutBindings(
