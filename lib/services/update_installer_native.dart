@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
@@ -17,6 +18,48 @@ typedef DetachedCommandLauncher = Future<void> Function(
     String executable, List<String> arguments);
 
 const _updaterChannel = MethodChannel('mdslens/updater');
+// Update helpers poll at 100 ms.  The timeout is only a safety boundary for
+// a helper that never starts or a replacement that never becomes healthy;
+// normal updates finish as soon as the replacement writes its nonce.
+const _updateHealthTimeoutAttempts = 1200; // 120 seconds
+const _updateStabilityAttempts = 600; // 60 seconds
+const _defaultUpdateStabilityWindow = Duration(
+  seconds: _updateStabilityAttempts ~/ 10,
+);
+
+class _UpdateHandshake {
+  _UpdateHandshake({
+    required this.healthFile,
+    required this.token,
+    required this.commitMarker,
+  });
+
+  final File healthFile;
+  final String token;
+  final String commitMarker;
+
+  List<String> get applicationArguments => [
+        '--mdslens-update-health=${healthFile.path}',
+        '--mdslens-update-token=$token',
+      ];
+}
+
+_UpdateHandshake _createUpdateHandshake(
+  Directory work, {
+  required String commitMarker,
+}) {
+  final random = Random.secure();
+  final token = base64Url
+      .encode(List<int>.generate(32, (_) => random.nextInt(256)))
+      .replaceAll('=', '');
+  return _UpdateHandshake(
+    healthFile: File(
+      '${work.path}${Platform.pathSeparator}replacement-health',
+    ),
+    token: token,
+    commitMarker: commitMarker,
+  );
+}
 
 bool get directUpdateSupported => nativeDirectUpdateSupported(
       platform: Platform.operatingSystem,
@@ -306,7 +349,10 @@ staged_bundle="$3"
 backup_bundle="$4"
 archive="$5"
 work_dir="$6"
-ready_file="$7"
+health_file="$7"
+health_token="$8"
+commit_marker="$9"
+ready_file="$10"
 previous_bundle="${current_bundle}.mdslens-previous"
 
 case "$current_bundle" in ""|"/") exit 1 ;; esac
@@ -329,10 +375,13 @@ done
 
 if /bin/mv "$current_bundle" "$backup_bundle" &&
    /bin/mv "$staged_bundle" "$current_bundle"; then
-  /usr/bin/open -n -W "$current_bundle" >/dev/null 2>&1 &
+  /usr/bin/open -n -W "$current_bundle" --args \
+    "--mdslens-update-health=$health_file" \
+    "--mdslens-update-token=$health_token" >/dev/null 2>&1 &
   open_pid=$!
   attempt=0
-  while [ "$attempt" -lt 30 ]; do
+  healthy=0
+  while [ "$attempt" -lt 1200 ]; do
     if ! kill -0 "$open_pid" 2>/dev/null; then
       /bin/rm -rf "$current_bundle"
       /bin/mv "$backup_bundle" "$current_bundle"
@@ -340,9 +389,22 @@ if /bin/mv "$current_bundle" "$backup_bundle" &&
       /bin/rm -rf "$work_dir"
       exit 1
     fi
+    if [ -f "$health_file" ] &&
+       [ "$(/bin/cat "$health_file" 2>/dev/null || true)" = "$health_token" ]; then
+      healthy=1
+      break
+    fi
     attempt=$((attempt + 1))
     sleep 0.1
   done
+  if [ "$healthy" -ne 1 ]; then
+    /bin/rm -rf "$current_bundle"
+    /bin/mv "$backup_bundle" "$current_bundle"
+    /usr/bin/open "$current_bundle"
+    /bin/rm -rf "$work_dir"
+    exit 1
+  fi
+  /bin/printf '%s\n' "$health_token" > "$commit_marker"
   previous_owned=0
   if [ -f "$previous_bundle/Contents/Info.plist" ]; then
     previous_id=$(/usr/libexec/PlistBuddy -c 'Print:CFBundleIdentifier' \
@@ -353,7 +415,17 @@ if /bin/mv "$current_bundle" "$backup_bundle" &&
   if [ ! -e "$previous_bundle" ]; then
     /bin/mv "$backup_bundle" "$previous_bundle"
   fi
-  /bin/rm -f "$archive"
+  attempt=0
+  while [ "$attempt" -lt 600 ]; do
+    if ! kill -0 "$open_pid" 2>/dev/null; then
+      /bin/rm -rf "$work_dir"
+      exit 0
+    fi
+    attempt=$((attempt + 1))
+    sleep 0.1
+  done
+  /bin/rm -rf "$previous_bundle"
+  /bin/rm -f "$commit_marker" "$health_file" "$archive"
   /bin/rm -rf "$work_dir"
   exit 0
 fi
@@ -376,6 +448,10 @@ current_image="$2"
 staged_image="$3"
 backup_image="$4"
 downloaded_image="$5"
+health_file="$6"
+health_token="$7"
+commit_marker="$8"
+work_dir=$(/usr/bin/dirname "$health_file")
 previous_image="${current_image}.mdslens-previous"
 previous_owner="${previous_image}.owner"
 
@@ -398,19 +474,34 @@ done
 if /bin/mv -T -- "$current_image" "$backup_image" &&
    /bin/mv -T -- "$staged_image" "$current_image"; then
   /bin/chmod +x "$current_image"
-  "$current_image" >/dev/null 2>&1 &
+  "$current_image" "--mdslens-update-health=$health_file" \
+    "--mdslens-update-token=$health_token" >/dev/null 2>&1 &
   new_pid=$!
   attempt=0
-  while [ "$attempt" -lt 30 ]; do
+  healthy=0
+  while [ "$attempt" -lt 1200 ]; do
     if ! kill -0 "$new_pid" 2>/dev/null; then
       /bin/rm -f "$current_image"
       /bin/mv -T -- "$backup_image" "$current_image"
       "$current_image" >/dev/null 2>&1 &
       exit 1
     fi
+    if [ -f "$health_file" ] &&
+       [ "$(/bin/cat "$health_file" 2>/dev/null || true)" = "$health_token" ]; then
+      healthy=1
+      break
+    fi
     attempt=$((attempt + 1))
     sleep 0.1
   done
+  if [ "$healthy" -ne 1 ]; then
+    /bin/rm -f "$current_image"
+    /bin/mv -T -- "$backup_image" "$current_image"
+    "$current_image" >/dev/null 2>&1 &
+    /bin/rm -rf "$work_dir"
+    exit 1
+  fi
+  /bin/printf '%s\n' "$health_token" > "$commit_marker"
   previous_owned=0
   if [ -f "$previous_owner" ] &&
      [ "$(/bin/cat "$previous_owner")" = "com.mdslens.app" ]; then
@@ -423,7 +514,18 @@ if /bin/mv -T -- "$current_image" "$backup_image" &&
     /bin/mv -T -- "$backup_image" "$previous_image"
     echo 'com.mdslens.app' > "$previous_owner"
   fi
-  /bin/rm -f "$downloaded_image"
+  attempt=0
+  while [ "$attempt" -lt 600 ]; do
+    if ! kill -0 "$new_pid" 2>/dev/null; then
+      /bin/rm -rf "$work_dir"
+      exit 0
+    fi
+    attempt=$((attempt + 1))
+    sleep 0.1
+  done
+  /bin/rm -f "$previous_image" "$previous_owner" "$commit_marker" \
+    "$health_file" "$downloaded_image"
+  /bin/rm -rf "$work_dir"
   exit 0
 fi
 
@@ -434,6 +536,7 @@ fi
 if [ -x "$current_image" ]; then
   "$current_image" >/dev/null 2>&1 &
 fi
+/bin/rm -rf "$work_dir"
 exit 1
 ''';
 
@@ -444,13 +547,17 @@ current_image="$2"
 staged_image="$3"
 backup_image="$4"
 downloaded_image="$5"
-ready_file="$6"
-healthy_file="$7"
-failed_file="$8"
-rollback_file="$9"
+health_file="$6"
+health_token="$7"
+commit_marker="$8"
+ready_file="$9"
+healthy_file="${10}"
+failed_file="${11}"
+rollback_file="${12}"
+pid_file="${13}"
 previous_image="${current_image}.mdslens-previous"
 previous_owner="${previous_image}.owner"
-work_dir=$(/usr/bin/dirname "$ready_file")
+work_dir=$(/usr/bin/dirname "$health_file")
 
 case "$current_image" in ""|"/") exit 1 ;; esac
 case "$staged_image" in "${current_image}.mdslens-update-"*) ;; *) exit 1 ;; esac
@@ -470,8 +577,9 @@ if /bin/mv -T -- "$current_image" "$backup_image" &&
   /bin/chmod +x "$current_image"
   : > "$ready_file"
   attempt=0
-  while [ "$attempt" -lt 300 ]; do
+  while [ "$attempt" -lt 1200 ]; do
     if [ -e "$healthy_file" ]; then
+      /bin/printf '%s\n' "$health_token" > "$commit_marker"
       previous_owned=0
       if [ -f "$previous_owner" ] &&
          [ "$(/bin/cat "$previous_owner")" = "com.mdslens.app" ]; then
@@ -484,7 +592,23 @@ if /bin/mv -T -- "$current_image" "$backup_image" &&
         /bin/mv -T -- "$backup_image" "$previous_image"
         echo 'com.mdslens.app' > "$previous_owner"
       fi
-      /bin/rm -f "$downloaded_image"
+      new_pid=''
+      if [ -f "$pid_file" ]; then
+        new_pid=$(/bin/cat "$pid_file" 2>/dev/null || true)
+      fi
+      if [ -n "$new_pid" ]; then
+        stability_attempt=0
+        while [ "$stability_attempt" -lt 600 ]; do
+          if ! kill -0 "$new_pid" 2>/dev/null; then
+            /bin/rm -rf "$work_dir"
+            exit 0
+          fi
+          stability_attempt=$((stability_attempt + 1))
+          sleep 0.1
+        done
+        /bin/rm -f "$previous_image" "$previous_owner" "$commit_marker" \
+          "$health_file" "$downloaded_image" "$pid_file"
+      fi
       /bin/rm -rf "$work_dir"
       exit 0
     fi
@@ -517,15 +641,20 @@ healthy_file="$3"
 failed_file="$4"
 rollback_file="$5"
 cancel_file="$6"
+health_file="$7"
+health_token="$8"
+pid_file="$9"
 
 attempt=0
 while [ "$attempt" -lt 300 ]; do
   [ -e "$cancel_file" ] && exit 1
   if [ -e "$ready_file" ]; then
-    "$current_image" >/dev/null 2>&1 &
+    "$current_image" "--mdslens-update-health=$health_file" \
+      "--mdslens-update-token=$health_token" >/dev/null 2>&1 &
     new_pid=$!
+    /bin/printf '%s\n' "$new_pid" > "$pid_file"
     health_attempt=0
-    while [ "$health_attempt" -lt 30 ]; do
+    while [ "$health_attempt" -lt 1200 ]; do
       if ! kill -0 "$new_pid" 2>/dev/null; then
         : > "$failed_file"
         rollback_attempt=0
@@ -539,10 +668,15 @@ while [ "$attempt" -lt 300 ]; do
         done
         exit 1
       fi
+      if [ -f "$health_file" ] &&
+         [ "$(/bin/cat "$health_file" 2>/dev/null || true)" = "$health_token" ]; then
+        : > "$healthy_file"
+        exit 0
+      fi
       health_attempt=$((health_attempt + 1))
       sleep 0.1
     done
-    : > "$healthy_file"
+    : > "$failed_file"
     exit 0
   fi
   attempt=$((attempt + 1))
@@ -570,6 +704,9 @@ staged_root="$3"
 backup_root="$4"
 downloaded_archive="$5"
 work_dir="$6"
+health_file="$7"
+health_token="$8"
+commit_marker="$9"
 previous_root="${current_root}.mdslens-previous"
 
 case "$current_root" in ""|"/") exit 1 ;; esac
@@ -580,7 +717,8 @@ case "$backup_root" in "${current_root}.mdslens-backup-"*) ;; *) exit 1 ;; esac
 
 launch_from_root() {
   root="$1"
-  (cd "$root" && exec ./mdslens) >/dev/null 2>&1 &
+  shift
+  (cd "$root" && exec ./mdslens "$@") >/dev/null 2>&1 &
   launched_pid=$!
 }
 
@@ -606,10 +744,13 @@ done
 
 if /bin/mv -T -- "$current_root" "$backup_root" &&
    /bin/mv -T -- "$staged_root" "$current_root"; then
-  launch_from_root "$current_root"
+  launch_from_root "$current_root" \
+    "--mdslens-update-health=$health_file" \
+    "--mdslens-update-token=$health_token"
   new_pid=$launched_pid
   attempt=0
-  while [ "$attempt" -lt 30 ]; do
+  healthy=0
+  while [ "$attempt" -lt 1200 ]; do
     if ! process_is_running "$new_pid"; then
       /bin/rm -rf "$current_root"
       /bin/mv -T -- "$backup_root" "$current_root"
@@ -617,12 +758,25 @@ if /bin/mv -T -- "$current_root" "$backup_root" &&
       /bin/rm -rf "$work_dir"
       exit 1
     fi
+    if [ -f "$health_file" ] &&
+       [ "$(/bin/cat "$health_file" 2>/dev/null || true)" = "$health_token" ]; then
+      healthy=1
+      break
+    fi
     attempt=$((attempt + 1))
     sleep 0.1
   done
+  if [ "$healthy" -ne 1 ]; then
+    /bin/rm -rf "$current_root"
+    /bin/mv -T -- "$backup_root" "$current_root"
+    launch_from_root "$current_root"
+    /bin/rm -rf "$work_dir"
+    exit 1
+  fi
+  /bin/printf '%s\n' "$health_token" > "$commit_marker"
   /bin/rm -rf "$previous_root"
   /bin/mv -T -- "$backup_root" "$previous_root"
-  /bin/rm -f "$downloaded_archive"
+  /bin/rm -f "$downloaded_archive" "$health_file"
   /bin/rm -rf "$work_dir"
   (
     stability_attempt=0
@@ -633,7 +787,7 @@ if /bin/mv -T -- "$current_root" "$backup_root" &&
       stability_attempt=$((stability_attempt + 1))
       sleep 0.1
     done
-    /bin/rm -rf "$previous_root"
+    /bin/rm -rf "$previous_root" "$commit_marker"
   ) </dev/null >/dev/null 2>&1 &
   exit 0
 fi
@@ -672,9 +826,12 @@ staged_root="$3"
 backup_root="$4"
 downloaded_archive="$5"
 work_dir="$6"
-ready_file="$7"
-healthy_file="$8"
-pid_file="$9"
+health_file="$7"
+health_token="$8"
+commit_marker="$9"
+ready_file="${10}"
+healthy_file="${11}"
+pid_file="${12}"
 previous_root="${current_root}.mdslens-previous"
 
 case "$current_root" in ""|"/") exit 1 ;; esac
@@ -708,15 +865,14 @@ if /bin/mv -T -- "$current_root" "$backup_root" &&
   : > "$ready_file"
   attempt=0
   while [ "$attempt" -lt 300 ]; do
-    if [ -e "$healthy_file" ]; then
+      if [ -e "$healthy_file" ]; then
+      /bin/printf '%s\n' "$health_token" > "$commit_marker"
       new_pid=''
       if [ -r "$pid_file" ]; then
         new_pid=$(cat "$pid_file" 2>/dev/null || true)
       fi
       /bin/rm -rf "$previous_root"
       /bin/mv -T -- "$backup_root" "$previous_root"
-      /bin/rm -f "$downloaded_archive"
-      /bin/rm -rf "$work_dir"
       if [ -n "$new_pid" ]; then
         (
           stability_attempt=0
@@ -727,9 +883,11 @@ if /bin/mv -T -- "$current_root" "$backup_root" &&
             stability_attempt=$((stability_attempt + 1))
             sleep 0.1
           done
-          /bin/rm -rf "$previous_root"
+          /bin/rm -rf "$previous_root" "$commit_marker"
         ) </dev/null >/dev/null 2>&1 &
       fi
+      /bin/rm -f "$downloaded_archive" "$health_file"
+      /bin/rm -rf "$work_dir"
       exit 0
     fi
     attempt=$((attempt + 1))
@@ -755,6 +913,8 @@ ready_file="$2"
 healthy_file="$3"
 cancel_file="$4"
 pid_file="$5"
+health_file="$6"
+health_token="$7"
 
 attempt=0
 while [ "$attempt" -lt 300 ]; do
@@ -762,18 +922,25 @@ while [ "$attempt" -lt 300 ]; do
     exit 1
   fi
   if [ -e "$ready_file" ]; then
-    (cd "$current_root" && exec ./mdslens) >/dev/null 2>&1 &
+    (cd "$current_root" && exec ./mdslens \
+      "--mdslens-update-health=$health_file" \
+      "--mdslens-update-token=$health_token") >/dev/null 2>&1 &
     new_pid=$!
     printf '%s\n' "$new_pid" > "$pid_file"
     health_attempt=0
-    while [ "$health_attempt" -lt 30 ]; do
+    while [ "$health_attempt" -lt 1200 ]; do
       if ! kill -0 "$new_pid" 2>/dev/null; then
         exit 1
+      fi
+      if [ -f "$health_file" ] &&
+         [ "$(/bin/cat "$health_file" 2>/dev/null || true)" = "$health_token" ]; then
+        : > "$healthy_file"
+        exit 0
       fi
       health_attempt=$((health_attempt + 1))
       sleep 0.1
     done
-    : > "$healthy_file"
+    : > "$failed_file"
     exit 0
   fi
   attempt=$((attempt + 1))
@@ -794,6 +961,8 @@ set "Scope=%~6"
 set "WorkDirectory=%~7"
 set "ReadyFile=%~8"
 set "LogFile=%~9"
+set "HealthFile=%~10"
+set "HealthToken=%~11"
 
 >"%ReadyFile%" echo ready
 >>"%LogFile%" echo [%date% %time%] Update helper started for PID %ParentPid%.
@@ -835,6 +1004,7 @@ goto relaunch
 
 :installation_succeeded
 del /F /Q "%Installer%" >NUL 2>&1
+goto relaunch_new
 
 :relaunch
 if exist "%TargetExecutable%" (
@@ -843,6 +1013,32 @@ if exist "%TargetExecutable%" (
 ) else (
   >>"%LogFile%" echo [%date% %time%] Target executable is missing after update.
 )
+goto cleanup
+
+:relaunch_new
+if exist "%TargetExecutable%" (
+  >>"%LogFile%" echo [%date% %time%] Relaunching "%TargetExecutable%" with health handshake.
+  start "" "%TargetExecutable%" "--mdslens-update-health=%HealthFile%" "--mdslens-update-token=%HealthToken%"
+  set /a HealthAttempts=0
+:wait_for_health
+  if not exist "%HealthFile%" goto health_poll
+  %SystemRoot%\System32\findstr.exe /R /X /C:"%HealthToken%" "%HealthFile%" >NUL 2>&1
+  if not errorlevel 1 goto health_ok
+:health_poll
+  set /a HealthAttempts+=1
+  if %HealthAttempts% GEQ 1200 goto health_timeout
+  %SystemRoot%\System32\ping.exe -n 2 127.0.0.1 >NUL
+  goto wait_for_health
+:health_ok
+  >>"%LogFile%" echo [%date% %time%] Replacement reported healthy startup.
+  goto cleanup
+:health_timeout
+  >>"%LogFile%" echo [%date% %time%] Replacement did not report healthy startup within 120 seconds.
+) else (
+  >>"%LogFile%" echo [%date% %time%] Target executable is missing after update.
+)
+
+:cleanup
 %SystemRoot%\System32\ping.exe -n 2 127.0.0.1 >NUL
 rmdir /S /Q "%WorkDirectory%" >NUL 2>&1
 endlocal
@@ -856,7 +1052,10 @@ $stagedRoot = [IO.Path]::GetFullPath($args[2])
 $backupRoot = [IO.Path]::GetFullPath($args[3])
 $archive = $args[4]
 $workRoot = $args[5]
-$readyFile = $args[6]
+$healthFile = $args[6]
+$healthToken = $args[7]
+$commitMarker = $args[8]
+$readyFile = $args[9]
 $previousRoot = "$currentRoot.mdslens-previous"
 
 if ($currentRoot -eq [IO.Path]::GetPathRoot($currentRoot)) { exit 1 }
@@ -876,11 +1075,24 @@ try {
   Move-Item -LiteralPath $currentRoot -Destination $backupRoot
   Move-Item -LiteralPath $stagedRoot -Destination $currentRoot
   $target = Join-Path $currentRoot 'mdslens.exe'
-  $process = Start-Process -FilePath $target -WorkingDirectory $currentRoot -PassThru
-  Start-Sleep -Seconds 3
-  $process.Refresh()
-  if ($process.HasExited) { throw 'The replacement exited during startup.' }
+  $process = Start-Process -FilePath $target -WorkingDirectory $currentRoot `
+    -ArgumentList @("--mdslens-update-health=$healthFile", "--mdslens-update-token=$healthToken") `
+    -PassThru
+  $healthy = $false
+  for ($attempt = 0; $attempt -lt 1200; $attempt++) {
+    $process.Refresh()
+    if ($process.HasExited) { throw 'The replacement exited before reporting healthy startup.' }
+    if (Test-Path -LiteralPath $healthFile) {
+      try {
+        $reported = (Get-Content -LiteralPath $healthFile -Raw).Trim()
+        if ($reported -eq $healthToken) { $healthy = $true; break }
+      } catch {}
+    }
+    Start-Sleep -Milliseconds 100
+  }
+  if (-not $healthy) { throw 'The replacement did not report healthy startup within 120 seconds.' }
 
+  Set-Content -LiteralPath $commitMarker -Value $healthToken -Encoding Ascii
   $previousOwned = $false
   $previousMarker = Join-Path $previousRoot '.mdslens-portable.json'
   if (Test-Path -LiteralPath $previousMarker -PathType Leaf) {
@@ -895,6 +1107,16 @@ try {
     Move-Item -LiteralPath $backupRoot -Destination $previousRoot
   }
   Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
+  for ($attempt = 0; $attempt -lt 600; $attempt++) {
+    $process.Refresh()
+    if ($process.HasExited) { exit 0 }
+    Start-Sleep -Milliseconds 100
+  }
+  if (Test-Path -LiteralPath $previousRoot) {
+    Remove-Item -LiteralPath $previousRoot -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  Remove-Item -LiteralPath $commitMarker -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $healthFile -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
   exit 0
 } catch {
@@ -907,6 +1129,7 @@ try {
       -WorkingDirectory $currentRoot
   }
   Remove-Item -LiteralPath $stagedRoot -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $healthFile -Force -ErrorAction SilentlyContinue
   exit 1
 }
 ''';
@@ -925,6 +1148,10 @@ $swapReadyFile = $args[8]
 $healthyFile = $args[9]
 $failedFile = $args[10]
 $rollbackReadyFile = $args[11]
+$healthFile = $args[12]
+$healthToken = $args[13]
+$commitMarker = $args[14]
+$newPidFile = $args[15]
 $previousRoot = "$currentRoot.mdslens-previous"
 $extractionRoot = "$stagedRoot-extracted"
 trap {
@@ -962,7 +1189,7 @@ try {
   Move-Item -LiteralPath $currentRoot -Destination $backupRoot
   Move-Item -LiteralPath $stagedRoot -Destination $currentRoot
   Set-Content -LiteralPath $swapReadyFile -Value 'ready' -Encoding Ascii
-  for ($attempt = 0; $attempt -lt 300; $attempt++) {
+  for ($attempt = 0; $attempt -lt 1200; $attempt++) {
     if (Test-Path -LiteralPath $healthyFile) { break }
     if (Test-Path -LiteralPath $failedFile) { throw 'Replacement failed health check.' }
     Start-Sleep -Milliseconds 100
@@ -979,12 +1206,29 @@ try {
   }
   if ($previousOwned) { Remove-Item -LiteralPath $previousRoot -Recurse -Force }
   if (-not (Test-Path -LiteralPath $previousRoot)) { Move-Item -LiteralPath $backupRoot -Destination $previousRoot }
+  Set-Content -LiteralPath $commitMarker -Value $healthToken -Encoding Ascii
+  $replacementPid = 0
+  if (Test-Path -LiteralPath $newPidFile) {
+    $replacementPid = [int](Get-Content -LiteralPath $newPidFile -Raw).Trim()
+  }
+  if ($replacementPid -le 0) { exit 0 }
+  for ($attempt = 0; $attempt -lt 600; $attempt++) {
+    if (-not (Get-Process -Id $replacementPid -ErrorAction SilentlyContinue)) { exit 0 }
+    Start-Sleep -Milliseconds 100
+  }
+  if (Test-Path -LiteralPath $previousRoot) {
+    Remove-Item -LiteralPath $previousRoot -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  Remove-Item -LiteralPath $commitMarker -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $healthFile -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $newPidFile -Force -ErrorAction SilentlyContinue
   exit 0
 } catch {
   if (Test-Path -LiteralPath $currentRoot) { Remove-Item -LiteralPath $currentRoot -Recurse -Force }
   if (Test-Path -LiteralPath $backupRoot) { Move-Item -LiteralPath $backupRoot -Destination $currentRoot }
   Remove-Item -LiteralPath $stagedRoot -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $extractionRoot -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $healthFile -Force -ErrorAction SilentlyContinue
   Set-Content -LiteralPath $rollbackReadyFile -Value 'ready' -Encoding Ascii
   exit 1
 }
@@ -999,30 +1243,41 @@ $failedFile = $args[3]
 $rollbackReadyFile = $args[4]
 $archive = $args[5]
 $workRoot = $args[6]
+$healthFile = $args[7]
+$healthToken = $args[8]
+$newPidFile = $args[9]
 for ($attempt = 0; $attempt -lt 600; $attempt++) {
   if (Test-Path -LiteralPath $swapReadyFile) { break }
   Start-Sleep -Milliseconds 100
 }
 if (-not (Test-Path -LiteralPath $swapReadyFile)) { exit 1 }
 $target = Join-Path $currentRoot 'mdslens.exe'
-$process = Start-Process -FilePath $target -WorkingDirectory $currentRoot -PassThru
-Start-Sleep -Seconds 3
-$process.Refresh()
-if (-not $process.HasExited) {
-  Set-Content -LiteralPath $healthyFile -Value 'healthy' -Encoding Ascii
-  Start-Sleep -Seconds 1
-  Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
-  Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
-  exit 0
+$process = Start-Process -FilePath $target -WorkingDirectory $currentRoot `
+  -ArgumentList @("--mdslens-update-health=$healthFile", "--mdslens-update-token=$healthToken") `
+  -PassThru
+Set-Content -LiteralPath $newPidFile -Value $process.Id -Encoding Ascii
+for ($attempt = 0; $attempt -lt 1200; $attempt++) {
+  $process.Refresh()
+  if ($process.HasExited) { break }
+  if (Test-Path -LiteralPath $healthFile) {
+    try {
+      $reported = (Get-Content -LiteralPath $healthFile -Raw).Trim()
+      if ($reported -eq $healthToken) {
+        Set-Content -LiteralPath $healthyFile -Value 'healthy' -Encoding Ascii
+        exit 0
+      }
+    } catch {}
+  }
+  Start-Sleep -Milliseconds 100
 }
 Set-Content -LiteralPath $failedFile -Value 'failed' -Encoding Ascii
 for ($attempt = 0; $attempt -lt 300; $attempt++) {
   if (Test-Path -LiteralPath $rollbackReadyFile) { break }
   Start-Sleep -Milliseconds 100
 }
-if (Test-Path -LiteralPath (Join-Path $currentRoot 'mdslens.exe')) {
-  Start-Process -FilePath (Join-Path $currentRoot 'mdslens.exe') -WorkingDirectory $currentRoot
-}
+  if (Test-Path -LiteralPath (Join-Path $currentRoot 'mdslens.exe')) {
+    Start-Process -FilePath (Join-Path $currentRoot 'mdslens.exe') -WorkingDirectory $currentRoot
+  }
 exit 1
 ''';
 
@@ -1037,7 +1292,7 @@ Future<void> requestApplicationExitForUpdate() async {
 Future<void> scheduleLinuxPortableRollbackCleanup({
   String? platformOverride,
   String? currentExecutableOverride,
-  Duration stabilityWindow = const Duration(seconds: 60),
+  Duration stabilityWindow = _defaultUpdateStabilityWindow,
 }) async {
   final platform = platformOverride ?? Platform.operatingSystem;
   if (platform.toLowerCase() != 'linux') return;
@@ -1172,6 +1427,10 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
     final ready = File(
       '${work.path}${Platform.pathSeparator}helper-ready',
     );
+    final handshake = _createUpdateHandshake(
+      work,
+      commitMarker: '${work.path}${Platform.pathSeparator}committed',
+    );
     final localAppData = (Platform.environment['LOCALAPPDATA'] ?? '').trim();
     final logDirectory = localAppData.isEmpty
         ? Directory.systemTemp
@@ -1198,6 +1457,8 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
       work.path,
       ready.path,
       log.path,
+      handshake.healthFile.path,
+      handshake.token,
     ]);
     final helperReady = await _waitForFile(
       ready,
@@ -1475,6 +1736,10 @@ Future<UpdateInstallResult> prepareWindowsPortableUpdate(
     final ready = File(
       '${work.path}${Platform.pathSeparator}helper-ready',
     );
+    final handshake = _createUpdateHandshake(
+      work,
+      commitMarker: '${currentRoot.path}.mdslens-update-committed',
+    );
     await helper.writeAsString(_windowsPortableApplyUpdateScript);
     await commandLauncher(powershell, [
       '-NoProfile',
@@ -1489,6 +1754,9 @@ Future<UpdateInstallResult> prepareWindowsPortableUpdate(
       backup.path,
       update.path,
       work.path,
+      handshake.healthFile.path,
+      handshake.token,
+      handshake.commitMarker,
       ready.path,
     ]);
     if (!await _waitForFile(ready, attempts: helperReadyAttempts)) {
@@ -1546,6 +1814,11 @@ Future<UpdateInstallResult> _prepareProtectedWindowsPortableUpdate(
   final failed = File('${work.path}${Platform.pathSeparator}failed');
   final rollbackReady =
       File('${work.path}${Platform.pathSeparator}rollback-ready');
+  final handshake = _createUpdateHandshake(
+    work,
+    commitMarker: '${currentRoot.path}.mdslens-update-committed',
+  );
+  final newPid = File('${work.path}${Platform.pathSeparator}new-pid');
   await privilegedHelper.writeAsString(_windowsPortablePrivilegedUpdateScript);
   await userHelper.writeAsString(_windowsPortableUserRelaunchScript);
   await bootstrap.writeAsString(r'''
@@ -1575,6 +1848,10 @@ try {
     healthy.path,
     failed.path,
     rollbackReady.path,
+    handshake.healthFile.path,
+    handshake.token,
+    handshake.commitMarker,
+    newPid.path,
   ];
   final elevation = await commandRunner(powershell, [
     '-NoProfile',
@@ -1616,6 +1893,9 @@ try {
     rollbackReady.path,
     update.path,
     work.path,
+    handshake.healthFile.path,
+    handshake.token,
+    newPid.path,
   ]);
   return UpdateInstallResult(
     status: UpdateLaunchStatus.installed,
@@ -1645,7 +1925,7 @@ Future<bool> _validWindowsPortableMarker(
 
 Future<bool> _waitForFile(
   File file, {
-  int attempts = 50,
+  int attempts = _updateHealthTimeoutAttempts,
   Duration interval = const Duration(milliseconds: 100),
 }) async {
   for (var attempt = 0; attempt < attempts; attempt++) {
@@ -1914,6 +2194,10 @@ Future<UpdateInstallResult?> prepareLinuxPortableUpdate(
   final candidate = Directory(
     '${extracted.path}${Platform.pathSeparator}$expectedTopLevel',
   );
+  final handshake = _createUpdateHandshake(
+    work,
+    commitMarker: '${currentRoot.path}.mdslens-update-committed',
+  );
   var scheduled = false;
   try {
     await extracted.create();
@@ -1947,6 +2231,9 @@ Future<UpdateInstallResult?> prepareLinuxPortableUpdate(
       backupRoot.path,
       update.path,
       work.path,
+      handshake.healthFile.path,
+      handshake.token,
+      handshake.commitMarker,
     ];
     if (parentWritable) {
       await stagedRoot.create();
@@ -1989,6 +2276,8 @@ Future<UpdateInstallResult?> prepareLinuxPortableUpdate(
         healthyFile,
         cancelFile,
         pidFile,
+        handshake.healthFile.path,
+        handshake.token,
       ]);
       final authorization = await commandRunner(pkexec, [
         '/bin/sh',
@@ -2145,6 +2434,10 @@ Future<UpdateInstallResult?> prepareMacOSApplicationUpdate(
   final backupBundle = backupCandidate;
   final work = await Directory.systemTemp.createTemp('mdslens-macos-update-');
   final ready = File('${work.path}${Platform.pathSeparator}helper-ready');
+  final handshake = _createUpdateHandshake(
+    work,
+    commitMarker: '$bundlePath.mdslens-update-committed',
+  );
   final extracted = Directory(
     '${work.path}${Platform.pathSeparator}extracted',
   );
@@ -2188,6 +2481,9 @@ Future<UpdateInstallResult?> prepareMacOSApplicationUpdate(
       backupBundle.path,
       update.path,
       work.path,
+      handshake.healthFile.path,
+      handshake.token,
+      handshake.commitMarker,
       ready.path,
     ];
     if (parentWritable) {
@@ -2361,6 +2657,13 @@ Future<UpdateInstallResult?> prepareAppImageUpdate(
   if (stagedCandidate == null || backupCandidate == null) return null;
   final staged = stagedCandidate;
   final backup = backupCandidate;
+  final work = await Directory.systemTemp.createTemp(
+    'mdslens-appimage-update-',
+  );
+  final handshake = _createUpdateHandshake(
+    work,
+    commitMarker: '${current.path}.mdslens-update-committed',
+  );
   var scheduled = false;
   try {
     await File(update.path).copy(staged.path);
@@ -2375,6 +2678,9 @@ Future<UpdateInstallResult?> prepareAppImageUpdate(
       staged.path,
       backup.path,
       update.path,
+      handshake.healthFile.path,
+      handshake.token,
+      handshake.commitMarker,
     ]);
     scheduled = true;
     return UpdateInstallResult(
@@ -2390,6 +2696,9 @@ Future<UpdateInstallResult?> prepareAppImageUpdate(
     if (!scheduled) {
       try {
         if (await staged.exists()) await staged.delete();
+      } catch (_) {}
+      try {
+        if (await work.exists()) await work.delete(recursive: true);
       } catch (_) {}
     }
   }
@@ -2488,6 +2797,11 @@ Future<UpdateInstallResult?> prepareElevatedAppImageUpdate(
   final failed = '${work.path}${Platform.pathSeparator}failed';
   final rollback = '${work.path}${Platform.pathSeparator}rollback';
   final cancel = '${work.path}${Platform.pathSeparator}cancel';
+  final handshake = _createUpdateHandshake(
+    work,
+    commitMarker: '$resolvedCurrent.mdslens-update-committed',
+  );
+  final pidFile = '${work.path}${Platform.pathSeparator}new-pid';
   await commandLauncher('/bin/sh', [
     '-c',
     _linuxAppImageUserRelaunchScript,
@@ -2498,6 +2812,9 @@ Future<UpdateInstallResult?> prepareElevatedAppImageUpdate(
     failed,
     rollback,
     cancel,
+    handshake.healthFile.path,
+    handshake.token,
+    pidFile,
   ]);
   final authorization = await commandRunner(pkexec, [
     '/bin/sh',
@@ -2512,10 +2829,14 @@ Future<UpdateInstallResult?> prepareElevatedAppImageUpdate(
     staged,
     backup,
     update.path,
+    handshake.healthFile.path,
+    handshake.token,
+    handshake.commitMarker,
     ready,
     healthy,
     failed,
     rollback,
+    pidFile,
   ]);
   if (authorization.exitCode != 0) {
     try {

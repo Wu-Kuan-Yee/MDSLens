@@ -394,7 +394,8 @@ void main() {
     expect(launchedArguments?[5], endsWith('apply-update.ps1'));
     final helper = File(launchedArguments![5]);
     final script = await helper.readAsString();
-    expect(script, contains('The replacement exited during startup.'));
+    expect(script,
+        contains('The replacement exited before reporting healthy startup.'));
     expect(script, contains('Move-Item -LiteralPath \$backupRoot'));
   });
 
@@ -707,8 +708,17 @@ void main() {
       final launched = File('${directory.path}/launched');
       final launchedPid = File('${directory.path}/launched.pid');
       await downloaded.writeAsString(
-        '#!/bin/sh\necho launched > "${launched.path}"\n'
-        'echo \$\$ > "${launchedPid.path}"\nsleep 10\n',
+        '#!/bin/sh\n'
+        'for argument in "\$@"; do\n'
+        '  case "\$argument" in\n'
+        '    --mdslens-update-health=*) health="\${argument#*=}" ;;\n'
+        '    --mdslens-update-token=*) token="\${argument#*=}" ;;\n'
+        '  esac\n'
+        'done\n'
+        'printf "%s\\n" "\$token" > "\$health"\n'
+        'echo launched > "${launched.path}"\n'
+        'echo \$\$ > "${launchedPid.path}"\n'
+        'sleep 10\n',
       );
       final update = DownloadedUpdate(
         asset: UpdateManifestAsset(
@@ -1221,7 +1231,7 @@ void main() {
     expect(result?.closeApplication, isTrue);
     expect(launches.single.$1, '/bin/sh');
     final stagedPath = launches.single.$2.lastWhere(
-      (argument) => argument.contains('.mdslens-update-'),
+      (argument) => argument.endsWith('.mdslens-update-collision-1'),
     );
     expect(stagedPath, endsWith('.mdslens-update-collision-1'));
     expect(await File('$stagedPath/mdslens').readAsString(), 'new');
@@ -1262,8 +1272,17 @@ void main() {
       final payload = Directory('${root.path}/payload/mdslens-linux-x64');
       await payload.create(recursive: true);
       await File('${payload.path}/mdslens').writeAsString(
-        '#!/bin/sh\npwd > "${observedWorkingDirectory.path}"\n'
-        'echo \$\$ > "${observedProcessId.path}"\nsleep 10\n',
+        '#!/bin/sh\n'
+        'for argument in "\$@"; do\n'
+        '  case "\$argument" in\n'
+        '    --mdslens-update-health=*) health="\${argument#*=}" ;;\n'
+        '    --mdslens-update-token=*) token="\${argument#*=}" ;;\n'
+        '  esac\n'
+        'done\n'
+        'printf "%s\\n" "\$token" > "\$health"\n'
+        'pwd > "${observedWorkingDirectory.path}"\n'
+        'echo \$\$ > "${observedProcessId.path}"\n'
+        'sleep 10\n',
       );
       await File('${payload.path}/.mdslens-portable.json').writeAsString(
         jsonEncode({
@@ -1370,8 +1389,7 @@ void main() {
     });
     await File('${current.path}/.mdslens-portable.json').writeAsString(marker);
     await File('${previous.path}/mdslens').writeAsString('previous');
-    await File('${previous.path}/.mdslens-portable.json')
-        .writeAsString(marker);
+    await File('${previous.path}/.mdslens-portable.json').writeAsString(marker);
 
     await scheduleLinuxPortableRollbackCleanup(
       platformOverride: 'linux',
