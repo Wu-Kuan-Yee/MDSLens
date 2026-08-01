@@ -17,10 +17,6 @@ use std::sync::{mpsc, Arc, Mutex};
 
 /// Maximum concurrent chunks per wave.
 const MAX_GLOBAL_SOCKETS: usize = 16;
-/// Full reads briefly hold the wire buffer, decoded f64 values, and the final
-/// f32 series at the same time. A lower wave width prevents memory pressure
-/// from stalling the UI while retaining useful I/O parallelism.
-const MAX_GLOBAL_FULL_SOCKETS: usize = 8;
 
 pub type SignalCallback = Box<dyn Fn(LoadedSignal) + Send + Sync>;
 
@@ -121,15 +117,13 @@ pub fn fetch_all(
     output
 }
 
-fn global_wave_limit(requests: &[FetchRequest]) -> usize {
-    if requests
-        .iter()
-        .any(|request| request.read_mode == DataReadMode::Full)
-    {
-        MAX_GLOBAL_FULL_SOCKETS
-    } else {
-        MAX_GLOBAL_SOCKETS
-    }
+fn global_wave_limit(_requests: &[FetchRequest]) -> usize {
+    // Keep the original 16-way dispatch for Full as well. FullLargeDownloadPermit
+    // still limits simultaneous multi-million-point transfers per server; the
+    // remaining requests can use the other workers instead of waiting for a
+    // second, unnecessarily narrow wave. Direct f32 decoding and ownership
+    // transfer keep the old memory peak from returning here.
+    MAX_GLOBAL_SOCKETS
 }
 
 /// Pre-connect to all unique servers in the layout.
@@ -536,9 +530,9 @@ mod tests {
     }
 
     #[test]
-    fn full_reads_use_a_memory_safe_wave_width() {
+    fn full_reads_keep_the_original_wave_width() {
         let requests = build_requests(&make_test_config(), DataReadMode::Full);
-        assert_eq!(global_wave_limit(&requests), MAX_GLOBAL_FULL_SOCKETS);
+        assert_eq!(global_wave_limit(&requests), MAX_GLOBAL_SOCKETS);
     }
 
     #[test]
