@@ -18,14 +18,9 @@ class AppDelegate: FlutterAppDelegate {
     return true
   }
 
-  override func applicationShouldTerminate(
-    _ sender: NSApplication
-  ) -> NSApplication.TerminateReply {
-    // Never let a background Flutter/Rust data read veto or defer a user
-    // initiated quit. Dart receives the exit request first and cancels the
-    // active native request; AppKit can then terminate immediately.
-    return .terminateNow
-  }
+  // Keep FlutterAppDelegate's applicationShouldTerminate implementation. It
+  // forwards the close request to Dart first, allowing AppState.prepareForExit
+  // to cancel an in-flight Rust/MDS read before AppKit terminates the process.
 
   override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
     return true

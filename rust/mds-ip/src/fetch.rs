@@ -786,10 +786,16 @@ fn apply_series_scale(series: &mut SignalSeries, name: &str, scale: f64) {
     if scale == 1.0 {
         return;
     }
-    for point in &mut series.points {
+    for (index, point) in series.points.iter_mut().enumerate() {
+        if index & 0x3fff == 0 && protocol::current_operation_canceled() {
+            return;
+        }
         point[1] *= scale;
     }
-    for value in &mut series.uniform_y {
+    for (index, value) in series.uniform_y.iter_mut().enumerate() {
+        if index & 0x3fff == 0 && protocol::current_operation_canceled() {
+            return;
+        }
         *value = (f64::from(*value) * scale) as f32;
     }
     if series.uniform_min_y.is_finite() && series.uniform_max_y.is_finite() {
@@ -1210,25 +1216,39 @@ fn series_from_msg(name: String, msg: &Message, max_points: usize) -> SignalSeri
         };
     }
 
+    if protocol::current_operation_canceled() {
+        return canceled_series(name);
+    }
+
     // Store as points with actual index-based X. The caller should
     // replace X with proper timebase if available (via series_from_msg_uniform).
     let n = values.len();
     if n <= max_points || max_points == 0 {
+        let mut points = Vec::with_capacity(n);
+        let mut min_y = f64::INFINITY;
+        let mut max_y = f64::NEG_INFINITY;
+        for (index, value) in values.into_iter().enumerate() {
+            if index & 0x3fff == 0 && protocol::current_operation_canceled() {
+                return canceled_series(name);
+            }
+            min_y = min_y.min(value);
+            max_y = max_y.max(value);
+            points.push([index as f64, value]);
+        }
         SignalSeries {
             name,
-            points: values
-                .iter()
-                .enumerate()
-                .map(|(i, &v)| [i as f64, v])
-                .collect(),
-            uniform_min_y: values.iter().fold(f64::INFINITY, |a, &v| a.min(v)),
-            uniform_max_y: values.iter().fold(f64::NEG_INFINITY, |a, &v| a.max(v)),
+            points,
+            uniform_min_y: min_y,
+            uniform_max_y: max_y,
             ..Default::default()
         }
     } else {
         let step = n / max_points;
         let mut pts = Vec::with_capacity(max_points * 2);
         for b in 0..max_points {
+            if b & 0x3fff == 0 && protocol::current_operation_canceled() {
+                return canceled_series(name);
+            }
             let start = b * step;
             let end = ((b + 1) * step).min(n);
             if start >= end {
@@ -1285,7 +1305,10 @@ fn series_from_f32_values_uniform(
 
     let mut min_y = f32::INFINITY;
     let mut max_y = f32::NEG_INFINITY;
-    for &value in &values {
+    for (index, &value) in values.iter().enumerate() {
+        if index & 0x3fff == 0 && protocol::current_operation_canceled() {
+            return canceled_series(name);
+        }
         min_y = min_y.min(value);
         max_y = max_y.max(value);
     }
@@ -1324,18 +1347,19 @@ fn series_from_values_uniform(
 
     let mut min_y = f64::INFINITY;
     let mut max_y = f64::NEG_INFINITY;
-    let uniform_y: Vec<f32> = values
-        .iter()
-        .map(|&v| {
-            if v < min_y {
-                min_y = v;
-            }
-            if v > max_y {
-                max_y = v;
-            }
-            v as f32
-        })
-        .collect();
+    let mut uniform_y = Vec::with_capacity(values.len());
+    for (index, &value) in values.iter().enumerate() {
+        if index & 0x3fff == 0 && protocol::current_operation_canceled() {
+            return canceled_series(name);
+        }
+        if value < min_y {
+            min_y = value;
+        }
+        if value > max_y {
+            max_y = value;
+        }
+        uniform_y.push(value as f32);
+    }
 
     SignalSeries {
         name,
@@ -1357,22 +1381,37 @@ fn series_from_values(name: String, y_values: Vec<f64>, x_values: Vec<f64>) -> S
         };
     }
     let points = if x_values.is_empty() {
-        y_values
-            .into_iter()
-            .enumerate()
-            .map(|(index, y)| [index as f64, y])
-            .collect()
+        let mut points = Vec::with_capacity(y_values.len());
+        for (index, y) in y_values.into_iter().enumerate() {
+            if index & 0x3fff == 0 && protocol::current_operation_canceled() {
+                return canceled_series(name);
+            }
+            points.push([index as f64, y]);
+        }
+        points
     } else {
-        x_values
-            .into_iter()
-            .zip(y_values)
-            .filter(|(x, y)| x.is_finite() && y.is_finite())
-            .map(|(x, y)| [x, y])
-            .collect()
+        let mut points = Vec::with_capacity(x_values.len().min(y_values.len()));
+        for (index, (x, y)) in x_values.into_iter().zip(y_values).enumerate() {
+            if index & 0x3fff == 0 && protocol::current_operation_canceled() {
+                return canceled_series(name);
+            }
+            if x.is_finite() && y.is_finite() {
+                points.push([x, y]);
+            }
+        }
+        points
     };
     SignalSeries {
         name,
         points,
+        ..Default::default()
+    }
+}
+
+fn canceled_series(name: String) -> SignalSeries {
+    SignalSeries {
+        name,
+        error: "operation canceled".into(),
         ..Default::default()
     }
 }

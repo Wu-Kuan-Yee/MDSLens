@@ -117,8 +117,7 @@ fn should_drain_canceled_body(
     }
     let remaining = size - offset;
     let predicted_remaining_ms =
-        (remaining as u128).saturating_mul(transfer_elapsed_ms.max(1))
-            / offset as u128;
+        (remaining as u128).saturating_mul(transfer_elapsed_ms.max(1)) / offset as u128;
     predicted_remaining_ms <= reconnect_ms && cancel_elapsed_ms <= reconnect_ms
 }
 
@@ -128,6 +127,14 @@ fn canceled() -> bool {
 
 pub(crate) fn current_operation_canceled() -> bool {
     canceled()
+}
+
+fn cancellation_checkpoint() -> Result<(), String> {
+    if canceled() {
+        Err("operation canceled".to_string())
+    } else {
+        Ok(())
+    }
 }
 
 fn reject_canceled_write() -> Result<(), String> {
@@ -213,7 +220,11 @@ pub fn queue_message(socket: &mut TcpStream, packet: &[u8]) -> Result<(), String
     })?;
     if written != packet.len() {
         mark_current_connection_unusable();
-        return Err(format!("queue write short: {} of {}", written, packet.len()));
+        return Err(format!(
+            "queue write short: {} of {}",
+            written,
+            packet.len()
+        ));
     }
     Ok(())
 }
@@ -261,13 +272,7 @@ fn read_fully(
                     .get_or_insert_with(Instant::now)
                     .elapsed()
                     .as_millis();
-                should_drain_canceled_body(
-                    offset,
-                    size,
-                    elapsed_ms,
-                    since_cancel_ms,
-                    reconnect_ms,
-                )
+                should_drain_canceled_body(offset, size, elapsed_ms, since_cancel_ms, reconnect_ms)
             } else {
                 false
             };
@@ -286,9 +291,7 @@ fn read_fully(
                 offset += read;
                 last_progress = Instant::now();
             }
-            Err(error)
-                if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
-            {
+            Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
                 if idle_deadline_expired(last_progress.elapsed(), idle_timeout) {
                     mark_current_connection_unusable();
                     return Err("read error: response timed out".to_string());
@@ -330,7 +333,12 @@ fn read_message_with_idle_timeout(
     let body_size = (msg_len - 48) as usize;
     let body = read_fully(socket, body_size, true, idle_timeout)?;
 
-    Ok(Message { status, length, dtype, body })
+    Ok(Message {
+        status,
+        length,
+        dtype,
+        body,
+    })
 }
 
 // ── Protocol operations ──────────────────────────────────────────────────
@@ -396,13 +404,12 @@ pub fn value_for_setup(socket: &mut TcpStream, expr: &str) -> Result<Message, St
 pub fn value_for_cleanup(socket: &mut TcpStream, expr: &str) -> Result<Message, String> {
     let body = expr.as_bytes();
     let result = with_cancel_suppressed(|| {
-        write_message(socket, &message(14, 1, 0, next_message_id(), body))
-            .and_then(|()| {
-                read_message_with_idle_timeout(
-                    socket,
-                    Some(Duration::from_millis(CONNECTION_SETUP_TIMEOUT_MS)),
-                )
-            })
+        write_message(socket, &message(14, 1, 0, next_message_id(), body)).and_then(|()| {
+            read_message_with_idle_timeout(
+                socket,
+                Some(Duration::from_millis(CONNECTION_SETUP_TIMEOUT_MS)),
+            )
+        })
     });
     if result.is_err() {
         mark_current_connection_unusable();
@@ -475,16 +482,24 @@ pub fn numeric_f32_from_message(msg: &Message) -> Result<Vec<f32>, String> {
 
 fn parse_f64_be(data: &[u8]) -> Result<Vec<f64>, String> {
     let mut values = Vec::with_capacity(data.len() / 8);
-    for chunk in data.chunks_exact(8) {
+    for (index, chunk) in data.chunks_exact(8).enumerate() {
+        if index & 0x3fff == 0 {
+            cancellation_checkpoint()?;
+        }
         let v = f64::from_be_bytes(chunk.try_into().unwrap());
-        if v.is_finite() { values.push(v); }
+        if v.is_finite() {
+            values.push(v);
+        }
     }
     Ok(values)
 }
 
 fn parse_f64_be_to_f32(data: &[u8]) -> Result<Vec<f32>, String> {
     let mut values = Vec::with_capacity(data.len() / 8);
-    for chunk in data.chunks_exact(8) {
+    for (index, chunk) in data.chunks_exact(8).enumerate() {
+        if index & 0x3fff == 0 {
+            cancellation_checkpoint()?;
+        }
         let value = f64::from_be_bytes(chunk.try_into().unwrap()) as f32;
         if value.is_finite() {
             values.push(value);
@@ -495,16 +510,24 @@ fn parse_f64_be_to_f32(data: &[u8]) -> Result<Vec<f32>, String> {
 
 fn parse_f32_be(data: &[u8]) -> Result<Vec<f64>, String> {
     let mut values = Vec::with_capacity(data.len() / 4);
-    for chunk in data.chunks_exact(4) {
+    for (index, chunk) in data.chunks_exact(4).enumerate() {
+        if index & 0x3fff == 0 {
+            cancellation_checkpoint()?;
+        }
         let v = f32::from_be_bytes(chunk.try_into().unwrap());
-        if v.is_finite() { values.push(v as f64); }
+        if v.is_finite() {
+            values.push(v as f64);
+        }
     }
     Ok(values)
 }
 
 fn parse_f32_be_direct(data: &[u8]) -> Result<Vec<f32>, String> {
     let mut values = Vec::with_capacity(data.len() / 4);
-    for chunk in data.chunks_exact(4) {
+    for (index, chunk) in data.chunks_exact(4).enumerate() {
+        if index & 0x3fff == 0 {
+            cancellation_checkpoint()?;
+        }
         let value = f32::from_be_bytes(chunk.try_into().unwrap());
         if value.is_finite() {
             values.push(value);
@@ -525,23 +548,43 @@ pub fn int_from_message(msg: &Message) -> Result<i32, String> {
     Ok(match msg.body.len() {
         n if n >= 8 && (msg.dtype == 11 || msg.dtype == 53) => {
             let v = f64::from_be_bytes(msg.body[..8].try_into().unwrap());
-            if v.is_finite() && v > 0.0 && v <= i32::MAX as f64 { v.round() as i32 } else { 0 }
+            if v.is_finite() && v > 0.0 && v <= i32::MAX as f64 {
+                v.round() as i32
+            } else {
+                0
+            }
         }
         n if n >= 4 && (msg.dtype == 10 || msg.dtype == 52) => {
             let v = f32::from_be_bytes(msg.body[..4].try_into().unwrap());
-            if v.is_finite() && v > 0.0 { v.round() as i32 } else { 0 }
+            if v.is_finite() && v > 0.0 {
+                v.round() as i32
+            } else {
+                0
+            }
         }
         8 => {
             let v = i64::from_be_bytes(msg.body[..8].try_into().unwrap());
-            if v > 0 && v <= i32::MAX as i64 { v as i32 } else { 0 }
+            if v > 0 && v <= i32::MAX as i64 {
+                v as i32
+            } else {
+                0
+            }
         }
         n if n >= 4 => {
             let v = i32::from_be_bytes(msg.body[..4].try_into().unwrap());
-            if v > 0 { v } else { 0 }
+            if v > 0 {
+                v
+            } else {
+                0
+            }
         }
         n if n >= 2 => {
             let v = i16::from_be_bytes(msg.body[..2].try_into().unwrap());
-            if v > 0 { v as i32 } else { 0 }
+            if v > 0 {
+                v as i32
+            } else {
+                0
+            }
         }
         1 => msg.body[0] as i32,
         _ => 0,
@@ -560,7 +603,10 @@ mod tests {
     #[test]
     fn setup_reads_keep_a_bounded_idle_deadline() {
         let timeout = Some(Duration::from_secs(8));
-        assert!(!idle_deadline_expired(Duration::from_millis(7_999), timeout));
+        assert!(!idle_deadline_expired(
+            Duration::from_millis(7_999),
+            timeout
+        ));
         assert!(idle_deadline_expired(Duration::from_secs(8), timeout));
     }
 
@@ -579,7 +625,9 @@ mod tests {
     #[test]
     fn test_message_id_wraps() {
         // Drain IDs and verify wrap behavior
-        for _ in 0..254 { next_message_id(); }
+        for _ in 0..254 {
+            next_message_id();
+        }
         assert_eq!(next_message_id(), 0); // wraps
         assert_eq!(next_message_id(), 1); // skips 0
         assert_eq!(next_message_id(), 2); // back to start
@@ -587,11 +635,18 @@ mod tests {
 
     #[test]
     fn test_numeric_from_message_f64() {
-        let body: Vec<u8> = 1.5f64.to_be_bytes().into_iter()
+        let body: Vec<u8> = 1.5f64
+            .to_be_bytes()
+            .into_iter()
             .chain(2.5f64.to_be_bytes())
             .chain(f64::NAN.to_be_bytes()) // filtered
             .collect();
-        let msg = Message { status: 0, length: 0, dtype: 11, body };
+        let msg = Message {
+            status: 0,
+            length: 0,
+            dtype: 11,
+            body,
+        };
         let values = numeric_from_message(&msg).unwrap();
         assert_eq!(values.len(), 2);
         assert!((values[0] - 1.5).abs() < 1e-10);
@@ -600,10 +655,17 @@ mod tests {
 
     #[test]
     fn test_numeric_from_message_f32() {
-        let body: Vec<u8> = 1.0f32.to_be_bytes().into_iter()
+        let body: Vec<u8> = 1.0f32
+            .to_be_bytes()
+            .into_iter()
             .chain((-3.0f32).to_be_bytes())
             .collect();
-        let msg = Message { status: 0, length: 0, dtype: 10, body };
+        let msg = Message {
+            status: 0,
+            length: 0,
+            dtype: 10,
+            body,
+        };
         let values = numeric_from_message(&msg).unwrap();
         assert_eq!(values.len(), 2);
         assert!((values[0] - 1.0).abs() < 1e-6);
@@ -612,39 +674,87 @@ mod tests {
 
     #[test]
     fn test_numeric_f32_from_message_keeps_float_storage() {
-        let body: Vec<u8> = 1.0f32.to_be_bytes().into_iter()
+        let body: Vec<u8> = 1.0f32
+            .to_be_bytes()
+            .into_iter()
             .chain((-3.0f32).to_be_bytes())
             .collect();
-        let msg = Message { status: 0, length: 0, dtype: 10, body };
-        assert_eq!(numeric_f32_from_message(&msg).unwrap(), vec![1.0f32, -3.0f32]);
+        let msg = Message {
+            status: 0,
+            length: 0,
+            dtype: 10,
+            body,
+        };
+        assert_eq!(
+            numeric_f32_from_message(&msg).unwrap(),
+            vec![1.0f32, -3.0f32]
+        );
     }
 
     #[test]
     fn test_numeric_f32_from_message_converts_doubles_directly() {
-        let body: Vec<u8> = 1.5f64.to_be_bytes().into_iter()
+        let body: Vec<u8> = 1.5f64
+            .to_be_bytes()
+            .into_iter()
             .chain((-2.25f64).to_be_bytes())
             .collect();
-        let msg = Message { status: 0, length: 0, dtype: 11, body };
-        assert_eq!(numeric_f32_from_message(&msg).unwrap(), vec![1.5f32, -2.25f32]);
+        let msg = Message {
+            status: 0,
+            length: 0,
+            dtype: 11,
+            body,
+        };
+        assert_eq!(
+            numeric_f32_from_message(&msg).unwrap(),
+            vec![1.5f32, -2.25f32]
+        );
+    }
+
+    #[test]
+    fn large_numeric_decode_honors_cancellation() {
+        let msg = Message {
+            status: 0,
+            length: 0,
+            dtype: 11,
+            body: vec![0u8; 8 * 65_536],
+        };
+        let cancel = Arc::new(AtomicBool::new(true));
+        let result = with_cancel_context(cancel, false, || numeric_from_message(&msg));
+        assert_eq!(result.unwrap_err(), "operation canceled");
     }
 
     #[test]
     fn test_numeric_error_string() {
         let body = b"Error: signal not found";
-        let msg = Message { status: 0, length: 0, dtype: 14, body: body.to_vec() };
+        let msg = Message {
+            status: 0,
+            length: 0,
+            dtype: 14,
+            body: body.to_vec(),
+        };
         assert!(numeric_from_message(&msg).is_err());
     }
 
     #[test]
     fn test_int_from_message_double() {
         let body = 42.0f64.to_be_bytes().to_vec();
-        let msg = Message { status: 0, length: 0, dtype: 11, body };
+        let msg = Message {
+            status: 0,
+            length: 0,
+            dtype: 11,
+            body,
+        };
         assert_eq!(int_from_message(&msg).unwrap(), 42);
     }
 
     #[test]
     fn test_int_from_message_empty() {
-        let msg = Message { status: 0, length: 0, dtype: 0, body: vec![] };
+        let msg = Message {
+            status: 0,
+            length: 0,
+            dtype: 0,
+            body: vec![],
+        };
         assert_eq!(int_from_message(&msg).unwrap(), 0);
     }
 
@@ -652,9 +762,17 @@ mod tests {
     fn test_msg_len_rejects_too_small() {
         // Construct a message with invalid msgLen
         let mut buf = vec![0u8; 48];
-        buf[0] = 0; buf[1] = 0; buf[2] = 0; buf[3] = 10; // msgLen = 10 (< 48)
-        // We can't test read_message without a real socket, but we test the logic via Message bounds
-        let msg = Message { status: 0, length: 0, dtype: 0, body: vec![1, 2, 3] };
+        buf[0] = 0;
+        buf[1] = 0;
+        buf[2] = 0;
+        buf[3] = 10; // msgLen = 10 (< 48)
+                     // We can't test read_message without a real socket, but we test the logic via Message bounds
+        let msg = Message {
+            status: 0,
+            length: 0,
+            dtype: 0,
+            body: vec![1, 2, 3],
+        };
         // read_message uses 48 ≤ msgLen ≤ 128*1024*1024
         // numeric_from_message with body.len() < 48 is fine, the check is on msgLen in read_message
         assert!(numeric_from_message(&msg).is_ok()); // non-numeric fallback, no error
@@ -665,10 +783,7 @@ mod tests {
         let cancel = Arc::new(AtomicBool::new(true));
 
         with_cancel_context(cancel, true, || {
-            assert_eq!(
-                reject_canceled_write().unwrap_err(),
-                "operation canceled"
-            );
+            assert_eq!(reject_canceled_write().unwrap_err(), "operation canceled");
             // No bytes entered the protocol, so the clean idle socket can
             // still be reused after the obsolete request is discarded.
             assert!(current_connection_reusable());
@@ -683,10 +798,7 @@ mod tests {
             assert!(canceled());
             with_cancel_suppressed(|| assert!(!canceled()));
             assert!(canceled());
-            assert_eq!(
-                reject_canceled_write().unwrap_err(),
-                "operation canceled"
-            );
+            assert_eq!(reject_canceled_write().unwrap_err(), "operation canceled");
         });
     }
 
