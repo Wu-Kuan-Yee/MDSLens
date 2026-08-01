@@ -31,7 +31,7 @@ Future<void> _initializeApplication(
     await app.initializeStartupSession(preparedNetworkAccess: networkAccess);
   } finally {
     app.markStartupInitializationComplete();
-    unawaited(scheduleLinuxPortableRollbackCleanup());
+    unawaited(scheduleNativeRollbackCleanup());
   }
 }
 

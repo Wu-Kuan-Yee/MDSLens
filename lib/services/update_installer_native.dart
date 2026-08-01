@@ -1334,6 +1334,192 @@ Future<void> scheduleLinuxPortableRollbackCleanup({
   }
 }
 
+/// Schedules recovery cleanup for every native self-replacing channel.  The
+/// helper normally removes the rollback copy itself; this startup path handles
+/// a machine shutdown, helper crash, or user closing the new process during
+/// the stability window.
+Future<void> scheduleNativeRollbackCleanup({
+  String? platformOverride,
+  String? currentExecutableOverride,
+  String? currentAppImageOverride,
+  Duration stabilityWindow = _defaultUpdateStabilityWindow,
+}) async {
+  final platform = (platformOverride ?? Platform.operatingSystem).toLowerCase();
+  switch (platform) {
+    case 'windows':
+      await scheduleWindowsPortableRollbackCleanup(
+        platformOverride: platform,
+        currentExecutableOverride: currentExecutableOverride,
+        stabilityWindow: stabilityWindow,
+      );
+    case 'macos':
+      await scheduleMacOSRollbackCleanup(
+        platformOverride: platform,
+        currentExecutableOverride: currentExecutableOverride,
+        stabilityWindow: stabilityWindow,
+      );
+    case 'linux':
+      final appImage = currentAppImageOverride ??
+          (Platform.environment['APPIMAGE'] ?? '').trim();
+      if (appImage.isNotEmpty) {
+        await scheduleLinuxAppImageRollbackCleanup(
+          platformOverride: platform,
+          currentAppImageOverride: appImage,
+          stabilityWindow: stabilityWindow,
+        );
+      } else {
+        await scheduleLinuxPortableRollbackCleanup(
+          platformOverride: platform,
+          currentExecutableOverride: currentExecutableOverride,
+          stabilityWindow: stabilityWindow,
+        );
+      }
+  }
+}
+
+Future<void> scheduleWindowsPortableRollbackCleanup({
+  String? platformOverride,
+  String? currentExecutableOverride,
+  Duration stabilityWindow = _defaultUpdateStabilityWindow,
+}) async {
+  final platform = platformOverride ?? Platform.operatingSystem;
+  if (platform.toLowerCase() != 'windows') return;
+  final executable = currentExecutableOverride ?? Platform.resolvedExecutable;
+  final currentRoot = windowsPortableRootFromExecutable(executable);
+  if (currentRoot == null) return;
+
+  final currentMarker = File(
+    '$currentRoot${Platform.pathSeparator}.mdslens-portable.json',
+  );
+  final previous = Directory('$currentRoot.mdslens-previous');
+  final commit = File('$currentRoot.mdslens-update-committed');
+  if (!await _validWindowsPortableMarker(currentMarker) ||
+      !await _validUpdateCommitMarker(commit) ||
+      await FileSystemEntity.type(
+            previous.path,
+            followLinks: false,
+          ) !=
+          FileSystemEntityType.directory) {
+    return;
+  }
+  final previousMarker = File(
+    '${previous.path}${Platform.pathSeparator}.mdslens-portable.json',
+  );
+  if (!await _validWindowsPortableMarker(previousMarker)) return;
+
+  if (stabilityWindow > Duration.zero) {
+    await Future<void>.delayed(stabilityWindow);
+  }
+  if (!await _validWindowsPortableMarker(currentMarker) ||
+      !await _validUpdateCommitMarker(commit) ||
+      !await _validWindowsPortableMarker(previousMarker)) {
+    return;
+  }
+  try {
+    await previous.delete(recursive: true);
+    await commit.delete();
+  } catch (_) {
+    // A protected installation is cleaned by the privileged helper.  Do not
+    // ask for a second authorization prompt during ordinary startup.
+  }
+}
+
+Future<void> scheduleMacOSRollbackCleanup({
+  String? platformOverride,
+  String? currentExecutableOverride,
+  Duration stabilityWindow = _defaultUpdateStabilityWindow,
+}) async {
+  final platform = platformOverride ?? Platform.operatingSystem;
+  if (platform.toLowerCase() != 'macos') return;
+  final executable = currentExecutableOverride ?? Platform.resolvedExecutable;
+  final bundlePath = macOSBundlePathFromExecutable(executable);
+  if (bundlePath == null) return;
+  final current = Directory(bundlePath);
+  final previous = Directory('$bundlePath.mdslens-previous');
+  final commit = File('$bundlePath.mdslens-update-committed');
+  if (!await current.exists() ||
+      !await _validUpdateCommitMarker(commit) ||
+      await FileSystemEntity.type(
+            previous.path,
+            followLinks: false,
+          ) !=
+          FileSystemEntityType.directory ||
+      !await File('${previous.path}/Contents/Info.plist').exists()) {
+    return;
+  }
+  if (stabilityWindow > Duration.zero) {
+    await Future<void>.delayed(stabilityWindow);
+  }
+  if (!await current.exists() ||
+      !await _validUpdateCommitMarker(commit) ||
+      !await File('${previous.path}/Contents/Info.plist').exists()) {
+    return;
+  }
+  try {
+    await previous.delete(recursive: true);
+    await commit.delete();
+  } catch (_) {}
+}
+
+Future<void> scheduleLinuxAppImageRollbackCleanup({
+  String? platformOverride,
+  String? currentAppImageOverride,
+  Duration stabilityWindow = _defaultUpdateStabilityWindow,
+}) async {
+  final platform = platformOverride ?? Platform.operatingSystem;
+  if (platform.toLowerCase() != 'linux') return;
+  final rawPath = currentAppImageOverride ??
+      (Platform.environment['APPIMAGE'] ?? '').trim();
+  if (rawPath.trim().isEmpty) return;
+  String currentPath;
+  try {
+    currentPath = await File(rawPath).resolveSymbolicLinks();
+  } catch (_) {
+    return;
+  }
+  final current = File(currentPath);
+  final previous = File('$currentPath.mdslens-previous');
+  final owner = File('$currentPath.mdslens-previous.owner');
+  final commit = File('$currentPath.mdslens-update-committed');
+  if (!await current.exists() ||
+      !await _validUpdateCommitMarker(commit) ||
+      !await previous.exists() ||
+      !await owner.exists() ||
+      (await owner.readAsString()).trim() != 'com.mdslens.app') {
+    return;
+  }
+  if (stabilityWindow > Duration.zero) {
+    await Future<void>.delayed(stabilityWindow);
+  }
+  if (!await current.exists() ||
+      !await _validUpdateCommitMarker(commit) ||
+      !await previous.exists() ||
+      (await owner.readAsString()).trim() != 'com.mdslens.app') {
+    return;
+  }
+  try {
+    await previous.delete();
+    await owner.delete();
+    await commit.delete();
+  } catch (_) {}
+}
+
+Future<bool> _validUpdateCommitMarker(File marker) async {
+  try {
+    if (await FileSystemEntity.type(
+          marker.path,
+          followLinks: false,
+        ) ==
+        FileSystemEntityType.link) {
+      return false;
+    }
+    final value = (await marker.readAsString()).trim();
+    return RegExp(r'^[A-Za-z0-9_-]{32,}$').hasMatch(value);
+  } catch (_) {
+    return false;
+  }
+}
+
 Future<UpdateInstallResult> launchVerifiedUpdateAsset(
   DownloadedUpdate update, {
   String? platformOverride,

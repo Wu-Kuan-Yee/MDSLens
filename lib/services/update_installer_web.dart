@@ -18,6 +18,13 @@ Future<void> scheduleLinuxPortableRollbackCleanup({
   Duration stabilityWindow = const Duration(seconds: 60),
 }) async {}
 
+Future<void> scheduleNativeRollbackCleanup({
+  String? platformOverride,
+  String? currentExecutableOverride,
+  String? currentAppImageOverride,
+  Duration stabilityWindow = const Duration(seconds: 60),
+}) async {}
+
 Future<UpdateInstallResult> installLatestReleaseUpdate(
   ReleaseUpdate release,
   RuntimeSystemInfo systemInfo, {

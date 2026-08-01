@@ -1400,6 +1400,102 @@ void main() {
     expect(await previous.exists(), isFalse);
   });
 
+  test('Windows portable committed rollback copies are cleaned on startup',
+      () async {
+    final root = await Directory.systemTemp.createTemp(
+      'mdslens-windows-cleanup-test-',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    final current = Directory('${root.path}/mdslens-windows-x64');
+    final previous = Directory('${current.path}.mdslens-previous');
+    await current.create(recursive: true);
+    await previous.create(recursive: true);
+    final marker = jsonEncode({
+      'schema_version': 1,
+      'product': 'com.mdslens.app',
+      'platform': 'windows',
+      'version': '0.3.7',
+      'architecture': 'x64',
+      'executable': 'mdslens.exe',
+    });
+    await File('${current.path}/mdslens.exe').writeAsString('current');
+    await File('${current.path}/.mdslens-portable.json').writeAsString(marker);
+    await File('${previous.path}/mdslens.exe').writeAsString('previous');
+    await File('${previous.path}/.mdslens-portable.json').writeAsString(marker);
+    await File('${current.path}.mdslens-update-committed')
+        .writeAsString('a' * 43);
+
+    await scheduleWindowsPortableRollbackCleanup(
+      platformOverride: 'windows',
+      currentExecutableOverride: '${current.path}/mdslens.exe',
+      stabilityWindow: Duration.zero,
+    );
+
+    expect(await previous.exists(), isFalse);
+    expect(
+      File('${current.path}.mdslens-update-committed').existsSync(),
+      isFalse,
+    );
+  });
+
+  test('macOS committed bundle rollback copies are cleaned on startup',
+      () async {
+    final root = await Directory.systemTemp.createTemp(
+      'mdslens-macos-cleanup-test-',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    final current = Directory('${root.path}/MDSLens.app');
+    final previous = Directory('${current.path}.mdslens-previous');
+    await Directory('${current.path}/Contents/MacOS').create(recursive: true);
+    await Directory('${previous.path}/Contents').create(recursive: true);
+    await File('${current.path}/Contents/MacOS/MDSLens')
+        .writeAsString('current');
+    await File('${previous.path}/Contents/Info.plist')
+        .writeAsString('previous');
+    await File('${current.path}.mdslens-update-committed')
+        .writeAsString('b' * 43);
+
+    await scheduleMacOSRollbackCleanup(
+      platformOverride: 'macos',
+      currentExecutableOverride: '${current.path}/Contents/MacOS/MDSLens',
+      stabilityWindow: Duration.zero,
+    );
+
+    expect(await previous.exists(), isFalse);
+    expect(
+      File('${current.path}.mdslens-update-committed').existsSync(),
+      isFalse,
+    );
+  });
+
+  test('AppImage committed rollback copies are cleaned on startup', () async {
+    final root = await Directory.systemTemp.createTemp(
+      'mdslens-appimage-cleanup-test-',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    final current = File('${root.path}/MDSLens.AppImage');
+    final previous = File('${current.path}.mdslens-previous');
+    final owner = File('${previous.path}.owner');
+    await current.writeAsString('current');
+    await previous.writeAsString('previous');
+    await owner.writeAsString('com.mdslens.app\n');
+    await File('${current.path}.mdslens-update-committed')
+        .writeAsString('c' * 43);
+
+    await scheduleLinuxAppImageRollbackCleanup(
+      platformOverride: 'linux',
+      currentAppImageOverride: current.path,
+      stabilityWindow: Duration.zero,
+    );
+
+    expect(await previous.exists(), isFalse);
+    expect(await owner.exists(), isFalse);
+    expect(
+      File('${current.path}.mdslens-update-committed').existsSync(),
+      isFalse,
+    );
+  });
+
   test('Linux portable updates reject archive path traversal', () async {
     final root = await Directory.systemTemp.createTemp(
       'mdslens-portable-traversal-test-',
