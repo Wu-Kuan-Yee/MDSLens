@@ -106,6 +106,18 @@ void main() {
     expect(legacy?.strokes.single.key, LogicalKeyboardKey.keyP);
   });
 
+  test('shortcut sequences are capped at four strokes when restored', () {
+    final sequence = MdsShortcutSequence([
+      MdsShortcutStroke(LogicalKeyboardKey.keyA),
+      MdsShortcutStroke(LogicalKeyboardKey.keyB),
+      MdsShortcutStroke(LogicalKeyboardKey.keyC),
+      MdsShortcutStroke(LogicalKeyboardKey.keyD),
+      MdsShortcutStroke(LogicalKeyboardKey.keyE),
+    ]);
+    expect(sequence.strokes, hasLength(4));
+    expect(sequence.strokes.last.key, LogicalKeyboardKey.keyD);
+  });
+
   test('dispatcher waits for a longer sequence before firing its prefix', () {
     final bindings = <MdsShortcutCommand, MdsShortcutBinding>{
       MdsShortcutCommand.showAllPanels: MdsShortcutBinding(

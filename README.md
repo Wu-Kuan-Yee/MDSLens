@@ -29,6 +29,9 @@ The project website is available at
   while preserving those separate files.
 - Responsive layouts, configurable fonts, icon sizes and themes, internal web
   bookmarks, shot history management, and native system file/link integration.
+- Configurable desktop keyboard shortcuts with platform-aware navigation,
+  multi-stroke commands, and safe text-field behavior. See
+  [Keyboard shortcuts](docs/KEYBOARD_SHORTCUTS.md).
 - Default-on, configurable startup update checks, plus manual checks,
   platform/architecture selection, cancellable streaming downloads, SHA-256
   verification, same-location replacement, and operating-system authorization

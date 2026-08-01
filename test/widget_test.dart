@@ -1022,7 +1022,7 @@ void main() {
     expect(tester.testTextInput.isVisible, isFalse);
   });
 
-  test('Only Shot navigation and Escape bypass focused text editing', () {
+  test('Global actions, Shot navigation, and Escape bypass focused editing', () {
     expect(
       allowShortcutWhileEditing(
         MdsShortcutCommand.previousShot,
@@ -1050,6 +1050,20 @@ void main() {
         shotInputFocused: true,
       ),
       isFalse,
+    );
+    expect(
+      allowShortcutWhileEditing(
+        MdsShortcutCommand.openFile,
+        shotInputFocused: true,
+      ),
+      isTrue,
+    );
+    expect(
+      allowShortcutWhileEditing(
+        MdsShortcutCommand.globalExport,
+        shotInputFocused: false,
+      ),
+      isTrue,
     );
     expect(
       allowShortcutWhileEditing(
