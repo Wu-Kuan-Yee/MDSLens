@@ -64,6 +64,11 @@ class SourceIndexMemory {
 
   Set<String> get trees => Set<String>.unmodifiable(_signalsByTree.keys);
 
+  /// Remove the locally learned Tree/Signal suggestions.
+  void clear() {
+    _signalsByTree.clear();
+  }
+
   Map<String, List<String>> toJson() {
     final result = <String, List<String>>{};
     final treeNames = _signalsByTree.keys.toList()..sort();

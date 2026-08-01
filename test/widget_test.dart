@@ -4420,7 +4420,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    expect(find.byType(PopupMenuDivider), findsNWidgets(4));
+    expect(find.byType(PopupMenuDivider), findsNWidgets(5));
   });
 
   testWidgets('Shot history uses the polished compact dropdown', (
@@ -5084,11 +5084,69 @@ void main() {
     expect(find.byIcon(Icons.language_rounded), findsOneWidget);
     expect(find.byIcon(Icons.dashboard_customize_rounded), findsOneWidget);
     expect(find.byIcon(Icons.font_download_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.restore_rounded), findsOneWidget);
     expect(
       find.byKey(const ValueKey('settings-auto-update-check')),
       findsNothing,
     );
     expect(find.byIcon(Icons.info_outline_rounded), findsOneWidget);
+  });
+
+  testWidgets('Settings can restore every preference after confirmation', (
+    tester,
+  ) async {
+    final app = AppState(credentialStore: MemoryCredentialStore());
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.themeMode = 1;
+    app.dataMode = 2;
+    app.applyFontSettings('Arial', 17, 12, 13, 16, iconSize: 30);
+    app.addWebBookmark('Example', 'https://example.com');
+    app.shotText = '163714';
+    app.sourceIndexMemory.remember('pcs_east', r'\\ip');
+    app.setLoginUser('user');
+    app.setLoginPass('secret');
+    app.setSshHost('host');
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Restore all settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Restore all settings?'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('restore-all-settings-cancel')));
+    await tester.pumpAndSettle();
+    expect(app.themeMode, 1);
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Restore all settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('restore-all-settings-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(app.themeMode, 2);
+    expect(app.dataMode, 0);
+    expect(app.fontFamily, 'System');
+    expect(app.fontLegendSize, 11);
+    expect(app.fontAxisSize, 8);
+    expect(app.fontUnitSize, 9);
+    expect(app.fontUiSize, 12);
+    expect(app.iconSize, 22);
+    expect(app.webBookmarks, isEmpty);
+    expect(app.shotHistory, isEmpty);
+    expect(app.shotText, isEmpty);
+    expect(app.loginUser, isEmpty);
+    expect(app.loginPass, isEmpty);
+    expect(app.sshHost, isEmpty);
+    expect(app.sourceIndexMemory.trees, isEmpty);
+    expect(app.columns.map((column) => column.length), [3, 3]);
   });
 
   testWidgets('Automatic update checks are enabled by default and configurable',

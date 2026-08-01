@@ -1078,6 +1078,9 @@ class ToolbarWidget extends StatelessWidget {
           case 'shortcuts':
             KeyboardShortcutsDialog.show(ctx);
             break;
+          case 'restore-all':
+            _confirmRestoreAllSettings(ctx, app);
+            break;
           case 'about':
             AboutDialogWidget.show(ctx);
             break;
@@ -1103,6 +1106,11 @@ class ToolbarWidget extends StatelessWidget {
           value: 'shortcuts',
           icon: Icons.keyboard_alt_outlined,
           label: 'Keyboard shortcuts',
+        ),
+        _settingsMenuItem(
+          value: 'restore-all',
+          icon: Icons.restore_rounded,
+          label: 'Restore all settings',
         ),
         _settingsMenuItem(
           value: 'about',
@@ -3299,6 +3307,73 @@ class ToolbarWidget extends StatelessWidget {
     );
     if (confirmed == true) {
       await app.restoreDefaultConfig();
+    }
+  }
+
+  Future<void> _confirmRestoreAllSettings(
+    BuildContext context,
+    AppState app,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        final colors = Theme.of(dialogContext).colorScheme;
+        return KeyboardSafeDialog(
+          maxWidth: 520,
+          title: Row(
+            children: [
+              Icon(Icons.restore_rounded, color: colors.error),
+              const SizedBox(width: 10),
+              const Flexible(child: Text('Restore all settings?')),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: colors.errorContainer.withValues(alpha: 0.28),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: colors.error.withValues(alpha: 0.32)),
+                ),
+                child: const Text(
+                  'This restores the entire application to its initial state. '
+                  'Your saved configuration files will not be deleted.',
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'It will reset themes, fonts, shortcuts, layout, waveform '
+                'rate and mode, shot history, web pages, learned Tree/Signal '
+                'suggestions, Login and SSH settings. Saved passwords and '
+                'session tokens will also be removed.',
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              key: const ValueKey('restore-all-settings-cancel'),
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              key: const ValueKey('restore-all-settings-confirm'),
+              style: FilledButton.styleFrom(
+                backgroundColor: colors.error,
+                foregroundColor: colors.onError,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              icon: const Icon(Icons.restore_rounded),
+              label: const Text('Restore all settings'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed == true) {
+      await app.restoreAllDefaults();
     }
   }
 

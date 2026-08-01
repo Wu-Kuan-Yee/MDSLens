@@ -551,6 +551,7 @@ class PanelShortcutRequest {
 class AppState extends ChangeNotifier {
   static const int defaultShotHistoryLimit = 50;
   static const int maximumShotHistoryLimit = 10000;
+  static const String defaultLoginApiUrl = 'http://202.127.204.26:80/api';
 
   final SignalFetchWorker _signalFetchWorker;
   final StreamingSignalFetchWorker? _streamingSignalFetchWorker;
@@ -1087,7 +1088,7 @@ class AppState extends ChangeNotifier {
   String get authToken => _authToken;
   bool get hasActiveSession => _loggedIn && _authToken.trim().isNotEmpty;
   bool _explicitlyLoggedOut = false;
-  String _loginApiUrl = 'http://202.127.204.26:80/api';
+  String _loginApiUrl = defaultLoginApiUrl;
   String get loginApiUrl => _loginApiUrl;
   String _loginUser = '';
   String get loginUser => _loginUser;
@@ -2229,6 +2230,92 @@ class AppState extends ChangeNotifier {
     if (hasActiveSession && shot.isNotEmpty) {
       refreshDisplayedShot();
     }
+  }
+
+  /// Restore every user preference to the application's initial defaults.
+  ///
+  /// User-created configuration files are deliberately preserved: they are
+  /// documents, not preferences.  Login/API credentials and SSH secrets are
+  /// cleared from the platform credential vault through savePreferences().
+  Future<void> restoreAllDefaults() async {
+    await preferencesReady;
+    if (_disposed) return;
+
+    _sessionGeneration++;
+    _invalidateFetchForSettingsChange();
+    _disconnectSshTunnels();
+    var remoteLogoutFailed = false;
+    if (kIsWeb) {
+      try {
+        await WebGatewayClient.instance.logout();
+      } catch (_) {
+        // Keep the local session explicitly logged out if the gateway could
+        // not be reached, so a stale browser cookie cannot restore it.
+        remoteLogoutFailed = true;
+      }
+    }
+
+    _rememberLogin = true;
+    _loggedIn = false;
+    _authToken = '';
+    _explicitlyLoggedOut = remoteLogoutFailed;
+    _loginApiUrl = defaultLoginApiUrl;
+    _loginUser = '';
+    _loginPass = '';
+    _sshHost = '';
+    _sshPort = 22;
+    _sshUser = '';
+    _sshPass = '';
+    _sshIdentity = '';
+    _sshMode = 1;
+    _resetSshConnectionState();
+
+    _dataMode = 0;
+    _interactionMode = 0;
+    _themeMode = 2;
+    _toolbarCollapsed = false;
+    _autoCheckUpdates = true;
+    _fontFamily = 'System';
+    _fontLegendSize = 11;
+    _fontAxisSize = 8;
+    _fontUnitSize = 9;
+    _fontUiSize = 12;
+    _iconSize = 22;
+    _keyboardShortcuts = defaultMdsShortcutBindings();
+
+    _limitShotHistory = true;
+    _shotHistoryLimit = defaultShotHistoryLimit;
+    _shotHistory.clear();
+    _webBookmarks.clear();
+    sourceIndexMemory.clear();
+
+    _pendingImportedShot = null;
+    _shotText = '';
+    _displayedShot = '';
+    _shotCtrl.value = const TextEditingValue();
+    _shotInfoIp = '';
+    _shotInfoPulse = '';
+    _shotInfoIt = '';
+    _shotInfoTime = '';
+    selectedCol = -1;
+    selectedRow = -1;
+    _maximizedPlot = null;
+    _pointLocked = false;
+    clearCrosshair();
+    sharedXMin = null;
+    sharedXMax = null;
+    sharedYMin = null;
+    sharedYMax = null;
+    _viewResetId++;
+    _rateViewResetId++;
+    _networkPermissionFailureDetails = '';
+    _lastNetworkRetry = null;
+    _stylusEraserMode = false;
+
+    loadDefaultConfig();
+    _status = 'All settings restored to defaults. Login + Refresh to fetch data.';
+    notifyListeners();
+    await savePreferences();
   }
 
   Future<void> openFile({
