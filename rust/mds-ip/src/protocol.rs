@@ -168,6 +168,29 @@ pub struct Message {
     pub body: Vec<u8>,
 }
 
+/// Return whether an MDSIP response reports success.
+///
+/// MDSplus puts the success bit in the low bit of the status word.  A reply
+/// can be fully decoded at the transport layer while still carrying an MDS
+/// expression error, so connection setup callers must check this bit before
+/// caching the tree/shot state.
+pub fn message_succeeded(message: &Message) -> bool {
+    message.status & 1 != 0
+}
+
+/// Extract a useful error from a failed MDSIP response.
+pub fn message_error(message: &Message) -> String {
+    let body = String::from_utf8_lossy(&message.body)
+        .trim_matches(char::from(0))
+        .trim()
+        .to_string();
+    if !body.is_empty() {
+        body
+    } else {
+        format!("MDS request failed (status=0x{:x})", message.status)
+    }
+}
+
 // ── Message construction ─────────────────────────────────────────────────
 
 /// Construct a MDSIP message packet.
@@ -620,6 +643,29 @@ mod tests {
         assert_eq!(body_len, 12);
         // Verify message ID byte (index 12)
         assert_eq!(msg[12], 5);
+    }
+
+    #[test]
+    fn message_status_helpers_distinguish_failed_setup_replies() {
+        let success = Message {
+            status: 1,
+            length: 0,
+            dtype: 8,
+            body: vec![],
+        };
+        assert!(message_succeeded(&success));
+
+        let failure = Message {
+            status: 0x12,
+            length: 0,
+            dtype: 14,
+            body: b"%TREE-E-NODATA, No data available for this node".to_vec(),
+        };
+        assert!(!message_succeeded(&failure));
+        assert_eq!(
+            message_error(&failure),
+            "%TREE-E-NODATA, No data available for this node"
+        );
     }
 
     #[test]

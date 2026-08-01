@@ -17,8 +17,7 @@ struct ConnectionSetupPermit {
     key: String,
 }
 
-static CONNECTION_SETUPS: OnceLock<(Mutex<HashMap<String, usize>>, Condvar)> =
-    OnceLock::new();
+static CONNECTION_SETUPS: OnceLock<(Mutex<HashMap<String, usize>>, Condvar)> = OnceLock::new();
 
 fn connection_setups() -> &'static (Mutex<HashMap<String, usize>>, Condvar) {
     CONNECTION_SETUPS.get_or_init(|| (Mutex::new(HashMap::new()), Condvar::new()))
@@ -78,11 +77,16 @@ impl MdsConnection {
         let started = Instant::now();
         // If host already contains a port (SSH tunnel rewrites IP to "127.0.0.1:PORT"),
         // use it as-is. Otherwise append the MDS port.
-        let addr = if host.contains(':') { host.to_string() }
-                   else { format!("{}:{}", host, port) };
+        let addr = if host.contains(':') {
+            host.to_string()
+        } else {
+            format!("{}:{}", host, port)
+        };
         let _setup_permit = ConnectionSetupPermit::acquire(addr.clone())?;
         let stream = TcpStream::connect_timeout(
-            &addr.parse().map_err(|e| format!("invalid address {}: {}", addr, e))?,
+            &addr
+                .parse()
+                .map_err(|e| format!("invalid address {}: {}", addr, e))?,
             Duration::from_millis(protocol::CONNECTION_SETUP_TIMEOUT_MS),
         )
         .map_err(|e| format!("connect to {}: {}", addr, e))?;
@@ -116,12 +120,29 @@ impl MdsConnection {
         }
 
         let expr = format!("TreeOpen(\"{}\", {})", tree, shot);
-        match protocol::value_for_setup(&mut self.stream, &expr) {
-            Ok(_) => {}
-            Err(_e) => {
-                // Fallback: try JavaOpen for EAST servers
-                let fallback = format!("JavaOpen(\"{}\", {})", tree, shot);
-                protocol::value_for_setup(&mut self.stream, &fallback)?;
+        let tree_result = protocol::value_for_setup(&mut self.stream, &expr);
+        let tree_error = match tree_result {
+            Ok(message) if protocol::message_succeeded(&message) => None,
+            Ok(message) => Some(protocol::message_error(&message)),
+            Err(error) => Some(error),
+        };
+
+        if let Some(tree_error) = tree_error {
+            // EAST deployments may expose a tree through JavaOpen even when
+            // the native TreeOpen expression returns an MDS error.  The Qt
+            // client retries this path; do the same, including when the
+            // failed response was a syntactically valid MDSIP packet.
+            let fallback = format!("JavaOpen(\"{}\", {})", tree, shot);
+            match protocol::value_for_setup(&mut self.stream, &fallback) {
+                Ok(message) if protocol::message_succeeded(&message) => {}
+                Ok(message) => {
+                    return Err(format!(
+                        "{}; fallback JavaOpen: {}",
+                        tree_error,
+                        protocol::message_error(&message)
+                    ));
+                }
+                Err(error) => return Err(format!("{}; fallback JavaOpen: {}", tree_error, error)),
             }
         }
         self.current_tree = tree.to_string();
@@ -144,7 +165,10 @@ pub struct ConnectionPool {
 
 impl ConnectionPool {
     pub fn new() -> Self {
-        Self { connections: HashMap::new(), max_connections: 8 }
+        Self {
+            connections: HashMap::new(),
+            max_connections: 8,
+        }
     }
 
     /// Get or create a connection to `host:port`. Opens the given tree.
@@ -155,8 +179,11 @@ impl ConnectionPool {
         tree: &str,
         shot: &str,
     ) -> Result<&mut MdsConnection, String> {
-        let key = if host.contains(':') { host.to_string() }
-                  else { format!("{}:{}", host, port) };
+        let key = if host.contains(':') {
+            host.to_string()
+        } else {
+            format!("{}:{}", host, port)
+        };
 
         if !self.connections.contains_key(&key) {
             if self.connections.len() >= self.max_connections {
@@ -197,15 +224,18 @@ where
 // all 16 workers; discarding half of those connections made every refresh pay
 // another round of MDSIP handshakes and TreeOpen calls.
 const MAX_IDLE_CONNECTIONS_PER_SERVER: usize = 16;
-static SHARED_CONNECTIONS: OnceLock<Mutex<HashMap<String, Vec<MdsConnection>>>> =
-    OnceLock::new();
+static SHARED_CONNECTIONS: OnceLock<Mutex<HashMap<String, Vec<MdsConnection>>>> = OnceLock::new();
 
 fn shared_connections() -> &'static Mutex<HashMap<String, Vec<MdsConnection>>> {
     SHARED_CONNECTIONS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 fn connection_key(host: &str, port: u16) -> String {
-    if host.contains(':') { host.to_string() } else { format!("{}:{}", host, port) }
+    if host.contains(':') {
+        host.to_string()
+    } else {
+        format!("{}:{}", host, port)
+    }
 }
 
 /// Borrow a reusable connection without holding the pool lock during network
@@ -274,7 +304,9 @@ pub fn ensure_reusable_connections(host: &str, port: u16, target: usize) {
         }));
     }
     for handle in handles {
-        let Ok(Some(connection)) = handle.join() else { continue };
+        let Ok(Some(connection)) = handle.join() else {
+            continue;
+        };
         let key = connection_key(host, port);
         let mut pool = shared_connections()
             .lock()
