@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -751,4 +753,153 @@ String shortcutPlatformDescription() {
     return 'Linux defaults include H/J/K/L navigation alongside Ctrl shortcuts.';
   }
   return 'Shortcuts take effect when a hardware keyboard is connected.';
+}
+
+typedef MdsShortcutCommandEnabled = bool Function(MdsShortcutCommand command);
+typedef MdsShortcutCommandCallback = void Function(
+  MdsShortcutCommand command,
+);
+
+/// Matches configurable single- and multi-stroke shortcuts without stealing
+/// a key that belongs to a longer sequence. For example, Ctrl+A can remain a
+/// usable command while Ctrl+A, R is also assigned to another command.
+class MdsShortcutDispatcher {
+  MdsShortcutDispatcher({this.sequenceTimeout = const Duration(milliseconds: 850)});
+
+  final Duration sequenceTimeout;
+  final _pending = <MdsShortcutStroke>[];
+  Timer? _timer;
+  MdsShortcutCommand? _pendingExact;
+
+  void dispose() {
+    _timer?.cancel();
+    _timer = null;
+    _pending.clear();
+    _pendingExact = null;
+  }
+
+  void reset() {
+    _timer?.cancel();
+    _timer = null;
+    _pending.clear();
+    _pendingExact = null;
+  }
+
+  bool handle(
+    MdsShortcutStroke stroke, {
+    required Map<MdsShortcutCommand, MdsShortcutBinding> bindings,
+    required MdsShortcutCommandEnabled isEnabled,
+    required MdsShortcutCommandCallback onTrigger,
+  }) {
+    final candidate = [..._pending, stroke];
+    final result = _match(
+      candidate,
+      bindings: bindings,
+      isEnabled: isEnabled,
+    );
+    if (result.exact != null && result.partial) {
+      _pending
+        ..clear()
+        ..addAll(candidate);
+      _pendingExact = result.exact;
+      _schedule(bindings: bindings, isEnabled: isEnabled, onTrigger: onTrigger);
+      return true;
+    }
+    if (result.exact != null) {
+      reset();
+      onTrigger(result.exact!);
+      return true;
+    }
+    if (result.partial) {
+      _pending
+        ..clear()
+        ..addAll(candidate);
+      _pendingExact = null;
+      _schedule(bindings: bindings, isEnabled: isEnabled, onTrigger: onTrigger);
+      return true;
+    }
+
+    if (_pending.isNotEmpty) {
+      final delayed = _pendingExact;
+      reset();
+      if (delayed != null && isEnabled(delayed)) {
+        onTrigger(delayed);
+      }
+      final fresh = _match(
+        [stroke],
+        bindings: bindings,
+        isEnabled: isEnabled,
+      );
+      if (fresh.exact != null) {
+        onTrigger(fresh.exact!);
+        return true;
+      }
+      if (fresh.partial) {
+        _pending.add(stroke);
+        _schedule(
+          bindings: bindings,
+          isEnabled: isEnabled,
+          onTrigger: onTrigger,
+        );
+        return true;
+      }
+      return delayed != null;
+    }
+    return false;
+  }
+
+  _ShortcutMatch _match(
+    List<MdsShortcutStroke> candidate, {
+    required Map<MdsShortcutCommand, MdsShortcutBinding> bindings,
+    required MdsShortcutCommandEnabled isEnabled,
+  }) {
+    MdsShortcutCommand? exact;
+    var partial = false;
+    for (final entry in bindings.entries) {
+      if (!isEnabled(entry.key)) continue;
+      for (final sequence in entry.value.sequences) {
+        if (_sameStrokes(sequence.strokes, candidate)) {
+          exact ??= entry.key;
+        } else if (_startsWith(sequence.strokes, candidate)) {
+          partial = true;
+        }
+      }
+    }
+    return _ShortcutMatch(exact: exact, partial: partial);
+  }
+
+  void _schedule({
+    required Map<MdsShortcutCommand, MdsShortcutBinding> bindings,
+    required MdsShortcutCommandEnabled isEnabled,
+    required MdsShortcutCommandCallback onTrigger,
+  }) {
+    _timer?.cancel();
+    _timer = Timer(sequenceTimeout, () {
+      final command = _pendingExact;
+      reset();
+      if (command != null && isEnabled(command)) onTrigger(command);
+    });
+  }
+
+  static bool _sameStrokes(
+    List<MdsShortcutStroke> first,
+    List<MdsShortcutStroke> second,
+  ) =>
+      first.length == second.length &&
+      first.asMap().entries.every((entry) => entry.value == second[entry.key]);
+
+  static bool _startsWith(
+    List<MdsShortcutStroke> sequence,
+    List<MdsShortcutStroke> prefix,
+  ) =>
+      prefix.isNotEmpty &&
+      prefix.length < sequence.length &&
+      prefix.asMap().entries.every((entry) => sequence[entry.key] == entry.value);
+}
+
+class _ShortcutMatch {
+  const _ShortcutMatch({required this.exact, required this.partial});
+
+  final MdsShortcutCommand? exact;
+  final bool partial;
 }

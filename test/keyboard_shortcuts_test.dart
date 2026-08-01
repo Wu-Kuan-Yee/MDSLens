@@ -105,4 +105,69 @@ void main() {
     );
     expect(legacy?.strokes.single.key, LogicalKeyboardKey.keyP);
   });
+
+  test('dispatcher waits for a longer sequence before firing its prefix', () {
+    final bindings = <MdsShortcutCommand, MdsShortcutBinding>{
+      MdsShortcutCommand.showAllPanels: MdsShortcutBinding(
+        primary: MdsShortcutSequence.single(
+          MdsShortcutStroke(LogicalKeyboardKey.keyA, control: true),
+        ),
+      ),
+      MdsShortcutCommand.resetAllScales: MdsShortcutBinding(
+        primary: MdsShortcutSequence([
+          MdsShortcutStroke(LogicalKeyboardKey.keyA, control: true),
+          MdsShortcutStroke(LogicalKeyboardKey.keyR),
+        ]),
+      ),
+    };
+    final dispatcher = MdsShortcutDispatcher(
+      sequenceTimeout: const Duration(milliseconds: 20),
+    );
+    final triggered = <MdsShortcutCommand>[];
+    final first = dispatcher.handle(
+      MdsShortcutStroke(LogicalKeyboardKey.keyA, control: true),
+      bindings: bindings,
+      isEnabled: (_) => true,
+      onTrigger: triggered.add,
+    );
+    expect(first, isTrue);
+    expect(triggered, isEmpty);
+    dispatcher.handle(
+      MdsShortcutStroke(LogicalKeyboardKey.keyR),
+      bindings: bindings,
+      isEnabled: (_) => true,
+      onTrigger: triggered.add,
+    );
+    expect(triggered, [MdsShortcutCommand.resetAllScales]);
+    dispatcher.dispose();
+  });
+
+  test('dispatcher fires a prefix command when the sequence times out', () async {
+    final bindings = <MdsShortcutCommand, MdsShortcutBinding>{
+      MdsShortcutCommand.showAllPanels: MdsShortcutBinding(
+        primary: MdsShortcutSequence.single(
+          MdsShortcutStroke(LogicalKeyboardKey.keyA, control: true),
+        ),
+      ),
+      MdsShortcutCommand.resetAllScales: MdsShortcutBinding(
+        primary: MdsShortcutSequence([
+          MdsShortcutStroke(LogicalKeyboardKey.keyA, control: true),
+          MdsShortcutStroke(LogicalKeyboardKey.keyR),
+        ]),
+      ),
+    };
+    final dispatcher = MdsShortcutDispatcher(
+      sequenceTimeout: const Duration(milliseconds: 1),
+    );
+    final triggered = <MdsShortcutCommand>[];
+    dispatcher.handle(
+      MdsShortcutStroke(LogicalKeyboardKey.keyA, control: true),
+      bindings: bindings,
+      isEnabled: (_) => true,
+      onTrigger: triggered.add,
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(triggered, [MdsShortcutCommand.showAllPanels]);
+    dispatcher.dispose();
+  });
 }
