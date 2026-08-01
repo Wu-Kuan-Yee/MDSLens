@@ -198,7 +198,11 @@ void main() {
             '${installDirectory.path}${Platform.pathSeparator}mdslens.exe',
         commandLauncher: (executable, arguments) async {
           commands.add((executable, arguments));
-          await File(arguments[12]).create(recursive: true);
+          final helperIndex = arguments.indexWhere(
+            (argument) => argument.endsWith('apply-update.cmd'),
+          );
+          expect(helperIndex, greaterThanOrEqualTo(0));
+          await File(arguments[helperIndex + 8]).create(recursive: true);
         },
       );
 
@@ -210,14 +214,20 @@ void main() {
           '/d',
           '/s',
           '/c',
-          'call',
+          'start',
+          'MDSLens Update Helper',
+          '/b',
           '12345',
           update.path,
           '/CURRENTUSER',
           installDirectory.path,
         ]),
       );
-      final helper = File(commands.single.$2[4]);
+      final helper = File(
+        commands.single.$2.firstWhere(
+          (argument) => argument.endsWith('apply-update.cmd'),
+        ),
+      );
       final script = await helper.readAsString();
       expect(script, contains(':wait_for_parent'));
       expect(script, contains('Installer exit code'));
@@ -258,10 +268,15 @@ void main() {
         currentExecutableOverride: r'C:\Program Files\MDSLens\mdslens.exe',
         commandLauncher: (executable, arguments) async {
           commands.add((executable, arguments));
-          await File(arguments[12]).create(recursive: true);
+          final helperIndex = arguments.indexWhere(
+            (argument) => argument.endsWith('apply-update.cmd'),
+          );
+          expect(helperIndex, greaterThanOrEqualTo(0));
+          await File(arguments[helperIndex + 8]).create(recursive: true);
         },
       );
 
+      expect(commands, hasLength(1));
       expect(commands.single.$1, 'cmd.exe');
       expect(
         commands.single.$2,
@@ -271,7 +286,11 @@ void main() {
           r'C:\Program Files\MDSLens\mdslens.exe',
         ]),
       );
-      final helper = File(commands.single.$2[4]);
+      final helper = File(
+        commands.single.$2.firstWhere(
+          (argument) => argument.endsWith('apply-update.cmd'),
+        ),
+      );
       final script = await helper.readAsString();
       expect(script, contains(':install_msi'));
       expect(script, contains('start "" /wait msiexec.exe'));
@@ -391,8 +410,11 @@ void main() {
     );
 
     expect(result.closeApplication, isTrue);
-    expect(launchedArguments?[5], endsWith('apply-update.ps1'));
-    final helper = File(launchedArguments![5]);
+    final helperPath = launchedArguments!.firstWhere(
+      (argument) => argument.endsWith('apply-update.ps1'),
+    );
+    expect(helperPath, endsWith('apply-update.ps1'));
+    final helper = File(helperPath);
     final script = await helper.readAsString();
     expect(script,
         contains('The replacement exited before reporting healthy startup.'));
@@ -473,9 +495,9 @@ void main() {
       },
       commandLauncher: (executable, arguments) async {
         launches.add(executable);
-        // Simulate the first detached PowerShell process being reaped by a
-        // desktop process job. The cmd/start fallback acknowledges ownership.
-        if (executable == 'cmd.exe') {
+        // Simulate a shell that cannot execute the detached start form. The
+        // direct PowerShell fallback then acknowledges ownership.
+        if (executable == 'powershell.exe') {
           await File(arguments.last).create(recursive: true);
         }
       },
@@ -484,7 +506,8 @@ void main() {
     expect(result.status, UpdateLaunchStatus.installed);
     expect(result.closeApplication, isTrue);
     expect(launches, hasLength(2));
-    expect(launches.last, 'cmd.exe');
+    expect(launches.first, 'cmd.exe');
+    expect(launches.last, 'powershell.exe');
   });
 
   test('protected Windows portable updates request UAC and relaunch as user',
@@ -564,8 +587,11 @@ void main() {
     expect(bootstrapScript, contains('-Verb RunAs'));
     expect(privilegedScript, contains('Replacement health check timed out.'));
     expect(privilegedScript, contains('rollbackReadyFile'));
-    expect(userHelperArguments?[5], endsWith('relaunch-update.ps1'));
-    final userScript = await File(userHelperArguments![5]).readAsString();
+    final userHelperPath = userHelperArguments!.firstWhere(
+      (argument) => argument.endsWith('relaunch-update.ps1'),
+    );
+    expect(userHelperPath, endsWith('relaunch-update.ps1'));
+    final userScript = await File(userHelperPath).readAsString();
     expect(userScript, contains("Start-Process -FilePath \$target"));
     expect(userScript, isNot(contains('-Verb RunAs')));
   });

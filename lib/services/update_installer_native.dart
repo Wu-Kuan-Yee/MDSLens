@@ -318,6 +318,29 @@ Future<void> _startDetached(String executable, List<String> arguments) async {
   await Process.start(executable, arguments, mode: ProcessStartMode.detached);
 }
 
+/// Starts a Windows helper through `cmd start`, which creates a new process
+/// outside the Flutter runner's process tree.  `ProcessStartMode.detached`
+/// detaches the console/stdio handles, but a desktop launcher can still put
+/// that child in the same Windows job as the application.  When the app exits
+/// after handing the update over, the job may terminate the helper as well.
+/// `start` is intentionally the first hop so the helper remains alive while
+/// it waits for the application to exit and replaces the installation.
+List<String> _windowsDetachedStartArguments(
+  String executable,
+  List<String> arguments,
+) {
+  return <String>[
+    '/d',
+    '/s',
+    '/c',
+    'start',
+    'MDSLens Update Helper',
+    '/b',
+    executable,
+    ...arguments,
+  ];
+}
+
 String _windowsPowerShellExecutable() {
   if (!Platform.isWindows) return 'powershell.exe';
   final root = (Platform.environment['SystemRoot'] ??
@@ -1806,12 +1829,7 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
       '${logDirectory.path}${Platform.pathSeparator}latest-update.log',
     );
     await helper.writeAsString(_windowsApplyUpdateScript);
-    await launch('cmd.exe', [
-      '/d',
-      '/s',
-      '/c',
-      'call',
-      helper.path,
+    final helperArguments = <String>[
       '${currentPidOverride ?? pid}',
       update.path,
       installDirectory.path,
@@ -1824,11 +1842,64 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
       handshake.healthFile.path,
       handshake.token,
       handshake.commitMarker,
-    ]);
-    final helperReady = await _waitForFile(
-      ready,
-      attempts: windowsHelperReadyAttempts,
-    );
+    ];
+
+    // Always use `cmd start` for the first hop.  A direct detached `cmd`
+    // process can still belong to the Flutter runner's Windows job and be
+    // terminated as soon as this application exits.  `start` creates the
+    // actual update helper as an independent process before we hand control
+    // back to the caller.
+    var helperLaunched = false;
+    var directFallbackLaunched = false;
+    try {
+      await launch(
+        'cmd.exe',
+        _windowsDetachedStartArguments(helper.path, helperArguments),
+      );
+      helperLaunched = true;
+    } catch (_) {
+      // The direct call below is retained as a compatibility fallback for
+      // unusual Windows environments where `start` is unavailable.
+      try {
+        await launch('cmd.exe', [
+          '/d',
+          '/s',
+          '/c',
+          'call',
+          helper.path,
+          ...helperArguments,
+        ]);
+        helperLaunched = true;
+        directFallbackLaunched = true;
+      } catch (_) {}
+    }
+    final initialAttempts = min(windowsHelperReadyAttempts, 20);
+    var helperReady =
+        helperLaunched && await _waitForFile(ready, attempts: initialAttempts);
+    if (!helperReady && helperLaunched && !directFallbackLaunched) {
+      // Some older Windows shells do not support the detached `start` form
+      // with a .cmd target. Give the legacy invocation a chance, but only
+      // after the first helper has failed to claim the ready marker.
+      try {
+        await launch('cmd.exe', [
+          '/d',
+          '/s',
+          '/c',
+          'call',
+          helper.path,
+          ...helperArguments,
+        ]);
+      } catch (_) {}
+      helperReady = await _waitForFile(
+        ready,
+        attempts: max(0, windowsHelperReadyAttempts - initialAttempts),
+      );
+    } else if (!helperReady) {
+      helperReady = await _waitForFile(
+        ready,
+        attempts: max(0, windowsHelperReadyAttempts - initialAttempts),
+      );
+    }
     if (!helperReady) {
       try {
         await work.delete(recursive: true);
@@ -2125,33 +2196,41 @@ Future<UpdateInstallResult> prepareWindowsPortableUpdate(
       ready.path,
     ];
 
-    // Launch through PowerShell first.  A few Windows desktop launchers put
-    // Flutter in a process job that is torn down with the UI process; asking
-    // `cmd start` to create a second, independent process is a reliable
-    // fallback for that case.  The helper writes its ready marker before it
-    // waits for the current process, so this fallback never races a helper
-    // that has already taken ownership of the transaction.
+    // Launch through `cmd start` first.  A few Windows desktop launchers put
+    // Flutter in a process job that is torn down with the UI process; a direct
+    // PowerShell child can therefore disappear at the exact moment the app
+    // exits. `start` creates a second, independent process before we hand the
+    // update over. The helper writes its ready marker before it waits for the
+    // current process, so the caller can safely close after this handoff.
+    var helperLaunched = false;
+    var directFallbackLaunched = false;
     try {
-      await commandLauncher(powershell, helperArguments);
+      await commandLauncher(
+        'cmd.exe',
+        _windowsDetachedStartArguments(powershell, helperArguments),
+      );
+      helperLaunched = true;
     } catch (_) {
-      // The fallback below provides the user-facing result and keeps the
-      // current application open if both launch paths are unavailable.
+      // The direct PowerShell call below is retained for unusual shells where
+      // `cmd start` cannot be invoked.
+      try {
+        await commandLauncher(powershell, helperArguments);
+        helperLaunched = true;
+        directFallbackLaunched = true;
+      } catch (_) {}
     }
     final initialAttempts = min(helperReadyAttempts, 20);
-    var helperReady = await _waitForFile(ready, attempts: initialAttempts);
-    if (!helperReady) {
+    var helperReady =
+        helperLaunched && await _waitForFile(ready, attempts: initialAttempts);
+    if (!helperReady && helperLaunched && !directFallbackLaunched) {
       try {
-        await commandLauncher('cmd.exe', [
-          '/d',
-          '/s',
-          '/c',
-          'start',
-          'MDSLens Update Helper',
-          '/b',
-          powershell,
-          ...helperArguments,
-        ]);
+        await commandLauncher(powershell, helperArguments);
       } catch (_) {}
+      helperReady = await _waitForFile(
+        ready,
+        attempts: max(0, helperReadyAttempts - initialAttempts),
+      );
+    } else if (!helperReady) {
       helperReady = await _waitForFile(
         ready,
         attempts: max(0, helperReadyAttempts - initialAttempts),
@@ -2280,7 +2359,7 @@ try {
     );
   }
 
-  await commandLauncher(powershell, [
+  final userHelperArguments = <String>[
     '-NoProfile',
     '-NonInteractive',
     '-ExecutionPolicy',
@@ -2298,7 +2377,18 @@ try {
     handshake.token,
     handshake.commitMarker,
     newPid.path,
-  ]);
+  ];
+  // The relaunch helper must outlive the Flutter process just like the
+  // ordinary portable helper.  Start it through an independent Windows shell
+  // process so UAC work can finish after the current app closes.
+  try {
+    await commandLauncher(
+      'cmd.exe',
+      _windowsDetachedStartArguments(userHelper.path, userHelperArguments),
+    );
+  } catch (_) {
+    await commandLauncher(powershell, userHelperArguments);
+  }
   return UpdateInstallResult(
     status: UpdateLaunchStatus.installed,
     message:
@@ -2596,8 +2686,8 @@ Future<UpdateInstallResult?> prepareLinuxPortableUpdate(
   final candidate = Directory(
     '${extracted.path}${Platform.pathSeparator}$expectedTopLevel',
   );
-  final parentWritable = parentWritableOverride ??
-      await _directoryIsWritable(currentRoot.parent);
+  final parentWritable =
+      parentWritableOverride ?? await _directoryIsWritable(currentRoot.parent);
   final handshake = _createUpdateHandshake(
     work,
     commitMarker: parentWritable
