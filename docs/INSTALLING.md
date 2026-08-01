@@ -68,19 +68,24 @@ standard UAC prompt. The elevated helper re-verifies the archive and performs
 only the transactional file replacement; the replacement application is
 started separately with the original user's privileges. The helper is launched
 through the system Windows PowerShell executable rather than relying on PATH,
-and MDSLens allows a 30-second handoff window for Windows startup and security
-scanning before reporting that the helper could not take ownership.
-The new executable must remain alive during its startup health window. If it
-exits early, the helper restores and launches the old directory. After success,
-one owned previous bundle remains beside the installation for recovery; an
-unrelated directory with the same name is never removed.
+and MDSLens allows a 30-second helper-handoff window for Windows startup and
+security scanning before reporting that the helper could not take ownership.
+The replacement then receives a nonce-bound health handshake from the new
+process. The helper waits up to 120 seconds for Flutter and local startup to
+report healthy; this is a safety limit, not a fixed delay. If the replacement
+exits before that signal, the helper restores and launches the old directory.
+After the signal, one owned previous bundle is retained for a 60-second
+stability window and is then removed. If the helper or machine stops during
+that window, the next launch resumes the cleanup. An unrelated directory with
+the same name is never removed.
 
 On macOS, self-update is attempted only when MDSLens is running from a real
 `.app` bundle. The downloaded bundle must retain the expected
 `com.mdslens.app` identifier and pass strict code-signature validation before
 it is staged. Replacement happens at the existing bundle path after the old
 process exits, uses a same-directory atomic rename, keeps a rollback copy until
-the swap succeeds, and then reopens MDSLens. If the bundle's parent directory
+the replacement reports healthy startup, retains it for the same 60-second
+stability window, and then removes it. If the bundle's parent directory
 is not writable, macOS displays its standard administrator authorization
 dialog; cancelling it leaves the running installation unchanged.
 
@@ -90,8 +95,9 @@ desktop's administrator authorization dialog. If PolicyKit or a graphical
 authentication agent is unavailable, the verified package is handed to the
 normal system package workflow instead. Privileged file replacement never
 launches the graphical application as root: a helper in the signed-in user's
-session starts and checks the new AppImage, while the privileged helper retains
-the old file until that health check succeeds. Android's package installer
+session starts the new AppImage and waits for its nonce-bound health signal;
+the privileged helper retains the old file through the same 60-second
+stability window. Android's package installer
 updates the same application ID and presents any per-source installation
 permission it requires. The verified pending APK path survives activity and
 process recreation while the user grants permission, but Android still requires
@@ -107,13 +113,14 @@ Extracted Linux portable bundles are replaced as a complete directory. The
 restarted process explicitly changes into the new directory before launch, so
 it never inherits a working directory that is about to be retired. The previous
 complete bundle is retained beside the installation as
-`<directory>.mdslens-previous` while the replacement is checked. After the new
-process survives the initial startup check and remains alive for a conservative
-60-second stability window, the updater removes that owned rollback copy
-automatically.
-If the new process exits during that window, the rollback copy is kept so the
-installation can still be recovered. Update paths are resolved and checked as
-sibling directories before any rename or removal is allowed. Unique staging
+`<directory>.mdslens-previous` while the replacement is checked. The new
+process receives a nonce-bound health handshake; after it reports healthy and
+remains alive for a conservative 60-second stability window, the updater
+removes that owned rollback copy automatically. If the new process exits before
+the health signal, the updater restores the old bundle. If it exits during the
+stability window, the rollback copy is kept and the next launch resumes cleanup.
+Update paths are resolved and checked as sibling directories before any rename
+or removal is allowed. Unique staging
 and backup names skip every existing file, directory, or symbolic link, are
 checked again immediately before the swap, and use exact-target renames that
 cannot merge into a pre-existing directory.

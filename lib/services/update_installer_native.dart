@@ -2772,11 +2772,17 @@ Future<void> scheduleApplicationRelaunch(
 }) async {
   final work = await Directory.systemTemp.createTemp('mdslens-relaunch-');
   final helper = File('${work.path}${Platform.pathSeparator}relaunch.sh');
+  final handshake = _createUpdateHandshake(
+    work,
+    commitMarker: '${work.path}${Platform.pathSeparator}committed',
+  );
   await helper.writeAsString(r'''#!/bin/sh
 set -u
 parent_pid="$1"
 executable="$2"
-work_dir="$3"
+health_file="$3"
+health_token="$4"
+work_dir="$5"
 attempt=0
 while kill -0 "$parent_pid" 2>/dev/null; do
   if [ "$attempt" -ge 3000 ]; then
@@ -2786,7 +2792,24 @@ while kill -0 "$parent_pid" 2>/dev/null; do
   attempt=$((attempt + 1))
   sleep 0.1
 done
-"$executable" >/dev/null 2>&1 &
+"$executable" \
+  "--mdslens-update-health=$health_file" \
+  "--mdslens-update-token=$health_token" >/dev/null 2>&1 &
+new_pid=$!
+health_attempt=0
+while [ "$health_attempt" -lt 1200 ]; do
+  if ! kill -0 "$new_pid" 2>/dev/null; then
+    /bin/rm -rf "$work_dir"
+    exit 1
+  fi
+  if [ -f "$health_file" ] &&
+     [ "$(/bin/cat "$health_file" 2>/dev/null || true)" = "$health_token" ]; then
+    /bin/rm -rf "$work_dir"
+    exit 0
+  fi
+  health_attempt=$((health_attempt + 1))
+  sleep 0.1
+done
 /bin/rm -rf "$work_dir"
 ''');
   final chmod = await Process.run('/bin/chmod', ['700', helper.path]);
@@ -2798,6 +2821,8 @@ done
     helper.path,
     '$currentPid',
     executablePath,
+    handshake.healthFile.path,
+    handshake.token,
     work.path,
   ]);
 }
