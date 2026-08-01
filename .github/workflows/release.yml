@@ -40,7 +40,88 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.92.0
       - name: Install Windows packagers
         shell: powershell
-        run: choco install 7zip innosetup wixtoolset --no-progress -y
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          # Chocolatey occasionally returns success after a feed timeout while
+          # leaving the requested package uninstalled. Install each dependency
+          # independently, retry transient feed failures, and verify the tools
+          # before the build starts so a flaky mirror cannot produce a partial
+          # Windows release.
+          $checks = @{
+            '7zip' = @(
+              "$env:ProgramFiles\7-Zip\7z.exe",
+              'C:\ProgramData\chocolatey\bin\7z.exe'
+            )
+            'innosetup' = @(
+              "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+              "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
+              'C:\ProgramData\chocolatey\bin\ISCC.exe'
+            )
+            'wixtoolset' = @(
+              "${env:ProgramFiles(x86)}\WiX Toolset v3.14\bin\heat.exe",
+              "${env:ProgramFiles(x86)}\WiX Toolset v3.14\bin\candle.exe",
+              "${env:ProgramFiles(x86)}\WiX Toolset v3.14\bin\light.exe",
+              "$env:ProgramFiles\WiX Toolset v3.14\bin\heat.exe",
+              "$env:ProgramFiles\WiX Toolset v3.14\bin\candle.exe",
+              "$env:ProgramFiles\WiX Toolset v3.14\bin\light.exe",
+              'C:\ProgramData\chocolatey\bin\heat.exe',
+              'C:\ProgramData\chocolatey\bin\candle.exe',
+              'C:\ProgramData\chocolatey\bin\light.exe'
+            )
+          }
+
+          function Test-PackageTools([string] $package) {
+            if ($package -eq 'wixtoolset') {
+              $required = @('heat.exe', 'candle.exe', 'light.exe')
+              foreach ($tool in $required) {
+                if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
+                  $found = $false
+                  foreach ($path in $checks[$package]) {
+                    if ((Split-Path $path -Leaf) -eq $tool -and (Test-Path $path)) {
+                      $found = $true
+                      break
+                    }
+                  }
+                  if (-not $found) { return $false }
+                }
+              }
+              return $true
+            }
+
+            $command = if ($package -eq '7zip') { '7z.exe' } else { 'ISCC.exe' }
+            if (Get-Command $command -ErrorAction SilentlyContinue) { return $true }
+            return @($checks[$package] | Where-Object { Test-Path $_ }).Count -gt 0
+          }
+
+          foreach ($package in @('7zip', 'innosetup', 'wixtoolset')) {
+            $ready = $false
+            for ($attempt = 1; $attempt -le 4; $attempt++) {
+              if (Test-PackageTools $package) {
+                Write-Host "$package is available."
+                $ready = $true
+                break
+              }
+
+              Write-Host "Installing $package (attempt $attempt/4)..."
+              & choco install $package --no-progress -y --execution-timeout=1200
+              $exitCode = $LASTEXITCODE
+              if (Test-PackageTools $package) {
+                $ready = $true
+                break
+              }
+              if ($attempt -lt 4) {
+                Write-Warning "$package is still unavailable (Chocolatey exit code $exitCode); retrying."
+                Start-Sleep -Seconds (5 * $attempt)
+              }
+            }
+
+            if (-not $ready) {
+              throw "Required Windows packager '$package' is unavailable after four installation attempts."
+            }
+          }
+
+          Write-Host 'All Windows packagers are installed and verified.'
       - name: Build packages
         run: >-
           python build_app.py -p windows -a ${{ matrix.arch }}
