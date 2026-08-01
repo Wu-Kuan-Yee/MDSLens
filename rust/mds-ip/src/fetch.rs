@@ -368,14 +368,8 @@ fn fetch_east_length_sampled(socket: &mut TcpStream, req: &FetchRequest, result:
         Ok(msg) => protocol::int_from_message(&msg).unwrap_or(0) as usize,
         Err(_) => 0,
     };
-
-    if total_points == 0 {
-        result.series.error = "empty signal".into();
-        return;
-    }
-
     let plan = sampling_from_point_count(total_points, req.max_points);
-    let step = plan.step;
+    let mut step = plan.step;
 
     let y_expr = if step > 1 {
         format!(
@@ -390,38 +384,35 @@ fn fetch_east_length_sampled(socket: &mut TcpStream, req: &FetchRequest, result:
         )
     };
 
-    match protocol::value(socket, &y_expr) {
-        Ok(msg) => {
-            // Get X axis from dim_of(y) for proper time coords (matching C++ behavior)
-            let x_expr = if step > 1 {
-                format!(
-                    "( _jscope_1 = (data(dim_of({}))[1:*:{}]), ft_float(_jscope_1))",
-                    req.sig.y_expr.trim(),
-                    step
-                )
-            } else {
-                format!(
-                    "( _jscope_1 = (dim_of({})), ft_float(_jscope_1))",
-                    req.sig.y_expr.trim()
-                )
-            };
-            if let Ok(x_msg) = protocol::value(socket, &x_expr) {
-                if let Ok(x_vals) = protocol::numeric_from_message(&x_msg) {
-                    let y_vals = protocol::numeric_from_message(&msg).unwrap_or_default();
-                    let n = y_vals.len().min(x_vals.len());
-                    result.series = SignalSeries {
-                        name: normalized_name(&req.sig.y_expr),
-                        points: (0..n).map(|i| [x_vals[i], y_vals[i]]).collect(),
-                        ..Default::default()
-                    };
-                    return;
-                }
-            }
-            result.series = series_from_msg(normalized_name(&req.sig.y_expr), &msg, req.max_points);
-        }
-        Err(e) => {
-            result.series.error = e;
-        }
+    let (y_vals, error, used_fallback) =
+        numeric_query_with_fallback(socket, &y_expr, &format!("data({})", req.sig.y_expr.trim()));
+    if y_vals.is_empty() {
+        result.series.error = error.unwrap_or_else(|| "empty signal".into());
+        return;
+    }
+    if used_fallback {
+        // The fallback is the un-sampled data() expression. Do not pair it
+        // with a stride-derived X axis or timebase.
+        step = 1;
+    }
+
+    // Get X axis from dim_of(y) for proper time coordinates (matching C++).
+    let x_expr = if step > 1 {
+        format!(
+            "( _jscope_1 = (data(dim_of({}))[1:*:{}]), ft_float(_jscope_1))",
+            req.sig.y_expr.trim(),
+            step
+        )
+    } else {
+        format!(
+            "( _jscope_1 = (dim_of({})), ft_float(_jscope_1))",
+            req.sig.y_expr.trim()
+        )
+    };
+    let x_vals = numeric_query(socket, &x_expr).0;
+    result.series = series_from_values(normalized_name(&req.sig.y_expr), y_vals, x_vals);
+    if !result.series.has_data() {
+        result.series.error = "no numeric points".into();
     }
 }
 
@@ -454,17 +445,13 @@ fn fetch_east_length_sampled_with_budget(
         Ok(msg) => protocol::int_from_message(&msg).unwrap_or(0) as usize,
         Err(_) => 0,
     };
-    if total == 0 {
-        result.series.error = "empty signal".into();
-        return;
-    }
-
     let plan = sampling_from_point_count(total, budget);
-    let y_expr = if plan.step > 1 {
+    let mut step = plan.step;
+    let y_expr = if step > 1 {
         format!(
             "( _jscope_0 = (data({})[1:*:{}]), fs_float(_jscope_0))",
             req.sig.y_expr.trim(),
-            plan.step
+            step
         )
     } else {
         format!(
@@ -473,25 +460,55 @@ fn fetch_east_length_sampled_with_budget(
         )
     };
 
-    match protocol::value(socket, &y_expr) {
-        Ok(msg) => {
-            // Try to derive timebase first (EAST signal freq+trigtime)
-            if let Some(tb) = try_timebase(socket, req) {
-                result.series = series_from_msg_uniform(
-                    normalized_name(&req.sig.y_expr),
-                    &msg,
-                    tb.start,
-                    tb.step,
-                    req.max_points,
-                );
+    let (y_vals, error, used_fallback) =
+        numeric_query_with_fallback(socket, &y_expr, &format!("data({})", req.sig.y_expr.trim()));
+    if y_vals.is_empty() {
+        result.series.error = error.unwrap_or_else(|| "empty signal".into());
+        return;
+    }
+    if used_fallback {
+        step = 1;
+    }
+
+    // Try the uniform EAST timebase only for the sampled primary expression;
+    // data(y) fallback is un-sampled and must use the native X coordinates.
+    if !used_fallback {
+        if let Some(tb) = try_timebase(socket, req) {
+            let sampled_start = if step > 1 {
+                tb.start + tb.step
             } else {
-                result.series =
-                    series_from_msg(normalized_name(&req.sig.y_expr), &msg, req.max_points);
+                tb.start
+            };
+            let sampled_step = tb.step * step as f64;
+            let series = series_from_values_uniform(
+                normalized_name(&req.sig.y_expr),
+                y_vals.clone(),
+                sampled_start,
+                sampled_step,
+            );
+            if series.has_data() {
+                result.series = series;
+                return;
             }
         }
-        Err(e) => {
-            result.series.error = e;
-        }
+    }
+
+    let x_expr = if step > 1 {
+        format!(
+            "( _jscope_1 = (data(dim_of({}))[1:*:{}]), ft_float(_jscope_1))",
+            req.sig.y_expr.trim(),
+            step
+        )
+    } else {
+        format!(
+            "( _jscope_1 = (dim_of({})), ft_float(_jscope_1))",
+            req.sig.y_expr.trim()
+        )
+    };
+    let x_vals = numeric_query(socket, &x_expr).0;
+    result.series = series_from_values(normalized_name(&req.sig.y_expr), y_vals, x_vals);
+    if !result.series.has_data() {
+        result.series.error = "no numeric points".into();
     }
 }
 
@@ -606,48 +623,82 @@ fn fetch_full(socket: &mut TcpStream, req: &FetchRequest, result: &mut FetchResu
 // ── Generic Thin ──────────────────────────────────────────────────────────
 
 fn fetch_generic_thin(socket: &mut TcpStream, req: &FetchRequest, result: &mut FetchResult) {
-    let size_expr = format!("size({})", req.sig.y_expr.trim());
+    let raw_y = req.sig.y_expr.trim();
+    let size_expr = format!("size({raw_y})");
     let total = match protocol::value(socket, &size_expr) {
         Ok(msg) => protocol::int_from_message(&msg).unwrap_or(0) as usize,
         Err(_) => 0,
     };
-    if total == 0 {
-        result.series.error = "empty signal".into();
-        return;
-    }
 
     let plan = sampling_from_point_count(total, req.max_points);
     let y_expr = if plan.step > 1 {
         format!(
             "( _jscope_0 = (data({})[1:*:{}]), fs_float(_jscope_0))",
-            req.sig.y_expr.trim(),
-            plan.step
+            raw_y, plan.step
         )
     } else {
-        format!(
-            "( _jscope_0 = ({}), fs_float(_jscope_0))",
-            req.sig.y_expr.trim()
-        )
+        format!("( _jscope_0 = ({raw_y}), fs_float(_jscope_0))")
     };
 
-    match protocol::value(socket, &y_expr) {
-        Ok(msg) => {
-            if let Some(tb) = try_timebase(socket, req) {
-                result.series = series_from_msg_uniform(
-                    normalized_name(&req.sig.y_expr),
-                    &msg,
-                    tb.start,
-                    tb.step,
-                    req.max_points,
-                );
+    // `size(y)` is only a sampling hint. Some valid MDSplus expressions
+    // (segmented data, scalar-backed expressions, and computed nodes) return
+    // zero or an error for size() while `y`/`data(y)` still contains samples.
+    // The original client continues with the actual value query in that case;
+    // treating the hint as authoritative is what made these signals appear
+    // empty in the Rust client.
+    let (y_vals, error, used_fallback) =
+        numeric_query_with_fallback(socket, &y_expr, &format!("data({raw_y})"));
+    if y_vals.is_empty() {
+        result.series.error = error.unwrap_or_else(|| "empty signal".into());
+        return;
+    }
+
+    let configured_x = req.sig.x_expr.trim();
+    let step = if used_fallback { 1 } else { plan.step };
+    let mut x_vals = if configured_x.is_empty() {
+        Vec::new()
+    } else {
+        let x_expr = if step > 1 {
+            format!("( _jscope_1 = (data({configured_x})[1:*:{step}]), ft_float(_jscope_1))")
+        } else {
+            format!("( _jscope_1 = ({configured_x}), ft_float(_jscope_1))")
+        };
+        numeric_query(socket, &x_expr).0
+    };
+
+    if x_vals.is_empty() && configured_x.is_empty() && !used_fallback {
+        if let Some(tb) = try_timebase(socket, req) {
+            let sampled_start = if step > 1 {
+                tb.start + tb.step
             } else {
-                result.series =
-                    series_from_msg(normalized_name(&req.sig.y_expr), &msg, req.max_points);
+                tb.start
+            };
+            let sampled_step = tb.step * step as f64;
+            let series = series_from_values_uniform(
+                normalized_name(&req.sig.y_expr),
+                y_vals.clone(),
+                sampled_start,
+                sampled_step,
+            );
+            if series.has_data() {
+                result.series = series;
+                return;
             }
         }
-        Err(e) => {
-            result.series.error = e;
-        }
+    }
+
+    if x_vals.is_empty() {
+        let x_expr = if step > 1 {
+            format!("( _jscope_1 = (data(dim_of({raw_y}))[1:*:{step}]), ft_float(_jscope_1))")
+        } else {
+            format!("( _jscope_1 = (dim_of({raw_y})), ft_float(_jscope_1))")
+        };
+        x_vals = numeric_query(socket, &x_expr).0;
+    }
+
+    result.series = series_from_values(normalized_name(&req.sig.y_expr), y_vals, x_vals);
+    if !result.series.has_data() {
+        result.series.error = "no numeric points".into();
     }
 }
 
@@ -814,6 +865,38 @@ fn numeric_query(socket: &mut TcpStream, expression: &str) -> (Vec<f64>, Option<
         },
         Err(error) => (Vec::new(), Some(error)),
     }
+}
+
+/// Query a signal expression and retry with `data(raw_expression)` when the
+/// first result is empty or rejected by the server.
+///
+/// `size(expr)` is not a reliable validity check for every MDSplus datatype.
+/// In particular, segmented and computed expressions can have a usable value
+/// even when their size expression returns zero. The fallback mirrors the
+/// original client's value/data retry and returns whether the fallback was
+/// needed so callers can keep the X sampling stride consistent.
+fn numeric_query_with_fallback(
+    socket: &mut TcpStream,
+    primary_expression: &str,
+    fallback_expression: &str,
+) -> (Vec<f64>, Option<String>, bool) {
+    let (values, primary_error) = numeric_query(socket, primary_expression);
+    if !values.is_empty() {
+        return (values, primary_error, false);
+    }
+
+    let (fallback, fallback_error) = numeric_query(socket, fallback_expression);
+    if !fallback.is_empty() {
+        return (fallback, None, true);
+    }
+
+    (
+        Vec::new(),
+        fallback_error
+            .or(primary_error)
+            .or_else(|| Some("empty signal".into())),
+        true,
+    )
 }
 
 fn full_point_count_best_effort(socket: &mut TcpStream, expression: &str) -> usize {
@@ -1202,71 +1285,6 @@ pub fn sampling_from_point_count(total: usize, max_points: usize) -> SamplingPla
         source_count: total,
         step,
         sampled_count,
-    }
-}
-
-/// Build a SignalSeries from a numeric message (no timebase info).
-fn series_from_msg(name: String, msg: &Message, max_points: usize) -> SignalSeries {
-    let values = protocol::numeric_from_message(msg).unwrap_or_default();
-    if values.is_empty() {
-        return SignalSeries {
-            name,
-            error: "empty signal".into(),
-            ..Default::default()
-        };
-    }
-
-    if protocol::current_operation_canceled() {
-        return canceled_series(name);
-    }
-
-    // Store as points with actual index-based X. The caller should
-    // replace X with proper timebase if available (via series_from_msg_uniform).
-    let n = values.len();
-    if n <= max_points || max_points == 0 {
-        let mut points = Vec::with_capacity(n);
-        let mut min_y = f64::INFINITY;
-        let mut max_y = f64::NEG_INFINITY;
-        for (index, value) in values.into_iter().enumerate() {
-            if index & 0x3fff == 0 && protocol::current_operation_canceled() {
-                return canceled_series(name);
-            }
-            min_y = min_y.min(value);
-            max_y = max_y.max(value);
-            points.push([index as f64, value]);
-        }
-        SignalSeries {
-            name,
-            points,
-            uniform_min_y: min_y,
-            uniform_max_y: max_y,
-            ..Default::default()
-        }
-    } else {
-        let step = n / max_points;
-        let mut pts = Vec::with_capacity(max_points * 2);
-        for b in 0..max_points {
-            if b & 0x3fff == 0 && protocol::current_operation_canceled() {
-                return canceled_series(name);
-            }
-            let start = b * step;
-            let end = ((b + 1) * step).min(n);
-            if start >= end {
-                continue;
-            }
-            let (min_val, max_val) = values[start..end]
-                .iter()
-                .fold((f64::INFINITY, f64::NEG_INFINITY), |(min, max), &v| {
-                    (min.min(v), max.max(v))
-                });
-            pts.push([(start + end) as f64 / 2.0, min_val]);
-            pts.push([(start + end) as f64 / 2.0, max_val]);
-        }
-        SignalSeries {
-            name,
-            points: pts,
-            ..Default::default()
-        }
     }
 }
 
