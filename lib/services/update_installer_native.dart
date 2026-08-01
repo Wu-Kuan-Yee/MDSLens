@@ -20,12 +20,13 @@ const _updaterChannel = MethodChannel('mdslens/updater');
 
 bool get directUpdateSupported => nativeDirectUpdateSupported(
       platform: Platform.operatingSystem,
-      resolvedExecutable: Platform.resolvedExecutable,
+      resolvedExecutable: resolvedExecutableForUpdate(),
       environment: Platform.environment,
       flatpakInfoExists: File('/.flatpak-info').existsSync(),
       linuxOsRelease: _linuxOsReleaseSync(),
       linuxPortableRootExists:
-          linuxPortableRootFromExecutable(Platform.resolvedExecutable) != null,
+          linuxPortableRootFromExecutable(resolvedExecutableForUpdate()) !=
+              null,
       windowsPortableRootExists:
           windowsPortableRootFromExecutable(Platform.resolvedExecutable) !=
               null,
@@ -76,6 +77,25 @@ bool nativeDirectUpdateSupported({
     default:
       return false;
   }
+}
+
+/// Finds the executable that is actually running, rather than trusting a
+/// launcher symlink or a desktop-entry path.  Linux exposes this through
+/// `/proc/self/exe`; resolving it is important for portable bundles because
+/// the update must replace the directory containing the running binary.
+String resolvedExecutableForUpdate() {
+  final candidates = <String>[];
+  if (Platform.isLinux) candidates.add('/proc/self/exe');
+  candidates.add(Platform.resolvedExecutable);
+  for (final candidate in candidates) {
+    try {
+      final file = File(candidate);
+      if (!file.existsSync()) continue;
+      final resolved = file.resolveSymbolicLinksSync();
+      if (resolved.trim().isNotEmpty) return resolved;
+    } catch (_) {}
+  }
+  return Platform.resolvedExecutable;
 }
 
 String get directUpdateActionLabel {
@@ -1108,8 +1128,35 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
     );
   }
   if (platform == 'linux') {
+    final currentExecutable =
+        currentExecutableOverride ?? resolvedExecutableForUpdate();
     final currentAppImage = currentAppImageOverride ??
         (Platform.environment['APPIMAGE'] ?? '').trim();
+    final portableRoot = currentPortableRootOverride ??
+        linuxPortableRootFromExecutable(currentExecutable);
+
+    // Never hand a package from another installation channel to the system
+    // installer.  Doing so is especially confusing for portable launches:
+    // the new process would come from /usr while the original directory would
+    // still contain the old release.
+    if (currentAppImage.isNotEmpty && update.asset.format != 'AppImage') {
+      return UpdateInstallResult(
+        status: UpdateLaunchStatus.unsupported,
+        message:
+            'The verified update does not match the running AppImage installation.',
+        downloaded: update,
+      );
+    }
+    if (currentAppImage.isEmpty &&
+        portableRoot != null &&
+        update.asset.format != 'tar.gz') {
+      return UpdateInstallResult(
+        status: UpdateLaunchStatus.unsupported,
+        message:
+            'The verified update does not match the running portable installation.',
+        downloaded: update,
+      );
+    }
     if (update.asset.format == 'AppImage' && currentAppImage.isNotEmpty) {
       final prepared = await prepareAppImageUpdate(
         update,
@@ -1127,10 +1174,6 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
       );
       if (elevated != null) return elevated;
     }
-    final portableRoot = currentPortableRootOverride ??
-        linuxPortableRootFromExecutable(
-          currentExecutableOverride ?? Platform.resolvedExecutable,
-        );
     if (update.asset.format == 'tar.gz' && portableRoot != null) {
       final prepared = await prepareLinuxPortableUpdate(
         update,
@@ -1152,8 +1195,7 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
         .contains(update.asset.format)) {
       final installed = await prepareLinuxSystemPackageUpdate(
         update,
-        currentExecutable:
-            currentExecutableOverride ?? Platform.resolvedExecutable,
+        currentExecutable: currentExecutable,
         currentPid: currentPidOverride ?? pid,
         commandLauncher: launch,
         commandRunner: run,
@@ -2371,30 +2413,49 @@ Future<UpdateInstallResult?> prepareElevatedAppImageUpdate(
 }
 
 Future<String> _preferredLinuxPackageFormat() async {
-  if ((Platform.environment['APPIMAGE'] ?? '').trim().isNotEmpty) {
+  final executable = resolvedExecutableForUpdate();
+  final source = _linuxOsReleaseSync();
+  return linuxPreferredPackageFormatForInstallation(
+    executablePath: executable,
+    environment: Platform.environment,
+    linuxOsRelease: source,
+    linuxPortableRootExists:
+        linuxPortableRootFromExecutable(executable) != null,
+  );
+}
+
+/// Returns the package format that belongs to the currently running Linux
+/// installation channel.  This deliberately prefers a marked portable bundle
+/// over the host distribution's package format.  Otherwise launching a
+/// portable copy through a symlink or desktop entry could install a second
+/// copy under /usr and leave the original directory unchanged.
+String linuxPreferredPackageFormatForInstallation({
+  required String executablePath,
+  required Map<String, String> environment,
+  required String linuxOsRelease,
+  bool linuxPortableRootExists = false,
+}) {
+  if ((environment['APPIMAGE'] ?? '').trim().isNotEmpty) {
     return 'AppImage';
   }
-  if (linuxPortableRootFromExecutable(Platform.resolvedExecutable) != null) {
-    return 'tar.gz';
+  if (linuxPortableRootExists) return 'tar.gz';
+
+  final source = linuxOsRelease.toLowerCase();
+  if (RegExp(
+    r'(?:^|\s)(?:id|id_like)=[^\n]*(?:debian|ubuntu)',
+  ).hasMatch(source)) {
+    return 'deb';
   }
-  try {
-    final source = (await File('/etc/os-release').readAsString()).toLowerCase();
-    if (RegExp(
-      r'(?:^|\s)(?:id|id_like)=[^\n]*(?:debian|ubuntu)',
-    ).hasMatch(source)) {
-      return 'deb';
-    }
-    if (RegExp(
-      r'(?:^|\s)(?:id|id_like)=[^\n]*(?:fedora|rhel|centos|suse)',
-    ).hasMatch(source)) {
-      return 'rpm';
-    }
-    if (RegExp(
-      r'(?:^|\s)(?:id|id_like)=[^\n]*(?:arch|manjaro)',
-    ).hasMatch(source)) {
-      return 'pkg.tar.zst';
-    }
-  } catch (_) {}
+  if (RegExp(
+    r'(?:^|\s)(?:id|id_like)=[^\n]*(?:fedora|rhel|centos|suse)',
+  ).hasMatch(source)) {
+    return 'rpm';
+  }
+  if (RegExp(
+    r'(?:^|\s)(?:id|id_like)=[^\n]*(?:arch|manjaro)',
+  ).hasMatch(source)) {
+    return 'pkg.tar.zst';
+  }
   return 'AppImage';
 }
 

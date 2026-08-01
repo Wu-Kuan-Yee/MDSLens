@@ -952,6 +952,35 @@ void main() {
     expect(result?.closeApplication, isFalse);
   });
 
+  test('Linux package selection follows the running installation channel', () {
+    expect(
+      linuxPreferredPackageFormatForInstallation(
+        executablePath: '/home/user/Applications/mdslens/mdslens',
+        environment: const {},
+        linuxOsRelease: 'ID=ubuntu',
+        linuxPortableRootExists: true,
+      ),
+      'tar.gz',
+      reason: 'portable bundles must never be redirected into /usr',
+    );
+    expect(
+      linuxPreferredPackageFormatForInstallation(
+        executablePath: '/usr/lib/mdslens/mdslens',
+        environment: const {},
+        linuxOsRelease: 'ID=ubuntu',
+      ),
+      'deb',
+    );
+    expect(
+      linuxPreferredPackageFormatForInstallation(
+        executablePath: '/home/user/MDSLens.AppImage',
+        environment: const {'APPIMAGE': '/home/user/MDSLens.AppImage'},
+        linuxOsRelease: 'ID=fedora',
+      ),
+      'AppImage',
+    );
+  });
+
   test('direct update support follows the native installation channel', () {
     expect(
       nativeDirectUpdateSupported(
@@ -1055,6 +1084,56 @@ void main() {
       isFalse,
       reason: 'a read-only mounted disk image must not self-replace',
     );
+  });
+
+  test('Linux portable updates reject a package from another channel',
+      () async {
+    final root = await Directory.systemTemp.createTemp(
+      'mdslens-linux-channel-test-',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    await File('${root.path}/mdslens').writeAsString('old');
+    await File('${root.path}/.mdslens-portable.json').writeAsString(
+      jsonEncode({
+        'schema_version': 1,
+        'product': 'com.mdslens.app',
+        'architecture': 'x64',
+        'executable': 'mdslens',
+      }),
+    );
+    final update = DownloadedUpdate(
+      asset: UpdateManifestAsset(
+        name: 'mdslens-linux-x64.deb',
+        url: 'https://example.invalid/mdslens.deb',
+        platform: 'linux',
+        architecture: 'x64',
+        format: 'deb',
+        strategy: 'open-package',
+        size: 1,
+        sha256:
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      ),
+      path: '/tmp/mdslens-linux-x64.deb',
+    );
+    final commands = <(String, List<String>)>[];
+
+    final result = await launchVerifiedUpdateAsset(
+      update,
+      platformOverride: 'linux',
+      currentExecutableOverride: '${root.path}/mdslens',
+      currentAppImageOverride: '',
+      commandLauncher: (executable, arguments) async {
+        commands.add((executable, arguments));
+      },
+      commandRunner: (executable, arguments) async {
+        commands.add((executable, arguments));
+        return ProcessResult(0, 0, '', '');
+      },
+    );
+
+    expect(result.status, UpdateLaunchStatus.unsupported);
+    expect(result.message, contains('running portable installation'));
+    expect(commands, isEmpty);
   });
 
   test('marked Linux portable bundles prepare an in-place directory update',
