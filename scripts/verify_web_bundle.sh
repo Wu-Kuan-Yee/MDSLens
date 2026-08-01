@@ -42,7 +42,8 @@ grep -qi 'SameSite=Strict' <<<"$session_headers"
 curl -fsS -b "$cookie_file" \
   "http://127.0.0.1:$port/gateway/v1/session" |
   grep -q '"authenticated":false'
-grep -q '"useLocalCanvasKit":true' "$web_root/flutter_bootstrap.js"
+test -s "$web_root/canvaskit/canvaskit.js"
+test -s "$web_root/canvaskit/canvaskit.wasm"
 test -f "$web_root/main.dart.wasm"
 test -f "$web_root/canvaskit/skwasm.wasm"
 test -f "$web_root/startup.js"
