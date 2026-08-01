@@ -24,6 +24,12 @@ const MAX_GLOBAL_FULL_SOCKETS: usize = 8;
 
 pub type SignalCallback = Box<dyn Fn(LoadedSignal) + Send + Sync>;
 
+#[derive(Debug, Default, Clone)]
+struct ResultSlot {
+    completed: bool,
+    result: Option<FetchResult>,
+}
+
 // ── Public API ────────────────────────────────────────────────────────────
 
 /// Fetch all non-hidden signals in a layout config.
@@ -33,7 +39,7 @@ pub type SignalCallback = Box<dyn Fn(LoadedSignal) + Send + Sync>;
 pub fn fetch_all(
     config: &LayoutConfig,
     read_mode: DataReadMode,
-    callback: &SignalCallback,
+    callback: Option<&SignalCallback>,
     cancel: &Arc<AtomicBool>,
 ) -> Vec<LoadedSignal> {
     let requests = build_requests(config, read_mode);
@@ -42,7 +48,7 @@ pub fn fetch_all(
     }
 
     let n = requests.len();
-    let results: Arc<Mutex<Vec<Option<FetchResult>>>> = Arc::new(Mutex::new(vec![None; n]));
+    let results: Arc<Mutex<Vec<ResultSlot>>> = Arc::new(Mutex::new(vec![ResultSlot::default(); n]));
     let groups = group_requests(&requests);
     let chunks = build_chunks(&requests, &groups);
 
@@ -73,12 +79,22 @@ pub fn fetch_all(
         // already-finished panels behind its join.
         for fr in result_rx {
             let idx = fr.loaded_index;
-            if should_stream_result(&fr) {
-                callback(fetch_result_to_loaded(&requests, &fr));
-            }
-            if let Ok(mut res) = results.lock() {
-                if idx < res.len() {
-                    res[idx] = Some(fr);
+            let stream = callback.is_some() && should_stream_result(&fr);
+            if stream {
+                if let Ok(mut slots) = results.lock() {
+                    if let Some(slot) = slots.get_mut(idx) {
+                        slot.completed = true;
+                    }
+                }
+                if let Some(callback) = callback {
+                    // Moving the completed signal into the callback avoids a
+                    // deep clone of every Full waveform buffer.
+                    callback(fetch_result_into_loaded(&requests, fr));
+                }
+            } else if let Ok(mut slots) = results.lock() {
+                if let Some(slot) = slots.get_mut(idx) {
+                    slot.completed = true;
+                    slot.result = Some(fr);
                 }
             }
         }
@@ -97,7 +113,7 @@ pub fn fetch_all(
     let mut guard = results.lock().unwrap();
     let output = guard
         .iter_mut()
-        .filter_map(Option::take)
+        .filter_map(|slot| slot.result.take())
         .map(|fr| fetch_result_into_loaded(&requests, fr))
         .collect();
     drop(guard);
@@ -224,8 +240,8 @@ fn fetch_chunk_serial_streaming(
 
 fn retry_transient(
     requests: &[FetchRequest],
-    results: &Arc<Mutex<Vec<Option<FetchResult>>>>,
-    callback: &SignalCallback,
+    results: &Arc<Mutex<Vec<ResultSlot>>>,
+    callback: Option<&SignalCallback>,
     cancel: &Arc<AtomicBool>,
 ) {
     let to_retry = retry_indices(requests, &results.lock().unwrap());
@@ -255,12 +271,20 @@ fn retry_transient(
             if let Ok(retried) = handle.join() {
                 for fr in retried {
                     let idx = fr.loaded_index;
-                    if should_stream_result(&fr) {
-                        callback(fetch_result_to_loaded(requests, &fr));
-                    }
-                    if let Ok(mut res) = results.lock() {
-                        if idx < res.len() {
-                            res[idx] = Some(fr);
+                    let stream = callback.is_some() && should_stream_result(&fr);
+                    if stream {
+                        if let Ok(mut slots) = results.lock() {
+                            if let Some(slot) = slots.get_mut(idx) {
+                                slot.completed = true;
+                            }
+                        }
+                        if let Some(callback) = callback {
+                            callback(fetch_result_into_loaded(requests, fr));
+                        }
+                    } else if let Ok(mut slots) = results.lock() {
+                        if let Some(slot) = slots.get_mut(idx) {
+                            slot.completed = true;
+                            slot.result = Some(fr);
                         }
                     }
                 }
@@ -284,16 +308,16 @@ fn should_stream_result(result: &FetchResult) -> bool {
         || (!result.series.error.is_empty() && is_permanent_mds_error(&result.series.error))
 }
 
-fn retry_indices(requests: &[FetchRequest], results: &[Option<FetchResult>]) -> Vec<usize> {
+fn retry_indices(requests: &[FetchRequest], results: &[ResultSlot]) -> Vec<usize> {
     requests
         .iter()
         .filter_map(|request| {
-            let needs_retry = results
-                .get(request.loaded_index)
-                .and_then(|result| result.as_ref())
-                .is_none_or(|result| {
-                    !result.series.has_data() && !is_permanent_mds_error(&result.series.error)
-                });
+            let needs_retry = results.get(request.loaded_index).is_none_or(|slot| {
+                !slot.completed
+                    || slot.result.as_ref().is_some_and(|result| {
+                        !result.series.has_data() && !is_permanent_mds_error(&result.series.error)
+                    })
+            });
             needs_retry.then_some(request.loaded_index)
         })
         .collect()
@@ -467,17 +491,6 @@ fn effective_shot(plot: &PlotSpec, sig: &SignalSpec) -> String {
     }
 }
 
-fn fetch_result_to_loaded(requests: &[FetchRequest], fr: &FetchResult) -> LoadedSignal {
-    let req = &requests[fr.loaded_index];
-    LoadedSignal {
-        column: req.column,
-        row: req.row,
-        signal: req.signal,
-        shot: req.shot.clone(),
-        series: fr.series.clone(),
-    }
-}
-
 fn fetch_result_into_loaded(requests: &[FetchRequest], fr: FetchResult) -> LoadedSignal {
     let req = &requests[fr.loaded_index];
     LoadedSignal {
@@ -639,45 +652,63 @@ mod tests {
     #[test]
     fn retry_candidates_include_errors_and_missing_results() {
         let requests = build_requests(&make_test_config(), DataReadMode::Thin);
-        let errored = vec![Some(FetchResult {
-            loaded_index: 0,
-            series: mds_core::types::SignalSeries {
-                error: "temporary connection failure".into(),
-                ..Default::default()
-            },
-        })];
+        let errored = vec![ResultSlot {
+            completed: true,
+            result: Some(FetchResult {
+                loaded_index: 0,
+                series: mds_core::types::SignalSeries {
+                    error: "temporary connection failure".into(),
+                    ..Default::default()
+                },
+            }),
+        }];
         assert_eq!(retry_indices(&requests, &errored), vec![0]);
-        assert_eq!(retry_indices(&requests, &[None]), vec![0]);
+        assert_eq!(retry_indices(&requests, &[ResultSlot::default()]), vec![0]);
 
-        let loaded = vec![Some(FetchResult {
-            loaded_index: 0,
-            series: mds_core::types::SignalSeries {
-                points: vec![[0.0, 1.0]],
-                ..Default::default()
-            },
-        })];
+        let loaded = vec![ResultSlot {
+            completed: true,
+            result: Some(FetchResult {
+                loaded_index: 0,
+                series: mds_core::types::SignalSeries {
+                    points: vec![[0.0, 1.0]],
+                    ..Default::default()
+                },
+            }),
+        }];
         assert!(retry_indices(&requests, &loaded).is_empty());
+
+        let streamed = vec![ResultSlot {
+            completed: true,
+            result: None,
+        }];
+        assert!(retry_indices(&requests, &streamed).is_empty());
     }
 
     #[test]
     fn permanent_mds_errors_are_not_retried() {
         let requests = build_requests(&make_test_config(), DataReadMode::Thin);
-        let missing = vec![Some(FetchResult {
-            loaded_index: 0,
-            series: mds_core::types::SignalSeries {
-                error: "%TREE-W-NNF, Node not found".into(),
-                ..Default::default()
-            },
-        })];
+        let missing = vec![ResultSlot {
+            completed: true,
+            result: Some(FetchResult {
+                loaded_index: 0,
+                series: mds_core::types::SignalSeries {
+                    error: "%TREE-W-NNF, Node not found".into(),
+                    ..Default::default()
+                },
+            }),
+        }];
         assert!(retry_indices(&requests, &missing).is_empty());
 
-        let empty = vec![Some(FetchResult {
-            loaded_index: 0,
-            series: mds_core::types::SignalSeries {
-                error: "empty signal".into(),
-                ..Default::default()
-            },
-        })];
+        let empty = vec![ResultSlot {
+            completed: true,
+            result: Some(FetchResult {
+                loaded_index: 0,
+                series: mds_core::types::SignalSeries {
+                    error: "empty signal".into(),
+                    ..Default::default()
+                },
+            }),
+        }];
         assert!(retry_indices(&requests, &empty).is_empty());
     }
 

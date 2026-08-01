@@ -23,7 +23,6 @@ pub struct FrbSignalSpec {
     pub read_mode: i32, // 0=Thin, 1=Medium, 2=Full (per-signal override)
 }
 
-
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct FrbPlotSpec {
@@ -62,14 +61,12 @@ impl Default for FrbPlotSpec {
     }
 }
 
-
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct FrbLayoutConfig {
     pub shot: String,
     pub columns: Vec<Vec<FrbPlotSpec>>,
 }
-
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct FrbSignalSeries {
@@ -86,7 +83,6 @@ pub struct FrbSignalSeries {
     pub points: Vec<Vec<f64>>, // [[x,y], ...]
 }
 
-
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct FrbLoadedSignal {
     pub column: i32,
@@ -95,7 +91,6 @@ pub struct FrbLoadedSignal {
     pub shot: String,
     pub series: FrbSignalSeries,
 }
-
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
@@ -107,7 +102,6 @@ pub struct FrbSshSettings {
     pub identity_file: String,
     pub mode: i32, // 0=Disabled, 1=Auto, 2=Always
 }
-
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct FrbShotInfo {
@@ -128,7 +122,23 @@ impl From<mds_core::types::SignalSpec> for FrbSignalSpec {
             mds_core::types::SignalHideMode::Visible if s.hidden => 2,
             mds_core::types::SignalHideMode::Visible => 0,
         };
-        Self { shot: s.shot, y_expr: s.y_expr, x_expr: s.x_expr, legend: s.legend, experiment: s.experiment, server_ip: s.server_ip, color_name: s.color_name, manual_color: s.manual_color, hidden: hide_mode != 0, hide_mode, read_mode: s.read_mode.map_or(0, |m| match m { mds_core::types::DataReadMode::Medium => 1, mds_core::types::DataReadMode::Full => 2, _ => 0 }) }
+        Self {
+            shot: s.shot,
+            y_expr: s.y_expr,
+            x_expr: s.x_expr,
+            legend: s.legend,
+            experiment: s.experiment,
+            server_ip: s.server_ip,
+            color_name: s.color_name,
+            manual_color: s.manual_color,
+            hidden: hide_mode != 0,
+            hide_mode,
+            read_mode: s.read_mode.map_or(0, |m| match m {
+                mds_core::types::DataReadMode::Medium => 1,
+                mds_core::types::DataReadMode::Full => 2,
+                _ => 0,
+            }),
+        }
     }
 }
 
@@ -156,7 +166,11 @@ impl From<mds_core::types::LayoutConfig> for FrbLayoutConfig {
     fn from(c: mds_core::types::LayoutConfig) -> Self {
         Self {
             shot: c.shot,
-            columns: c.columns.into_iter().map(|col| col.into_iter().map(Into::into).collect()).collect(),
+            columns: c
+                .columns
+                .into_iter()
+                .map(|col| col.into_iter().map(Into::into).collect())
+                .collect(),
         }
     }
 }
@@ -166,20 +180,40 @@ impl From<mds_core::types::SignalSeries> for FrbSignalSeries {
         let had_uniform_samples = s.has_uniform_data();
         let had_samples = !s.points.is_empty() || had_uniform_samples;
         let mut error = s.error;
-        let points: Vec<Vec<f64>> = s.points.iter()
+        let points: Vec<Vec<f64>> = s
+            .points
+            .iter()
             .filter(|p| p[0].is_finite() && p[1].is_finite())
             .map(|p| p.to_vec())
             .collect();
         if had_samples && points.is_empty() && !had_uniform_samples && error.is_empty() {
             error = "signal contains no finite numeric samples".into();
         }
-        Self { name: s.name, unit: s.unit, x_name: s.x_name, x_unit: s.x_unit, error, uniform_y: s.uniform_y, uniform_start: s.uniform_start, uniform_step: s.uniform_step, uniform_min_y: s.uniform_min_y, uniform_max_y: s.uniform_max_y, points }
+        Self {
+            name: s.name,
+            unit: s.unit,
+            x_name: s.x_name,
+            x_unit: s.x_unit,
+            error,
+            uniform_y: s.uniform_y,
+            uniform_start: s.uniform_start,
+            uniform_step: s.uniform_step,
+            uniform_min_y: s.uniform_min_y,
+            uniform_max_y: s.uniform_max_y,
+            points,
+        }
     }
 }
 
 impl From<mds_core::types::LoadedSignal> for FrbLoadedSignal {
     fn from(ls: mds_core::types::LoadedSignal) -> Self {
-        Self { column: ls.column, row: ls.row, signal: ls.signal, shot: ls.shot, series: ls.series.into() }
+        Self {
+            column: ls.column,
+            row: ls.row,
+            signal: ls.signal,
+            shot: ls.shot,
+            series: ls.series.into(),
+        }
     }
 }
 
@@ -190,41 +224,66 @@ impl FrbLayoutConfig {
         mds_core::types::LayoutConfig {
             file_path: String::new(),
             shot: self.shot,
-            columns: self.columns.into_iter().map(|col| {
-                col.into_iter().map(|p| mds_core::types::PlotSpec {
-                    shot: p.shot, title: p.title, x_label: p.x_label, y_label: p.y_label,
-                    extraction_points: if p.extraction_points >= 2 {
-                        p.extraction_points
-                    } else {
-                        2000
-                    },
-                    grid: p.grid,
-                    custom_x_range: p.custom_x_range,
-                    custom_y_range: p.custom_y_range,
-                    xmin: p.xmin.unwrap_or(f64::NAN),
-                    xmax: p.xmax.unwrap_or(f64::NAN),
-                    ymin: p.ymin.unwrap_or(f64::NAN),
-                    ymax: p.ymax.unwrap_or(f64::NAN),
-                    signal_specs: p.signal_specs.into_iter().map(|s| {
-                        let hide_mode = match s.hide_mode {
-                            1 => mds_core::types::SignalHideMode::Temporary,
-                            2 => mds_core::types::SignalHideMode::Persistent,
-                            _ if s.hidden => mds_core::types::SignalHideMode::Persistent,
-                            _ => mds_core::types::SignalHideMode::Visible,
-                        };
-                        mds_core::types::SignalSpec {
-                            shot: s.shot, y_expr: s.y_expr, x_expr: s.x_expr, legend: s.legend,
-                            experiment: s.experiment, server_ip: s.server_ip,
-                            color_name: s.color_name, manual_color: s.manual_color,
-                            hidden: hide_mode != mds_core::types::SignalHideMode::Visible,
-                            hide_mode,
-                            read_mode: match s.read_mode { 1 => Some(mds_core::types::DataReadMode::Medium), 2 => Some(mds_core::types::DataReadMode::Full), _ => Some(mds_core::types::DataReadMode::Thin) },
+            columns: self
+                .columns
+                .into_iter()
+                .map(|col| {
+                    col.into_iter()
+                        .map(|p| mds_core::types::PlotSpec {
+                            shot: p.shot,
+                            title: p.title,
+                            x_label: p.x_label,
+                            y_label: p.y_label,
+                            extraction_points: if p.extraction_points >= 2 {
+                                p.extraction_points
+                            } else {
+                                2000
+                            },
+                            grid: p.grid,
+                            custom_x_range: p.custom_x_range,
+                            custom_y_range: p.custom_y_range,
+                            xmin: p.xmin.unwrap_or(f64::NAN),
+                            xmax: p.xmax.unwrap_or(f64::NAN),
+                            ymin: p.ymin.unwrap_or(f64::NAN),
+                            ymax: p.ymax.unwrap_or(f64::NAN),
+                            signal_specs: p
+                                .signal_specs
+                                .into_iter()
+                                .map(|s| {
+                                    let hide_mode = match s.hide_mode {
+                                        1 => mds_core::types::SignalHideMode::Temporary,
+                                        2 => mds_core::types::SignalHideMode::Persistent,
+                                        _ if s.hidden => {
+                                            mds_core::types::SignalHideMode::Persistent
+                                        }
+                                        _ => mds_core::types::SignalHideMode::Visible,
+                                    };
+                                    mds_core::types::SignalSpec {
+                                        shot: s.shot,
+                                        y_expr: s.y_expr,
+                                        x_expr: s.x_expr,
+                                        legend: s.legend,
+                                        experiment: s.experiment,
+                                        server_ip: s.server_ip,
+                                        color_name: s.color_name,
+                                        manual_color: s.manual_color,
+                                        hidden: hide_mode
+                                            != mds_core::types::SignalHideMode::Visible,
+                                        hide_mode,
+                                        read_mode: match s.read_mode {
+                                            1 => Some(mds_core::types::DataReadMode::Medium),
+                                            2 => Some(mds_core::types::DataReadMode::Full),
+                                            _ => Some(mds_core::types::DataReadMode::Thin),
+                                        },
+                                        ..Default::default()
+                                    }
+                                })
+                                .collect(),
                             ..Default::default()
-                        }
-                    }).collect(),
-                    ..Default::default()
-                }).collect()
-            }).collect(),
+                        })
+                        .collect()
+                })
+                .collect(),
             ..Default::default()
         }
     }
@@ -233,15 +292,21 @@ impl FrbLayoutConfig {
 impl FrbSshSettings {
     pub fn into_rust(self) -> mds_ssh::settings::SshSettings {
         mds_ssh::settings::SshSettings {
-            mode: match self.mode { 1 => mds_core::types::SshMode::Auto, 2 => mds_core::types::SshMode::Always, _ => mds_core::types::SshMode::Disabled },
-            host: self.host, port: self.port, user: self.user,
-            password: self.password, identity_file: self.identity_file,
+            mode: match self.mode {
+                1 => mds_core::types::SshMode::Auto,
+                2 => mds_core::types::SshMode::Always,
+                _ => mds_core::types::SshMode::Disabled,
+            },
+            host: self.host,
+            port: self.port,
+            user: self.user,
+            password: self.password,
+            identity_file: self.identity_file,
         }
     }
 }
 
 // ── Environment I/O ────────────────────────────────────────────────────
-
 
 pub fn parse_environment(path: String) -> FrbLayoutConfig {
     mds_core::env_io::parse_environment(&path).into()
@@ -250,7 +315,6 @@ pub fn parse_environment(path: String) -> FrbLayoutConfig {
 pub fn parse_environment_checked(path: String) -> Result<FrbLayoutConfig, String> {
     mds_core::env_io::parse_environment_checked(&path).map(Into::into)
 }
-
 
 pub fn write_environment(config: FrbLayoutConfig, path: String) -> Result<(), String> {
     let mut rust = config.into_rust();
@@ -270,41 +334,59 @@ pub fn encode_environment_webscp(config: FrbLayoutConfig) -> String {
 
 // ── API Auth ───────────────────────────────────────────────────────────
 
-
 pub fn request_login(api_url: String, user: String, pass: String) -> Result<String, String> {
     mds_auth::http::request_api_token(&api_url, &user, &pass)
 }
 
-
 pub fn fetch_shot(api_url: String, token: String) -> Result<FrbShotInfo, String> {
     let info = mds_auth::http::fetch_latest_shot(&api_url, &token)?;
-    Ok(FrbShotInfo { shot: info.shot, ip: info.ip, pulse: info.pulse, it: info.it, time: info.time })
+    Ok(FrbShotInfo {
+        shot: info.shot,
+        ip: info.ip,
+        pulse: info.pulse,
+        it: info.it,
+        time: info.time,
+    })
 }
 
-pub fn fetch_shot_info(api_url: String, token: String, shot: String) -> Result<FrbShotInfo, String> {
+pub fn fetch_shot_info(
+    api_url: String,
+    token: String,
+    shot: String,
+) -> Result<FrbShotInfo, String> {
     let info = mds_auth::http::fetch_shot_info(&api_url, &token, &shot)?;
-    Ok(FrbShotInfo { shot: info.shot, ip: info.ip, pulse: info.pulse, it: info.it, time: info.time })
+    Ok(FrbShotInfo {
+        shot: info.shot,
+        ip: info.ip,
+        pulse: info.pulse,
+        it: info.it,
+        time: info.time,
+    })
 }
 
 // ── SSH ────────────────────────────────────────────────────────────────
 
-
 pub fn ssh_test(settings: FrbSshSettings) -> Result<(), String> {
-    let s = mds_ssh::settings::SshSettings { host: settings.host, port: settings.port, user: settings.user, password: settings.password, identity_file: settings.identity_file, ..Default::default() };
+    let s = mds_ssh::settings::SshSettings {
+        host: settings.host,
+        port: settings.port,
+        user: settings.user,
+        password: settings.password,
+        identity_file: settings.identity_file,
+        ..Default::default()
+    };
     let mgr = mds_ssh::tunnel::SshTunnelManager::new();
     mgr.test_connection(&s)
 }
 
 // ── Data Fetch ─────────────────────────────────────────────────────────
 
-
 pub fn fetch_signals(config_json: String, mode: i32) -> Vec<FrbLoadedSignal> {
     fetch_signals_inner(config_json, mode, None, None, None)
 }
 
 static ACTIVE_FETCHES: OnceLock<Mutex<HashMap<u64, Arc<AtomicBool>>>> = OnceLock::new();
-static DATA_TUNNEL_MANAGER: OnceLock<Mutex<mds_ssh::tunnel::SshTunnelManager>> =
-    OnceLock::new();
+static DATA_TUNNEL_MANAGER: OnceLock<Mutex<mds_ssh::tunnel::SshTunnelManager>> = OnceLock::new();
 static DATA_TUNNEL_EPOCH: AtomicU64 = AtomicU64::new(0);
 
 fn active_fetches() -> &'static Mutex<HashMap<u64, Arc<AtomicBool>>> {
@@ -312,8 +394,7 @@ fn active_fetches() -> &'static Mutex<HashMap<u64, Arc<AtomicBool>>> {
 }
 
 fn data_tunnel_manager() -> &'static Mutex<mds_ssh::tunnel::SshTunnelManager> {
-    DATA_TUNNEL_MANAGER
-        .get_or_init(|| Mutex::new(mds_ssh::tunnel::SshTunnelManager::new()))
+    DATA_TUNNEL_MANAGER.get_or_init(|| Mutex::new(mds_ssh::tunnel::SshTunnelManager::new()))
 }
 
 pub fn disconnect_data_tunnels() {
@@ -359,16 +440,28 @@ impl Drop for FetchRegistration {
 
 /// Fetch signals with SSH tunneling. Forwarding listeners are retained across
 /// requests and are discarded only when settings change or SSH is disabled.
-pub fn fetch_signals_ssh(config_json: String, mode: i32, ssh_settings_json: String) -> Vec<FrbLoadedSignal> {
+pub fn fetch_signals_ssh(
+    config_json: String,
+    mode: i32,
+    ssh_settings_json: String,
+) -> Vec<FrbLoadedSignal> {
     let ssh_settings: Option<FrbSshSettings> = if ssh_settings_json.is_empty() {
         None
     } else {
         match serde_json::from_str(&ssh_settings_json) {
             Ok(s) => Some(s),
-            Err(e) => return vec![FrbLoadedSignal {
-                column: 0, row: 0, signal: 0, shot: "".into(),
-                series: FrbSignalSeries { error: format!("SSH settings parse: {}", e), ..Default::default() },
-            }],
+            Err(e) => {
+                return vec![FrbLoadedSignal {
+                    column: 0,
+                    row: 0,
+                    signal: 0,
+                    shot: "".into(),
+                    series: FrbSignalSeries {
+                        error: format!("SSH settings parse: {}", e),
+                        ..Default::default()
+                    },
+                }]
+            }
         }
     };
     fetch_signals_inner(config_json, mode, ssh_settings, None, None)
@@ -385,13 +478,18 @@ pub fn fetch_signals_ssh_streaming(
     } else {
         match serde_json::from_str(&ssh_settings_json) {
             Ok(settings) => Some(settings),
-            Err(error) => return vec![FrbLoadedSignal {
-                column: 0, row: 0, signal: 0, shot: String::new(),
-                series: FrbSignalSeries {
-                    error: format!("SSH settings parse: {error}"),
-                    ..Default::default()
-                },
-            }],
+            Err(error) => {
+                return vec![FrbLoadedSignal {
+                    column: 0,
+                    row: 0,
+                    signal: 0,
+                    shot: String::new(),
+                    series: FrbSignalSeries {
+                        error: format!("SSH settings parse: {error}"),
+                        ..Default::default()
+                    },
+                }]
+            }
         }
     };
     fetch_signals_inner(config_json, mode, ssh_settings, None, Some(callback))
@@ -466,23 +564,43 @@ fn fetch_signals_inner(
         .unwrap_or(0);
     let config: FrbLayoutConfig = match serde_json::from_str(&config_json) {
         Ok(c) => c,
-        Err(e) => return vec![FrbLoadedSignal {
-            column: 0, row: 0, signal: 0, shot: "".into(),
-            series: FrbSignalSeries { error: format!("Config parse: {}", e), ..Default::default() },
-        }],
+        Err(e) => {
+            return vec![FrbLoadedSignal {
+                column: 0,
+                row: 0,
+                signal: 0,
+                shot: "".into(),
+                series: FrbSignalSeries {
+                    error: format!("Config parse: {}", e),
+                    ..Default::default()
+                },
+            }]
+        }
     };
-    let read_mode = match mode { 1 => mds_core::types::DataReadMode::Medium, 2 => mds_core::types::DataReadMode::Full, _ => mds_core::types::DataReadMode::Thin };
+    let read_mode = match mode {
+        1 => mds_core::types::DataReadMode::Medium,
+        2 => mds_core::types::DataReadMode::Full,
+        _ => mds_core::types::DataReadMode::Thin,
+    };
     let mut rust_config = config.into_rust();
 
     // Verify config was parsed correctly
-    let total_signals: usize = rust_config.columns.iter()
+    let total_signals: usize = rust_config
+        .columns
+        .iter()
         .flat_map(|c| c.iter())
         .map(|p| p.signal_specs.iter().filter(|s| !s.is_hidden()).count())
         .sum();
     if total_signals == 0 {
         return vec![FrbLoadedSignal {
-            column: 0, row: 0, signal: 0, shot: "".into(),
-            series: FrbSignalSeries { error: "No signals in config".into(), ..Default::default() },
+            column: 0,
+            row: 0,
+            signal: 0,
+            shot: "".into(),
+            series: FrbSignalSeries {
+                error: "No signals in config".into(),
+                ..Default::default()
+            },
         }];
     }
 
@@ -492,7 +610,10 @@ fn fetch_signals_inner(
             if let Some(manager) = session_tunnel_manager.as_deref_mut() {
                 manager.reload_settings(ssh.into_rust());
                 if let Err(e) = manager.prepare_layout(&mut rust_config) {
-                    eprintln!("[mds-bridge] SSH tunnel setup failed (will try direct): {}", e);
+                    eprintln!(
+                        "[mds-bridge] SSH tunnel setup failed (will try direct): {}",
+                        e
+                    );
                 }
             } else {
                 let tunnel_epoch = DATA_TUNNEL_EPOCH.load(Ordering::Acquire);
@@ -510,7 +631,10 @@ fn fetch_signals_inner(
                         }
                         Err(e) => {
                             // Tunnel setup failed, log but continue with direct connection
-                            eprintln!("[mds-bridge] SSH tunnel setup failed (will try direct): {}", e);
+                            eprintln!(
+                                "[mds-bridge] SSH tunnel setup failed (will try direct): {}",
+                                e
+                            );
                         }
                     }
                 }
@@ -542,9 +666,11 @@ fn fetch_signals_inner(
         cancel
     };
     let _registration = (request_id > 0).then_some(FetchRegistration { request_id });
-    let callback = callback.unwrap_or_else(|| Box::new(|_| {}));
-    let results: Vec<FrbLoadedSignal> = mds_ip::pipeline::fetch_all(&rust_config, read_mode, &callback, &cancel)
-        .into_iter().map(FrbLoadedSignal::from).collect();
+    let results: Vec<FrbLoadedSignal> =
+        mds_ip::pipeline::fetch_all(&rust_config, read_mode, callback.as_ref(), &cancel)
+            .into_iter()
+            .map(FrbLoadedSignal::from)
+            .collect();
 
     results
 }
@@ -598,10 +724,15 @@ mod tests {
     #[test]
     fn test_convert_roundtrip_signal_spec() {
         let orig = mds_core::types::SignalSpec {
-            y_expr: "\\pcrl01".into(), experiment: "pcs_east".into(),
-            server_ip: "202.127.204.12".into(), color_name: "#123456".into(),
-            legend: "Plasma current".into(), manual_color: true, hidden: true,
-            hide_mode: mds_core::types::SignalHideMode::Temporary, ..Default::default()
+            y_expr: "\\pcrl01".into(),
+            experiment: "pcs_east".into(),
+            server_ip: "202.127.204.12".into(),
+            color_name: "#123456".into(),
+            legend: "Plasma current".into(),
+            manual_color: true,
+            hidden: true,
+            hide_mode: mds_core::types::SignalHideMode::Temporary,
+            ..Default::default()
         };
         let frb = FrbSignalSpec::from(orig.clone());
         assert_eq!(frb.y_expr, "\\pcrl01");
@@ -616,9 +747,13 @@ mod tests {
     #[test]
     fn test_convert_roundtrip_signal_series() {
         let orig = mds_core::types::SignalSeries {
-            name: "test".into(), error: "err".into(),
-            uniform_y: vec![1.0, 2.0], uniform_start: 0.0, uniform_step: 0.1,
-            uniform_min_y: 1.0, uniform_max_y: 2.0,
+            name: "test".into(),
+            error: "err".into(),
+            uniform_y: vec![1.0, 2.0],
+            uniform_start: 0.0,
+            uniform_step: 0.1,
+            uniform_min_y: 1.0,
+            uniform_max_y: 2.0,
             ..Default::default()
         };
         let frb = FrbSignalSeries::from(orig);
@@ -644,11 +779,7 @@ mod tests {
     fn test_non_finite_points_do_not_cross_the_json_bridge() {
         let orig = mds_core::types::SignalSeries {
             name: "mixed".into(),
-            points: vec![
-                [0.0, f64::NAN],
-                [1.0, 2.0],
-                [f64::INFINITY, 3.0],
-            ],
+            points: vec![[0.0, f64::NAN], [1.0, 2.0], [f64::INFINITY, 3.0]],
             ..Default::default()
         };
         let frb = FrbSignalSeries::from(orig);
@@ -711,11 +842,15 @@ mod tests {
         let frb = FrbLayoutConfig {
             shot: "143850".into(),
             columns: vec![vec![FrbPlotSpec {
-                shot: "143850".into(), title: "Ip".into(),
-                x_label: "s".into(), y_label: "kA".into(),
-                extraction_points: 2000, grid: true,
+                shot: "143850".into(),
+                title: "Ip".into(),
+                x_label: "s".into(),
+                y_label: "kA".into(),
+                extraction_points: 2000,
+                grid: true,
                 signal_specs: vec![FrbSignalSpec {
-                    y_expr: "\\pcrl01".into(), experiment: "pcs_east".into(),
+                    y_expr: "\\pcrl01".into(),
+                    experiment: "pcs_east".into(),
                     server_ip: "202.127.204.12".into(),
                     ..Default::default()
                 }],
@@ -726,14 +861,21 @@ mod tests {
         assert_eq!(rust.shot, "143850");
         assert_eq!(rust.columns.len(), 1);
         assert_eq!(rust.columns[0][0].signal_specs[0].y_expr, "\\pcrl01");
-        assert_eq!(rust.columns[0][0].signal_specs[0].read_mode, Some(mds_core::types::DataReadMode::Thin));
+        assert_eq!(
+            rust.columns[0][0].signal_specs[0].read_mode,
+            Some(mds_core::types::DataReadMode::Thin)
+        );
     }
 
     #[test]
     fn test_ssh_settings_into_rust() {
         let frb = FrbSshSettings {
-            host: "host".into(), port: 22, user: "user".into(),
-            password: "pass".into(), identity_file: "".into(), mode: 1,
+            host: "host".into(),
+            port: 22,
+            user: "user".into(),
+            password: "pass".into(),
+            identity_file: "".into(),
+            mode: 1,
         };
         let rust = frb.into_rust();
         assert_eq!(rust.host, "host");
