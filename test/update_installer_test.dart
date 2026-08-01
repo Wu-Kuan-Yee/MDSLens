@@ -352,7 +352,8 @@ void main() {
       parentWritableOverride: true,
       commandRunner: (executable, arguments) async {
         final script = arguments[3];
-        if (script.startsWith('Expand-Archive')) {
+        if (script.contains('Expand-Archive')) {
+          expect(script, contains(r'param($archive, $destination)'));
           final candidate = Directory(
             '${arguments.last}/mdslens-windows-x64',
           );
@@ -368,7 +369,8 @@ void main() {
               'executable': 'mdslens.exe',
             }),
           );
-        } else if (script.startsWith('Copy-Item')) {
+        } else if (script.contains('Copy-Item')) {
+          expect(script, contains(r'param($source, $destination)'));
           final source = Directory(arguments[4]);
           final destination = Directory(arguments[5]);
           await destination.create();
@@ -441,7 +443,7 @@ void main() {
       nonceOverride: 'protected',
       parentWritableOverride: false,
       commandRunner: (executable, arguments) async {
-        if (arguments[3].startsWith('Expand-Archive')) {
+        if (arguments[3].contains('Expand-Archive')) {
           final candidate = Directory(
             '${arguments.last}/mdslens-windows-x64',
           );
@@ -519,7 +521,7 @@ void main() {
       currentPid: 12345,
       parentWritableOverride: false,
       commandRunner: (executable, arguments) async {
-        if (arguments[3].startsWith('Expand-Archive')) {
+        if (arguments[3].contains('Expand-Archive')) {
           final candidate = Directory(
             '${arguments.last}/mdslens-windows-x64',
           );

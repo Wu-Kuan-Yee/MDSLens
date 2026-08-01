@@ -1240,7 +1240,7 @@ Future<UpdateInstallResult> prepareWindowsPortableUpdate(
       '-NoProfile',
       '-NonInteractive',
       '-Command',
-      r'Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force',
+      r'& { param($archive, $destination); Expand-Archive -LiteralPath $archive -DestinationPath $destination -Force }',
       update.path,
       extracted.path,
     ]);
@@ -1283,7 +1283,7 @@ Future<UpdateInstallResult> prepareWindowsPortableUpdate(
       '-NoProfile',
       '-NonInteractive',
       '-Command',
-      r'Copy-Item -LiteralPath $args[0] -Destination $args[1] -Recurse',
+      r'& { param($source, $destination); Copy-Item -LiteralPath $source -Destination $destination -Recurse }',
       candidate.path,
       staged.path,
     ]);
