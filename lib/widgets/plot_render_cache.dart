@@ -275,10 +275,44 @@ class PlotRenderCache {
       if (start >= end) continue;
       var minY = double.infinity;
       var maxY = double.negativeInfinity;
-      for (var index = start; index < end; index++) {
-        final value = values[index].toDouble();
+
+      void consider(double value) {
+        if (!value.isFinite) return;
         if (value < minY) minY = value;
         if (value > maxY) maxY = value;
+      }
+
+      final indexedMin = series.minYBlocks;
+      final indexedMax = series.maxYBlocks;
+      final blockSize = series.minMaxBlockSize;
+      var index = start;
+      if (indexedMin != null &&
+          indexedMax != null &&
+          indexedMin.length == indexedMax.length &&
+          blockSize > 0) {
+        // Scan only the two partial edge blocks and use the precomputed
+        // extrema for complete blocks. This keeps the first Full render from
+        // walking millions of samples on Flutter's UI isolate.
+        while (index < end && index % blockSize != 0) {
+          consider(values[index].toDouble());
+          index++;
+        }
+        while (index + blockSize <= end) {
+          final block = index ~/ blockSize;
+          if (block >= indexedMin.length) {
+            for (var offset = 0; offset < blockSize; offset++) {
+              consider(values[index + offset].toDouble());
+            }
+          } else {
+            consider(indexedMin[block].toDouble());
+            consider(indexedMax[block].toDouble());
+          }
+          index += blockSize;
+        }
+      }
+      while (index < end) {
+        consider(values[index].toDouble());
+        index++;
       }
       final x = bucket == 0
           ? xAt(rangeStart)

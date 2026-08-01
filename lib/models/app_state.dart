@@ -2691,6 +2691,9 @@ class AppState extends ChangeNotifier {
       uniformY: decoded.uniformY,
       uniformStart: decoded.uniformStart,
       uniformStep: decoded.uniformStep,
+      minYBlocks: decoded.minYBlocks,
+      maxYBlocks: decoded.maxYBlocks,
+      minMaxBlockSize: decoded.minMaxBlockSize,
     );
 
     final plotIndex = _plotIndexFor(column, row);
@@ -2731,6 +2734,9 @@ class AppState extends ChangeNotifier {
     List<List<double>>? points,
     Float64List? interleavedPoints,
     Float32List? uniformY,
+    Float32List? minYBlocks,
+    Float32List? maxYBlocks,
+    int minMaxBlockSize,
     double uniformStart,
     double uniformStep,
     String? error,
@@ -2743,6 +2749,9 @@ class AppState extends ChangeNotifier {
         points: null,
         interleavedPoints: null,
         uniformY: null,
+        minYBlocks: null,
+        maxYBlocks: null,
+        minMaxBlockSize: 0,
         uniformStart: 0,
         uniformStep: 0,
         error: 'The server returned an invalid signal payload.',
@@ -2758,11 +2767,23 @@ class AppState extends ChangeNotifier {
     final rawPoints = rawSeries['points'];
     final rawInterleaved = rawSeries['_interleaved_points'];
     final rawUniform = rawSeries['uniform_y'];
+    final minYBlocks = _decodeFloat32List(rawSeries['min_y_blocks']);
+    final maxYBlocks = _decodeFloat32List(rawSeries['max_y_blocks']);
+    final rawBlockSize = rawSeries['min_max_block_size'];
+    final minMaxBlockSize = rawBlockSize is num ? rawBlockSize.toInt() : 0;
+    final hasMinMaxIndex = minYBlocks != null &&
+        maxYBlocks != null &&
+        minYBlocks.length == maxYBlocks.length &&
+        minYBlocks.isNotEmpty &&
+        minMaxBlockSize > 0;
     if (rawPoints != null && rawPoints is! List) {
       return (
         points: null,
         interleavedPoints: null,
         uniformY: null,
+        minYBlocks: null,
+        maxYBlocks: null,
+        minMaxBlockSize: 0,
         uniformStart: 0,
         uniformStep: 0,
         error: rawError.isEmpty
@@ -2842,6 +2863,9 @@ class AppState extends ChangeNotifier {
       points: points,
       interleavedPoints: interleavedPoints,
       uniformY: uniformY,
+      minYBlocks: hasMinMaxIndex ? minYBlocks : null,
+      maxYBlocks: hasMinMaxIndex ? maxYBlocks : null,
+      minMaxBlockSize: hasMinMaxIndex ? minMaxBlockSize : 0,
       uniformStart: uniformStart,
       uniformStep: uniformStep,
       error: error,
@@ -2849,6 +2873,20 @@ class AppState extends ChangeNotifier {
       xName: xName,
       xUnit: xUnit,
     );
+  }
+
+  Float32List? _decodeFloat32List(dynamic raw) {
+    if (raw is Float32List) {
+      return raw.isEmpty ? null : raw;
+    }
+    if (raw is! List || raw.isEmpty) return null;
+    final values = Float32List(raw.length);
+    for (var index = 0; index < raw.length; index++) {
+      final value = raw[index];
+      if (value is! num || !value.toDouble().isFinite) return null;
+      values[index] = value.toDouble();
+    }
+    return values;
   }
 
   int? _decodeSignalIndex(dynamic value) {
@@ -2985,6 +3023,9 @@ class AppState extends ChangeNotifier {
             uniformY: decoded.uniformY,
             uniformStart: decoded.uniformStart,
             uniformStep: decoded.uniformStep,
+            minYBlocks: decoded.minYBlocks,
+            maxYBlocks: decoded.maxYBlocks,
+            minMaxBlockSize: decoded.minMaxBlockSize,
           );
         }
       }
@@ -3158,6 +3199,9 @@ class AppState extends ChangeNotifier {
                   uniformY: decoded.uniformY,
                   uniformStart: decoded.uniformStart,
                   uniformStep: decoded.uniformStep,
+                  minYBlocks: decoded.minYBlocks,
+                  maxYBlocks: decoded.maxYBlocks,
+                  minMaxBlockSize: decoded.minMaxBlockSize,
                 );
               }
             }
@@ -3330,6 +3374,9 @@ class AppState extends ChangeNotifier {
     Float32List? uniformY,
     double uniformStart = 0,
     double uniformStep = 0,
+    Float32List? minYBlocks,
+    Float32List? maxYBlocks,
+    int minMaxBlockSize = 0,
   }) {
     var pi = 0;
     for (var c = 0; c < _columns.length; c++) {
@@ -3351,6 +3398,9 @@ class AppState extends ChangeNotifier {
         uniformY: uniformY,
         uniformStart: uniformStart,
         uniformStep: uniformStep,
+        minYBlocks: minYBlocks,
+        maxYBlocks: maxYBlocks,
+        minMaxBlockSize: minMaxBlockSize,
       );
     }
   }
@@ -3402,6 +3452,9 @@ class SeriesData {
   List<List<double>>? points;
   Float64List? interleavedPoints;
   Float32List? uniformY;
+  Float32List? minYBlocks;
+  Float32List? maxYBlocks;
+  int minMaxBlockSize;
   final double uniformStart;
   final double uniformStep;
   String? error;
@@ -3418,6 +3471,9 @@ class SeriesData {
     this.uniformY,
     this.uniformStart = 0,
     this.uniformStep = 0,
+    this.minYBlocks,
+    this.maxYBlocks,
+    this.minMaxBlockSize = 0,
   });
 
   bool get hasData =>
@@ -3439,6 +3495,9 @@ class SeriesData {
     points = null;
     interleavedPoints = null;
     uniformY = null;
+    minYBlocks = null;
+    maxYBlocks = null;
+    minMaxBlockSize = 0;
     error = null;
   }
 

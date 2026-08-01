@@ -15,6 +15,8 @@ use std::time::{Duration, Instant};
 const FIXED_TIME_RESOLUTION_SECONDS: f64 = 0.0001;
 const DEFAULT_FULL_LARGE_SIGNAL_POINTS: usize = 8_000_000;
 const DEFAULT_FULL_LARGE_DOWNLOAD_LIMIT: usize = 2;
+const MIN_MAX_BLOCK_SIZE: usize = 256;
+const MIN_MAX_INDEX_MIN_POINTS: usize = MIN_MAX_BLOCK_SIZE * 4;
 
 #[derive(Clone)]
 struct SignalMetadata {
@@ -154,6 +156,11 @@ pub fn fetch_signal(socket: &mut TcpStream, request: &FetchRequest) -> FetchResu
 
     if result.series.has_data() {
         populate_series_metadata(socket, request, &mut result.series);
+        if result.series.has_uniform_data()
+            && result.series.uniform_y.len() >= MIN_MAX_INDEX_MIN_POINTS
+        {
+            mds_core::sampling::build_min_max_index(&mut result.series, MIN_MAX_BLOCK_SIZE);
+        }
     }
     if trace_fetch_enabled() {
         eprintln!(

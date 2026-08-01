@@ -654,6 +654,32 @@ void main() {
     expect(rendered.maxY, 3);
   });
 
+  test('Full uniform waveform render uses the Rust min/max block index', () {
+    final values = Float32List(4096);
+    values[1024 + 37] = -42;
+    values[11 * 256 + 73] = 999;
+    final minBlocks = Float32List.fromList(
+      List<double>.generate(16, (block) => block == 4 ? -42 : 0),
+    );
+    final maxBlocks = Float32List.fromList(
+      List<double>.generate(16, (block) => block == 11 ? 999 : 0),
+    );
+    final series = SeriesData(
+      points: <List<double>>[],
+      uniformY: values,
+      uniformStart: 0,
+      uniformStep: 0.001,
+      minYBlocks: minBlocks,
+      maxYBlocks: maxBlocks,
+      minMaxBlockSize: 256,
+    );
+
+    final rendered = PlotRenderCache().render(series, maxPoints: 32);
+
+    expect(rendered.minY, -42);
+    expect(rendered.maxY, 999);
+  });
+
   test('Compact irregular waveform renders and interpolates without expansion',
       () {
     final transferred = Float64List.fromList(<double>[

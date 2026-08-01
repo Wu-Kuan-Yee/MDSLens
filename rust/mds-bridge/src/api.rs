@@ -80,6 +80,9 @@ pub struct FrbSignalSeries {
     pub uniform_step: f64,
     pub uniform_min_y: f64,
     pub uniform_max_y: f64,
+    pub min_y_blocks: Vec<f32>,
+    pub max_y_blocks: Vec<f32>,
+    pub min_max_block_size: i32,
     pub points: Vec<Vec<f64>>, // [[x,y], ...]
 }
 
@@ -200,6 +203,9 @@ impl From<mds_core::types::SignalSeries> for FrbSignalSeries {
             uniform_step: s.uniform_step,
             uniform_min_y: s.uniform_min_y,
             uniform_max_y: s.uniform_max_y,
+            min_y_blocks: s.min_y_blocks,
+            max_y_blocks: s.max_y_blocks,
+            min_max_block_size: s.min_max_block_size as i32,
             points,
         }
     }
