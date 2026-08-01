@@ -352,8 +352,20 @@ work_dir="$6"
 health_file="$7"
 health_token="$8"
 commit_marker="$9"
-ready_file="$10"
+# POSIX shells treat $10 as "$1" followed by a literal zero.  The ready
+# marker is the tenth argument, so use the braced form or the helper will wait
+# forever even though the updater process was launched successfully.
+ready_file="${10}"
 previous_bundle="${current_bundle}.mdslens-previous"
+
+launch_bundle() {
+  bundle="$1"
+  shift
+  executable="$bundle/Contents/MacOS/MDSLens"
+  [ -x "$executable" ] || return 1
+  "$executable" "$@" >/dev/null 2>&1 &
+  launched_pid=$!
+}
 
 case "$current_bundle" in ""|"/") exit 1 ;; esac
 case "$staged_bundle" in "${current_bundle}.mdslens-update-"*) ;; *) exit 1 ;; esac
@@ -375,17 +387,22 @@ done
 
 if /bin/mv "$current_bundle" "$backup_bundle" &&
    /bin/mv "$staged_bundle" "$current_bundle"; then
-  /usr/bin/open -n -W "$current_bundle" --args \
-    "--mdslens-update-health=$health_file" \
-    "--mdslens-update-token=$health_token" >/dev/null 2>&1 &
-  open_pid=$!
+  if ! launch_bundle "$current_bundle" \
+      "--mdslens-update-health=$health_file" \
+      "--mdslens-update-token=$health_token"; then
+    /bin/rm -rf "$current_bundle"
+    /bin/mv "$backup_bundle" "$current_bundle"
+    /bin/rm -rf "$staged_bundle" "$work_dir"
+    exit 1
+  fi
+  new_pid=$launched_pid
   attempt=0
   healthy=0
   while [ "$attempt" -lt 1200 ]; do
-    if ! kill -0 "$open_pid" 2>/dev/null; then
+    if ! kill -0 "$new_pid" 2>/dev/null; then
       /bin/rm -rf "$current_bundle"
       /bin/mv "$backup_bundle" "$current_bundle"
-      /usr/bin/open "$current_bundle"
+      launch_bundle "$current_bundle" || true
       /bin/rm -rf "$work_dir"
       exit 1
     fi
@@ -400,7 +417,7 @@ if /bin/mv "$current_bundle" "$backup_bundle" &&
   if [ "$healthy" -ne 1 ]; then
     /bin/rm -rf "$current_bundle"
     /bin/mv "$backup_bundle" "$current_bundle"
-    /usr/bin/open "$current_bundle"
+    launch_bundle "$current_bundle" || true
     /bin/rm -rf "$work_dir"
     exit 1
   fi
@@ -417,7 +434,7 @@ if /bin/mv "$current_bundle" "$backup_bundle" &&
   fi
   attempt=0
   while [ "$attempt" -lt 600 ]; do
-    if ! kill -0 "$open_pid" 2>/dev/null; then
+    if ! kill -0 "$new_pid" 2>/dev/null; then
       /bin/rm -rf "$work_dir"
       exit 0
     fi
@@ -435,7 +452,7 @@ if [ ! -e "$current_bundle" ] && [ -e "$backup_bundle" ]; then
 fi
 /bin/rm -rf "$staged_bundle"
 if [ -e "$current_bundle" ]; then
-  /usr/bin/open "$current_bundle"
+  launch_bundle "$current_bundle" || true
 fi
 /bin/rm -rf "$work_dir"
 exit 1
@@ -785,17 +802,20 @@ if /bin/mv -T -- "$current_root" "$backup_root" &&
   /bin/mv -T -- "$backup_root" "$previous_root"
   /bin/rm -f "$downloaded_archive" "$health_file"
   /bin/rm -rf "$work_dir"
-  (
-    stability_attempt=0
-    while [ "$stability_attempt" -lt 600 ]; do
-      if ! process_is_running "$new_pid"; then
-        exit 0
-      fi
-      stability_attempt=$((stability_attempt + 1))
-      sleep 0.1
-    done
-    /bin/rm -rf "$previous_root" "$commit_marker"
-  ) </dev/null >/dev/null 2>&1 &
+  # Keep the detached updater alive until the stability window has elapsed.
+  # A background child can be reaped together with the shell on some desktop
+  # launchers, leaving the rollback directory and commit marker behind.
+  stability_attempt=0
+  while [ "$stability_attempt" -lt 600 ]; do
+    if ! process_is_running "$new_pid"; then
+      /bin/rm -rf "$work_dir"
+      exit 0
+    fi
+    stability_attempt=$((stability_attempt + 1))
+    sleep 0.1
+  done
+  /bin/rm -rf "$previous_root" "$commit_marker"
+  /bin/rm -rf "$work_dir"
   exit 0
 fi
 
@@ -888,17 +908,16 @@ if /bin/mv -T -- "$current_root" "$backup_root" &&
       /bin/rm -rf "$previous_root"
       /bin/mv -T -- "$backup_root" "$previous_root"
       if [ -n "$new_pid" ]; then
-        (
-          stability_attempt=0
-          while [ "$stability_attempt" -lt 600 ]; do
-            if ! process_is_running "$new_pid"; then
-              exit 0
-            fi
-            stability_attempt=$((stability_attempt + 1))
-            sleep 0.1
-          done
-          /bin/rm -rf "$previous_root" "$commit_marker"
-        ) </dev/null >/dev/null 2>&1 &
+        stability_attempt=0
+        while [ "$stability_attempt" -lt 600 ]; do
+          if ! process_is_running "$new_pid"; then
+            /bin/rm -rf "$work_dir"
+            exit 0
+          fi
+          stability_attempt=$((stability_attempt + 1))
+          sleep 0.1
+        done
+        /bin/rm -rf "$previous_root" "$commit_marker"
       fi
       /bin/rm -f "$downloaded_archive" "$health_file"
       /bin/rm -rf "$work_dir"
@@ -1372,6 +1391,14 @@ Future<void> scheduleLinuxPortableRollbackCleanup({
   }
   try {
     await previous.delete(recursive: true);
+    // Linux portable helpers from older releases only removed the rollback
+    // directory.  Remove the matching transaction marker as well so a
+    // successful update cannot leave a misleading "committed" artifact next
+    // to the installation forever.
+    final commit = File('$currentRoot.mdslens-update-committed');
+    if (await _validUpdateCommitMarker(commit)) {
+      await commit.delete();
+    }
   } catch (_) {
     // A protected installation may be owned by root. The privileged updater
     // performs the same delayed cleanup when it has the required authority.
@@ -1971,7 +1998,7 @@ Future<UpdateInstallResult> prepareWindowsPortableUpdate(
       commitMarker: '${currentRoot.path}.mdslens-update-committed',
     );
     await helper.writeAsString(_windowsPortableApplyUpdateScript);
-    await commandLauncher(powershell, [
+    final helperArguments = <String>[
       '-NoProfile',
       '-NonInteractive',
       '-ExecutionPolicy',
@@ -1988,8 +2015,41 @@ Future<UpdateInstallResult> prepareWindowsPortableUpdate(
       handshake.token,
       handshake.commitMarker,
       ready.path,
-    ]);
-    if (!await _waitForFile(ready, attempts: helperReadyAttempts)) {
+    ];
+
+    // Launch through PowerShell first.  A few Windows desktop launchers put
+    // Flutter in a process job that is torn down with the UI process; asking
+    // `cmd start` to create a second, independent process is a reliable
+    // fallback for that case.  The helper writes its ready marker before it
+    // waits for the current process, so this fallback never races a helper
+    // that has already taken ownership of the transaction.
+    try {
+      await commandLauncher(powershell, helperArguments);
+    } catch (_) {
+      // The fallback below provides the user-facing result and keeps the
+      // current application open if both launch paths are unavailable.
+    }
+    final initialAttempts = min(helperReadyAttempts, 20);
+    var helperReady = await _waitForFile(ready, attempts: initialAttempts);
+    if (!helperReady) {
+      try {
+        await commandLauncher('cmd.exe', [
+          '/d',
+          '/s',
+          '/c',
+          'start',
+          'MDSLens Update Helper',
+          '/b',
+          powershell,
+          ...helperArguments,
+        ]);
+      } catch (_) {}
+      helperReady = await _waitForFile(
+        ready,
+        attempts: max(0, helperReadyAttempts - initialAttempts),
+      );
+    }
+    if (!helperReady) {
       return UpdateInstallResult(
         status: UpdateLaunchStatus.unsupported,
         message:
