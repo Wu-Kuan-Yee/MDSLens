@@ -34,6 +34,8 @@ class FlutterWindow : public Win32Window {
       system_info_channel_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       system_fonts_channel_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      updater_channel_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

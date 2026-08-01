@@ -102,6 +102,153 @@ std::string Utf8FromWide(const std::wstring& value) {
   return result;
 }
 
+std::optional<std::wstring> WideFromUtf8(const std::string& value) {
+  if (value.empty()) {
+    return std::wstring();
+  }
+  const int characters = MultiByteToWideChar(
+      CP_UTF8, MB_ERR_INVALID_CHARS, value.data(),
+      static_cast<int>(value.size()), nullptr, 0);
+  if (characters <= 0) {
+    return std::nullopt;
+  }
+  std::wstring result(characters, L'\0');
+  if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(),
+                          static_cast<int>(value.size()), result.data(),
+                          characters) != characters) {
+    return std::nullopt;
+  }
+  return result;
+}
+
+// Quote one argument using the CommandLineToArgvW-compatible rules.  The
+// Windows runner receives a vector from Dart, but CreateProcessW still needs a
+// single mutable command line and treats backslashes before quotes specially.
+std::wstring QuoteWindowsArgument(const std::wstring& value) {
+  if (!value.empty() && value.find_first_of(L" \t\n\v\"") ==
+                            std::wstring::npos) {
+    return value;
+  }
+  std::wstring result = L"\"";
+  size_t backslashes = 0;
+  for (const wchar_t character : value) {
+    if (character == L'\\') {
+      ++backslashes;
+      continue;
+    }
+    if (character == L'\"') {
+      result.append(backslashes * 2 + 1, L'\\');
+      result.push_back(L'\"');
+    } else {
+      result.append(backslashes, L'\\');
+      result.push_back(character);
+    }
+    backslashes = 0;
+  }
+  result.append(backslashes * 2, L'\\');
+  result.push_back(L'\"');
+  return result;
+}
+
+std::optional<std::wstring> MapStringValue(
+    const flutter::EncodableMap& map,
+    const char* key) {
+  const auto iterator = map.find(flutter::EncodableValue(key));
+  if (iterator == map.end()) {
+    return std::nullopt;
+  }
+  const auto* value = std::get_if<std::string>(
+      static_cast<const flutter::EncodableValue::super*>(&iterator->second));
+  if (value == nullptr) {
+    return std::nullopt;
+  }
+  return WideFromUtf8(*value);
+}
+
+bool SpawnDetachedProcess(const flutter::EncodableMap& map,
+                          std::string* error_message) {
+  const auto executable = MapStringValue(map, "executable");
+  if (!executable || executable->empty()) {
+    *error_message = "The detached process executable is missing.";
+    return false;
+  }
+
+  std::vector<std::wstring> arguments;
+  const auto arguments_iterator =
+      map.find(flutter::EncodableValue("arguments"));
+  if (arguments_iterator != map.end()) {
+    const auto* encoded_arguments = std::get_if<flutter::EncodableList>(
+        static_cast<const flutter::EncodableValue::super*>(
+            &arguments_iterator->second));
+    if (encoded_arguments == nullptr) {
+      *error_message = "The detached process arguments are invalid.";
+      return false;
+    }
+    arguments.reserve(encoded_arguments->size());
+    for (const auto& encoded_argument : *encoded_arguments) {
+      const auto* argument = std::get_if<std::string>(
+          static_cast<const flutter::EncodableValue::super*>(&encoded_argument));
+      if (argument == nullptr) {
+        *error_message = "The detached process arguments are invalid.";
+        return false;
+      }
+      const auto wide_argument = WideFromUtf8(*argument);
+      if (!wide_argument) {
+        *error_message = "The detached process arguments are not UTF-8.";
+        return false;
+      }
+      arguments.push_back(*wide_argument);
+    }
+  }
+
+  std::wstring command_line = QuoteWindowsArgument(*executable);
+  for (const auto& argument : arguments) {
+    command_line.push_back(L' ');
+    command_line += QuoteWindowsArgument(argument);
+  }
+  std::wstring working_directory;
+  if (const auto value = MapStringValue(map, "workingDirectory")) {
+    working_directory = *value;
+  }
+
+  auto launch = [&](DWORD extra_flags) {
+    std::vector<wchar_t> mutable_command_line(command_line.begin(),
+                                               command_line.end());
+    mutable_command_line.push_back(L'\0');
+    STARTUPINFOW startup = {};
+    startup.cb = sizeof(startup);
+    PROCESS_INFORMATION process = {};
+    const BOOL created = CreateProcessW(
+        executable->c_str(), mutable_command_line.data(), nullptr, nullptr,
+        FALSE,
+        CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_PROCESS_GROUP |
+            DETACHED_PROCESS | extra_flags,
+        nullptr, working_directory.empty() ? nullptr : working_directory.c_str(),
+        &startup, &process);
+    if (!created) {
+      return false;
+    }
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+    return true;
+  };
+
+  // Breakaway is the important part: it prevents a launcher-created
+  // kill-on-close job from terminating the helper together with Flutter.
+  if (launch(CREATE_BREAKAWAY_FROM_JOB)) {
+    return true;
+  }
+  // Some Windows hosts do not place the app in a job that permits breakaway.
+  // A normal detached process is still a useful compatibility fallback; Dart
+  // will then try the historical shell handoff if this second launch fails.
+  if (launch(0)) {
+    return true;
+  }
+  *error_message = "CreateProcessW failed with error " +
+                   std::to_string(static_cast<unsigned long>(GetLastError()));
+  return false;
+}
+
 std::string RuntimeArchitecture() {
 #if defined(_M_ARM64)
   return "arm64";
@@ -240,6 +387,36 @@ bool FlutterWindow::OnCreate() {
         }
         result->Success(ReadSystemFontFamilies());
       });
+  updater_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), "mdslens/updater",
+          &flutter::StandardMethodCodec::GetInstance());
+  updater_channel_->SetMethodCallHandler(
+      [](const flutter::MethodCall<flutter::EncodableValue>& call,
+         std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+             result) {
+        if (call.method_name() != "spawnDetached") {
+          result->NotImplemented();
+          return;
+        }
+        const auto* arguments = call.arguments() == nullptr
+                                    ? nullptr
+                                    : std::get_if<flutter::EncodableMap>(
+                                          static_cast<
+                                              const flutter::EncodableValue::super*>(
+                                              call.arguments()));
+        if (arguments == nullptr) {
+          result->Error("INVALID_ARGUMENTS",
+                        "The detached process arguments are missing.");
+          return;
+        }
+        std::string error_message;
+        if (!SpawnDetachedProcess(*arguments, &error_message)) {
+          result->Error("SPAWN_FAILED", error_message);
+          return;
+        }
+        result->Success(flutter::EncodableValue(true));
+      });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -255,6 +432,7 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  updater_channel_.reset();
   system_fonts_channel_.reset();
   system_info_channel_.reset();
   if (flutter_controller_) {

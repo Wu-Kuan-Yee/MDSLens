@@ -318,13 +318,72 @@ Future<void> _startDetached(String executable, List<String> arguments) async {
   await Process.start(executable, arguments, mode: ProcessStartMode.detached);
 }
 
-/// Starts a Windows helper through `cmd start`, which creates a new process
-/// outside the Flutter runner's process tree.  `ProcessStartMode.detached`
-/// detaches the console/stdio handles, but a desktop launcher can still put
-/// that child in the same Windows job as the application.  When the app exits
-/// after handing the update over, the job may terminate the helper as well.
-/// `start` is intentionally the first hop so the helper remains alive while
-/// it waits for the application to exit and replaces the installation.
+/// Starts a Windows update helper outside the host application's process job.
+///
+/// Flutter desktop launchers are sometimes placed in a Windows job that uses
+/// kill-on-close.  A normal detached child (and even `cmd start`) can still be
+/// assigned to that job, so it disappears when the Flutter process exits.  The
+/// Windows runner exposes a small native launcher that requests
+/// CREATE_BREAKAWAY_FROM_JOB.  We keep the old shell invocation as a fallback
+/// for older runners and for test/embedding environments that do not provide
+/// the channel.
+Future<void> _startWindowsDetached(
+  String executable,
+  List<String> arguments,
+) async {
+  if (!Platform.isWindows) {
+    await _startDetached(executable, arguments);
+    return;
+  }
+
+  // Existing call sites pass the historical `cmd start` form.  Convert it to
+  // a direct `cmd /c call` invocation before handing it to the native launcher
+  // so the only process created by the runner is the breakaway child.
+  var launchExecutable = executable;
+  var launchArguments = List<String>.from(arguments);
+  if (executable.toLowerCase().endsWith(r'cmd.exe') &&
+      arguments.length >= 7 &&
+      arguments[0] == '/d' &&
+      arguments[1] == '/s' &&
+      arguments[2] == '/c' &&
+      arguments[3].toLowerCase() == 'start') {
+    launchArguments = <String>[
+      '/d',
+      '/s',
+      '/c',
+      'call',
+      ...arguments.sublist(6),
+    ];
+  }
+
+  try {
+    final launched = await _updaterChannel.invokeMethod<bool>(
+      'spawnDetached',
+      <String, Object?>{
+        'executable': launchExecutable,
+        'arguments': launchArguments,
+        'workingDirectory': Directory.current.path,
+      },
+    );
+    if (launched == true) return;
+  } on MissingPluginException {
+    // Older builds do not have the Windows runner channel.
+  } on PlatformException {
+    // Fall through to the compatibility launch below.
+  }
+
+  await Process.start(
+    executable,
+    arguments,
+    mode: ProcessStartMode.detached,
+  );
+}
+
+/// Builds the compatibility `cmd start` invocation used by older Windows
+/// runners. Current runners convert this into a direct breakaway process via
+/// [_startWindowsDetached]; keeping this shape lets already-embedded/test
+/// launchers continue to use the previous handoff when the native channel is
+/// unavailable.
 List<String> _windowsDetachedStartArguments(
   String executable,
   List<String> arguments,
@@ -1152,7 +1211,7 @@ goto relaunch_new
 :relaunch
 if exist "%TargetExecutable%" (
   >>"%LogFile%" echo [%date% %time%] Relaunching "%TargetExecutable%".
-  start "" "%TargetExecutable%"
+  start "" /D "%InstallDirectory%" "%TargetExecutable%"
 ) else (
   >>"%LogFile%" echo [%date% %time%] Target executable is missing after update.
 )
@@ -1161,7 +1220,7 @@ goto cleanup
 :relaunch_new
 if not exist "%TargetExecutable%" goto target_missing
 >>"%LogFile%" echo [%date% %time%] Relaunching "%TargetExecutable%" with health handshake.
-start "" "%TargetExecutable%" "--mdslens-update-health=%HealthFile%" "--mdslens-update-token=%HealthToken%" "--mdslens-update-commit=%CommitMarker%"
+start "" /D "%InstallDirectory%" "%TargetExecutable%" "--mdslens-update-health=%HealthFile%" "--mdslens-update-token=%HealthToken%" "--mdslens-update-commit=%CommitMarker%"
 set /a HealthAttempts=0
 :wait_for_health
 if not exist "%HealthFile%" goto health_poll
@@ -1735,7 +1794,8 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
   String? linuxPkexecPathOverride,
 }) async {
   final platform = platformOverride ?? Platform.operatingSystem;
-  final launch = commandLauncher ?? _startDetached;
+  final launch = commandLauncher ??
+      (platform == 'windows' ? _startWindowsDetached : _startDetached);
   final run = commandRunner ?? _runCommand;
   if (platform == 'android') {
     final status = await _updaterChannel.invokeMethod<String>(

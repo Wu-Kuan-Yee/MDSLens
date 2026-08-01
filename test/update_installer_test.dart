@@ -231,7 +231,7 @@ void main() {
       final script = await helper.readAsString();
       expect(script, contains(':wait_for_parent'));
       expect(script, contains('Installer exit code'));
-      expect(script, contains('start "" "%TargetExecutable%"'));
+      expect(script, contains('start "" /D "%InstallDirectory%"'));
       addTearDown(() async {
         if (await helper.parent.exists()) {
           await helper.parent.delete(recursive: true);
@@ -294,7 +294,7 @@ void main() {
       final script = await helper.readAsString();
       expect(script, contains(':install_msi'));
       expect(script, contains('start "" /wait msiexec.exe'));
-      expect(script, contains('start "" "%TargetExecutable%"'));
+      expect(script, contains('start "" /D "%InstallDirectory%"'));
       addTearDown(() async {
         if (await helper.parent.exists()) {
           await helper.parent.delete(recursive: true);
