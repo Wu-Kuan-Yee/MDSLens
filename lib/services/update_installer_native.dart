@@ -464,7 +464,8 @@ case "$backup_image" in "${current_image}.mdslens-backup-"*) ;; *) exit 1 ;; esa
 attempt=0
 while kill -0 "$parent_pid" 2>/dev/null; do
   if [ "$attempt" -ge 3000 ]; then
-    /bin/rm -f "$staged_image"
+    /bin/rm -f "$staged_image" "$downloaded_image"
+    /bin/rm -rf "$work_dir"
     exit 1
   fi
   attempt=$((attempt + 1))
@@ -484,6 +485,8 @@ if /bin/mv -T -- "$current_image" "$backup_image" &&
       /bin/rm -f "$current_image"
       /bin/mv -T -- "$backup_image" "$current_image"
       "$current_image" >/dev/null 2>&1 &
+      /bin/rm -f "$downloaded_image"
+      /bin/rm -rf "$work_dir"
       exit 1
     fi
     if [ -f "$health_file" ] &&
@@ -498,6 +501,7 @@ if /bin/mv -T -- "$current_image" "$backup_image" &&
     /bin/rm -f "$current_image"
     /bin/mv -T -- "$backup_image" "$current_image"
     "$current_image" >/dev/null 2>&1 &
+    /bin/rm -f "$downloaded_image"
     /bin/rm -rf "$work_dir"
     exit 1
   fi
@@ -517,6 +521,7 @@ if /bin/mv -T -- "$current_image" "$backup_image" &&
   attempt=0
   while [ "$attempt" -lt 600 ]; do
     if ! kill -0 "$new_pid" 2>/dev/null; then
+      /bin/rm -f "$downloaded_image"
       /bin/rm -rf "$work_dir"
       exit 0
     fi
@@ -536,6 +541,7 @@ fi
 if [ -x "$current_image" ]; then
   "$current_image" >/dev/null 2>&1 &
 fi
+/bin/rm -f "$downloaded_image"
 /bin/rm -rf "$work_dir"
 exit 1
 ''';
@@ -600,6 +606,7 @@ if /bin/mv -T -- "$current_image" "$backup_image" &&
         stability_attempt=0
         while [ "$stability_attempt" -lt 600 ]; do
           if ! kill -0 "$new_pid" 2>/dev/null; then
+            /bin/rm -f "$downloaded_image"
             /bin/rm -rf "$work_dir"
             exit 0
           fi
@@ -831,7 +838,9 @@ health_token="$8"
 commit_marker="$9"
 ready_file="${10}"
 healthy_file="${11}"
-pid_file="${12}"
+failed_file="${12}"
+pid_file="${13}"
+cancel_file="${14}"
 previous_root="${current_root}.mdslens-previous"
 
 case "$current_root" in ""|"/") exit 1 ;; esac
@@ -852,6 +861,10 @@ process_is_running() {
 
 attempt=0
 while kill -0 "$parent_pid" 2>/dev/null; do
+  if [ -e "$cancel_file" ]; then
+    /bin/rm -rf "$staged_root" "$work_dir"
+    exit 1
+  fi
   if [ "$attempt" -ge 3000 ]; then
     /bin/rm -rf "$staged_root" "$work_dir"
     exit 1
@@ -864,8 +877,9 @@ if /bin/mv -T -- "$current_root" "$backup_root" &&
    /bin/mv -T -- "$staged_root" "$current_root"; then
   : > "$ready_file"
   attempt=0
-  while [ "$attempt" -lt 300 ]; do
-      if [ -e "$healthy_file" ]; then
+  while [ "$attempt" -lt 1200 ]; do
+    if [ -e "$cancel_file" ]; then break; fi
+    if [ -e "$healthy_file" ]; then
       /bin/printf '%s\n' "$health_token" > "$commit_marker"
       new_pid=''
       if [ -r "$pid_file" ]; then
@@ -890,6 +904,7 @@ if /bin/mv -T -- "$current_root" "$backup_root" &&
       /bin/rm -rf "$work_dir"
       exit 0
     fi
+    if [ -e "$failed_file" ]; then break; fi
     attempt=$((attempt + 1))
     sleep 0.1
   done
@@ -911,14 +926,16 @@ set -u
 current_root="$1"
 ready_file="$2"
 healthy_file="$3"
-cancel_file="$4"
-pid_file="$5"
-health_file="$6"
-health_token="$7"
+failed_file="$4"
+cancel_file="$5"
+pid_file="$6"
+health_file="$7"
+health_token="$8"
 
 attempt=0
-while [ "$attempt" -lt 300 ]; do
+while [ "$attempt" -lt 1200 ]; do
   if [ -e "$cancel_file" ]; then
+    : > "$failed_file"
     exit 1
   fi
   if [ -e "$ready_file" ]; then
@@ -930,6 +947,7 @@ while [ "$attempt" -lt 300 ]; do
     health_attempt=0
     while [ "$health_attempt" -lt 1200 ]; do
       if ! kill -0 "$new_pid" 2>/dev/null; then
+        : > "$failed_file"
         exit 1
       fi
       if [ -f "$health_file" ] &&
@@ -946,6 +964,7 @@ while [ "$attempt" -lt 300 ]; do
   attempt=$((attempt + 1))
   sleep 0.1
 done
+: > "$failed_file"
 exit 1
 ''';
 
@@ -1069,7 +1088,11 @@ for ($attempt = 0; $attempt -lt 300; $attempt++) {
   if (-not (Get-Process -Id $parentPid -ErrorAction SilentlyContinue)) { break }
   Start-Sleep -Milliseconds 100
 }
-if (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) { exit 1 }
+if (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) {
+  Remove-Item -LiteralPath $stagedRoot -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
+  exit 1
+}
 
 try {
   Move-Item -LiteralPath $currentRoot -Destination $backupRoot
@@ -1109,7 +1132,10 @@ try {
   Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
   for ($attempt = 0; $attempt -lt 600; $attempt++) {
     $process.Refresh()
-    if ($process.HasExited) { exit 0 }
+    if ($process.HasExited) {
+      Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
+      exit 0
+    }
     Start-Sleep -Milliseconds 100
   }
   if (Test-Path -LiteralPath $previousRoot) {
@@ -1130,6 +1156,7 @@ try {
   }
   Remove-Item -LiteralPath $stagedRoot -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $healthFile -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
   exit 1
 }
 ''';
@@ -1153,10 +1180,12 @@ $healthToken = $args[13]
 $commitMarker = $args[14]
 $newPidFile = $args[15]
 $previousRoot = "$currentRoot.mdslens-previous"
+$workRoot = Split-Path -Parent $preparedFile
 $extractionRoot = "$stagedRoot-extracted"
 trap {
   Remove-Item -LiteralPath $stagedRoot -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $extractionRoot -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
   exit 1
 }
 
@@ -1183,7 +1212,12 @@ for ($attempt = 0; $attempt -lt 600; $attempt++) {
   if (-not (Get-Process -Id $parentPid -ErrorAction SilentlyContinue)) { break }
   Start-Sleep -Milliseconds 100
 }
-if (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) { exit 1 }
+if (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) {
+  Remove-Item -LiteralPath $stagedRoot -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $extractionRoot -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
+  exit 1
+}
 
 try {
   Move-Item -LiteralPath $currentRoot -Destination $backupRoot
@@ -1211,9 +1245,15 @@ try {
   if (Test-Path -LiteralPath $newPidFile) {
     $replacementPid = [int](Get-Content -LiteralPath $newPidFile -Raw).Trim()
   }
-  if ($replacementPid -le 0) { exit 0 }
+  if ($replacementPid -le 0) {
+    Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
+    exit 0
+  }
   for ($attempt = 0; $attempt -lt 600; $attempt++) {
-    if (-not (Get-Process -Id $replacementPid -ErrorAction SilentlyContinue)) { exit 0 }
+    if (-not (Get-Process -Id $replacementPid -ErrorAction SilentlyContinue)) {
+      Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
+      exit 0
+    }
     Start-Sleep -Milliseconds 100
   }
   if (Test-Path -LiteralPath $previousRoot) {
@@ -1250,7 +1290,10 @@ for ($attempt = 0; $attempt -lt 600; $attempt++) {
   if (Test-Path -LiteralPath $swapReadyFile) { break }
   Start-Sleep -Milliseconds 100
 }
-if (-not (Test-Path -LiteralPath $swapReadyFile)) { exit 1 }
+if (-not (Test-Path -LiteralPath $swapReadyFile)) {
+  Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
+  exit 1
+}
 $target = Join-Path $currentRoot 'mdslens.exe'
 $process = Start-Process -FilePath $target -WorkingDirectory $currentRoot `
   -ArgumentList @("--mdslens-update-health=$healthFile", "--mdslens-update-token=$healthToken") `
@@ -1275,9 +1318,10 @@ for ($attempt = 0; $attempt -lt 300; $attempt++) {
   if (Test-Path -LiteralPath $rollbackReadyFile) { break }
   Start-Sleep -Milliseconds 100
 }
-  if (Test-Path -LiteralPath (Join-Path $currentRoot 'mdslens.exe')) {
-    Start-Process -FilePath (Join-Path $currentRoot 'mdslens.exe') -WorkingDirectory $currentRoot
-  }
+if (Test-Path -LiteralPath (Join-Path $currentRoot 'mdslens.exe')) {
+  Start-Process -FilePath (Join-Path $currentRoot 'mdslens.exe') -WorkingDirectory $currentRoot
+}
+Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
 exit 1
 ''';
 
@@ -2451,6 +2495,7 @@ Future<UpdateInstallResult?> prepareLinuxPortableUpdate(
       if (pkexec == null) return null;
       final readyFile = '${work.path}${Platform.pathSeparator}ready';
       final healthyFile = '${work.path}${Platform.pathSeparator}healthy';
+      final failedFile = '${work.path}${Platform.pathSeparator}failed';
       final cancelFile = '${work.path}${Platform.pathSeparator}cancel';
       final pidFile = '${work.path}${Platform.pathSeparator}new-pid';
       await commandLauncher('/bin/sh', [
@@ -2460,6 +2505,7 @@ Future<UpdateInstallResult?> prepareLinuxPortableUpdate(
         currentRoot.path,
         readyFile,
         healthyFile,
+        failedFile,
         cancelFile,
         pidFile,
         handshake.healthFile.path,
@@ -2476,7 +2522,9 @@ Future<UpdateInstallResult?> prepareLinuxPortableUpdate(
         ...applyArguments,
         readyFile,
         healthyFile,
+        failedFile,
         pidFile,
+        cancelFile,
       ]);
       if (authorization.exitCode != 0) {
         try {
