@@ -1223,6 +1223,41 @@ class AppState extends ChangeNotifier {
     return !_disposed && generation == _fetchGeneration;
   }
 
+  /// Publishes a completed waveform load after the frame containing the new
+  /// data has been scheduled for painting.  Keeping the stopwatch alive until
+  /// the post-frame callback makes the value represent the user-visible load,
+  /// rather than only the time spent waiting for the native request.
+  void _publishWaveformLoadCompletion({
+    required Stopwatch stopwatch,
+    required int generation,
+    required String status,
+  }) {
+    if (!_isCurrentFetch(generation)) return;
+
+    // Give the plot widgets an opportunity to rebuild immediately.  The
+    // final status is replaced on the next frame with the precise duration.
+    _status = '$status · Drawing...';
+    notifyListeners();
+
+    void finish() {
+      if (!_isCurrentFetch(generation)) return;
+      stopwatch.stop();
+      final seconds =
+          stopwatch.elapsedMicroseconds / Duration.microsecondsPerSecond;
+      _status = '$status · Load time: ${seconds.toStringAsFixed(3)} s';
+      notifyListeners();
+    }
+
+    // A headless AppState (for example, a parser or persistence test) has no
+    // frame to observe.  Complete it immediately in that case; normal UI
+    // instances have listeners and use the post-frame boundary above.
+    if (!hasListeners) {
+      finish();
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => finish());
+  }
+
   void _invalidateFetchForSettingsChange() {
     _cancelPendingFullShotRefresh();
     _discardPendingWaveformFetch();
@@ -3039,6 +3074,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> _executeGlobalFetch({required String shot}) async {
     if (!_requireActiveSession('load waveforms')) return;
+    final loadStopwatch = Stopwatch()..start();
     _cancelActiveNativeFetch();
     final generation = ++_fetchGeneration;
     final requestShot = shot;
@@ -3168,6 +3204,11 @@ class AppState extends ChangeNotifier {
           retry: () => _doFetch(shot: requestShot),
         );
       }
+      _publishWaveformLoadCompletion(
+        stopwatch: loadStopwatch,
+        generation: generation,
+        status: _status,
+      );
       unawaited(_fetchTopInfo(requestShot, generation));
     } catch (e) {
       if (_activeNativeFetchId == generation) _activeNativeFetchId = null;
@@ -3254,6 +3295,7 @@ class AppState extends ChangeNotifier {
     }
     if (targetCol < 0) return;
 
+    final loadStopwatch = Stopwatch()..start();
     _cancelActiveNativeFetch();
     final generation = ++_fetchGeneration;
     final shot = _displayedShot.trim().isNotEmpty
@@ -3327,7 +3369,11 @@ class AppState extends ChangeNotifier {
       }
       _fetching = false;
       _fetchingPlotIndex = null;
-      _status = 'Updated panel ($targetCol, $targetRow)';
+      _publishWaveformLoadCompletion(
+        stopwatch: loadStopwatch,
+        generation: generation,
+        status: 'Updated panel ($targetCol, $targetRow)',
+      );
     } catch (e) {
       if (_activeNativeFetchId == generation) _activeNativeFetchId = null;
       if (!_isCurrentFetch(generation)) return;

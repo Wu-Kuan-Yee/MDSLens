@@ -2446,6 +2446,7 @@ void main() {
       expect(app.fetching, isFalse);
       expect(app.plots[0].series[0]!.points![0][1], 222);
       expect(app.status, contains('163702'));
+      expect(app.status, matches(RegExp(r'Load time: \d+\.\d{3} s$')));
     },
   );
 
