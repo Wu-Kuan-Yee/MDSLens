@@ -24,6 +24,7 @@ Future<void> _initializeApplication(
     // login.  Those are external conditions and must not make a successfully
     // launched replacement wait for the network before it can be committed.
     await acknowledgeUpdateHealth(commandLineArguments);
+    await acknowledgeUpdateCommit(commandLineArguments);
     final networkAccess =
         await NetworkPermissionService.requestAllStartupPermissions(
       app.loginApiUrl,

@@ -38,4 +38,19 @@ void main() {
 
     expect(await target.readAsString(), 'untouched');
   });
+
+  test('commit signal writes the updater nonce', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'mdslens-update-commit-test-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final marker = File('${directory.path}/commit');
+
+    await acknowledgeUpdateCommit([
+      '--mdslens-update-commit=${marker.path}',
+      '--mdslens-update-token=nonce-456',
+    ]);
+
+    expect(await marker.readAsString(), 'nonce-456\n');
+  });
 }

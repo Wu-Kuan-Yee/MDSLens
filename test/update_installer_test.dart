@@ -802,9 +802,11 @@ void main() {
         '  case "\$argument" in\n'
         '    --mdslens-update-health=*) health="\${argument#*=}" ;;\n'
         '    --mdslens-update-token=*) token="\${argument#*=}" ;;\n'
+        '    --mdslens-update-commit=*) commit="\${argument#*=}" ;;\n'
         '  esac\n'
         'done\n'
         'printf "%s\\n" "\$token" > "\$health"\n'
+        'printf "%s\\n" "\$token" > "\$commit"\n'
         'echo launched > "${launched.path}"\n'
         'echo \$\$ > "${launchedPid.path}"\n'
         'sleep 10\n',
@@ -1330,7 +1332,7 @@ void main() {
     final script = launches.single.$2[1];
     expect(script, contains('/bin/mv -T --'));
     expect(script, contains(r'[ -L "$backup_root" ] && exit 1'));
-    expect(script, contains('stability_attempt'));
+    expect(script, contains('commit_attempt'));
     expect(script, contains(r'/bin/rm -rf "$previous_root"'));
   });
 
@@ -1367,9 +1369,11 @@ void main() {
         '  case "\$argument" in\n'
         '    --mdslens-update-health=*) health="\${argument#*=}" ;;\n'
         '    --mdslens-update-token=*) token="\${argument#*=}" ;;\n'
+        '    --mdslens-update-commit=*) commit="\${argument#*=}" ;;\n'
         '  esac\n'
         'done\n'
         'printf "%s\\n" "\$token" > "\$health"\n'
+        'printf "%s\\n" "\$token" > "\$commit"\n'
         'pwd > "${observedWorkingDirectory.path}"\n'
         'echo \$\$ > "${observedProcessId.path}"\n'
         'sleep 10\n',
