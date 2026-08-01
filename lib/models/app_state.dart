@@ -1223,39 +1223,26 @@ class AppState extends ChangeNotifier {
     return !_disposed && generation == _fetchGeneration;
   }
 
-  /// Publishes a completed waveform load after the frame containing the new
-  /// data has been scheduled for painting.  Keeping the stopwatch alive until
-  /// the post-frame callback makes the value represent the user-visible load,
-  /// rather than only the time spent waiting for the native request.
+  /// Publishes a completed waveform load at the shared benchmark boundary.
+  ///
+  /// The timer starts when the queued fetch actually begins and includes
+  /// request preparation (including any SSH work), transport, decoding, and
+  /// updates to the plot models.  It stops after those model/view adjustments
+  /// are complete, before Flutter schedules the next frame.  The original
+  /// desktop client uses the same model-complete boundary, so the displayed
+  /// value can be compared directly across implementations without making
+  /// frame scheduling or GPU presentation part of the measurement.
   void _publishWaveformLoadCompletion({
     required Stopwatch stopwatch,
     required int generation,
     required String status,
   }) {
     if (!_isCurrentFetch(generation)) return;
-
-    // Give the plot widgets an opportunity to rebuild immediately.  The
-    // final status is replaced on the next frame with the precise duration.
-    _status = '$status · Drawing...';
+    stopwatch.stop();
+    final seconds =
+        stopwatch.elapsedMicroseconds / Duration.microsecondsPerSecond;
+    _status = '$status · Load time: ${seconds.toStringAsFixed(3)} s';
     notifyListeners();
-
-    void finish() {
-      if (!_isCurrentFetch(generation)) return;
-      stopwatch.stop();
-      final seconds =
-          stopwatch.elapsedMicroseconds / Duration.microsecondsPerSecond;
-      _status = '$status · Load time: ${seconds.toStringAsFixed(3)} s';
-      notifyListeners();
-    }
-
-    // A headless AppState (for example, a parser or persistence test) has no
-    // frame to observe.  Complete it immediately in that case; normal UI
-    // instances have listeners and use the post-frame boundary above.
-    if (!hasListeners) {
-      finish();
-      return;
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) => finish());
   }
 
   void _invalidateFetchForSettingsChange() {
@@ -3074,6 +3061,10 @@ class AppState extends ChangeNotifier {
 
   Future<void> _executeGlobalFetch({required String shot}) async {
     if (!_requireActiveSession('load waveforms')) return;
+    // Start after queue/debounce coalescing has selected the request.  The
+    // shared benchmark includes request preparation, old-series cleanup,
+    // SSH/transport, decoding, and model updates, but stops before the next
+    // Flutter frame is painted.
     final loadStopwatch = Stopwatch()..start();
     _cancelActiveNativeFetch();
     final generation = ++_fetchGeneration;
@@ -3295,7 +3286,10 @@ class AppState extends ChangeNotifier {
     }
     if (targetCol < 0) return;
 
+    // Match global loads: measure the actual panel request, including the
+    // previous-series cleanup and all preparation through model update.
     final loadStopwatch = Stopwatch()..start();
+    _clearPanelSeries(plotIdx);
     _cancelActiveNativeFetch();
     final generation = ++_fetchGeneration;
     final shot = _displayedShot.trim().isNotEmpty
@@ -3322,7 +3316,6 @@ class AppState extends ChangeNotifier {
       if (raw.isNotEmpty) {
         final json = jsonDecode(raw);
         if (json is List) {
-          _clearPanelSeries(plotIdx);
           String? firstErr;
           for (final sig in json) {
             if (sig is Map) {
