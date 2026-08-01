@@ -15,6 +15,7 @@ import 'dialogs/keyboard_shortcuts.dart';
 import 'dropdown_items.dart';
 import 'plot_panel.dart';
 import 'polished_dropdown.dart';
+import 'polished_popup_menu.dart';
 import 'responsive_plot_layout.dart';
 
 class _LayoutDragData {
@@ -283,6 +284,48 @@ List<(String, String)> _shotMetadata(AppState app) {
   ];
 }
 
+Future<void> showRateShortcutMenu(BuildContext context, AppState app) async {
+  final overlay = Navigator.of(context).overlay?.context.findRenderObject();
+  final position = overlay is RenderBox
+      ? overlay.localToGlobal(
+          Offset(overlay.size.width / 2, overlay.size.height / 2),
+        )
+      : Offset.zero;
+  final value = await showPolishedPopupMenu<int>(
+    context: context,
+    globalPosition: position,
+    id: 'shortcut-rate-menu',
+    groups: const [
+      PolishedPopupMenuGroup(
+        label: 'Rate',
+        options: [
+          PolishedPopupMenuOption(
+            id: 'thin',
+            value: 0,
+            label: 'Thin',
+            icon: Icons.compress_rounded,
+          ),
+          PolishedPopupMenuOption(
+            id: 'medium',
+            value: 1,
+            label: 'Medium',
+            icon: Icons.format_line_spacing_rounded,
+          ),
+          PolishedPopupMenuOption(
+            id: 'full',
+            value: 2,
+            label: 'Full',
+            icon: Icons.stacked_line_chart_rounded,
+          ),
+        ],
+      ),
+    ],
+  );
+  if (value == null) return;
+  app.dataMode = value;
+  app.startRateRefresh();
+}
+
 class ResponsiveToolbar extends StatelessWidget {
   const ResponsiveToolbar({super.key});
 
@@ -489,6 +532,26 @@ class _CollapsedMetadataScrollerState
 
 class ToolbarWidget extends StatelessWidget {
   const ToolbarWidget({super.key});
+
+  Future<void> openConfigurationShortcut(
+    BuildContext context,
+    AppState app,
+  ) =>
+      _openConfiguration(context, app);
+
+  Future<void> saveConfigurationShortcut(
+    BuildContext context,
+    AppState app,
+  ) =>
+      _chooseConfigurationSaveFormat(context, app);
+
+  void openInternalWebPagesShortcut(BuildContext context, AppState app) {
+    _showWebBookmarks(context, app);
+  }
+
+  void openLayoutSetupShortcut(BuildContext context, AppState app) {
+    _showLayoutSetup(context, app);
+  }
 
   @override
   Widget build(BuildContext context) {

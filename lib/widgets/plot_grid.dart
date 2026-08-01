@@ -16,7 +16,11 @@ class PlotGrid extends StatelessWidget {
     if (app.maximizedPlot != null) {
       final idx = app.maximizedPlot!;
       if (idx >= app.plots.length) return const SizedBox();
-      return PlotPanel(plotIdx: idx, selected: true);
+      return PlotPanel(
+        plotIdx: idx,
+        selected: true,
+        panelShortcutRequests: app.panelShortcutRequests,
+      );
     }
 
     return LayoutBuilder(
@@ -55,6 +59,7 @@ class PlotGrid extends StatelessWidget {
       key: ValueKey('plot-panel-${cell.plotIndex}'),
       plotIdx: cell.plotIndex,
       selected: selected,
+      panelShortcutRequests: app.panelShortcutRequests,
       onTap: () => app.selectPanel(cell.sourceColumn, cell.sourceRow),
       onContextAction: (action) {
         switch (action) {

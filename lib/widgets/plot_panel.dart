@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -230,6 +231,7 @@ class PlotPanel extends StatefulWidget {
   final void Function()? onTap;
   final void Function(String action)? onContextAction;
   final PlatformSaveDialog? exportSaveDialog;
+  final ValueListenable<PanelShortcutRequest?>? panelShortcutRequests;
 
   const PlotPanel({
     super.key,
@@ -237,6 +239,7 @@ class PlotPanel extends StatefulWidget {
     this.onTap,
     this.onContextAction,
     this.exportSaveDialog,
+    this.panelShortcutRequests,
     this.selected = false,
   });
 
@@ -273,11 +276,65 @@ class _PlotPanelState extends State<PlotPanel> {
   Timer? _longPressTimer;
   Offset? _longPressStartPos;
   static const double _stylusLongPressSlop = 12;
+  int _lastPanelShortcutRequestId = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.panelShortcutRequests?.addListener(_handlePanelShortcutRequest);
+  }
+
+  @override
+  void didUpdateWidget(covariant PlotPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.panelShortcutRequests != widget.panelShortcutRequests) {
+      oldWidget.panelShortcutRequests?.removeListener(
+        _handlePanelShortcutRequest,
+      );
+      widget.panelShortcutRequests?.addListener(_handlePanelShortcutRequest);
+    }
+  }
 
   @override
   void dispose() {
+    widget.panelShortcutRequests?.removeListener(_handlePanelShortcutRequest);
     _longPressTimer?.cancel();
     super.dispose();
+  }
+
+  void _handlePanelShortcutRequest() {
+    final request = widget.panelShortcutRequests?.value;
+    if (request == null ||
+        request.plotIndex != widget.plotIdx ||
+        request.id == _lastPanelShortcutRequestId) {
+      return;
+    }
+    _lastPanelShortcutRequestId = request.id;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_runPanelShortcutRequest(request.action));
+    });
+  }
+
+  Future<void> _runPanelShortcutRequest(String action) async {
+    final app = context.read<AppState>();
+    switch (action) {
+      case 'source':
+        await _showDataSourceSetup(context, app);
+        break;
+      case 'setup':
+        await _showPanelSetup(context, app);
+        break;
+      case 'export':
+        await exportMultiplePanels(
+          context,
+          app,
+          saveDialog: widget.exportSaveDialog,
+          initialSelection: {widget.plotIdx},
+          allowPanelSelection: false,
+        );
+        break;
+    }
   }
 
   @override

@@ -365,12 +365,19 @@ class MdsShortcutStroke {
 /// stroke shape so older MDSLens settings remain readable.
 class MdsShortcutSequence {
   MdsShortcutSequence(Iterable<MdsShortcutStroke> strokes)
-      : strokes = List.unmodifiable(strokes);
+      : strokes = _normalize(strokes);
 
   MdsShortcutSequence.single(MdsShortcutStroke stroke)
       : strokes = List.unmodifiable(<MdsShortcutStroke>[stroke]);
 
   final List<MdsShortcutStroke> strokes;
+
+  static List<MdsShortcutStroke> _normalize(
+    Iterable<MdsShortcutStroke> raw,
+  ) {
+    final result = raw.take(4).toList(growable: false);
+    return List.unmodifiable(result);
+  }
 
   bool get isEmpty => strokes.isEmpty;
   bool get isSingle => strokes.length == 1;

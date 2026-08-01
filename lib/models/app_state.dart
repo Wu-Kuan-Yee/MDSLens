@@ -531,6 +531,23 @@ class CrosshairSnapshot {
   final int sourceSeries;
 }
 
+/// A request sent from the global shortcut dispatcher to the currently
+/// selected plot. Plot panels own their setup dialogs, so the request travels
+/// through a small notifier instead of coupling the page to private panel
+/// state.
+@immutable
+class PanelShortcutRequest {
+  const PanelShortcutRequest({
+    required this.plotIndex,
+    required this.action,
+    required this.id,
+  });
+
+  final int plotIndex;
+  final String action;
+  final int id;
+}
+
 class AppState extends ChangeNotifier {
   static const int defaultShotHistoryLimit = 50;
   static const int maximumShotHistoryLimit = 10000;
@@ -623,6 +640,19 @@ class AppState extends ChangeNotifier {
   final List<({String name, double y})> crosshairReadout = [];
   final ValueNotifier<CrosshairSnapshot?> crosshairChanges =
       ValueNotifier<CrosshairSnapshot?>(null);
+  final ValueNotifier<PanelShortcutRequest?> panelShortcutRequests =
+      ValueNotifier<PanelShortcutRequest?>(null);
+  int _panelShortcutRequestId = 0;
+
+  void requestSelectedPanelShortcut(String action) {
+    final plotIndex = selectedPlotIndex;
+    if (plotIndex == null) return;
+    panelShortcutRequests.value = PanelShortcutRequest(
+      plotIndex: plotIndex,
+      action: action,
+      id: ++_panelShortcutRequestId,
+    );
+  }
 
   void setCrosshair(double x, {int? sourcePlot, int sourceSeries = 0}) {
     crosshairX = x;
@@ -3412,6 +3442,7 @@ class AppState extends ChangeNotifier {
     _shotCtrl.dispose();
     shotFocusNode.dispose();
     crosshairChanges.dispose();
+    panelShortcutRequests.dispose();
     super.dispose();
   }
 }
