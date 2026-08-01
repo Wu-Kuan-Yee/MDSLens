@@ -66,7 +66,10 @@ directories without converting the portable copy into an installed program.
 If the portable bundle's parent directory is protected, Windows displays the
 standard UAC prompt. The elevated helper re-verifies the archive and performs
 only the transactional file replacement; the replacement application is
-started separately with the original user's privileges.
+started separately with the original user's privileges. The helper is launched
+through the system Windows PowerShell executable rather than relying on PATH,
+and MDSLens allows a 30-second handoff window for Windows startup and security
+scanning before reporting that the helper could not take ownership.
 The new executable must remain alive during its startup health window. If it
 exits early, the helper restores and launches the old directory. After success,
 one owned previous bundle remains beside the installation for recovery; an

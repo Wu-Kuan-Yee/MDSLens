@@ -271,6 +271,23 @@ Future<void> _startDetached(String executable, List<String> arguments) async {
   await Process.start(executable, arguments, mode: ProcessStartMode.detached);
 }
 
+String _windowsPowerShellExecutable() {
+  if (!Platform.isWindows) return 'powershell.exe';
+  final root = (Platform.environment['SystemRoot'] ??
+          Platform.environment['WINDIR'] ??
+          '')
+      .replaceFirst(RegExp(r'[\\/]+$'), '');
+  if (root.isNotEmpty) {
+    final systemPowerShell = File(
+      '$root${Platform.pathSeparator}System32${Platform.pathSeparator}'
+      'WindowsPowerShell${Platform.pathSeparator}v1.0${Platform.pathSeparator}'
+      'powershell.exe',
+    );
+    if (systemPowerShell.existsSync()) return systemPowerShell.path;
+  }
+  return 'powershell.exe';
+}
+
 Future<ProcessResult> _runCommand(
   String executable,
   List<String> arguments,
@@ -1071,7 +1088,7 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
   String? currentAppImageOverride,
   String? currentPortableRootOverride,
   int? currentPidOverride,
-  int windowsHelperReadyAttempts = 50,
+  int windowsHelperReadyAttempts = 300,
   String? linuxPackageManagerPathOverride,
   String? linuxPkexecPathOverride,
 }) async {
@@ -1136,6 +1153,7 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
         currentPid: currentPidOverride ?? pid,
         commandLauncher: launch,
         commandRunner: run,
+        helperReadyAttempts: windowsHelperReadyAttempts,
       );
     }
     final installDirectory =
@@ -1328,10 +1346,11 @@ Future<UpdateInstallResult> prepareWindowsPortableUpdate(
   required DetachedCommandLauncher commandLauncher,
   required CommandRunner commandRunner,
   String? nonceOverride,
-  int helperReadyAttempts = 50,
+  int helperReadyAttempts = 300,
   int authorizationReadyAttempts = 600,
   bool? parentWritableOverride,
 }) async {
+  final powershell = _windowsPowerShellExecutable();
   final currentRoot = Directory(portableRoot);
   if (!await currentRoot.exists() ||
       windowsPortableRootFromExecutable(
@@ -1392,7 +1411,7 @@ Future<UpdateInstallResult> prepareWindowsPortableUpdate(
 
   var scheduled = false;
   try {
-    final unpack = await commandRunner('powershell.exe', [
+    final unpack = await commandRunner(powershell, [
       '-NoProfile',
       '-NonInteractive',
       '-Command',
@@ -1435,7 +1454,7 @@ Future<UpdateInstallResult> prepareWindowsPortableUpdate(
       scheduled = result.closeApplication;
       return result;
     }
-    final stage = await commandRunner('powershell.exe', [
+    final stage = await commandRunner(powershell, [
       '-NoProfile',
       '-NonInteractive',
       '-Command',
@@ -1457,7 +1476,7 @@ Future<UpdateInstallResult> prepareWindowsPortableUpdate(
       '${work.path}${Platform.pathSeparator}helper-ready',
     );
     await helper.writeAsString(_windowsPortableApplyUpdateScript);
-    await commandLauncher('powershell.exe', [
+    await commandLauncher(powershell, [
       '-NoProfile',
       '-NonInteractive',
       '-ExecutionPolicy',
@@ -1511,6 +1530,7 @@ Future<UpdateInstallResult> _prepareProtectedWindowsPortableUpdate(
   required CommandRunner commandRunner,
   required int helperReadyAttempts,
 }) async {
+  final powershell = _windowsPowerShellExecutable();
   final privilegedHelper = File(
     '${work.path}${Platform.pathSeparator}apply-update-elevated.ps1',
   );
@@ -1533,7 +1553,8 @@ $ErrorActionPreference = 'Stop'
 try {
   $quoted = $args | ForEach-Object { '"' + $_ + '"' }
   $arguments = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File') + $quoted
-  Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList $arguments
+  $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+  Start-Process -FilePath $powershell -Verb RunAs -ArgumentList $arguments
   exit 0
 } catch {
   exit 1223
@@ -1555,7 +1576,7 @@ try {
     failed.path,
     rollbackReady.path,
   ];
-  final elevation = await commandRunner('powershell.exe', [
+  final elevation = await commandRunner(powershell, [
     '-NoProfile',
     '-NonInteractive',
     '-ExecutionPolicy',
@@ -1581,7 +1602,7 @@ try {
     );
   }
 
-  await commandLauncher('powershell.exe', [
+  await commandLauncher(powershell, [
     '-NoProfile',
     '-NonInteractive',
     '-ExecutionPolicy',
