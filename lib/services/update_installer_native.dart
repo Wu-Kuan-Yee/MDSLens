@@ -355,6 +355,16 @@ Future<void> _startWindowsDetached(
       ...arguments.sublist(6),
     ];
   }
+  if (launchExecutable.toLowerCase().endsWith(r'cmd.exe')) {
+    final root = (Platform.environment['SystemRoot'] ??
+            Platform.environment['WINDIR'] ??
+            '')
+        .replaceFirst(RegExp(r'[\\/]+$'), '');
+    if (root.isNotEmpty) {
+      launchExecutable =
+          '$root${Platform.pathSeparator}System32${Platform.pathSeparator}cmd.exe';
+    }
+  }
 
   try {
     final launched = await _updaterChannel.invokeMethod<bool>(
