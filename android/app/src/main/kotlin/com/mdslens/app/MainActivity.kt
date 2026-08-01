@@ -150,6 +150,20 @@ class MainActivity: FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             "mdslens/updater"
         ).setMethodCallHandler { call, result ->
+            if (call.method == "getUpdateCacheDirectory") {
+                try {
+                    result.success(
+                        File(cacheDir, "mdslens-updates").canonicalPath
+                    )
+                } catch (error: Exception) {
+                    result.error(
+                        "UPDATE_CACHE_UNAVAILABLE",
+                        error.message,
+                        null
+                    )
+                }
+                return@setMethodCallHandler
+            }
             if (call.method != "installApk") {
                 result.notImplemented()
                 return@setMethodCallHandler

@@ -157,10 +157,7 @@ Future<DownloadedUpdate> downloadVerifiedUpdateAsset(
   final ownedClient = client == null;
   final activeClient = client ?? http.Client();
   controller.bind(activeClient.close);
-  final directory = downloadDirectory ??
-      Directory(
-        '${Directory.systemTemp.path}${Platform.pathSeparator}mdslens-updates',
-      );
+  final directory = downloadDirectory ?? await _defaultUpdateDirectory();
   await directory.create(recursive: true);
   final destination = File(
     '${directory.path}${Platform.pathSeparator}${asset.name}',
@@ -231,6 +228,23 @@ Future<DownloadedUpdate> downloadVerifiedUpdateAsset(
     controller.unbind();
     if (ownedClient) activeClient.close();
   }
+}
+
+Future<Directory> _defaultUpdateDirectory() async {
+  if (Platform.isAndroid) {
+    final cachePath = await _updaterChannel.invokeMethod<String>(
+      'getUpdateCacheDirectory',
+    );
+    if (cachePath == null || cachePath.trim().isEmpty) {
+      throw const FileSystemException(
+        'Android did not provide an application update cache directory.',
+      );
+    }
+    return Directory(cachePath);
+  }
+  return Directory(
+    '${Directory.systemTemp.path}${Platform.pathSeparator}mdslens-updates',
+  );
 }
 
 Future<void> _startDetached(String executable, List<String> arguments) async {
