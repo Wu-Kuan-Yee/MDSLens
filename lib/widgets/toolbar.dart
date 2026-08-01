@@ -295,6 +295,7 @@ Future<void> showRateShortcutMenu(BuildContext context, AppState app) async {
     context: context,
     globalPosition: position,
     id: 'shortcut-rate-menu',
+    keyboardShortcuts: app.keyboardShortcuts,
     groups: const [
       PolishedPopupMenuGroup(
         label: 'Rate',

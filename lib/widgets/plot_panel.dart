@@ -2041,6 +2041,7 @@ class _PlotPanelState extends State<PlotPanel> {
       context: ctx,
       globalPosition: globalPosition,
       id: 'plot-context-menu',
+      keyboardShortcuts: app.keyboardShortcuts,
       groups: [
         PolishedPopupMenuGroup(
           label: 'View',

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/keyboard_shortcuts.dart';
 
 class PolishedPopupMenuOption<T> {
   const PolishedPopupMenuOption({
@@ -21,11 +22,62 @@ class PolishedPopupMenuGroup<T> {
   final List<PolishedPopupMenuOption<T>> options;
 }
 
+class _KeyboardPopupMenuItem<T> extends PopupMenuItem<T> {
+  const _KeyboardPopupMenuItem({
+    super.key,
+    required super.value,
+    required super.child,
+    required this.shortcuts,
+    super.height,
+    super.padding,
+  });
+
+  final Map<ShortcutActivator, Intent> shortcuts;
+
+  @override
+  PopupMenuItemState<T, _KeyboardPopupMenuItem<T>> createState() =>
+      _KeyboardPopupMenuItemState<T>();
+}
+
+class _KeyboardPopupMenuItemState<T>
+    extends PopupMenuItemState<T, _KeyboardPopupMenuItem<T>> {
+  @override
+  Widget build(BuildContext context) => Shortcuts(
+        shortcuts: widget.shortcuts,
+        child: super.build(context),
+      );
+}
+
+Map<ShortcutActivator, Intent> _menuShortcutBindings(
+  Map<MdsShortcutCommand, MdsShortcutBinding>? configured,
+) {
+  final bindings = configured ?? defaultMdsShortcutBindings();
+  final result = <ShortcutActivator, Intent>{};
+
+  void add(MdsShortcutCommand command, Intent intent) {
+    final binding = bindings[command];
+    if (binding == null) return;
+    for (final sequence in binding.sequences) {
+      if (sequence.isSingle) {
+        result[sequence.strokes.single.activator] = intent;
+      }
+    }
+  }
+
+  add(MdsShortcutCommand.menuLeft, const PreviousFocusIntent());
+  add(MdsShortcutCommand.menuDown, const NextFocusIntent());
+  add(MdsShortcutCommand.menuUp, const PreviousFocusIntent());
+  add(MdsShortcutCommand.menuRight, const NextFocusIntent());
+  add(MdsShortcutCommand.menuActivate, const ActivateIntent());
+  return result;
+}
+
 Future<T?> showPolishedPopupMenu<T>({
   required BuildContext context,
   required Offset globalPosition,
   required String id,
   required List<PolishedPopupMenuGroup<T>> groups,
+  Map<MdsShortcutCommand, MdsShortcutBinding>? keyboardShortcuts,
 }) {
   final theme = Theme.of(context);
   final colors = theme.colorScheme;
@@ -40,6 +92,7 @@ Future<T?> showPolishedPopupMenu<T>({
   );
 
   final entries = <PopupMenuEntry<T>>[];
+  final menuShortcuts = _menuShortcutBindings(keyboardShortcuts);
   for (var groupIndex = 0; groupIndex < groups.length; groupIndex++) {
     final group = groups[groupIndex];
     if (groupIndex > 0) {
@@ -81,9 +134,10 @@ Future<T?> showPolishedPopupMenu<T>({
       }
       final option = group.options[optionIndex];
       entries.add(
-        PopupMenuItem<T>(
+        _KeyboardPopupMenuItem<T>(
           key: ValueKey('$id-${option.id}'),
           value: option.value,
+          shortcuts: menuShortcuts,
           height: 46,
           padding: const EdgeInsets.symmetric(horizontal: 8),
           child: Row(
