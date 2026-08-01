@@ -1348,6 +1348,40 @@ void main() {
     },
   );
 
+  test('Linux portable rollback copies are removed after a stable launch',
+      () async {
+    final root = await Directory.systemTemp.createTemp(
+      'mdslens-portable-cleanup-test-',
+    );
+    addTearDown(() async {
+      if (await root.exists()) await root.delete(recursive: true);
+    });
+    final current = Directory('${root.path}/MDSLens');
+    final previous = Directory('${current.path}.mdslens-previous');
+    await current.create(recursive: true);
+    await previous.create(recursive: true);
+    await File('${current.path}/mdslens').writeAsString('current');
+    final marker = jsonEncode({
+      'schema_version': 1,
+      'product': 'com.mdslens.app',
+      'version': '0.3.7',
+      'architecture': 'x64',
+      'executable': 'mdslens',
+    });
+    await File('${current.path}/.mdslens-portable.json').writeAsString(marker);
+    await File('${previous.path}/mdslens').writeAsString('previous');
+    await File('${previous.path}/.mdslens-portable.json')
+        .writeAsString(marker);
+
+    await scheduleLinuxPortableRollbackCleanup(
+      platformOverride: 'linux',
+      currentExecutableOverride: '${current.path}/mdslens',
+      stabilityWindow: Duration.zero,
+    );
+
+    expect(await previous.exists(), isFalse);
+  });
+
   test('Linux portable updates reject archive path traversal', () async {
     final root = await Directory.systemTemp.createTemp(
       'mdslens-portable-traversal-test-',

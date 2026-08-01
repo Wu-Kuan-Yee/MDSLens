@@ -1013,6 +1013,55 @@ Future<void> requestApplicationExitForUpdate() async {
   exit(0);
 }
 
+/// Removes an owned Linux portable rollback directory after the new process
+/// has had time to demonstrate that it can remain running. This also handles
+/// rollback directories created by an older updater that did not yet perform
+/// delayed cleanup itself.
+Future<void> scheduleLinuxPortableRollbackCleanup({
+  String? platformOverride,
+  String? currentExecutableOverride,
+  Duration stabilityWindow = const Duration(seconds: 60),
+}) async {
+  final platform = platformOverride ?? Platform.operatingSystem;
+  if (platform.toLowerCase() != 'linux') return;
+  final executable = currentExecutableOverride ?? resolvedExecutableForUpdate();
+  final currentRoot = linuxPortableRootFromExecutable(executable);
+  if (currentRoot == null) return;
+
+  final currentMarker = File(
+    '$currentRoot${Platform.pathSeparator}.mdslens-portable.json',
+  );
+  final previous = Directory('$currentRoot.mdslens-previous');
+  if (await FileSystemEntity.type(
+        previous.path,
+        followLinks: false,
+      ) !=
+      FileSystemEntityType.directory) {
+    return;
+  }
+  if (!await _validLinuxPortableMarker(currentMarker)) return;
+  final previousMarker = File(
+    '${previous.path}${Platform.pathSeparator}.mdslens-portable.json',
+  );
+  if (!await _validLinuxPortableMarker(previousMarker)) return;
+
+  if (stabilityWindow > Duration.zero) {
+    await Future<void>.delayed(stabilityWindow);
+  }
+  // Re-check ownership after the delay so a concurrent update or a manually
+  // replaced directory cannot turn this cleanup into an unsafe deletion.
+  if (!await _validLinuxPortableMarker(currentMarker) ||
+      !await _validLinuxPortableMarker(previousMarker)) {
+    return;
+  }
+  try {
+    await previous.delete(recursive: true);
+  } catch (_) {
+    // A protected installation may be owned by root. The privileged updater
+    // performs the same delayed cleanup when it has the required authority.
+  }
+}
+
 Future<UpdateInstallResult> launchVerifiedUpdateAsset(
   DownloadedUpdate update, {
   String? platformOverride,

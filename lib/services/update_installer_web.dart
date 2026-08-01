@@ -12,6 +12,12 @@ String get directUpdateActionLabel => 'View Details';
 
 Future<void> requestApplicationExitForUpdate() async {}
 
+Future<void> scheduleLinuxPortableRollbackCleanup({
+  String? platformOverride,
+  String? currentExecutableOverride,
+  Duration stabilityWindow = const Duration(seconds: 60),
+}) async {}
+
 Future<UpdateInstallResult> installLatestReleaseUpdate(
   ReleaseUpdate release,
   RuntimeSystemInfo systemInfo, {

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'models/app_state.dart';
 import 'services/network_permission_service.dart';
 import 'services/incoming_configuration_service.dart';
+import 'services/update_installer.dart';
 import 'app.dart';
 
 Future<void> _initializeApplication(
@@ -25,6 +26,7 @@ Future<void> _initializeApplication(
     await app.initializeStartupSession(preparedNetworkAccess: networkAccess);
   } finally {
     app.markStartupInitializationComplete();
+    unawaited(scheduleLinuxPortableRollbackCleanup());
   }
 }
 
