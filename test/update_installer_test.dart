@@ -1230,6 +1230,8 @@ void main() {
     final script = launches.single.$2[1];
     expect(script, contains('/bin/mv -T --'));
     expect(script, contains(r'[ -L "$backup_root" ] && exit 1'));
+    expect(script, contains('stability_attempt'));
+    expect(script, contains(r'/bin/rm -rf "$previous_root"'));
   });
 
   test(

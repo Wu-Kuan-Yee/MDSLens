@@ -104,12 +104,16 @@ Extracted Linux portable bundles are replaced as a complete directory. The
 restarted process explicitly changes into the new directory before launch, so
 it never inherits a working directory that is about to be retired. The previous
 complete bundle is retained beside the installation as
-`<directory>.mdslens-previous`; only that exact backup is replaced by a later
-successful update. Update paths are resolved and checked as sibling directories
-before any rename or removal is allowed. Unique staging and backup names skip
-every existing file, directory, or symbolic link, are checked again immediately
-before the swap, and use exact-target renames that cannot merge into a
-pre-existing directory.
+`<directory>.mdslens-previous` while the replacement is checked. After the new
+process survives the initial startup check and remains alive for a conservative
+60-second stability window, the updater removes that owned rollback copy
+automatically.
+If the new process exits during that window, the rollback copy is kept so the
+installation can still be recovered. Update paths are resolved and checked as
+sibling directories before any rename or removal is allowed. Unique staging
+and backup names skip every existing file, directory, or symbolic link, are
+checked again immediately before the swap, and use exact-target renames that
+cannot merge into a pre-existing directory.
 
 The installation identity must also match the installed copy. In particular,
 Android updates require every release to use the same release keystore.

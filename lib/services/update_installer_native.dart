@@ -567,6 +567,16 @@ launch_from_root() {
   launched_pid=$!
 }
 
+process_is_running() {
+  candidate_pid="$1"
+  kill -0 "$candidate_pid" 2>/dev/null || return 1
+  if [ -r "/proc/$candidate_pid/stat" ]; then
+    process_state=$(awk '{print $3}' "/proc/$candidate_pid/stat" 2>/dev/null || true)
+    [ "$process_state" = "Z" ] && return 1
+  fi
+  return 0
+}
+
 attempt=0
 while kill -0 "$parent_pid" 2>/dev/null; do
   if [ "$attempt" -ge 3000 ]; then
@@ -583,7 +593,7 @@ if /bin/mv -T -- "$current_root" "$backup_root" &&
   new_pid=$launched_pid
   attempt=0
   while [ "$attempt" -lt 30 ]; do
-    if ! kill -0 "$new_pid" 2>/dev/null; then
+    if ! process_is_running "$new_pid"; then
       /bin/rm -rf "$current_root"
       /bin/mv -T -- "$backup_root" "$current_root"
       launch_from_root "$current_root"
@@ -597,6 +607,17 @@ if /bin/mv -T -- "$current_root" "$backup_root" &&
   /bin/mv -T -- "$backup_root" "$previous_root"
   /bin/rm -f "$downloaded_archive"
   /bin/rm -rf "$work_dir"
+  (
+    stability_attempt=0
+    while [ "$stability_attempt" -lt 600 ]; do
+      if ! process_is_running "$new_pid"; then
+        exit 0
+      fi
+      stability_attempt=$((stability_attempt + 1))
+      sleep 0.1
+    done
+    /bin/rm -rf "$previous_root"
+  ) </dev/null >/dev/null 2>&1 &
   exit 0
 fi
 
@@ -636,6 +657,7 @@ downloaded_archive="$5"
 work_dir="$6"
 ready_file="$7"
 healthy_file="$8"
+pid_file="$9"
 previous_root="${current_root}.mdslens-previous"
 
 case "$current_root" in ""|"/") exit 1 ;; esac
@@ -643,6 +665,16 @@ case "$staged_root" in "${current_root}.mdslens-update-"*) ;; *) exit 1 ;; esac
 case "$backup_root" in "${current_root}.mdslens-backup-"*) ;; *) exit 1 ;; esac
 [ -e "$backup_root" ] && exit 1
 [ -L "$backup_root" ] && exit 1
+
+process_is_running() {
+  candidate_pid="$1"
+  kill -0 "$candidate_pid" 2>/dev/null || return 1
+  if [ -r "/proc/$candidate_pid/stat" ]; then
+    process_state=$(awk '{print $3}' "/proc/$candidate_pid/stat" 2>/dev/null || true)
+    [ "$process_state" = "Z" ] && return 1
+  fi
+  return 0
+}
 
 attempt=0
 while kill -0 "$parent_pid" 2>/dev/null; do
@@ -660,10 +692,27 @@ if /bin/mv -T -- "$current_root" "$backup_root" &&
   attempt=0
   while [ "$attempt" -lt 300 ]; do
     if [ -e "$healthy_file" ]; then
+      new_pid=''
+      if [ -r "$pid_file" ]; then
+        new_pid=$(cat "$pid_file" 2>/dev/null || true)
+      fi
       /bin/rm -rf "$previous_root"
       /bin/mv -T -- "$backup_root" "$previous_root"
       /bin/rm -f "$downloaded_archive"
       /bin/rm -rf "$work_dir"
+      if [ -n "$new_pid" ]; then
+        (
+          stability_attempt=0
+          while [ "$stability_attempt" -lt 600 ]; do
+            if ! process_is_running "$new_pid"; then
+              exit 0
+            fi
+            stability_attempt=$((stability_attempt + 1))
+            sleep 0.1
+          done
+          /bin/rm -rf "$previous_root"
+        ) </dev/null >/dev/null 2>&1 &
+      fi
       exit 0
     fi
     attempt=$((attempt + 1))
@@ -688,6 +737,7 @@ current_root="$1"
 ready_file="$2"
 healthy_file="$3"
 cancel_file="$4"
+pid_file="$5"
 
 attempt=0
 while [ "$attempt" -lt 300 ]; do
@@ -697,6 +747,7 @@ while [ "$attempt" -lt 300 ]; do
   if [ -e "$ready_file" ]; then
     (cd "$current_root" && exec ./mdslens) >/dev/null 2>&1 &
     new_pid=$!
+    printf '%s\n' "$new_pid" > "$pid_file"
     health_attempt=0
     while [ "$health_attempt" -lt 30 ]; do
       if ! kill -0 "$new_pid" 2>/dev/null; then
@@ -1858,6 +1909,7 @@ Future<UpdateInstallResult?> prepareLinuxPortableUpdate(
       final readyFile = '${work.path}${Platform.pathSeparator}ready';
       final healthyFile = '${work.path}${Platform.pathSeparator}healthy';
       final cancelFile = '${work.path}${Platform.pathSeparator}cancel';
+      final pidFile = '${work.path}${Platform.pathSeparator}new-pid';
       await commandLauncher('/bin/sh', [
         '-c',
         _linuxPortableUserRelaunchScript,
@@ -1866,6 +1918,7 @@ Future<UpdateInstallResult?> prepareLinuxPortableUpdate(
         readyFile,
         healthyFile,
         cancelFile,
+        pidFile,
       ]);
       final authorization = await commandRunner(pkexec, [
         '/bin/sh',
@@ -1878,6 +1931,7 @@ Future<UpdateInstallResult?> prepareLinuxPortableUpdate(
         ...applyArguments,
         readyFile,
         healthyFile,
+        pidFile,
       ]);
       if (authorization.exitCode != 0) {
         try {
