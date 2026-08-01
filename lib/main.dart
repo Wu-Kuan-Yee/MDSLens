@@ -6,6 +6,7 @@ import 'models/app_state.dart';
 import 'services/network_permission_service.dart';
 import 'services/incoming_configuration_service.dart';
 import 'services/update_installer.dart';
+import 'services/update_health.dart';
 import 'app.dart';
 
 Future<void> _initializeApplication(
@@ -19,6 +20,10 @@ Future<void> _initializeApplication(
       commandLineArguments: commandLineArguments,
     );
     await WidgetsBinding.instance.endOfFrame;
+    // Report update health before network permission prompts or automatic
+    // login.  Those are external conditions and must not make a successfully
+    // launched replacement wait for the network before it can be committed.
+    await acknowledgeUpdateHealth(commandLineArguments);
     final networkAccess =
         await NetworkPermissionService.requestAllStartupPermissions(
       app.loginApiUrl,
