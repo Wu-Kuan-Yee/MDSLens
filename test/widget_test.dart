@@ -34,6 +34,7 @@ import 'package:mdslens/widgets/plot_panel.dart';
 import 'package:mdslens/widgets/plot_grid.dart';
 import 'package:mdslens/widgets/plot_render_cache.dart';
 import 'package:mdslens/widgets/polished_dropdown.dart';
+import 'package:mdslens/widgets/polished_popup_menu.dart';
 import 'package:mdslens/widgets/responsive_plot_layout.dart';
 import 'package:mdslens/widgets/toolbar.dart';
 import 'package:provider/provider.dart';
@@ -1833,6 +1834,51 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 1));
     expect(app.ratePreparing, isFalse);
+  });
+
+  test('Current panel rate changes only the selected panel', () async {
+    String? requestedConfig;
+    String? requestedMode;
+    final app = AppState(
+      signalFetchWorker: (configJson, dataMode, _) async {
+        requestedConfig = configJson;
+        requestedMode = dataMode;
+        return '[]';
+      },
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setLoggedIn(true, 'test-token');
+    app.shotText = '170001';
+    app.columns[0][0]['signal_specs'] = [
+      {'y_expr': r'\FIRST', 'experiment': 'tree_a'},
+    ];
+    app.columns[0][1]['signal_specs'] = [
+      {'y_expr': r'\SECOND', 'experiment': 'tree_b'},
+    ];
+    app.selectPanel(0, 0);
+
+    app.changeSelectedPanelDataModeAndRefresh(2);
+    for (var attempt = 0; attempt < 20 && requestedConfig == null; attempt++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    expect(app.dataMode, 0);
+    expect(
+      (app.columns[0][0]['signal_specs'] as List).single['read_mode'],
+      2,
+    );
+    expect(
+      (app.columns[0][1]['signal_specs'] as List).single['read_mode'],
+      isNull,
+    );
+    expect(requestedMode, '0');
+    final config = jsonDecode(requestedConfig!) as Map<String, dynamic>;
+    final columns = config['columns'] as List;
+    final selectedSignals =
+        ((columns[0] as List)[0] as Map)['signal_specs'] as List;
+    expect((selectedSignals.single as Map)['read_mode'], 2);
+    expect(((columns[0] as List)[1] as Map)['signal_specs'], isEmpty);
   });
 
   testWidgets('Rapid Full shot changes coalesce into the latest request', (
@@ -4879,6 +4925,77 @@ void main() {
     expect(exportDialogCalls, 1, reason: app.status);
     expect(app.status, 'Export cancelled');
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Popup menus honor configured multi-stroke shortcuts', (
+    tester,
+  ) async {
+    String? selected;
+    final menuShortcuts = <MdsShortcutCommand, MdsShortcutBinding>{
+      for (final command in const [
+        MdsShortcutCommand.menuLeft,
+        MdsShortcutCommand.menuDown,
+        MdsShortcutCommand.menuUp,
+        MdsShortcutCommand.menuRight,
+        MdsShortcutCommand.menuActivate,
+      ])
+        command: const MdsShortcutBinding(),
+    };
+    menuShortcuts[MdsShortcutCommand.menuActivate] = MdsShortcutBinding(
+      primary: MdsShortcutSequence([
+        MdsShortcutStroke(LogicalKeyboardKey.keyG),
+        MdsShortcutStroke(LogicalKeyboardKey.keyR),
+      ]),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: MDSLensTheme.light(),
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () {
+                unawaited(
+                  showPolishedPopupMenu<String>(
+                    context: context,
+                    globalPosition: const Offset(200, 200),
+                    id: 'multi-stroke-popup-test',
+                    keyboardShortcuts: menuShortcuts,
+                    groups: const [
+                      PolishedPopupMenuGroup(
+                        label: 'Test',
+                        options: [
+                          PolishedPopupMenuOption(
+                            id: 'first',
+                            value: 'first',
+                            label: 'First',
+                            icon: Icons.check,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ).then((value) => selected = value),
+                );
+              },
+              child: const Text('Open menu'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open menu'));
+    await tester.pumpAndSettle();
+    expect(find.text('First'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.pump();
+    expect(find.text('First'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyR);
+    await tester.pumpAndSettle();
+
+    expect(selected, 'first');
+    expect(find.text('First'), findsNothing);
   });
 
   testWidgets('Empty data source fields expose every available suggestion', (

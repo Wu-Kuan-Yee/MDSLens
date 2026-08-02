@@ -285,7 +285,11 @@ List<(String, String)> _shotMetadata(AppState app) {
   ];
 }
 
-Future<void> showRateShortcutMenu(BuildContext context, AppState app) async {
+Future<void> showRateShortcutMenu(
+  BuildContext context,
+  AppState app, {
+  bool selectedPanelOnly = false,
+}) async {
   final overlay = Navigator.of(context).overlay?.context.findRenderObject();
   final position = overlay is RenderBox
       ? overlay.localToGlobal(
@@ -295,12 +299,12 @@ Future<void> showRateShortcutMenu(BuildContext context, AppState app) async {
   final value = await showPolishedPopupMenu<int>(
     context: context,
     globalPosition: position,
-    id: 'shortcut-rate-menu',
+    id: selectedPanelOnly ? 'shortcut-panel-rate-menu' : 'shortcut-rate-menu',
     keyboardShortcuts: app.keyboardShortcuts,
-    groups: const [
+    groups: [
       PolishedPopupMenuGroup(
-        label: 'Rate',
-        options: [
+        label: selectedPanelOnly ? 'Selected panel rate' : 'Rate',
+        options: const [
           PolishedPopupMenuOption(
             id: 'thin',
             value: 0,
@@ -324,7 +328,11 @@ Future<void> showRateShortcutMenu(BuildContext context, AppState app) async {
     ],
   );
   if (value == null) return;
-  app.changeDataModeAndRefresh(value);
+  if (selectedPanelOnly) {
+    app.changeSelectedPanelDataModeAndRefresh(value);
+  } else {
+    app.changeDataModeAndRefresh(value);
+  }
 }
 
 class ResponsiveToolbar extends StatelessWidget {

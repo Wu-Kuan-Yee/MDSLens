@@ -257,7 +257,13 @@ class _MainPageState extends State<MainPage> {
         _stepCrosshair(app, 1);
         break;
       case MdsShortcutCommand.panelRate:
-        unawaited(showRateShortcutMenu(context, app));
+        unawaited(
+          showRateShortcutMenu(
+            context,
+            app,
+            selectedPanelOnly: true,
+          ),
+        );
         break;
       case MdsShortcutCommand.panelSourceSetup:
         app.requestSelectedPanelShortcut('source');

@@ -30,8 +30,10 @@ that the same gesture becomes Refresh; Reset All receives the new
 - Panel navigation selects the neighboring panel without changing the loaded
   data. Point navigation steps the synchronized crosshair when Point mode is
   active.
-- Popup menus keep their own native focus and arrow/Enter behavior. The page
-  dispatcher does not steal those events while a menu is open.
+- Popup menus keep their own native focus and arrow/Enter behavior. Configured
+  menu navigation shortcuts, including one-to-four-stroke sequences, are
+  handled inside the open menu; the page dispatcher does not steal those
+  events.
 
 While an input field is being edited, ordinary navigation and mode shortcuts
 are suppressed so typing remains safe. Shot history navigation, global file

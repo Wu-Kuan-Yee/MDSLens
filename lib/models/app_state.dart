@@ -989,6 +989,38 @@ class AppState extends ChangeNotifier {
     startRateRefresh();
   }
 
+  /// Changes the read mode for the selected panel only and reloads that
+  /// panel.  The global toolbar rate remains unchanged; each signal in the
+  /// panel receives an explicit read-mode override so the native pipeline
+  /// cannot accidentally fall back to the global mode for this request.
+  void changeSelectedPanelDataModeAndRefresh(int value) {
+    final plotIndex = selectedPlotIndex;
+    if (plotIndex == null || selectedCol < 0 || selectedRow < 0) return;
+    if (value < 0 || value > 2) return;
+    final panel = _columns[selectedCol][selectedRow];
+    final rawSignals = panel['signal_specs'];
+    if (rawSignals is! List) return;
+
+    var changed = false;
+    panel['signal_specs'] = [
+      for (final rawSignal in rawSignals)
+        if (rawSignal is Map)
+          () {
+            final signal = Map<String, dynamic>.from(rawSignal);
+            if (signal['read_mode'] != value) {
+              signal['read_mode'] = value;
+              changed = true;
+            }
+            return signal;
+          }(),
+    ];
+    if (!changed) return;
+
+    savePreferences();
+    _notifyPlotChanged(plotIndex);
+    unawaited(fetchSinglePanel(plotIndex));
+  }
+
   // Point mode: Esc locks crosshair in place; next click unlocks
   bool _pointLocked = false;
   bool get pointLocked => _pointLocked;

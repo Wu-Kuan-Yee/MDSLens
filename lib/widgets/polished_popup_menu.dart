@@ -27,12 +27,16 @@ class _KeyboardPopupMenuItem<T> extends PopupMenuItem<T> {
     super.key,
     required super.value,
     required super.child,
-    required this.shortcuts,
+    required this.keyboardShortcuts,
+    required this.dispatcher,
+    required this.autofocus,
     super.height,
     super.padding,
   });
 
-  final Map<ShortcutActivator, Intent> shortcuts;
+  final Map<MdsShortcutCommand, MdsShortcutBinding> keyboardShortcuts;
+  final MdsShortcutDispatcher dispatcher;
+  final bool autofocus;
 
   @override
   PopupMenuItemState<T, _KeyboardPopupMenuItem<T>> createState() =>
@@ -41,35 +45,61 @@ class _KeyboardPopupMenuItem<T> extends PopupMenuItem<T> {
 
 class _KeyboardPopupMenuItemState<T>
     extends PopupMenuItemState<T, _KeyboardPopupMenuItem<T>> {
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    final stroke = shortcutStrokeFromEvent(event);
+    if (stroke == null) return KeyEventResult.ignored;
+    final handled = widget.dispatcher.handle(
+      stroke,
+      bindings: widget.keyboardShortcuts,
+      isEnabled: (_) => true,
+      onTrigger: (command) => _triggerMenuShortcut(context, command),
+    );
+    return handled ? KeyEventResult.handled : KeyEventResult.ignored;
+  }
+
+  void _triggerMenuShortcut(
+    BuildContext context,
+    MdsShortcutCommand command,
+  ) {
+    switch (command) {
+      case MdsShortcutCommand.menuLeft:
+      case MdsShortcutCommand.menuUp:
+        FocusScope.of(context).previousFocus();
+        break;
+      case MdsShortcutCommand.menuDown:
+      case MdsShortcutCommand.menuRight:
+        FocusScope.of(context).nextFocus();
+        break;
+      case MdsShortcutCommand.menuActivate:
+        handleTap();
+        break;
+      default:
+        break;
+    }
+  }
+
   @override
-  Widget build(BuildContext context) => Shortcuts(
-        shortcuts: widget.shortcuts,
+  Widget build(BuildContext context) => Focus(
+        autofocus: widget.autofocus,
+        onKeyEvent: _handleKeyEvent,
         child: super.build(context),
       );
 }
 
-Map<ShortcutActivator, Intent> _menuShortcutBindings(
+Map<MdsShortcutCommand, MdsShortcutBinding> _menuShortcutBindings(
   Map<MdsShortcutCommand, MdsShortcutBinding>? configured,
 ) {
   final bindings = configured ?? defaultMdsShortcutBindings();
-  final result = <ShortcutActivator, Intent>{};
-
-  void add(MdsShortcutCommand command, Intent intent) {
-    final binding = bindings[command];
-    if (binding == null) return;
-    for (final sequence in binding.sequences) {
-      if (sequence.isSingle) {
-        result[sequence.strokes.single.activator] = intent;
-      }
-    }
-  }
-
-  add(MdsShortcutCommand.menuLeft, const PreviousFocusIntent());
-  add(MdsShortcutCommand.menuDown, const NextFocusIntent());
-  add(MdsShortcutCommand.menuUp, const PreviousFocusIntent());
-  add(MdsShortcutCommand.menuRight, const NextFocusIntent());
-  add(MdsShortcutCommand.menuActivate, const ActivateIntent());
-  return result;
+  return {
+    for (final command in const [
+      MdsShortcutCommand.menuLeft,
+      MdsShortcutCommand.menuDown,
+      MdsShortcutCommand.menuUp,
+      MdsShortcutCommand.menuRight,
+      MdsShortcutCommand.menuActivate,
+    ])
+      if (bindings.containsKey(command)) command: bindings[command]!,
+  };
 }
 
 Future<T?> showPolishedPopupMenu<T>({
@@ -93,6 +123,7 @@ Future<T?> showPolishedPopupMenu<T>({
 
   final entries = <PopupMenuEntry<T>>[];
   final menuShortcuts = _menuShortcutBindings(keyboardShortcuts);
+  final menuDispatcher = MdsShortcutDispatcher();
   for (var groupIndex = 0; groupIndex < groups.length; groupIndex++) {
     final group = groups[groupIndex];
     if (groupIndex > 0) {
@@ -119,11 +150,9 @@ Future<T?> showPolishedPopupMenu<T>({
         ),
       ),
     );
-    for (
-      var optionIndex = 0;
-      optionIndex < group.options.length;
-      optionIndex++
-    ) {
+    for (var optionIndex = 0;
+        optionIndex < group.options.length;
+        optionIndex++) {
       if (optionIndex > 0) {
         entries.add(
           PopupMenuDivider(
@@ -137,7 +166,9 @@ Future<T?> showPolishedPopupMenu<T>({
         _KeyboardPopupMenuItem<T>(
           key: ValueKey('$id-${option.id}'),
           value: option.value,
-          shortcuts: menuShortcuts,
+          keyboardShortcuts: menuShortcuts,
+          dispatcher: menuDispatcher,
+          autofocus: groupIndex == 0 && optionIndex == 0,
           height: 46,
           padding: const EdgeInsets.symmetric(horizontal: 8),
           child: Row(
@@ -171,7 +202,7 @@ Future<T?> showPolishedPopupMenu<T>({
     }
   }
 
-  return showMenu<T>(
+  final menu = showMenu<T>(
     context: context,
     position: position,
     color: colors.surfaceContainerHigh,
@@ -192,4 +223,5 @@ Future<T?> showPolishedPopupMenu<T>({
     ),
     items: entries,
   );
+  return menu.whenComplete(menuDispatcher.dispose);
 }
