@@ -355,7 +355,7 @@ jobs:
       - name: Install Enterprise Linux verifier runtime
         if: matrix.family == 'enterprise'
         run: >-
-          dnf install -y binutils git gtk3 libepoxy libsecret libstdc++
+          dnf --disablerepo=extras install -y binutils git gtk3 libepoxy libsecret libstdc++
           python3 unzip
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
