@@ -2725,6 +2725,7 @@ class AppState extends ChangeNotifier {
     _fetchingPlotIndex = null;
     _fetching = true;
     _status = '$rateLabel rate selected; preparing...';
+    _beginGlobalPanelFetchTracking();
     notifyListeners();
     // Let Flutter paint the immediate loading state before cloning a large
     // layout and preparing the native request.  On large configurations this
