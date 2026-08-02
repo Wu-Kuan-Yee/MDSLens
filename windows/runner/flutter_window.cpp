@@ -211,21 +211,25 @@ bool SpawnDetachedProcess(const flutter::EncodableMap& map,
     working_directory = *value;
   }
 
+  DWORD launch_error = ERROR_SUCCESS;
   auto launch = [&](DWORD extra_flags) {
     std::vector<wchar_t> mutable_command_line(command_line.begin(),
                                                command_line.end());
     mutable_command_line.push_back(L'\0');
     STARTUPINFOW startup = {};
     startup.cb = sizeof(startup);
+    startup.dwFlags = STARTF_USESHOWWINDOW;
+    startup.wShowWindow = SW_HIDE;
     PROCESS_INFORMATION process = {};
     const BOOL created = CreateProcessW(
         executable->c_str(), mutable_command_line.data(), nullptr, nullptr,
         FALSE,
         CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_PROCESS_GROUP |
-            DETACHED_PROCESS | extra_flags,
+            CREATE_NO_WINDOW | extra_flags,
         nullptr, working_directory.empty() ? nullptr : working_directory.c_str(),
         &startup, &process);
     if (!created) {
+      launch_error = GetLastError();
       return false;
     }
     CloseHandle(process.hThread);
@@ -233,19 +237,38 @@ bool SpawnDetachedProcess(const flutter::EncodableMap& map,
     return true;
   };
 
-  // Breakaway is the important part: it prevents a launcher-created
-  // kill-on-close job from terminating the helper together with Flutter.
-  if (launch(CREATE_BREAKAWAY_FROM_JOB)) {
-    return true;
+  BOOL current_process_is_in_job = FALSE;
+  if (!IsProcessInJob(GetCurrentProcess(), nullptr,
+                      &current_process_is_in_job)) {
+    *error_message = "IsProcessInJob failed with error " +
+                     std::to_string(
+                         static_cast<unsigned long>(GetLastError()));
+    return false;
   }
-  // Some Windows hosts do not place the app in a job that permits breakaway.
-  // A normal detached process is still a useful compatibility fallback; Dart
-  // will then try the historical shell handoff if this second launch fails.
+
+  // A child normally inherits the parent's job. If that job uses
+  // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, reporting an ordinary detached launch
+  // as successful would let the Dart process exit and kill the updater before
+  // it can replace or relaunch the application. While inside a job, only a
+  // confirmed breakaway process is a valid handoff.
+  if (current_process_is_in_job) {
+    if (launch(CREATE_BREAKAWAY_FROM_JOB)) {
+      return true;
+    }
+    *error_message =
+        "CreateProcessW could not launch the update helper outside the "
+        "current job (error " +
+        std::to_string(static_cast<unsigned long>(launch_error)) + ").";
+    return false;
+  }
+
+  // With no parent job there is nothing that can terminate the helper when
+  // Flutter exits, so an ordinary hidden process is a safe handoff.
   if (launch(0)) {
     return true;
   }
   *error_message = "CreateProcessW failed with error " +
-                   std::to_string(static_cast<unsigned long>(GetLastError()));
+                   std::to_string(static_cast<unsigned long>(launch_error));
   return false;
 }
 

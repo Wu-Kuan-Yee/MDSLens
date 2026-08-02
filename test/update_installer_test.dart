@@ -231,6 +231,7 @@ void main() {
       final script = await helper.readAsString();
       expect(script, contains(':wait_for_parent'));
       expect(script, contains('Installer exit code'));
+      expect(script, contains('cd /D "%TEMP%"'));
       expect(script, contains('start "" /D "%InstallDirectory%"'));
       expect(script, contains('set "HealthFile=%~1"'));
       expect(script, contains('set "HealthToken=%~2"'));
@@ -298,6 +299,7 @@ void main() {
       final script = await helper.readAsString();
       expect(script, contains(':install_msi'));
       expect(script, contains('start "" /wait msiexec.exe'));
+      expect(script, contains('cd /D "%TEMP%"'));
       expect(script, contains('start "" /D "%InstallDirectory%"'));
       addTearDown(() async {
         if (await helper.parent.exists()) {
@@ -409,7 +411,10 @@ void main() {
       },
       commandLauncher: (executable, arguments) async {
         launchedArguments = arguments;
-        await File(arguments.last).create(recursive: true);
+        final readyPath = arguments.firstWhere(
+          (argument) => argument.endsWith('helper-ready'),
+        );
+        await File(readyPath).create(recursive: true);
       },
     );
 
@@ -420,6 +425,39 @@ void main() {
     expect(helperPath, endsWith('apply-update.ps1'));
     final helper = File(helperPath);
     final script = await helper.readAsString();
+    expect(
+        script, contains(r'$safeWorkingRoot = Split-Path -Parent $workRoot'));
+    expect(script, contains(r'Set-Location -LiteralPath $safeWorkingRoot'));
+    expect(
+      script,
+      matches(RegExp(r'\$logFile\s*=.*\$args\[10\]')),
+    );
+    expect(script, contains(r'Add-Content -LiteralPath $logFile'));
+    expect(script, contains(r'$_.ScriptStackTrace'));
+    expect(script, contains(r'function Invoke-WithRetry'));
+    expect(script, contains(r'$currentMoved = $false'));
+    expect(script, contains(r'$replacementMoved = $false'));
+    expect(script, contains(r'$currentMoved = $true'));
+    expect(script, contains(r'$replacementMoved = $true'));
+    expect(
+      RegExp(r'Invoke-WithRetry[^\n]*\{\s*Move-Item', multiLine: true)
+          .allMatches(script),
+      hasLength(greaterThanOrEqualTo(2)),
+    );
+    final guardedRollback = script.indexOf(r'if ($currentMoved) {');
+    final replacementRemoval = script.indexOf(
+      r'if ($replacementMoved -and (Test-Path -LiteralPath $currentRoot))',
+    );
+    expect(guardedRollback, greaterThanOrEqualTo(0));
+    expect(replacementRemoval, greaterThan(guardedRollback));
+    expect(
+      launchedArguments,
+      contains(
+        predicate<String>(
+          (argument) => argument.endsWith('latest-update.log'),
+        ),
+      ),
+    );
     expect(script,
         contains('The replacement exited before reporting healthy startup.'));
     expect(script, contains('Move-Item -LiteralPath \$backupRoot'));
@@ -502,7 +540,10 @@ void main() {
         // Simulate a shell that cannot execute the detached start form. The
         // direct PowerShell fallback then acknowledges ownership.
         if (executable == 'powershell.exe') {
-          await File(arguments.last).create(recursive: true);
+          final readyPath = arguments.firstWhere(
+            (argument) => argument.endsWith('helper-ready'),
+          );
+          await File(readyPath).create(recursive: true);
         }
       },
     );

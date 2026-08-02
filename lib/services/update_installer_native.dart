@@ -372,20 +372,46 @@ Future<void> _startWindowsDetached(
       <String, Object?>{
         'executable': launchExecutable,
         'arguments': launchArguments,
-        'workingDirectory': Directory.current.path,
+        // Never leave a Windows update helper inside the directory it may
+        // replace. Windows keeps the process current-directory handle open,
+        // which prevents the portable root from being renamed after this
+        // application exits.
+        'workingDirectory': Directory.systemTemp.path,
       },
     );
     if (launched == true) return;
   } on MissingPluginException {
     // Older builds do not have the Windows runner channel.
-  } on PlatformException {
-    // Fall through to the compatibility launch below.
+  } on PlatformException catch (error) {
+    // A runner that implements the channel has already determined that it
+    // cannot create a child which will survive this process. Falling back to
+    // a same-job Process.start would make the UI exit and silently kill the
+    // helper, so keep the application open and surface launch failure instead.
+    throw ProcessException(
+      launchExecutable,
+      launchArguments,
+      error.message ?? 'Windows could not detach the update helper.',
+    );
   }
 
   await Process.start(
     executable,
     arguments,
+    workingDirectory: Directory.systemTemp.path,
     mode: ProcessStartMode.detached,
+  );
+}
+
+Future<File> _windowsUpdateLogFile() async {
+  final localAppData = (Platform.environment['LOCALAPPDATA'] ?? '').trim();
+  final directory = localAppData.isEmpty
+      ? Directory.systemTemp
+      : Directory(
+          '$localAppData${Platform.pathSeparator}MDSLens${Platform.pathSeparator}updates',
+        );
+  await directory.create(recursive: true);
+  return File(
+    '${directory.path}${Platform.pathSeparator}latest-update.log',
   );
 }
 
@@ -1188,6 +1214,11 @@ set "HealthFile=%~1"
 set "HealthToken=%~2"
 set "CommitMarker=%~3"
 
+cd /D "%TEMP%"
+if errorlevel 1 (
+  >>"%LogFile%" echo [%date% %time%] Could not enter the system temporary directory.
+  exit /B 1
+)
 >"%ReadyFile%" echo ready
 >>"%LogFile%" echo [%date% %time%] Update helper started for PID %ParentPid%.
 
@@ -1289,42 +1320,101 @@ $parentPid = [int]$args[0]
 $currentRoot = [IO.Path]::GetFullPath($args[1])
 $stagedRoot = [IO.Path]::GetFullPath($args[2])
 $backupRoot = [IO.Path]::GetFullPath($args[3])
-$archive = $args[4]
-$workRoot = $args[5]
-$healthFile = $args[6]
+$archive = [IO.Path]::GetFullPath($args[4])
+$workRoot = [IO.Path]::GetFullPath($args[5])
+$healthFile = [IO.Path]::GetFullPath($args[6])
 $healthToken = $args[7]
-$commitMarker = $args[8]
-$readyFile = $args[9]
+$commitMarker = [IO.Path]::GetFullPath($args[8])
+$readyFile = [IO.Path]::GetFullPath($args[9])
+$logFile = [IO.Path]::GetFullPath($args[10])
 $previousRoot = "$currentRoot.mdslens-previous"
+$safeWorkingRoot = Split-Path -Parent $workRoot
+$currentMoved = $false
+$replacementMoved = $false
+$replacementProcess = $null
 
-if ($currentRoot -eq [IO.Path]::GetPathRoot($currentRoot)) { exit 1 }
-if (-not $stagedRoot.StartsWith("$currentRoot.mdslens-update-")) { exit 1 }
-if (-not $backupRoot.StartsWith("$currentRoot.mdslens-backup-")) { exit 1 }
-if (-not (Test-Path -LiteralPath $stagedRoot -PathType Container)) { exit 1 }
-if (Test-Path -LiteralPath $backupRoot) { exit 1 }
-Set-Content -LiteralPath $readyFile -Value 'ready' -Encoding Ascii
-
-for ($attempt = 0; $attempt -lt 300; $attempt++) {
-  if (-not (Get-Process -Id $parentPid -ErrorAction SilentlyContinue)) { break }
-  Start-Sleep -Milliseconds 100
+function Write-UpdateLog {
+  param([string]$Message)
+  try {
+    $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff'
+    Add-Content -LiteralPath $logFile -Value "[$timestamp] $Message" -Encoding UTF8
+  } catch {}
 }
-if (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) {
-  Remove-Item -LiteralPath $stagedRoot -Recurse -Force -ErrorAction SilentlyContinue
-  Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
-  exit 1
+
+function Invoke-WithRetry {
+  param(
+    [scriptblock]$Operation,
+    [string]$Description
+  )
+  $lastFailure = $null
+  for ($attempt = 1; $attempt -le 60; $attempt++) {
+    try {
+      & $Operation
+      if ($attempt -gt 1) {
+        Write-UpdateLog "$Description succeeded on attempt $attempt."
+      }
+      return
+    } catch {
+      $lastFailure = $_
+      if ($attempt -eq 1 -or ($attempt % 10) -eq 0) {
+        Write-UpdateLog "$Description attempt $attempt failed: $($_.Exception.Message)"
+      }
+      if ($attempt -lt 60) { Start-Sleep -Milliseconds 250 }
+    }
+  }
+  throw "$Description failed after 60 attempts: $($lastFailure.Exception.Message)"
+}
+
+function Remove-TreeWithRetry {
+  param(
+    [string]$Path,
+    [string]$Description
+  )
+  if (-not (Test-Path -LiteralPath $Path)) { return }
+  Invoke-WithRetry -Description $Description -Operation {
+    Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+  }
 }
 
 try {
-  Move-Item -LiteralPath $currentRoot -Destination $backupRoot
-  Move-Item -LiteralPath $stagedRoot -Destination $currentRoot
+  New-Item -ItemType Directory -Path (Split-Path -Parent $logFile) -Force | Out-Null
+  Set-Content -LiteralPath $logFile -Value '' -Encoding UTF8
+  # Releasing a current-directory handle inside currentRoot is mandatory on
+  # Windows before the portable installation directory can be renamed.
+  Set-Location -LiteralPath $safeWorkingRoot
+  Write-UpdateLog "Portable update helper started for PID $parentPid."
+
+  if ($currentRoot -eq [IO.Path]::GetPathRoot($currentRoot)) { throw 'Refusing to replace a filesystem root.' }
+  if (-not $stagedRoot.StartsWith("$currentRoot.mdslens-update-")) { throw 'The staging path is outside the owned transaction namespace.' }
+  if (-not $backupRoot.StartsWith("$currentRoot.mdslens-backup-")) { throw 'The backup path is outside the owned transaction namespace.' }
+  if (-not (Test-Path -LiteralPath $stagedRoot -PathType Container)) { throw 'The staged replacement is missing.' }
+  if (Test-Path -LiteralPath $backupRoot) { throw 'The transaction backup path already exists.' }
+  Set-Content -LiteralPath $readyFile -Value 'ready' -Encoding Ascii
+
+  for ($attempt = 0; $attempt -lt 300; $attempt++) {
+    if (-not (Get-Process -Id $parentPid -ErrorAction SilentlyContinue)) { break }
+    Start-Sleep -Milliseconds 100
+  }
+  if (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) {
+    throw 'Timed out waiting for the previous MDSLens process to exit.'
+  }
+
+  Invoke-WithRetry -Description 'Move current installation to transaction backup' -Operation {
+    Move-Item -LiteralPath $currentRoot -Destination $backupRoot -ErrorAction Stop
+  }
+  $currentMoved = $true
+  Invoke-WithRetry -Description 'Move staged replacement into the installation path' -Operation {
+    Move-Item -LiteralPath $stagedRoot -Destination $currentRoot -ErrorAction Stop
+  }
+  $replacementMoved = $true
   $target = Join-Path $currentRoot 'mdslens.exe'
-  $process = Start-Process -FilePath $target -WorkingDirectory $currentRoot `
+  $replacementProcess = Start-Process -FilePath $target -WorkingDirectory $currentRoot `
     -ArgumentList @("--mdslens-update-health=$healthFile", "--mdslens-update-token=$healthToken", "--mdslens-update-commit=$commitMarker") `
     -PassThru
   $healthy = $false
   for ($attempt = 0; $attempt -lt 1200; $attempt++) {
-    $process.Refresh()
-    if ($process.HasExited) { throw 'The replacement exited before reporting healthy startup.' }
+    $replacementProcess.Refresh()
+    if ($replacementProcess.HasExited) { throw 'The replacement exited before reporting healthy startup.' }
     if (Test-Path -LiteralPath $healthFile) {
       try {
         $reported = (Get-Content -LiteralPath $healthFile -Raw).Trim()
@@ -1343,12 +1433,14 @@ try {
         if ($reported -eq $healthToken) { $committed = $true; break }
       } catch {}
     }
-    $process.Refresh()
-    if ($process.HasExited) { break }
+    $replacementProcess.Refresh()
+    if ($replacementProcess.HasExited) { break }
     Start-Sleep -Milliseconds 100
   }
   if (-not $committed) { throw 'The replacement did not commit the update transaction.' }
+  Write-UpdateLog 'Replacement reported healthy startup and committed the transaction.'
   $previousOwned = $false
+  $rollbackCopyCreated = $false
   $previousMarker = Join-Path $previousRoot '.mdslens-portable.json'
   if (Test-Path -LiteralPath $previousMarker -PathType Leaf) {
     try {
@@ -1357,26 +1449,75 @@ try {
         $metadata.platform -eq 'windows'
     } catch {}
   }
-  if ($previousOwned) { Remove-Item -LiteralPath $previousRoot -Recurse -Force }
+  if ($previousOwned) {
+    Remove-TreeWithRetry -Path $previousRoot -Description 'Remove previous rollback copy'
+  }
   if (-not (Test-Path -LiteralPath $previousRoot)) {
     Move-Item -LiteralPath $backupRoot -Destination $previousRoot
+    $rollbackCopyCreated = $true
+  } else {
+    # Never replace or remove an unrelated directory that happens to use the
+    # conventional rollback name. The transaction backup is ours, so it can
+    # be discarded independently after the replacement has committed.
+    Write-UpdateLog 'Preserving an unrelated directory at the rollback path.'
+    try {
+      Remove-TreeWithRetry -Path $backupRoot -Description 'Remove transaction backup after rollback-name collision'
+    } catch {
+      Write-UpdateLog "Could not remove the transaction backup: $($_.Exception.Message)"
+    }
   }
   Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
-  if (Test-Path -LiteralPath $previousRoot) {
-    Remove-Item -LiteralPath $previousRoot -Recurse -Force -ErrorAction SilentlyContinue
+  if ($rollbackCopyCreated -and (Test-Path -LiteralPath $previousRoot)) {
+    Remove-TreeWithRetry -Path $previousRoot -Description 'Remove committed rollback copy'
   }
   Remove-Item -LiteralPath $commitMarker -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $healthFile -Force -ErrorAction SilentlyContinue
+  Write-UpdateLog 'Portable update completed successfully.'
   Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
   exit 0
 } catch {
-  if (Test-Path -LiteralPath $currentRoot) {
-    Remove-Item -LiteralPath $currentRoot -Recurse -Force
+  $failureMessage = $_.Exception.Message
+  $failureStack = $_.ScriptStackTrace
+  Write-UpdateLog "Portable update failed: $failureMessage"
+  if ($failureStack) { Write-UpdateLog "Script stack: $failureStack" }
+  try { Set-Location -LiteralPath $safeWorkingRoot } catch {}
+  if ($replacementProcess -ne $null) {
+    try {
+      $replacementProcess.Refresh()
+      if (-not $replacementProcess.HasExited) {
+        Stop-Process -Id $replacementProcess.Id -Force -ErrorAction SilentlyContinue
+        $replacementProcess.WaitForExit(5000) | Out-Null
+      }
+    } catch {}
   }
-  if (Test-Path -LiteralPath $backupRoot) {
-    Move-Item -LiteralPath $backupRoot -Destination $currentRoot
-    Start-Process -FilePath (Join-Path $currentRoot 'mdslens.exe') `
-      -WorkingDirectory $currentRoot
+  # Do not touch currentRoot unless this transaction successfully moved the
+  # old installation away. A failure before that point must leave it intact.
+  if ($currentMoved) {
+    if ($replacementMoved -and (Test-Path -LiteralPath $currentRoot)) {
+      try {
+        Remove-TreeWithRetry -Path $currentRoot -Description 'Remove failed replacement'
+      } catch {
+        Write-UpdateLog "Could not remove failed replacement: $($_.Exception.Message)"
+      }
+    }
+    if (Test-Path -LiteralPath $backupRoot) {
+      try {
+        Invoke-WithRetry -Description 'Restore previous installation' -Operation {
+          Move-Item -LiteralPath $backupRoot -Destination $currentRoot -ErrorAction Stop
+        }
+      } catch {
+        Write-UpdateLog "Could not restore previous installation: $($_.Exception.Message)"
+      }
+    }
+  }
+  $relaunchTarget = Join-Path $currentRoot 'mdslens.exe'
+  if (Test-Path -LiteralPath $relaunchTarget -PathType Leaf) {
+    try {
+      Start-Process -FilePath $relaunchTarget -WorkingDirectory $currentRoot
+      Write-UpdateLog 'Relaunched the available MDSLens installation after rollback.'
+    } catch {
+      Write-UpdateLog "Could not relaunch MDSLens after rollback: $($_.Exception.Message)"
+    }
   }
   Remove-Item -LiteralPath $stagedRoot -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $healthFile -Force -ErrorAction SilentlyContinue
@@ -1403,16 +1544,52 @@ $healthFile = $args[12]
 $healthToken = $args[13]
 $commitMarker = $args[14]
 $newPidFile = $args[15]
+$logFile = $args[16]
 $previousRoot = "$currentRoot.mdslens-previous"
 $workRoot = Split-Path -Parent $preparedFile
 $extractionRoot = "$stagedRoot-extracted"
+$safeWorkingRoot = Split-Path -Parent $workRoot
+$currentMoved = $false
+$replacementMoved = $false
+
+function Write-UpdateLog {
+  param([string]$Message)
+  try {
+    $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff'
+    Add-Content -LiteralPath $logFile -Value "[$timestamp] $Message" -Encoding UTF8
+  } catch {}
+}
+
+function Invoke-WithRetry {
+  param([scriptblock]$Operation, [string]$Description)
+  $lastFailure = $null
+  for ($attempt = 1; $attempt -le 60; $attempt++) {
+    try {
+      & $Operation
+      return
+    } catch {
+      $lastFailure = $_
+      if ($attempt -eq 1 -or ($attempt % 10) -eq 0) {
+        Write-UpdateLog "$Description attempt $attempt failed: $($_.Exception.Message)"
+      }
+      if ($attempt -lt 60) { Start-Sleep -Milliseconds 250 }
+    }
+  }
+  throw "$Description failed after 60 attempts: $($lastFailure.Exception.Message)"
+}
+
 trap {
+  Write-UpdateLog "Protected portable update setup failed: $($_.Exception.Message)"
   Remove-Item -LiteralPath $stagedRoot -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $extractionRoot -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
   exit 1
 }
 
+New-Item -ItemType Directory -Path (Split-Path -Parent $logFile) -Force | Out-Null
+Set-Content -LiteralPath $logFile -Value '' -Encoding UTF8
+Set-Location -LiteralPath $safeWorkingRoot
+Write-UpdateLog "Protected portable update helper started for PID $parentPid."
 if ($currentRoot -eq [IO.Path]::GetPathRoot($currentRoot)) { exit 1 }
 if ([IO.Path]::GetDirectoryName($stagedRoot) -ne [IO.Path]::GetDirectoryName($currentRoot)) { exit 1 }
 if ([IO.Path]::GetDirectoryName($backupRoot) -ne [IO.Path]::GetDirectoryName($currentRoot)) { exit 1 }
@@ -1444,8 +1621,14 @@ if (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) {
 }
 
 try {
-  Move-Item -LiteralPath $currentRoot -Destination $backupRoot
-  Move-Item -LiteralPath $stagedRoot -Destination $currentRoot
+  Invoke-WithRetry -Description 'Move protected installation to transaction backup' -Operation {
+    Move-Item -LiteralPath $currentRoot -Destination $backupRoot -ErrorAction Stop
+  }
+  $currentMoved = $true
+  Invoke-WithRetry -Description 'Move protected replacement into the installation path' -Operation {
+    Move-Item -LiteralPath $stagedRoot -Destination $currentRoot -ErrorAction Stop
+  }
+  $replacementMoved = $true
   Set-Content -LiteralPath $swapReadyFile -Value 'ready' -Encoding Ascii
   for ($attempt = 0; $attempt -lt 1200; $attempt++) {
     if (Test-Path -LiteralPath $healthyFile) { break }
@@ -1476,6 +1659,7 @@ try {
     throw 'Replacement did not commit the update transaction.'
   }
   $previousOwned = $false
+  $rollbackCopyCreated = $false
   $previousMarker = Join-Path $previousRoot '.mdslens-portable.json'
   if (Test-Path -LiteralPath $previousMarker -PathType Leaf) {
     try {
@@ -1483,19 +1667,57 @@ try {
       $previousOwned = $previousMetadata.product -eq 'com.mdslens.app' -and $previousMetadata.platform -eq 'windows'
     } catch {}
   }
-  if ($previousOwned) { Remove-Item -LiteralPath $previousRoot -Recurse -Force }
-  if (-not (Test-Path -LiteralPath $previousRoot)) { Move-Item -LiteralPath $backupRoot -Destination $previousRoot }
-  if (Test-Path -LiteralPath $previousRoot) {
-    Remove-Item -LiteralPath $previousRoot -Recurse -Force -ErrorAction SilentlyContinue
+  if ($previousOwned) {
+    Invoke-WithRetry -Description 'Remove previous protected rollback copy' -Operation {
+      Remove-Item -LiteralPath $previousRoot -Recurse -Force -ErrorAction Stop
+    }
+  }
+  if (-not (Test-Path -LiteralPath $previousRoot)) {
+    Move-Item -LiteralPath $backupRoot -Destination $previousRoot
+    $rollbackCopyCreated = $true
+  } else {
+    # An unrelated directory with this name must survive the update. The
+    # elevated transaction backup is still safe to remove by its exact path.
+    Write-UpdateLog 'Preserving an unrelated directory at the rollback path.'
+    try {
+      Invoke-WithRetry -Description 'Remove protected transaction backup after rollback-name collision' -Operation {
+        Remove-Item -LiteralPath $backupRoot -Recurse -Force -ErrorAction Stop
+      }
+    } catch {
+      Write-UpdateLog "Could not remove the protected transaction backup: $($_.Exception.Message)"
+    }
+  }
+  if ($rollbackCopyCreated -and (Test-Path -LiteralPath $previousRoot)) {
+    Invoke-WithRetry -Description 'Remove committed protected rollback copy' -Operation {
+      Remove-Item -LiteralPath $previousRoot -Recurse -Force -ErrorAction Stop
+    }
   }
   Remove-Item -LiteralPath $commitMarker -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $healthFile -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $newPidFile -Force -ErrorAction SilentlyContinue
+  Write-UpdateLog 'Protected portable update completed successfully.'
   Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
   exit 0
 } catch {
-  if (Test-Path -LiteralPath $currentRoot) { Remove-Item -LiteralPath $currentRoot -Recurse -Force }
-  if (Test-Path -LiteralPath $backupRoot) { Move-Item -LiteralPath $backupRoot -Destination $currentRoot }
+  Write-UpdateLog "Protected portable update failed: $($_.Exception.Message)"
+  if ($_.ScriptStackTrace) { Write-UpdateLog "Script stack: $($_.ScriptStackTrace)" }
+  try { Set-Location -LiteralPath $safeWorkingRoot } catch {}
+  if ($currentMoved) {
+    if ($replacementMoved -and (Test-Path -LiteralPath $currentRoot)) {
+      try {
+        Invoke-WithRetry -Description 'Remove failed protected replacement' -Operation {
+          Remove-Item -LiteralPath $currentRoot -Recurse -Force -ErrorAction Stop
+        }
+      } catch { Write-UpdateLog "Could not remove failed replacement: $($_.Exception.Message)" }
+    }
+    if (Test-Path -LiteralPath $backupRoot) {
+      try {
+        Invoke-WithRetry -Description 'Restore protected previous installation' -Operation {
+          Move-Item -LiteralPath $backupRoot -Destination $currentRoot -ErrorAction Stop
+        }
+      } catch { Write-UpdateLog "Could not restore previous installation: $($_.Exception.Message)" }
+    }
+  }
   Remove-Item -LiteralPath $stagedRoot -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $extractionRoot -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $healthFile -Force -ErrorAction SilentlyContinue
@@ -1517,11 +1739,22 @@ $healthFile = $args[7]
 $healthToken = $args[8]
 $commitMarker = $args[9]
 $newPidFile = $args[10]
+$logFile = $args[11]
+$safeWorkingRoot = Split-Path -Parent $workRoot
+try { Set-Location -LiteralPath $safeWorkingRoot } catch {}
+function Write-UpdateLog {
+  param([string]$Message)
+  try {
+    $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff'
+    Add-Content -LiteralPath $logFile -Value "[$timestamp] $Message" -Encoding UTF8
+  } catch {}
+}
 for ($attempt = 0; $attempt -lt 600; $attempt++) {
   if (Test-Path -LiteralPath $swapReadyFile) { break }
   Start-Sleep -Milliseconds 100
 }
 if (-not (Test-Path -LiteralPath $swapReadyFile)) {
+  Write-UpdateLog 'Protected swap helper did not report readiness.'
   Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
   exit 1
 }
@@ -1538,6 +1771,7 @@ for ($attempt = 0; $attempt -lt 1200; $attempt++) {
       $reported = (Get-Content -LiteralPath $healthFile -Raw).Trim()
       if ($reported -eq $healthToken) {
         Set-Content -LiteralPath $healthyFile -Value 'healthy' -Encoding Ascii
+        Write-UpdateLog 'Protected replacement reported healthy startup.'
         exit 0
       }
     } catch {}
@@ -1545,6 +1779,7 @@ for ($attempt = 0; $attempt -lt 1200; $attempt++) {
   Start-Sleep -Milliseconds 100
 }
 Set-Content -LiteralPath $failedFile -Value 'failed' -Encoding Ascii
+Write-UpdateLog 'Protected replacement failed its health check.'
 for ($attempt = 0; $attempt -lt 300; $attempt++) {
   if (Test-Path -LiteralPath $rollbackReadyFile) { break }
   Start-Sleep -Milliseconds 100
@@ -1900,16 +2135,7 @@ Future<UpdateInstallResult> launchVerifiedUpdateAsset(
       work,
       commitMarker: '${work.path}${Platform.pathSeparator}committed',
     );
-    final localAppData = (Platform.environment['LOCALAPPDATA'] ?? '').trim();
-    final logDirectory = localAppData.isEmpty
-        ? Directory.systemTemp
-        : Directory(
-            '$localAppData${Platform.pathSeparator}MDSLens${Platform.pathSeparator}updates',
-          );
-    await logDirectory.create(recursive: true);
-    final log = File(
-      '${logDirectory.path}${Platform.pathSeparator}latest-update.log',
-    );
+    final log = await _windowsUpdateLogFile();
     await helper.writeAsString(_windowsApplyUpdateScript);
     final helperArguments = <String>[
       '${currentPidOverride ?? pid}',
@@ -2258,8 +2484,11 @@ Future<UpdateInstallResult> prepareWindowsPortableUpdate(
       work,
       commitMarker: '${currentRoot.path}.mdslens-update-committed',
     );
+    final log = await _windowsUpdateLogFile();
     await helper.writeAsString(_windowsPortableApplyUpdateScript);
     final helperArguments = <String>[
+      '-WindowStyle',
+      'Hidden',
       '-NoProfile',
       '-NonInteractive',
       '-ExecutionPolicy',
@@ -2276,6 +2505,7 @@ Future<UpdateInstallResult> prepareWindowsPortableUpdate(
       handshake.token,
       handshake.commitMarker,
       ready.path,
+      log.path,
     ];
 
     // Launch through `cmd start` first.  A few Windows desktop launchers put
@@ -2381,6 +2611,7 @@ Future<UpdateInstallResult> _prepareProtectedWindowsPortableUpdate(
     commitMarker: '${work.path}${Platform.pathSeparator}committed',
   );
   final newPid = File('${work.path}${Platform.pathSeparator}new-pid');
+  final log = await _windowsUpdateLogFile();
   await privilegedHelper.writeAsString(_windowsPortablePrivilegedUpdateScript);
   await userHelper.writeAsString(_windowsPortableUserRelaunchScript);
   await bootstrap.writeAsString(r'''
@@ -2389,7 +2620,8 @@ try {
   $quoted = $args | ForEach-Object { '"' + $_ + '"' }
   $arguments = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File') + $quoted
   $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-  Start-Process -FilePath $powershell -Verb RunAs -ArgumentList $arguments
+  Start-Process -FilePath $powershell -Verb RunAs -ArgumentList $arguments `
+    -WorkingDirectory (Split-Path -Parent $args[0]) -WindowStyle Hidden
   exit 0
 } catch {
   exit 1223
@@ -2414,6 +2646,7 @@ try {
     handshake.token,
     handshake.commitMarker,
     newPid.path,
+    log.path,
   ];
   final elevation = await commandRunner(powershell, [
     '-NoProfile',
@@ -2442,6 +2675,8 @@ try {
   }
 
   final userHelperArguments = <String>[
+    '-WindowStyle',
+    'Hidden',
     '-NoProfile',
     '-NonInteractive',
     '-ExecutionPolicy',
@@ -2459,6 +2694,7 @@ try {
     handshake.token,
     handshake.commitMarker,
     newPid.path,
+    log.path,
   ];
   // The relaunch helper must outlive the Flutter process just like the
   // ordinary portable helper.  Start it through an independent Windows shell
