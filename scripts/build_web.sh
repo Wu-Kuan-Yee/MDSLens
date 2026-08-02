@@ -43,7 +43,8 @@ flutter pub get
 flutter build web --wasm --no-web-resources-cdn \
   --dart-define="MDSLENS_VERSION=$version" \
   --dart-define="MDSLENS_GIT_VERSION=$git_version"
-cargo build --manifest-path rust/Cargo.toml \
+bash scripts/run_cargo_with_retries.sh \
+  cargo build --manifest-path rust/Cargo.toml \
   -p mdslens-web-gateway --release --locked
 
 stage="build/web-package/mdslens-web-$platform-$arch"

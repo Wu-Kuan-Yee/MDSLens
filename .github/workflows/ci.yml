@@ -8,6 +8,11 @@ on:
 
 env:
   FLUTTER_VERSION: 3.44.7
+  # Keep clean-runner Cargo operations resilient to temporary registry/CDN
+  # failures. Native builds add an outer retry around Cargo itself.
+  CARGO_NET_RETRY: 10
+  CARGO_HTTP_TIMEOUT: 120
+  CARGO_HTTP_MULTIPLEXING: false
 
 jobs:
   product-site:

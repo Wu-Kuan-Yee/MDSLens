@@ -71,7 +71,8 @@ for arch in $ARCHS; do
     CARGO_TARGET_DIR="$IOS_TARGET_DIR" \
     IPHONEOS_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" \
     IPHONESIMULATOR_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" \
-    "$CARGO_BIN" rustc \
+    bash "$ROOT_DIR/scripts/run_cargo_with_retries.sh" \
+      "$CARGO_BIN" rustc --locked \
       --manifest-path "$MANIFEST" -p mds-bridge \
       --target "$RUST_TARGET" $CARGO_PROFILE_FLAG --lib -- \
       --crate-type=staticlib

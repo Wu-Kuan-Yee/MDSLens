@@ -48,7 +48,8 @@ for target in "$ARM_TARGET" "$INTEL_TARGET"; do
   env -u CPATH -u CFLAGS -u CXXFLAGS -u CPPFLAGS -u LDFLAGS \
     -u LIBRARY_PATH -u LD_LIBRARY_PATH -u DYLD_LIBRARY_PATH \
     -u PKG_CONFIG_PATH LIBZ_SYS_STATIC=1 RUSTC="$RUSTC_BIN" \
-    "$CARGO_BIN" build \
+    bash "$ROOT_DIR/scripts/run_cargo_with_retries.sh" \
+    "$CARGO_BIN" build --locked \
     --manifest-path "$MANIFEST" -p mds-bridge \
     --target "$target" $CARGO_PROFILE_FLAG
 done

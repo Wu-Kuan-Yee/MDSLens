@@ -67,7 +67,8 @@ build_target() {
     "CC_${cc_key}=$clang" \
     "AR_${cc_key}=$llvm_ar" \
     "RANLIB_${cc_key}=$llvm_ranlib" \
-    "$cargo_bin" build \
+    bash "$project_root/scripts/run_cargo_with_retries.sh" \
+      "$cargo_bin" build --locked \
       --manifest-path "$project_root/rust/Cargo.toml" \
       -p mds-bridge \
       --target "$rust_target" \

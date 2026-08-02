@@ -43,7 +43,9 @@ fi
 # shellcheck disable=SC2086
 env -u CPATH -u CFLAGS -u CXXFLAGS -u CPPFLAGS -u LDFLAGS \
   -u LIBRARY_PATH -u LD_LIBRARY_PATH -u PKG_CONFIG_PATH \
-  LIBZ_SYS_STATIC=1 RUSTC="$RUSTC_BIN" "$CARGO_BIN" build \
+  LIBZ_SYS_STATIC=1 RUSTC="$RUSTC_BIN" \
+  bash "$ROOT_DIR/scripts/run_cargo_with_retries.sh" \
+    "$CARGO_BIN" build --locked \
     --manifest-path "$ROOT_DIR/rust/Cargo.toml" \
     -p mds-bridge $CARGO_PROFILE_FLAG
 
