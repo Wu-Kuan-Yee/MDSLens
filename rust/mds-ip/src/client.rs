@@ -252,12 +252,20 @@ where
     F: FnOnce(&mut MdsConnection) -> (R, bool),
 {
     let key = connection_key(host, port);
-    let mut connection = shared_connections()
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .get_mut(&key)
-        .and_then(Vec::pop)
-        .map_or_else(|| MdsConnection::connect(host, port), Ok)?;
+    // Take an idle socket out of the pool before doing any network I/O.  Do
+    // not keep the global pool mutex alive while connecting or handshaking:
+    // otherwise every cold worker waits behind the first worker and the
+    // nominally parallel fetch pipeline becomes one connection at a time.
+    let idle_connection = {
+        let mut pool = shared_connections()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        pool.get_mut(&key).and_then(Vec::pop)
+    };
+    let mut connection = match idle_connection {
+        Some(connection) => connection,
+        None => MdsConnection::connect(host, port)?,
+    };
 
     if connection.open_tree(tree, shot).is_err() {
         connection = MdsConnection::connect(host, port)?;
