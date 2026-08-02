@@ -1172,9 +1172,21 @@ set "Scope=%~6"
 set "WorkDirectory=%~7"
 set "ReadyFile=%~8"
 set "LogFile=%~9"
-set "HealthFile=%~10"
-set "HealthToken=%~11"
-set "CommitMarker=%~12"
+rem Batch parameter expansion only addresses %0 through %9 directly.
+rem Shift the first nine values out before reading the handshake values;
+rem a double-digit parameter reference would otherwise expand incorrectly.
+shift
+shift
+shift
+shift
+shift
+shift
+shift
+shift
+shift
+set "HealthFile=%~1"
+set "HealthToken=%~2"
+set "CommitMarker=%~3"
 
 >"%ReadyFile%" echo ready
 >>"%LogFile%" echo [%date% %time%] Update helper started for PID %ParentPid%.

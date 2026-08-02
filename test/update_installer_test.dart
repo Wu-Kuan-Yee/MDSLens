@@ -232,6 +232,10 @@ void main() {
       expect(script, contains(':wait_for_parent'));
       expect(script, contains('Installer exit code'));
       expect(script, contains('start "" /D "%InstallDirectory%"'));
+      expect(script, contains('set "HealthFile=%~1"'));
+      expect(script, contains('set "HealthToken=%~2"'));
+      expect(script, contains('set "CommitMarker=%~3"'));
+      expect(script, isNot(contains('set "HealthFile=%~10"')));
       addTearDown(() async {
         if (await helper.parent.exists()) {
           await helper.parent.delete(recursive: true);
