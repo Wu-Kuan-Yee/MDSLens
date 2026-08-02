@@ -14,6 +14,15 @@ fn git_output(repo: &Path, arguments: &[&str]) -> Option<String> {
     (!value.is_empty()).then_some(value)
 }
 
+fn ci_commit_short_hash() -> Option<String> {
+    let value = std::env::var("GITHUB_SHA").ok()?;
+    let value = value.trim();
+    if value.len() < 9 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
+    }
+    Some(value[..9].to_ascii_lowercase())
+}
+
 fn release_version_from_tag(tag: &str) -> Option<([u64; 3], String)> {
     let version = tag.strip_prefix('v').unwrap_or(tag);
     let parts: Vec<&str> = version.split('.').collect();
@@ -30,9 +39,8 @@ fn latest_release_tag(repo: &Path) -> Option<(String, String)> {
     let tags = git_output(repo, &["tag", "--merged", "HEAD"])?;
     tags.lines()
         .filter_map(|tag| {
-            release_version_from_tag(tag).map(|(version, display)| {
-                (version, tag.to_string(), display)
-            })
+            release_version_from_tag(tag)
+                .map(|(version, display)| (version, tag.to_string(), display))
         })
         .max_by_key(|(version, _, _)| *version)
         .map(|(_, tag, display)| (tag, display))
@@ -59,18 +67,20 @@ fn main() {
         "cargo:rerun-if-changed={}",
         git_dir.join("logs/HEAD").display()
     );
-    println!("cargo:rerun-if-changed={}", repo.join("pubspec.yaml").display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        repo.join("pubspec.yaml").display()
+    );
     println!("cargo:rerun-if-env-changed=MDSLENS_VERSION");
+    println!("cargo:rerun-if-env-changed=MDSLENS_GIT_VERSION");
+    println!("cargo:rerun-if-env-changed=GITHUB_SHA");
     println!("cargo:rerun-if-env-changed=GITHUB_REF_TYPE");
     println!("cargo:rerun-if-env-changed=GITHUB_REF_NAME");
 
     let github_tagged_version = (std::env::var("GITHUB_REF_TYPE").as_deref() == Ok("tag"))
         .then(|| std::env::var("GITHUB_REF_NAME").ok())
         .flatten()
-        .and_then(|tag| {
-            release_version_from_tag(&tag)
-                .map(|(_, version)| (tag, version))
-        });
+        .and_then(|tag| release_version_from_tag(&tag).map(|(_, version)| (tag, version)));
     let tagged_version = github_tagged_version
         .clone()
         .or_else(|| latest_release_tag(&repo));
@@ -80,7 +90,11 @@ fn main() {
         .or_else(|| tagged_version.as_ref().map(|(_, version)| version.clone()))
         .or_else(|| pubspec_version(&repo))
         .unwrap_or_else(|| "unknown".into());
-    let hash = git_output(&repo, &["rev-parse", "--short=9", "HEAD"]);
+    // Linux release jobs run inside a container whose checkout is owned by the
+    // host runner user. Git can therefore reject the checkout as unsafe even
+    // though the source and Cargo metadata are readable. The CI commit SHA is
+    // an equally authoritative fallback for the displayed revision.
+    let hash = git_output(&repo, &["rev-parse", "--short=9", "HEAD"]).or_else(ci_commit_short_hash);
     let revision = if github_tagged_version.is_some() {
         Some("0".into())
     } else {
@@ -90,17 +104,22 @@ fn main() {
                 git_output(&repo, &["rev-list", "--count", &format!("{tag}..HEAD")])
             })
             .or_else(|| git_output(&repo, &["rev-list", "--count", "HEAD"]))
+            .or_else(|| ci_commit_short_hash().map(|_| "0".into()))
     };
     let dirty =
         git_output(&repo, &["status", "--porcelain"]).is_some_and(|status| !status.is_empty());
 
-    let git_version = match (hash, revision) {
-        (Some(hash), Some(revision)) => format!(
-            "{public_version}.r{revision}.g{hash}{}",
-            if dirty { ".dirty" } else { "" }
-        ),
-        _ => "unknown".into(),
-    };
+    let git_version = std::env::var("MDSLENS_GIT_VERSION")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| match (hash, revision) {
+            (Some(hash), Some(revision)) => format!(
+                "{public_version}.r{revision}.g{hash}{}",
+                if dirty { ".dirty" } else { "" }
+            ),
+            _ => "unknown".into(),
+        });
     println!("cargo:rustc-env=MDS_SCOPE_VERSION={public_version}");
     println!("cargo:rustc-env=MDS_SCOPE_GIT_VERSION={git_version}");
 }
