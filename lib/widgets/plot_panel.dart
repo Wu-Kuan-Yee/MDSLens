@@ -2860,11 +2860,12 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
 
   void _addRowFromSignal(Map<String, dynamic>? s, int i) {
     final defaultRate = context.read<AppState>().dataMode;
+    final fixedShot = s != null && signalShotIsEffectivelyFixed(s);
     _rows.add(
       _DSRow(
         shot: TextEditingController(
           text: resolveDataSourceShot(
-            signalShot: s != null && signalShotIsFixed(s) ? s['shot'] : null,
+            signalShot: fixedShot ? s['shot'] : null,
             inputShot: widget.defaultShot,
           ),
         ),
@@ -2879,7 +2880,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
         xExpr: s?['x_expr']?.toString() ?? '',
       )
         ..hideMode = s == null ? signalHideModeVisible : signalHideModeOf(s)
-        ..fixedShot = s != null && signalShotIsFixed(s)
+        ..fixedShot = fixedShot
         ..colorIdx = i % _presetColors.length
         ..readMode = (s?['read_mode'] as int?) ?? defaultRate,
     );
@@ -2980,8 +2981,12 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                     2: FixedColumnWidth(184),
                     3: FixedColumnWidth(130),
                     4: FixedColumnWidth(144),
-                    5: FixedColumnWidth(34),
-                    6: FixedColumnWidth(150),
+                    // Server IP is editable text and needs a full-width
+                    // field.  Color is only a compact swatch, so keeping
+                    // those widths in their corresponding columns prevents
+                    // the server field from collapsing to a single digit.
+                    5: FixedColumnWidth(150),
+                    6: FixedColumnWidth(34),
                     7: FixedColumnWidth(136),
                     8: FixedColumnWidth(152),
                     9: FixedColumnWidth(26),
@@ -3094,6 +3099,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                           Padding(
                             padding: const EdgeInsets.only(right: 4),
                             child: TextField(
+                              key: ValueKey('data-server-$i'),
                               controller: _rows[i].server,
                               decoration: _dsDeco(),
                               style: const TextStyle(fontSize: 12),
@@ -3227,11 +3233,13 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
     for (final r in _rows) {
       if (r.y.text.trim().isEmpty) continue;
       final shot = r.shot.text.trim();
+      final effectiveShot = shot.isNotEmpty ? shot : widget.defaultShot;
+      final fixedShot = r.fixedShot && effectiveShot.trim().isNotEmpty;
       final colorValue = r.customColor ??
           Color(_presetColors[r.colorIdx % _presetColors.length]);
       widget.signals.add({
-        'shot': shot.isNotEmpty ? shot : widget.defaultShot,
-        'shot_fixed': r.fixedShot,
+        'shot': effectiveShot,
+        'shot_fixed': fixedShot,
         'y_expr': r.y.text.trim(),
         'x_expr': r.xExpr,
         'legend': r.legend.text.trim(),

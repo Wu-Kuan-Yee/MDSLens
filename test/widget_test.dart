@@ -2431,6 +2431,49 @@ void main() {
     );
   });
 
+  test(
+    'Legacy fixed shots with no per-signal shot stay pinned after navigation',
+    () async {
+      final requestedConfigs = <Map<String, dynamic>>[];
+      final app = AppState(
+        configOpenPicker: () async =>
+            ConfigOpenSelection(name: 'legacy-inherited.toml', path: '/legacy'),
+        configParser: (_) => '{"shot":"170100","columns":[[{'
+            '"signal_specs":[{"y_expr":"\\\\legacy"}]'
+            '}]]}',
+        signalFetchWorker: (configJson, _, __) async {
+          requestedConfigs.add(jsonDecode(configJson) as Map<String, dynamic>);
+          return '[]';
+        },
+      );
+      await app.preferencesReady;
+      addTearDown(app.dispose);
+      app.setLoggedIn(true, 'test-token');
+
+      await app.openFile(
+        importedConfigurationDecision: (_) async =>
+            const ImportedConfigurationDecision(
+          retainShots: true,
+          retainFixedShots: true,
+        ),
+      );
+
+      final importedSignal =
+          (app.columns.single.single['signal_specs'] as List).single as Map;
+      expect(importedSignal['shot_fixed'], isTrue);
+      expect(importedSignal['shot'], '170100');
+
+      app.shotText = '170200';
+      app.startRefresh();
+      await Future<void>.delayed(Duration.zero);
+
+      final refreshedSignal = ((requestedConfigs.last['columns'] as List)
+          .first.first as Map)['signal_specs'] as List;
+      expect((refreshedSignal.single as Map)['shot_fixed'], isTrue);
+      expect((refreshedSignal.single as Map)['shot'], '170100');
+    },
+  );
+
   testWidgets('Toolbar restores and persists the default waveform layout', (
     tester,
   ) async {
@@ -5011,6 +5054,10 @@ void main() {
 
       await tester.tap(find.text('Open data source'));
       await tester.pumpAndSettle();
+      expect(
+        tester.getSize(find.byKey(const ValueKey('data-server-0'))).width,
+        greaterThan(100),
+      );
       final scrollbarHost = find.byKey(
         const ValueKey('data-source-horizontal-scrollbar'),
       );

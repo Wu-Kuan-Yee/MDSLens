@@ -110,6 +110,19 @@ bool signalShotIsFixed(Map<dynamic, dynamic> signal) {
   };
 }
 
+/// A fixed-shot flag is only meaningful when it has a concrete shot value.
+///
+/// Older TOML/WebScope files did not have an explicit flag and are imported
+/// as fixed for compatibility.  Some of those files also omit a per-signal
+/// shot, though; treating that empty value as fixed would make the Rust
+/// pipeline fall back to the panel shot and silently follow later shot
+/// changes.  Callers that need the actual runtime semantics should use this
+/// predicate rather than the raw metadata flag.
+bool signalShotIsEffectivelyFixed(Map<dynamic, dynamic> signal) {
+  if (!signalShotIsFixed(signal)) return false;
+  return signal['shot']?.toString().trim().isNotEmpty ?? false;
+}
+
 void normalizeSignalShotSettings(
   Map<dynamic, dynamic> signal, {
   bool defaultFixed = false,
@@ -2135,6 +2148,46 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Ensures every fixed signal has the shot it is meant to pin to.
+  ///
+  /// The legacy readers deliberately mark signals without shot metadata as
+  /// fixed, matching the historical WebScope behavior.  Materializing the
+  /// panel/global shot here keeps that compatibility while preventing an
+  /// empty fixed override from falling back to the newly selected panel shot.
+  /// If no shot exists anywhere, an empty fixed override cannot be honored and
+  /// is normalized to the follow-selected-shot state instead.
+  void _materializeFixedSignalShots(
+    List<List<Map<String, dynamic>>> columns, {
+    String fallbackShot = '',
+  }) {
+    final globalFallback = fallbackShot.trim();
+    for (final column in columns) {
+      for (final panel in column) {
+        final panelShot = panel['shot']?.toString().trim() ?? '';
+        final inheritedShot =
+            panelShot.isNotEmpty ? panelShot : globalFallback;
+        final signals = panel['signal_specs'];
+        if (signals is! List) continue;
+        for (final rawSignal in signals) {
+          if (rawSignal is! Map) continue;
+          final signal = Map<String, dynamic>.from(rawSignal);
+          if (signalShotIsFixed(signal) &&
+              (signal['shot']?.toString().trim() ?? '').isEmpty) {
+            if (inheritedShot.isNotEmpty) {
+              signal['shot'] = inheritedShot;
+            } else {
+              signal['shot_fixed'] = false;
+              signal.remove('fixed_shot');
+            }
+          }
+          rawSignal
+            ..clear()
+            ..addAll(signal);
+        }
+      }
+    }
+  }
+
   String _configurationInitialShot(
     Map<dynamic, dynamic> json,
     List<List<Map<String, dynamic>>> columns,
@@ -2198,7 +2251,7 @@ class AppState extends ChangeNotifier {
         for (final rawSignal in signals) {
           if (rawSignal is! Map) continue;
           signalCount++;
-          if (signalShotIsFixed(rawSignal)) fixedSignalCount++;
+          if (signalShotIsEffectivelyFixed(rawSignal)) fixedSignalCount++;
         }
       }
     }
@@ -2243,7 +2296,7 @@ class AppState extends ChangeNotifier {
         for (final rawSignal in signals) {
           if (rawSignal is! Map) continue;
           final signal = Map<String, dynamic>.from(rawSignal);
-          final fixed = signalShotIsFixed(signal);
+          final fixed = signalShotIsEffectivelyFixed(signal);
           if (!decision.retainFixedShots) {
             signal['shot_fixed'] = false;
             signal.remove('fixed_shot');
@@ -2277,7 +2330,7 @@ class AppState extends ChangeNotifier {
         if (signals is! List) continue;
         for (final rawSignal in signals) {
           if (rawSignal is Map &&
-              !signalShotIsFixed(rawSignal) &&
+              !signalShotIsEffectivelyFixed(rawSignal) &&
               rawSignal['shot']?.toString().trim() == initialShot) {
             rawSignal.remove('shot');
           }
@@ -2293,7 +2346,7 @@ class AppState extends ChangeNotifier {
         final signals = panel['signal_specs'];
         if (signals is! List) continue;
         for (final rawSignal in signals) {
-          if (rawSignal is Map && !signalShotIsFixed(rawSignal)) {
+          if (rawSignal is Map && !signalShotIsEffectivelyFixed(rawSignal)) {
             rawSignal.remove('shot');
           }
         }
@@ -2328,7 +2381,7 @@ class AppState extends ChangeNotifier {
             return <String, dynamic>{
               ...signal,
               'shot': shot.isNotEmpty ? shot : inheritedShot,
-              'shot_fixed': signalShotIsFixed(signal),
+              'shot_fixed': signalShotIsEffectivelyFixed(signal),
               'y_expr': signal['y_expr']?.toString() ?? '',
               'x_expr': signal['x_expr']?.toString() ?? '',
               'legend': signal['legend']?.toString() ?? '',
@@ -2361,6 +2414,7 @@ class AppState extends ChangeNotifier {
       }).toList();
       if (cols.every((column) => column.isEmpty)) cols.clear();
       final initialShot = _configurationInitialShot(json, cols);
+      _materializeFixedSignalShots(cols, fallbackShot: initialShot);
       _makeConfigurationShotInheritable(cols, initialShot);
       _columns = cols;
       _plots.clear();
@@ -2623,6 +2677,7 @@ class AppState extends ChangeNotifier {
       if (cols.every((column) => column.isEmpty)) cols.clear();
       _invalidateFetchForSettingsChange();
       final fileShot = _configurationInitialShot(json, cols);
+      _materializeFixedSignalShots(cols, fallbackShot: fileShot);
       final summary = _configurationSummary(json, cols);
       var preserveImportedShots = false;
       final shouldAskAboutMetadata = summary.hasShots || summary.hasSignals;
@@ -2793,7 +2848,12 @@ class AppState extends ChangeNotifier {
                       hideMode == signalHideModeTemporary) {
                     hideMode = signalHideModeVisible;
                   }
-                  if (updateShots && !signalShotIsFixed(signal)) {
+                  if (signalShotIsFixed(signal) &&
+                      !signalShotIsEffectivelyFixed(signal)) {
+                    signal['shot_fixed'] = false;
+                    signal.remove('fixed_shot');
+                  }
+                  if (updateShots && !signalShotIsEffectivelyFixed(signal)) {
                     signal['shot'] = shot;
                   }
                   signal['read_mode'] = _dataMode;
@@ -2991,8 +3051,13 @@ class AppState extends ChangeNotifier {
                     () {
                       final signal = Map<String, dynamic>.from(rawSignal);
                       final hideMode = signalHideModeOf(signal);
+                      if (signalShotIsFixed(signal) &&
+                          !signalShotIsEffectivelyFixed(signal)) {
+                        signal['shot_fixed'] = false;
+                        signal.remove('fixed_shot');
+                      }
                       if (!preserveConfiguredShots &&
-                          !signalShotIsFixed(signal)) {
+                          !signalShotIsEffectivelyFixed(signal)) {
                         signal['shot'] = shot;
                       }
                       signal['read_mode'] = _dataMode;
@@ -3029,7 +3094,14 @@ class AppState extends ChangeNotifier {
               if (rawSignal is Map)
                 () {
                   final signal = Map<String, dynamic>.from(rawSignal);
-                  if (!signalShotIsFixed(signal)) signal['shot'] = shot;
+                  if (signalShotIsFixed(signal) &&
+                      !signalShotIsEffectivelyFixed(signal)) {
+                    signal['shot_fixed'] = false;
+                    signal.remove('fixed_shot');
+                  }
+                  if (!signalShotIsEffectivelyFixed(signal)) {
+                    signal['shot'] = shot;
+                  }
                   return signal;
                 }(),
           ];
