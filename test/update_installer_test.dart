@@ -435,6 +435,13 @@ void main() {
     expect(script, contains(r'Add-Content -LiteralPath $logFile'));
     expect(script, contains(r'$_.ScriptStackTrace'));
     expect(script, contains(r'function Invoke-WithRetry'));
+    expect(script, contains(r'function Quote-ProcessArgument'));
+    expect(
+      script,
+      contains(
+          r'(Quote-ProcessArgument "--mdslens-update-health=$healthFile")'),
+    );
+    expect(script, contains(r'-ArgumentList $replacementArguments'));
     expect(script, contains(r'$currentMoved = $false'));
     expect(script, contains(r'$replacementMoved = $false'));
     expect(script, contains(r'$currentMoved = $true'));
@@ -638,6 +645,13 @@ void main() {
     expect(userHelperPath, endsWith('relaunch-update.ps1'));
     final userScript = await File(userHelperPath).readAsString();
     expect(userScript, contains("Start-Process -FilePath \$target"));
+    expect(userScript, contains(r'function Quote-ProcessArgument'));
+    expect(
+      userScript,
+      contains(
+          r'(Quote-ProcessArgument "--mdslens-update-health=$healthFile")'),
+    );
+    expect(userScript, contains(r'-ArgumentList $replacementArguments'));
     expect(userScript, isNot(contains('-Verb RunAs')));
   });
 

@@ -1376,6 +1376,15 @@ function Remove-TreeWithRetry {
   }
 }
 
+function Quote-ProcessArgument {
+  param([Parameter(Mandatory = $true)][string]$Value)
+  # Start-Process joins ArgumentList into one Windows command line. Preserve
+  # the complete argument when a health/commit path contains spaces. Windows
+  # paths cannot contain a literal quote, so escaping that character is enough
+  # for the command line produced by this helper.
+  return '"' + $Value.Replace('"', '\"') + '"'
+}
+
 try {
   New-Item -ItemType Directory -Path (Split-Path -Parent $logFile) -Force | Out-Null
   Set-Content -LiteralPath $logFile -Value '' -Encoding UTF8
@@ -1408,8 +1417,13 @@ try {
   }
   $replacementMoved = $true
   $target = Join-Path $currentRoot 'mdslens.exe'
+  $replacementArguments = @(
+    (Quote-ProcessArgument "--mdslens-update-health=$healthFile"),
+    (Quote-ProcessArgument "--mdslens-update-token=$healthToken"),
+    (Quote-ProcessArgument "--mdslens-update-commit=$commitMarker")
+  ) -join ' '
   $replacementProcess = Start-Process -FilePath $target -WorkingDirectory $currentRoot `
-    -ArgumentList @("--mdslens-update-health=$healthFile", "--mdslens-update-token=$healthToken", "--mdslens-update-commit=$commitMarker") `
+    -ArgumentList $replacementArguments `
     -PassThru
   $healthy = $false
   for ($attempt = 0; $attempt -lt 1200; $attempt++) {
@@ -1749,6 +1763,14 @@ function Write-UpdateLog {
     Add-Content -LiteralPath $logFile -Value "[$timestamp] $Message" -Encoding UTF8
   } catch {}
 }
+function Quote-ProcessArgument {
+  param([Parameter(Mandatory = $true)][string]$Value)
+  # Start-Process joins ArgumentList into one Windows command line. Preserve
+  # the complete argument when a health/commit path contains spaces. Windows
+  # paths cannot contain a literal quote, so escaping that character is enough
+  # for the command line produced by this helper.
+  return '"' + $Value.Replace('"', '\"') + '"'
+}
 for ($attempt = 0; $attempt -lt 600; $attempt++) {
   if (Test-Path -LiteralPath $swapReadyFile) { break }
   Start-Sleep -Milliseconds 100
@@ -1759,8 +1781,13 @@ if (-not (Test-Path -LiteralPath $swapReadyFile)) {
   exit 1
 }
 $target = Join-Path $currentRoot 'mdslens.exe'
+$replacementArguments = @(
+  (Quote-ProcessArgument "--mdslens-update-health=$healthFile"),
+  (Quote-ProcessArgument "--mdslens-update-token=$healthToken"),
+  (Quote-ProcessArgument "--mdslens-update-commit=$commitMarker")
+) -join ' '
 $process = Start-Process -FilePath $target -WorkingDirectory $currentRoot `
-  -ArgumentList @("--mdslens-update-health=$healthFile", "--mdslens-update-token=$healthToken", "--mdslens-update-commit=$commitMarker") `
+  -ArgumentList $replacementArguments `
   -PassThru
 Set-Content -LiteralPath $newPidFile -Value $process.Id -Encoding Ascii
 for ($attempt = 0; $attempt -lt 1200; $attempt++) {
