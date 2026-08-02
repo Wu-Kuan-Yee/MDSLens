@@ -100,6 +100,21 @@ void normalizeSignalHideSettings(Map<dynamic, dynamic> signal) {
   signal['hidden'] = mode != signalHideModeVisible;
 }
 
+bool signalShotIsFixed(Map<dynamic, dynamic> signal) {
+  final raw = signal['shot_fixed'] ?? signal['fixed_shot'];
+  if (raw is bool) return raw;
+  if (raw is num) return raw != 0;
+  return switch (raw?.toString().trim().toLowerCase()) {
+    '1' || 'true' || 'yes' || 'on' => true,
+    _ => false,
+  };
+}
+
+void normalizeSignalShotSettings(Map<dynamic, dynamic> signal) {
+  signal['shot_fixed'] = signalShotIsFixed(signal);
+  signal.remove('fixed_shot');
+}
+
 class ConfigOpenSelection {
   const ConfigOpenSelection({required this.name, this.path, this.bytes});
 
@@ -952,7 +967,9 @@ class AppState extends ChangeNotifier {
   String shortcutText(MdsShortcutCommand command) {
     final binding = _keyboardShortcuts[command];
     if (binding == null) return '';
-    return binding.sequences.map((sequence) => sequence.displayText).join(' / ');
+    return binding.sequences
+        .map((sequence) => sequence.displayText)
+        .join(' / ');
   }
 
   void applyFontSettings(
@@ -1192,6 +1209,8 @@ class AppState extends ChangeNotifier {
   _WaveformFetchRequest? _pendingWaveformFetch;
   bool _drainingWaveformFetches = false;
   Timer? _fullShotDebounceTimer;
+  Timer? _ratePreparationTimer;
+  int _ratePreparationRevision = 0;
   DateTime? _lastFullShotScheduleAt;
   int _rapidFullShotChanges = 0;
   int _networkPermissionFailureRevision = 0;
@@ -1246,6 +1265,7 @@ class AppState extends ChangeNotifier {
   }
 
   void _invalidateFetchForSettingsChange() {
+    _cancelPendingRatePreparation();
     _cancelPendingFullShotRefresh();
     _discardPendingWaveformFetch();
     _cancelActiveNativeFetch();
@@ -1255,6 +1275,12 @@ class AppState extends ChangeNotifier {
       _fetching = false;
       _status = 'Settings changed. Previous load discarded.';
     }
+  }
+
+  void _cancelPendingRatePreparation() {
+    _ratePreparationTimer?.cancel();
+    _ratePreparationTimer = null;
+    _ratePreparationRevision++;
   }
 
   void _cancelActiveNativeFetch() {
@@ -2035,6 +2061,7 @@ class AppState extends ChangeNotifier {
             () {
               final signal = Map<String, dynamic>.from(rawSignal);
               normalizeSignalHideSettings(signal);
+              normalizeSignalShotSettings(signal);
               return signal;
             }(),
       ];
@@ -2079,6 +2106,7 @@ class AppState extends ChangeNotifier {
         if (signals is! List) continue;
         for (final rawSignal in signals) {
           if (rawSignal is Map &&
+              !signalShotIsFixed(rawSignal) &&
               rawSignal['shot']?.toString().trim() == initialShot) {
             rawSignal.remove('shot');
           }
@@ -2094,7 +2122,9 @@ class AppState extends ChangeNotifier {
         final signals = panel['signal_specs'];
         if (signals is! List) continue;
         for (final rawSignal in signals) {
-          if (rawSignal is Map) rawSignal.remove('shot');
+          if (rawSignal is Map && !signalShotIsFixed(rawSignal)) {
+            rawSignal.remove('shot');
+          }
         }
       }
     }
@@ -2127,6 +2157,7 @@ class AppState extends ChangeNotifier {
             return <String, dynamic>{
               ...signal,
               'shot': shot.isNotEmpty ? shot : inheritedShot,
+              'shot_fixed': signalShotIsFixed(signal),
               'y_expr': signal['y_expr']?.toString() ?? '',
               'x_expr': signal['x_expr']?.toString() ?? '',
               'legend': signal['legend']?.toString() ?? '',
@@ -2335,7 +2366,8 @@ class AppState extends ChangeNotifier {
     _stylusEraserMode = false;
 
     loadDefaultConfig();
-    _status = 'All settings restored to defaults. Login + Refresh to fetch data.';
+    _status =
+        'All settings restored to defaults. Login + Refresh to fetch data.';
     notifyListeners();
     await savePreferences();
   }
@@ -2565,7 +2597,7 @@ class AppState extends ChangeNotifier {
                       hideMode == signalHideModeTemporary) {
                     hideMode = signalHideModeVisible;
                   }
-                  signal['shot'] = shot;
+                  if (!signalShotIsFixed(signal)) signal['shot'] = shot;
                   signal['read_mode'] = _dataMode;
                   signal['hide_mode'] = hideMode;
                   signal['hidden'] = hideMode != signalHideModeVisible;
@@ -2683,6 +2715,30 @@ class AppState extends ChangeNotifier {
     _pendingImportedShot = null;
     if (!_requireActiveSession('change waveform rate')) return;
     if (_columns.isEmpty) return;
+    _cancelPendingRatePreparation();
+    final revision = _ratePreparationRevision;
+    final rateLabel = switch (_dataMode) {
+      1 => 'Medium',
+      2 => 'Full',
+      _ => 'Thin',
+    };
+    _fetchingPlotIndex = null;
+    _fetching = true;
+    _status = '$rateLabel rate selected; preparing...';
+    notifyListeners();
+    // Let Flutter paint the immediate loading state before cloning a large
+    // layout and preparing the native request.  On large configurations this
+    // removes the dead-looking pause between selecting Rate and "Fetching".
+    _ratePreparationTimer = Timer(Duration.zero, () {
+      _ratePreparationTimer = null;
+      if (_disposed || revision != _ratePreparationRevision) return;
+      _performRateRefresh();
+    });
+  }
+
+  void _performRateRefresh() {
+    if (_disposed || !_requireActiveSession('change waveform rate')) return;
+    if (_columns.isEmpty) return;
     if (_shotCtrl.text.trim().isNotEmpty) {
       _shotText = _shotCtrl.text.trim();
     }
@@ -2715,7 +2771,7 @@ class AppState extends ChangeNotifier {
                     () {
                       final signal = Map<String, dynamic>.from(rawSignal);
                       final hideMode = signalHideModeOf(signal);
-                      signal['shot'] = shot;
+                      if (!signalShotIsFixed(signal)) signal['shot'] = shot;
                       signal['read_mode'] = _dataMode;
                       signal['hide_mode'] = hideMode;
                       signal['hidden'] = hideMode != signalHideModeVisible;
@@ -2743,6 +2799,18 @@ class AppState extends ChangeNotifier {
       for (var row = 0; row < _columns[col].length; row++) {
         final panel = Map<String, dynamic>.from(_columns[col][row]);
         panel['shot'] = shot;
+        final signals = panel['signal_specs'];
+        if (signals is List) {
+          panel['signal_specs'] = [
+            for (final rawSignal in signals)
+              if (rawSignal is Map)
+                () {
+                  final signal = Map<String, dynamic>.from(rawSignal);
+                  if (!signalShotIsFixed(signal)) signal['shot'] = shot;
+                  return signal;
+                }(),
+          ];
+        }
         _normalizePanelDefaults(panel);
         if (col != targetCol || row != targetRow) {
           panel['signal_specs'] = <Map<String, dynamic>>[];
@@ -3221,6 +3289,7 @@ class AppState extends ChangeNotifier {
   }
 
   void stopFetch() {
+    _cancelPendingRatePreparation();
     _cancelPendingFullShotRefresh(resetCadence: true);
     _discardPendingWaveformFetch();
     _cancelActiveNativeFetch();
@@ -3245,6 +3314,7 @@ class AppState extends ChangeNotifier {
     if (_disposed) return;
     _disposed = true;
     _sessionGeneration++;
+    _cancelPendingRatePreparation();
     _cancelPendingFullShotRefresh(resetCadence: true);
     _streamNotifyTimer?.cancel();
     _streamNotifyTimer = null;

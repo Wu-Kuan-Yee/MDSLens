@@ -67,6 +67,8 @@ pub enum SshMode {
 pub struct SignalSpec {
     /// Per-signal shot override (empty = inherit from panel).
     pub shot: String,
+    /// Keep this signal on `shot` when the global shot changes.
+    pub shot_fixed: bool,
     /// MDSplus Y expression (e.g. `\\pcrl01`).
     pub y_expr: String,
     /// Optional MDSplus X expression (empty = use dim_of(y)).

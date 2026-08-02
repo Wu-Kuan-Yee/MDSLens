@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 #[serde(default)]
 pub struct FrbSignalSpec {
     pub shot: String,
+    pub shot_fixed: bool,
     pub y_expr: String,
     pub x_expr: String,
     pub legend: String,
@@ -127,6 +128,7 @@ impl From<mds_core::types::SignalSpec> for FrbSignalSpec {
         };
         Self {
             shot: s.shot,
+            shot_fixed: s.shot_fixed,
             y_expr: s.y_expr,
             x_expr: s.x_expr,
             legend: s.legend,
@@ -266,6 +268,7 @@ impl FrbLayoutConfig {
                                     };
                                     mds_core::types::SignalSpec {
                                         shot: s.shot,
+                                        shot_fixed: s.shot_fixed,
                                         y_expr: s.y_expr,
                                         x_expr: s.x_expr,
                                         legend: s.legend,

@@ -41,8 +41,8 @@ pub fn parse_environment_checked(path: &str) -> Result<LayoutConfig, String> {
 fn validate_toml_environment(path: &str) -> Result<(), String> {
     let content = std::fs::read_to_string(path)
         .map_err(|error| format!("Cannot read configuration file: {error}"))?;
-    let value: toml::Value = toml::from_str(&content)
-        .map_err(|error| format!("Invalid TOML configuration: {error}"))?;
+    let value: toml::Value =
+        toml::from_str(&content).map_err(|error| format!("Invalid TOML configuration: {error}"))?;
 
     match value.get("version") {
         None => {}
@@ -63,9 +63,9 @@ fn validate_toml_environment(path: &str) -> Result<(), String> {
             .as_array()
             .ok_or_else(|| "TOML configuration field 'panels' must be an array.".to_string())?;
         for (index, panel) in panels.iter().enumerate() {
-            let panel = panel.as_table().ok_or_else(|| {
-                format!("TOML panel {} must be a table.", index + 1)
-            })?;
+            let panel = panel
+                .as_table()
+                .ok_or_else(|| format!("TOML panel {} must be a table.", index + 1))?;
             if let Some(signals) = panel.get("signals") {
                 let signals = signals.as_array().ok_or_else(|| {
                     format!("TOML panel {} field 'signals' must be an array.", index + 1)
@@ -90,9 +90,7 @@ fn validate_webscp_environment(path: &str) -> Result<(), String> {
         || map.contains_key("shot_txt")
         || map.keys().any(|key| key.ends_with(".rows"));
     if !recognizable {
-        return Err(
-            "Invalid WebScope configuration: no layout fields were found.".into(),
-        );
+        return Err("Invalid WebScope configuration: no layout fields were found.".into());
     }
     if let Some(cols) = map.get("cols") {
         cols.trim().parse::<usize>().map_err(|_| {
@@ -167,7 +165,10 @@ pub fn parse_toml_environment(path: &str) -> LayoutConfig {
             None => continue,
         };
 
-        let column = table.get("column").and_then(|v| v.as_integer()).unwrap_or(1) as usize;
+        let column = table
+            .get("column")
+            .and_then(|v| v.as_integer())
+            .unwrap_or(1) as usize;
         let row = table.get("row").and_then(|v| v.as_integer()).unwrap_or(1) as usize;
         max_column = max_column.max(column);
 
@@ -221,6 +222,11 @@ pub fn parse_toml_environment(path: &str) -> LayoutConfig {
                 if let Some(v) = sig.get("shot").and_then(|v| v.as_str()) {
                     signal.shot = v.to_string();
                 }
+                signal.shot_fixed = sig
+                    .get("shot_fixed")
+                    .and_then(|v| v.as_bool())
+                    .or_else(|| sig.get("fixed_shot").and_then(|v| v.as_bool()))
+                    .unwrap_or(false);
                 if let Some(v) = sig.get("tree").and_then(|v| v.as_str()) {
                     signal.experiment = v.to_string();
                 }
@@ -238,7 +244,8 @@ pub fn parse_toml_environment(path: &str) -> LayoutConfig {
                 }
                 if let Some(v) = sig.get("color").and_then(|v| v.as_str()) {
                     signal.color_name = v.to_string();
-                    signal.manual_color = sig.get("manual_color")
+                    signal.manual_color = sig
+                        .get("manual_color")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
                 }
@@ -246,14 +253,19 @@ pub fn parse_toml_environment(path: &str) -> LayoutConfig {
                     signal.color_name = crate::colors::color_for_index(i);
                 }
                 let legacy_hidden = sig.get("hidden").and_then(|v| v.as_bool()).unwrap_or(false);
-                signal.hide_mode = match sig.get("hide_mode")
+                signal.hide_mode = match sig
+                    .get("hide_mode")
                     .and_then(|v| v.as_str())
                     .map(|v| v.trim().to_ascii_lowercase())
                     .as_deref()
                 {
-                    Some("temporary" | "current_shot" | "current-shot") => SignalHideMode::Temporary,
+                    Some("temporary" | "current_shot" | "current-shot") => {
+                        SignalHideMode::Temporary
+                    }
                     Some("persistent" | "always") => SignalHideMode::Persistent,
-                    Some("visible" | "none" | "not_hidden" | "not-hidden") => SignalHideMode::Visible,
+                    Some("visible" | "none" | "not_hidden" | "not-hidden") => {
+                        SignalHideMode::Visible
+                    }
                     _ if legacy_hidden => SignalHideMode::Persistent,
                     _ => SignalHideMode::Visible,
                 };
@@ -270,11 +282,7 @@ pub fn parse_toml_environment(path: &str) -> LayoutConfig {
             }
         }
 
-        panel_slots.push(PanelSlot {
-            column,
-            row,
-            plot,
-        });
+        panel_slots.push(PanelSlot { column, row, plot });
     }
 
     // Sort panels: column first, then row
@@ -314,24 +322,62 @@ pub fn parse_webscp_environment(path: &str) -> LayoutConfig {
             let prefix = format!("{}_{}.", c, r);
             let mut plot = crate::types::PlotSpec::new();
 
-            plot.shot = trim_quotes(map.get(&format!("{}shot_txt", prefix)).map(|s| s.as_str()).unwrap_or(""));
-            plot.title = trim_quotes(map.get(&format!("{}title", prefix)).map(|s| s.as_str()).unwrap_or(""));
-            plot.x_label = trim_quotes(map.get(&format!("{}xlabel", prefix)).map(|s| s.as_str()).unwrap_or(""));
-            plot.y_label = trim_quotes(map.get(&format!("{}ylabel", prefix)).map(|s| s.as_str()).unwrap_or(""));
-            plot.extraction_points = parse_i32(&map, &format!("{}extraction_points", prefix),
-                parse_i32(&map, "Extraction_points", 2000));
-            plot.grid = parse_i32(&map, &format!("{}grid_mode", prefix),
-                parse_i32(&map, "Grid_Mode", 1)) != 0;
+            plot.shot = trim_quotes(
+                map.get(&format!("{}shot_txt", prefix))
+                    .map(|s| s.as_str())
+                    .unwrap_or(""),
+            );
+            plot.title = trim_quotes(
+                map.get(&format!("{}title", prefix))
+                    .map(|s| s.as_str())
+                    .unwrap_or(""),
+            );
+            plot.x_label = trim_quotes(
+                map.get(&format!("{}xlabel", prefix))
+                    .map(|s| s.as_str())
+                    .unwrap_or(""),
+            );
+            plot.y_label = trim_quotes(
+                map.get(&format!("{}ylabel", prefix))
+                    .map(|s| s.as_str())
+                    .unwrap_or(""),
+            );
+            plot.extraction_points = parse_i32(
+                &map,
+                &format!("{}extraction_points", prefix),
+                parse_i32(&map, "Extraction_points", 2000),
+            );
+            plot.grid = parse_i32(
+                &map,
+                &format!("{}grid_mode", prefix),
+                parse_i32(&map, "Grid_Mode", 1),
+            ) != 0;
             plot.custom_x_range = parse_i32(&map, &format!("{}xseting_mode", prefix), 1) == 0;
             plot.custom_y_range = parse_i32(&map, &format!("{}yseting_mode", prefix), 1) == 0;
 
             if plot.custom_x_range {
-                plot.xmin = parse_f64(map.get(&format!("{}xmin_custom", prefix)).map(|s| s.as_str()).unwrap_or(""));
-                plot.xmax = parse_f64(map.get(&format!("{}xmax_custom", prefix)).map(|s| s.as_str()).unwrap_or(""));
+                plot.xmin = parse_f64(
+                    map.get(&format!("{}xmin_custom", prefix))
+                        .map(|s| s.as_str())
+                        .unwrap_or(""),
+                );
+                plot.xmax = parse_f64(
+                    map.get(&format!("{}xmax_custom", prefix))
+                        .map(|s| s.as_str())
+                        .unwrap_or(""),
+                );
             }
             if plot.custom_y_range {
-                plot.ymin = parse_f64(map.get(&format!("{}ymin_custom", prefix)).map(|s| s.as_str()).unwrap_or(""));
-                plot.ymax = parse_f64(map.get(&format!("{}ymax_custom", prefix)).map(|s| s.as_str()).unwrap_or(""));
+                plot.ymin = parse_f64(
+                    map.get(&format!("{}ymin_custom", prefix))
+                        .map(|s| s.as_str())
+                        .unwrap_or(""),
+                );
+                plot.ymax = parse_f64(
+                    map.get(&format!("{}ymax_custom", prefix))
+                        .map(|s| s.as_str())
+                        .unwrap_or(""),
+                );
             }
 
             let signal_count = parse_usize(&map, &format!("{}num_sig", prefix), 1).max(1);
@@ -339,33 +385,69 @@ pub fn parse_webscp_environment(path: &str) -> LayoutConfig {
                 let _sig_prefix = format!("{}{}_", prefix, s);
                 let mut sig = crate::types::SignalSpec::default();
 
-                sig.shot = trim_quotes(map.get(&format!("{}shot_{}", prefix, s)).map(|v| v.as_str()).unwrap_or(""));
-                sig.y_expr = trim_quotes(map.get(&format!("{}y_expr_{}", prefix, s)).map(|v| v.as_str()).unwrap_or(""));
-                sig.x_expr = trim_quotes(map.get(&format!("{}x_expr_{}", prefix, s)).map(|v| v.as_str()).unwrap_or(""));
-                sig.experiment = trim_quotes(map.get(&format!("{}experiment_{}", prefix, s)).map(|v| v.as_str()).unwrap_or(""));
-                sig.server_ip = trim_quotes(map.get(&format!("{}server_ip_{}", prefix, s)).map(|v| v.as_str()).unwrap_or(""));
-                sig.legend = trim_quotes(map.get(&format!("{}legend_name_{}", prefix, s)).map(|v| v.as_str()).unwrap_or(""));
+                sig.shot = trim_quotes(
+                    map.get(&format!("{}shot_{}", prefix, s))
+                        .map(|v| v.as_str())
+                        .unwrap_or(""),
+                );
+                sig.shot_fixed = parse_i32(&map, &format!("{}shot_fixed_{}", prefix, s), 0) != 0;
+                sig.y_expr = trim_quotes(
+                    map.get(&format!("{}y_expr_{}", prefix, s))
+                        .map(|v| v.as_str())
+                        .unwrap_or(""),
+                );
+                sig.x_expr = trim_quotes(
+                    map.get(&format!("{}x_expr_{}", prefix, s))
+                        .map(|v| v.as_str())
+                        .unwrap_or(""),
+                );
+                sig.experiment = trim_quotes(
+                    map.get(&format!("{}experiment_{}", prefix, s))
+                        .map(|v| v.as_str())
+                        .unwrap_or(""),
+                );
+                sig.server_ip = trim_quotes(
+                    map.get(&format!("{}server_ip_{}", prefix, s))
+                        .map(|v| v.as_str())
+                        .unwrap_or(""),
+                );
+                sig.legend = trim_quotes(
+                    map.get(&format!("{}legend_name_{}", prefix, s))
+                        .map(|v| v.as_str())
+                        .unwrap_or(""),
+                );
 
-                let color_name = trim_quotes(map.get(&format!("{}color_name_{}", prefix, s)).map(|v| v.as_str()).unwrap_or(""));
-                sig.manual_color = parse_i32(&map, &format!("{}color_manual_{}", prefix, s), 0) != 0;
+                let color_name = trim_quotes(
+                    map.get(&format!("{}color_name_{}", prefix, s))
+                        .map(|v| v.as_str())
+                        .unwrap_or(""),
+                );
+                sig.manual_color =
+                    parse_i32(&map, &format!("{}color_manual_{}", prefix, s), 0) != 0;
                 if sig.manual_color && !color_name.is_empty() {
                     sig.color_name = color_name;
                 } else {
                     sig.color_name = crate::colors::color_for_index(s - 1);
                 }
                 let legacy_hidden = parse_i32(&map, &format!("{}hidden_{}", prefix, s), 0) != 0;
-                sig.hide_mode = match map.get(&format!("{}hide_mode_{}", prefix, s))
+                sig.hide_mode = match map
+                    .get(&format!("{}hide_mode_{}", prefix, s))
                     .map(|value| value.trim().to_ascii_lowercase())
                     .as_deref()
                 {
-                    Some("temporary" | "current_shot" | "current-shot") => SignalHideMode::Temporary,
+                    Some("temporary" | "current_shot" | "current-shot") => {
+                        SignalHideMode::Temporary
+                    }
                     Some("persistent" | "always") => SignalHideMode::Persistent,
-                    Some("visible" | "none" | "not_hidden" | "not-hidden") => SignalHideMode::Visible,
+                    Some("visible" | "none" | "not_hidden" | "not-hidden") => {
+                        SignalHideMode::Visible
+                    }
                     _ if legacy_hidden => SignalHideMode::Persistent,
                     _ => SignalHideMode::Visible,
                 };
                 sig.hidden = sig.hide_mode != SignalHideMode::Visible;
-                sig.read_mode = match map.get(&format!("{}read_mode_{}", prefix, s))
+                sig.read_mode = match map
+                    .get(&format!("{}read_mode_{}", prefix, s))
                     .map(|value| value.trim().to_ascii_lowercase())
                     .as_deref()
                 {
@@ -402,7 +484,9 @@ pub fn encode_environment_webscp(config: &LayoutConfig) -> String {
     let default_shot = if !config.shot.trim().is_empty() {
         config.shot.trim()
     } else {
-        config.columns.iter()
+        config
+            .columns
+            .iter()
             .flat_map(|column| column.iter())
             .map(|plot| plot.shot.trim())
             .find(|shot| !shot.is_empty())
@@ -433,18 +517,76 @@ pub fn encode_environment_webscp(config: &LayoutConfig) -> String {
             writeln!(out, "{}y_log:0", prefix).unwrap();
             writeln!(out, "{}legend:1", prefix).unwrap();
             writeln!(out, "{}legend_position:", prefix).unwrap();
-            writeln!(out, "{}xseting_mode:{}", prefix, if plot.custom_x_range { 0 } else { 1 }).unwrap();
-            writeln!(out, "{}yseting_mode:{}", prefix, if plot.custom_y_range { 0 } else { 1 }).unwrap();
+            writeln!(
+                out,
+                "{}xseting_mode:{}",
+                prefix,
+                if plot.custom_x_range { 0 } else { 1 }
+            )
+            .unwrap();
+            writeln!(
+                out,
+                "{}yseting_mode:{}",
+                prefix,
+                if plot.custom_y_range { 0 } else { 1 }
+            )
+            .unwrap();
             writeln!(out, "{}x_line_num:5", prefix).unwrap();
             writeln!(out, "{}y_line_num:5", prefix).unwrap();
-            writeln!(out, "{}extraction_points:{}", prefix, plot.extraction_points.max(2)).unwrap();
+            writeln!(
+                out,
+                "{}extraction_points:{}",
+                prefix,
+                plot.extraction_points.max(2)
+            )
+            .unwrap();
             writeln!(out, "{}vertical_offset:0", prefix).unwrap();
             writeln!(out, "{}horizontal_offset:0", prefix).unwrap();
             writeln!(out, "{}grid_mode:{}", prefix, i32::from(plot.grid)).unwrap();
-            writeln!(out, "{}xmin_custom:{}", prefix, if plot.custom_x_range && plot.xmin.is_finite() { plot.xmin.to_string() } else { String::new() }).unwrap();
-            writeln!(out, "{}xmax_custom:{}", prefix, if plot.custom_x_range && plot.xmax.is_finite() { plot.xmax.to_string() } else { String::new() }).unwrap();
-            writeln!(out, "{}ymin_custom:{}", prefix, if plot.custom_y_range && plot.ymin.is_finite() { plot.ymin.to_string() } else { String::new() }).unwrap();
-            writeln!(out, "{}ymax_custom:{}", prefix, if plot.custom_y_range && plot.ymax.is_finite() { plot.ymax.to_string() } else { String::new() }).unwrap();
+            writeln!(
+                out,
+                "{}xmin_custom:{}",
+                prefix,
+                if plot.custom_x_range && plot.xmin.is_finite() {
+                    plot.xmin.to_string()
+                } else {
+                    String::new()
+                }
+            )
+            .unwrap();
+            writeln!(
+                out,
+                "{}xmax_custom:{}",
+                prefix,
+                if plot.custom_x_range && plot.xmax.is_finite() {
+                    plot.xmax.to_string()
+                } else {
+                    String::new()
+                }
+            )
+            .unwrap();
+            writeln!(
+                out,
+                "{}ymin_custom:{}",
+                prefix,
+                if plot.custom_y_range && plot.ymin.is_finite() {
+                    plot.ymin.to_string()
+                } else {
+                    String::new()
+                }
+            )
+            .unwrap();
+            writeln!(
+                out,
+                "{}ymax_custom:{}",
+                prefix,
+                if plot.custom_y_range && plot.ymax.is_finite() {
+                    plot.ymax.to_string()
+                } else {
+                    String::new()
+                }
+            )
+            .unwrap();
             writeln!(out, "{}title:{}", prefix, value(&plot.title)).unwrap();
             writeln!(out, "{}xlabel:{}", prefix, value(&plot.x_label)).unwrap();
             writeln!(out, "{}ylabel:{}", prefix, value(&plot.y_label)).unwrap();
@@ -457,32 +599,104 @@ pub fn encode_environment_webscp(config: &LayoutConfig) -> String {
                     signal.shot.trim()
                 };
                 writeln!(out, "{}shot_{}:{}", prefix, number, value(signal_shot)).unwrap();
-                writeln!(out, "{}color_{}_{}:{}", prefix, row_index + 1, number, signal_index % 16).unwrap();
+                writeln!(
+                    out,
+                    "{}shot_fixed_{}:{}",
+                    prefix,
+                    number,
+                    i32::from(signal.shot_fixed)
+                )
+                .unwrap();
+                writeln!(
+                    out,
+                    "{}color_{}_{}:{}",
+                    prefix,
+                    row_index + 1,
+                    number,
+                    signal_index % 16
+                )
+                .unwrap();
                 writeln!(out, "{}markers_{}_{}:0", prefix, row_index + 1, number).unwrap();
                 writeln!(out, "{}interpolate_{}_{}:1", prefix, row_index + 1, number).unwrap();
                 writeln!(out, "{}y_expr_{}:{}", prefix, number, value(&signal.y_expr)).unwrap();
                 writeln!(out, "{}x_expr_{}:{}", prefix, number, value(&signal.x_expr)).unwrap();
-                writeln!(out, "{}experiment_{}:{}", prefix, number, value(&signal.experiment)).unwrap();
-                writeln!(out, "{}server_ip_{}:{}", prefix, number, value(&signal.server_ip)).unwrap();
-                writeln!(out, "{}legend_name_{}:{}", prefix, number, value(&signal.legend)).unwrap();
-                writeln!(out, "{}color_name_{}:{}", prefix, number, value(&signal.color_name)).unwrap();
-                writeln!(out, "{}color_manual_{}:{}", prefix, number, i32::from(signal.manual_color)).unwrap();
+                writeln!(
+                    out,
+                    "{}experiment_{}:{}",
+                    prefix,
+                    number,
+                    value(&signal.experiment)
+                )
+                .unwrap();
+                writeln!(
+                    out,
+                    "{}server_ip_{}:{}",
+                    prefix,
+                    number,
+                    value(&signal.server_ip)
+                )
+                .unwrap();
+                writeln!(
+                    out,
+                    "{}legend_name_{}:{}",
+                    prefix,
+                    number,
+                    value(&signal.legend)
+                )
+                .unwrap();
+                writeln!(
+                    out,
+                    "{}color_name_{}:{}",
+                    prefix,
+                    number,
+                    value(&signal.color_name)
+                )
+                .unwrap();
+                writeln!(
+                    out,
+                    "{}color_manual_{}:{}",
+                    prefix,
+                    number,
+                    i32::from(signal.manual_color)
+                )
+                .unwrap();
                 let hide_mode = if signal.hide_mode == SignalHideMode::Visible && signal.hidden {
                     SignalHideMode::Persistent
                 } else {
                     signal.hide_mode
                 };
-                writeln!(out, "{}hidden_{}:{}", prefix, number, i32::from(hide_mode != SignalHideMode::Visible)).unwrap();
-                writeln!(out, "{}hide_mode_{}:{}", prefix, number, match hide_mode {
-                    SignalHideMode::Temporary => "temporary",
-                    SignalHideMode::Persistent => "persistent",
-                    SignalHideMode::Visible => "visible",
-                }).unwrap();
-                writeln!(out, "{}read_mode_{}:{}", prefix, number, match signal.read_mode {
-                    Some(crate::types::DataReadMode::Full) => "full",
-                    Some(crate::types::DataReadMode::Medium) => "medium",
-                    _ => "thin",
-                }).unwrap();
+                writeln!(
+                    out,
+                    "{}hidden_{}:{}",
+                    prefix,
+                    number,
+                    i32::from(hide_mode != SignalHideMode::Visible)
+                )
+                .unwrap();
+                writeln!(
+                    out,
+                    "{}hide_mode_{}:{}",
+                    prefix,
+                    number,
+                    match hide_mode {
+                        SignalHideMode::Temporary => "temporary",
+                        SignalHideMode::Persistent => "persistent",
+                        SignalHideMode::Visible => "visible",
+                    }
+                )
+                .unwrap();
+                writeln!(
+                    out,
+                    "{}read_mode_{}:{}",
+                    prefix,
+                    number,
+                    match signal.read_mode {
+                        Some(crate::types::DataReadMode::Full) => "full",
+                        Some(crate::types::DataReadMode::Medium) => "medium",
+                        _ => "thin",
+                    }
+                )
+                .unwrap();
             }
         }
     }
@@ -507,10 +721,11 @@ pub fn encode_environment_toml(config: &LayoutConfig) -> String {
         }
     }
     let default_shot = if config.shot.trim().is_empty() {
-        shot_counts.into_iter()
-        .max_by_key(|(_, count)| *count)
-        .map(|(shot, _)| shot.to_string())
-        .unwrap_or_default()
+        shot_counts
+            .into_iter()
+            .max_by_key(|(_, count)| *count)
+            .map(|(shot, _)| shot.to_string())
+            .unwrap_or_default()
     } else {
         config.shot.trim().to_string()
     };
@@ -546,12 +761,20 @@ pub fn encode_environment_toml(config: &LayoutConfig) -> String {
                 writeln!(out, "custom_y_range = true").unwrap();
             }
             if plot.custom_x_range {
-                if plot.xmin.is_finite() { writeln!(out, "xmin = {}", plot.xmin).unwrap(); }
-                if plot.xmax.is_finite() { writeln!(out, "xmax = {}", plot.xmax).unwrap(); }
+                if plot.xmin.is_finite() {
+                    writeln!(out, "xmin = {}", plot.xmin).unwrap();
+                }
+                if plot.xmax.is_finite() {
+                    writeln!(out, "xmax = {}", plot.xmax).unwrap();
+                }
             }
             if plot.custom_y_range {
-                if plot.ymin.is_finite() { writeln!(out, "ymin = {}", plot.ymin).unwrap(); }
-                if plot.ymax.is_finite() { writeln!(out, "ymax = {}", plot.ymax).unwrap(); }
+                if plot.ymin.is_finite() {
+                    writeln!(out, "ymin = {}", plot.ymin).unwrap();
+                }
+                if plot.ymax.is_finite() {
+                    writeln!(out, "ymax = {}", plot.ymax).unwrap();
+                }
             }
             out.push('\n');
 
@@ -571,6 +794,7 @@ pub fn encode_environment_toml(config: &LayoutConfig) -> String {
                     signal.color_name.clone()
                 };
                 writeln!(out, "shot = {:?}", resolved_shot).unwrap();
+                writeln!(out, "shot_fixed = {}", signal.shot_fixed).unwrap();
                 writeln!(out, "tree = {:?}", signal.experiment).unwrap();
                 writeln!(out, "server = {:?}", signal.server_ip).unwrap();
                 writeln!(out, "y = {:?}", signal.y_expr).unwrap();
@@ -585,14 +809,23 @@ pub fn encode_environment_toml(config: &LayoutConfig) -> String {
                     signal.hide_mode
                 };
                 writeln!(out, "hidden = {}", hide_mode != SignalHideMode::Visible).unwrap();
-                writeln!(out, "hide_mode = {:?}", match hide_mode {
-                    SignalHideMode::Temporary => "temporary",
-                    SignalHideMode::Persistent => "persistent",
-                    SignalHideMode::Visible => "visible",
-                }).unwrap();
+                writeln!(
+                    out,
+                    "hide_mode = {:?}",
+                    match hide_mode {
+                        SignalHideMode::Temporary => "temporary",
+                        SignalHideMode::Persistent => "persistent",
+                        SignalHideMode::Visible => "visible",
+                    }
+                )
+                .unwrap();
                 match signal.read_mode {
-                    Some(crate::types::DataReadMode::Full) => writeln!(out, "read_mode = \"full\"").unwrap(),
-                    Some(crate::types::DataReadMode::Medium) => writeln!(out, "read_mode = \"medium\"").unwrap(),
+                    Some(crate::types::DataReadMode::Full) => {
+                        writeln!(out, "read_mode = \"full\"").unwrap()
+                    }
+                    Some(crate::types::DataReadMode::Medium) => {
+                        writeln!(out, "read_mode = \"medium\"").unwrap()
+                    }
                     _ => writeln!(out, "read_mode = \"thin\"").unwrap(),
                 }
                 out.push('\n');
@@ -653,7 +886,10 @@ fn read_key_value_file(path: &str) -> std::collections::HashMap<String, String> 
             let key = line[..pos].trim().to_string();
             let value = line[pos + 1..].trim().to_string();
             // Apply Java-style unescaping
-            let value = value.replace("\\:", ":").replace("\\=", "=").replace("\\\\", "\\");
+            let value = value
+                .replace("\\:", ":")
+                .replace("\\=", "=")
+                .replace("\\\\", "\\");
             map.insert(key, value);
         }
     }
@@ -673,7 +909,11 @@ fn trim_quotes(s: &str) -> String {
     s.to_string()
 }
 
-fn parse_usize(map: &std::collections::HashMap<String, String>, key: &str, fallback: usize) -> usize {
+fn parse_usize(
+    map: &std::collections::HashMap<String, String>,
+    key: &str,
+    fallback: usize,
+) -> usize {
     map.get(key)
         .and_then(|v| v.trim().parse().ok())
         .unwrap_or(fallback)
@@ -824,6 +1064,7 @@ y = "\\pcrl01"
                 signal_specs: vec![
                     crate::types::SignalSpec {
                         shot: "163899".into(),
+                        shot_fixed: true,
                         y_expr: "\\FIRST".into(),
                         x_expr: "dim_of(\\FIRST)".into(),
                         legend: "Primary current".into(),
@@ -837,6 +1078,7 @@ y = "\\pcrl01"
                     },
                     crate::types::SignalSpec {
                         shot: "163900".into(),
+                        shot_fixed: false,
                         y_expr: "\\SECOND".into(),
                         experiment: "tree_b".into(),
                         server_ip: "10.0.0.2".into(),
@@ -859,6 +1101,7 @@ y = "\\pcrl01"
         assert!(encoded.contains("manual_color = true"));
         assert!(encoded.contains("hidden = true"));
         assert!(encoded.contains("hide_mode = \"temporary\""));
+        assert!(encoded.contains("shot_fixed = true"));
         assert!(encoded.contains("read_mode = \"full\""));
         assert!(encoded.contains("shot = \"163900\""));
         assert!(encoded.contains("manual_color = false"));
@@ -872,6 +1115,7 @@ y = "\\pcrl01"
         let first = &decoded.columns[0][0].signal_specs[0];
         let second = &decoded.columns[0][0].signal_specs[1];
         assert_eq!(first.shot, "163899");
+        assert!(first.shot_fixed);
         assert_eq!(first.x_expr, "dim_of(\\FIRST)");
         assert_eq!(first.legend, "Primary current");
         assert_eq!(first.color_name, "#123456");
@@ -880,6 +1124,7 @@ y = "\\pcrl01"
         assert_eq!(first.hide_mode, crate::types::SignalHideMode::Temporary);
         assert_eq!(first.read_mode, Some(crate::types::DataReadMode::Full));
         assert_eq!(second.shot, "163900");
+        assert!(!second.shot_fixed);
         assert_eq!(second.color_name, crate::colors::color_for_index(1));
         assert!(!second.manual_color);
         assert!(!second.hidden);
@@ -932,6 +1177,7 @@ y = "\\pcrl01"
                 ymax: 600.0,
                 signal_specs: vec![crate::types::SignalSpec {
                     shot: "164000".into(),
+                    shot_fixed: true,
                     y_expr: "\\pcrl01".into(),
                     x_expr: "dim_of(\\pcrl01)".into(),
                     legend: "Ip".into(),
@@ -969,6 +1215,7 @@ y = "\\pcrl01"
         assert_eq!((panel.ymin, panel.ymax), (-10.0, 600.0));
         let signal = &panel.signal_specs[0];
         assert_eq!(signal.shot, "164000");
+        assert!(signal.shot_fixed);
         assert_eq!(signal.legend, "Ip");
         assert_eq!(signal.color_name, "#123456");
         assert!(signal.manual_color);
@@ -1066,8 +1313,7 @@ y = "\\pcrl01"
         std::fs::write(&webscp, "this is not a WebScope configuration\n").unwrap();
 
         let toml_error = parse_environment_checked(toml.to_str().unwrap()).unwrap_err();
-        let webscp_error =
-            parse_environment_checked(webscp.to_str().unwrap()).unwrap_err();
+        let webscp_error = parse_environment_checked(webscp.to_str().unwrap()).unwrap_err();
 
         std::fs::remove_file(toml).ok();
         std::fs::remove_file(webscp).ok();

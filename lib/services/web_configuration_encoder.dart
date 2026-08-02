@@ -43,6 +43,8 @@ class WebConfigurationEncoder {
   static String _text(Object? value) => value?.toString() ?? '';
   static bool _bool(Object? value, [bool fallback = false]) =>
       value is bool ? value : fallback;
+  static bool _shotFixed(Map<String, dynamic> signal) =>
+      _bool(signal['shot_fixed']) || _bool(signal['fixed_shot']);
   static int _int(Object? value, [int fallback = 0]) =>
       value is num ? value.toInt() : int.tryParse(_text(value)) ?? fallback;
   static num? _finiteNumber(Object? value) =>
@@ -151,6 +153,7 @@ class WebConfigurationEncoder {
             ..writeln('manual_color = ${_bool(signal['manual_color'])}')
             ..writeln('hidden = ${_hideMode(signal) != 'visible'}')
             ..writeln('hide_mode = ${_tomlString(_hideMode(signal))}')
+            ..writeln('shot_fixed = ${_shotFixed(signal)}')
             ..writeln('read_mode = ${_tomlString(_readMode(signal))}')
             ..writeln();
         }
@@ -254,6 +257,8 @@ class WebConfigurationEncoder {
             ..writeln(
                 '${prefix}hidden_$number:${hideMode == 'visible' ? 0 : 1}')
             ..writeln('${prefix}hide_mode_$number:$hideMode')
+            ..writeln(
+                '${prefix}shot_fixed_$number:${_shotFixed(signal) ? 1 : 0}')
             ..writeln('${prefix}read_mode_$number:${_readMode(signal)}');
         }
       }

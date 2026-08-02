@@ -478,7 +478,7 @@ fn grow_hot_pool(requests: &[FetchRequest], groups: &HashMap<String, Vec<usize>>
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 fn effective_shot(plot: &PlotSpec, sig: &SignalSpec) -> String {
-    if !sig.shot.trim().is_empty() {
+    if sig.shot_fixed && !sig.shot.trim().is_empty() {
         sig.shot.clone()
     } else {
         plot.shot.clone()
@@ -527,6 +527,21 @@ mod tests {
         assert_eq!(requests[0].read_mode, DataReadMode::Thin);
         assert_eq!(requests[0].max_points, 2000);
         assert_eq!(global_wave_limit(&requests), MAX_GLOBAL_SOCKETS);
+    }
+
+    #[test]
+    fn signal_shot_follows_panel_unless_fixed() {
+        let mut config = make_test_config();
+        config.shot = "170001".into();
+        config.columns[0][0].shot = "170001".into();
+        config.columns[0][0].signal_specs[0].shot = "169999".into();
+
+        let inherited = build_requests(&config, DataReadMode::Thin);
+        assert_eq!(inherited[0].shot, "170001");
+
+        config.columns[0][0].signal_specs[0].shot_fixed = true;
+        let fixed = build_requests(&config, DataReadMode::Thin);
+        assert_eq!(fixed[0].shot, "169999");
     }
 
     #[test]

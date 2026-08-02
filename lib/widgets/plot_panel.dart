@@ -2864,7 +2864,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
       _DSRow(
         shot: TextEditingController(
           text: resolveDataSourceShot(
-            signalShot: s?['shot'],
+            signalShot: s != null && signalShotIsFixed(s) ? s['shot'] : null,
             inputShot: widget.defaultShot,
           ),
         ),
@@ -2879,6 +2879,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
         xExpr: s?['x_expr']?.toString() ?? '',
       )
         ..hideMode = s == null ? signalHideModeVisible : signalHideModeOf(s)
+        ..fixedShot = s != null && signalShotIsFixed(s)
         ..colorIdx = i % _presetColors.length
         ..readMode = (s?['read_mode'] as int?) ?? defaultRate,
     );
@@ -2951,6 +2952,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                         xExpr: '',
                       )
                         ..colorIdx = _rows.length % _presetColors.length
+                        ..fixedShot = false
                         ..readMode = defaultRate;
                       setState(() {
                         _rows.add(newRow);
@@ -2974,20 +2976,22 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                 child: Table(
                   columnWidths: const {
                     0: FixedColumnWidth(84),
-                    1: FixedColumnWidth(124),
+                    1: FixedColumnWidth(152),
                     2: FixedColumnWidth(184),
                     3: FixedColumnWidth(130),
                     4: FixedColumnWidth(144),
                     5: FixedColumnWidth(34),
                     6: FixedColumnWidth(150),
                     7: FixedColumnWidth(136),
-                    8: FixedColumnWidth(26),
+                    8: FixedColumnWidth(152),
+                    9: FixedColumnWidth(26),
                   },
                   defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                   children: [
                     TableRow(
                       children: [
                         _hdrCell('Shot', 4),
+                        _hdrCell('Shot behavior', 4),
                         _hdrCell('Tree', 4),
                         _hdrCell('Signal', 4),
                         _hdrCell('Legend', 4),
@@ -3008,6 +3012,35 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                               controller: _rows[i].shot,
                               decoration: _dsDeco(),
                               style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: PolishedDropdown<bool>(
+                              key: ValueKey('data-shot-fixed-dropdown-$i'),
+                              id: 'data-shot-behavior-$i',
+                              value: _rows[i].fixedShot,
+                              height: 42,
+                              fontSize: 11,
+                              leadingIcon: _rows[i].fixedShot
+                                  ? Icons.lock_rounded
+                                  : Icons.sync_rounded,
+                              minimumMenuWidth: 220,
+                              options: const [
+                                PolishedDropdownOption(
+                                  value: false,
+                                  label: 'Follow selected shot',
+                                  icon: Icons.sync_rounded,
+                                ),
+                                PolishedDropdownOption(
+                                  value: true,
+                                  label: 'Fixed shot',
+                                  icon: Icons.lock_rounded,
+                                ),
+                              ],
+                              onChanged: (value) => setState(
+                                () => _rows[i].fixedShot = value,
+                              ),
                             ),
                           ),
                           Padding(
@@ -3198,6 +3231,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
           Color(_presetColors[r.colorIdx % _presetColors.length]);
       widget.signals.add({
         'shot': shot.isNotEmpty ? shot : widget.defaultShot,
+        'shot_fixed': r.fixedShot,
         'y_expr': r.y.text.trim(),
         'x_expr': r.xExpr,
         'legend': r.legend.text.trim(),
@@ -3605,6 +3639,7 @@ class _DSRow {
   final signalAutocompleteKey = GlobalKey<_AutocompleteFieldState>();
   final String xExpr;
   int hideMode = signalHideModeVisible;
+  bool fixedShot = false;
   int readMode = 0;
   int colorIdx = 0;
   Color? customColor;

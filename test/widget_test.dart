@@ -33,6 +33,7 @@ import 'package:mdslens/widgets/configuration_drop_region.dart';
 import 'package:mdslens/widgets/plot_panel.dart';
 import 'package:mdslens/widgets/plot_grid.dart';
 import 'package:mdslens/widgets/plot_render_cache.dart';
+import 'package:mdslens/widgets/polished_dropdown.dart';
 import 'package:mdslens/widgets/responsive_plot_layout.dart';
 import 'package:mdslens/widgets/toolbar.dart';
 import 'package:provider/provider.dart';
@@ -1022,7 +1023,8 @@ void main() {
     expect(tester.testTextInput.isVisible, isFalse);
   });
 
-  test('Global actions, Shot navigation, and Escape bypass focused editing', () {
+  test('Global actions, Shot navigation, and Escape bypass focused editing',
+      () {
     expect(
       allowShortcutWhileEditing(
         MdsShortcutCommand.previousShot,
@@ -1459,6 +1461,7 @@ void main() {
       expect(signals, hasLength(2));
       expect(signals[0], {
         'shot': '163899',
+        'shot_fixed': false,
         'y_expr': r'\FIRST',
         'x_expr': 'dim_of(\\FIRST)',
         'legend': '',
@@ -1472,6 +1475,7 @@ void main() {
       });
       expect(signals[1], {
         'shot': '163900',
+        'shot_fixed': false,
         'y_expr': r'\SECOND',
         'x_expr': '',
         'legend': '',
@@ -1721,6 +1725,7 @@ void main() {
       app.columns[0][0]['signal_specs'] = [
         {
           'shot': '100001',
+          'shot_fixed': true,
           'read_mode': 2,
           'hide_mode': signalHideModeTemporary,
           'hidden': true,
@@ -1732,6 +1737,7 @@ void main() {
         },
         {
           'shot': '100002',
+          'shot_fixed': false,
           'read_mode': 0,
           'hide_mode': signalHideModePersistent,
           'hidden': true,
@@ -1753,7 +1759,10 @@ void main() {
           jsonDecode(requestedConfig!)['columns'][0][0]['signal_specs'] as List;
       expect(
         signals.map((signal) => (signal as Map)['shot']),
-        everyElement('170001'),
+        [
+          '100001',
+          '170001',
+        ],
       );
       expect(
         signals.map((signal) => (signal as Map)['read_mode']),
@@ -1770,7 +1779,7 @@ void main() {
       expect((signals[0] as Map)['color_name'], '#123456');
 
       final stored = app.columns[0][0]['signal_specs'] as List;
-      expect((stored[0] as Map)['shot'], '170001');
+      expect((stored[0] as Map)['shot'], '100001');
       expect((stored[0] as Map)['read_mode'], 1);
       expect((stored[0] as Map)['hide_mode'], signalHideModeVisible);
       expect((stored[1] as Map)['hide_mode'], signalHideModePersistent);
@@ -4991,6 +5000,10 @@ void main() {
         find.byKey(const ValueKey('data-hide-mode-dropdown-0')),
         findsOneWidget,
       );
+      final shotBehavior = tester.widget<PolishedDropdown<bool>>(
+        find.byKey(const ValueKey('data-shot-fixed-dropdown-0')),
+      );
+      expect(shotBehavior.value, isFalse);
       expect(find.byType(Checkbox), findsNothing);
       await tester.ensureVisible(
         find.byKey(const ValueKey('data-hide-mode-dropdown-0')),
@@ -4999,10 +5012,22 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('data-hide-mode-0-option-1')));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('data-shot-fixed-dropdown-0')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('data-shot-fixed-dropdown-0')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('data-shot-behavior-0-option-1')),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('OK'));
       await tester.pumpAndSettle();
       expect(signals.single['legend'], 'Primary current');
       expect(signals.single['shot'], '163888');
+      expect(signals.single['shot_fixed'], isTrue);
       expect(signals.single['hide_mode'], signalHideModeTemporary);
       expect(signals.single['hidden'], isTrue);
     },
@@ -5129,7 +5154,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Restore all settings'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('restore-all-settings-confirm')));
+    await tester
+        .tap(find.byKey(const ValueKey('restore-all-settings-confirm')));
     await tester.pumpAndSettle();
 
     expect(app.themeMode, 2);
