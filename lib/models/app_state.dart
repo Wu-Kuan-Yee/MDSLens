@@ -654,6 +654,42 @@ class AppState extends ChangeNotifier {
   List<List<Map<String, dynamic>>> _columns = [];
   List<List<Map<String, dynamic>>> get columns => _columns;
 
+  // Waveform panels have a much higher update frequency than the rest of the
+  // application state: streaming loads can deliver one signal every few
+  // milliseconds. Keep a small per-panel notifier so a signal arriving in
+  // one panel does not rebuild every other chart. The ordinary
+  // ChangeNotifier remains the source of truth for the toolbar, status bar,
+  // dialogs, and persistence.
+  final Map<int, ValueNotifier<int>> _plotChangeNotifiers = {};
+  int _plotLayoutRevision = 0;
+  int _plotVisualRevision = 0;
+
+  int get plotLayoutRevision => _plotLayoutRevision;
+  int get plotVisualRevision => _plotVisualRevision;
+
+  ValueListenable<int> plotChanges(int plotIndex) {
+    return _plotChangeNotifiers.putIfAbsent(plotIndex, () => ValueNotifier(0));
+  }
+
+  void _notifyPlotChanged(int plotIndex) {
+    _plotChangeNotifiers[plotIndex]?.value++;
+  }
+
+  void _notifyAllPlotsChanged() {
+    for (final notifier in _plotChangeNotifiers.values) {
+      notifier.value++;
+    }
+  }
+
+  void _markPlotLayoutChanged() {
+    _plotLayoutRevision++;
+    _notifyAllPlotsChanged();
+  }
+
+  void _markPlotVisualChanged() {
+    _plotVisualRevision++;
+  }
+
   // Plots
   final List<PlotData> _plots = [];
   List<PlotData> get plots => _plots;
@@ -958,6 +994,8 @@ class AppState extends ChangeNotifier {
   bool get pointLocked => _pointLocked;
   set pointLocked(bool v) {
     _pointLocked = v;
+    _markPlotVisualChanged();
+    _notifyAllPlotsChanged();
     notifyListeners();
   }
 
@@ -972,6 +1010,8 @@ class AppState extends ChangeNotifier {
       pointLocked = false;
       clearCrosshair();
     }
+    _markPlotVisualChanged();
+    _notifyAllPlotsChanged();
     savePreferences();
     notifyListeners();
   }
@@ -997,6 +1037,7 @@ class AppState extends ChangeNotifier {
   int get themeMode => _themeMode;
   set themeMode(int v) {
     _themeMode = v;
+    _markPlotVisualChanged();
     savePreferences();
     notifyListeners();
   }
@@ -1069,6 +1110,7 @@ class AppState extends ChangeNotifier {
     _fontUnitSize = unit;
     _fontUiSize = ui;
     if (iconSize != null) _iconSize = iconSize.clamp(18, 32);
+    _markPlotVisualChanged();
     savePreferences();
     notifyListeners();
   }
@@ -1151,6 +1193,7 @@ class AppState extends ChangeNotifier {
         )
         .toList();
     _rebuildPlotsFromColumns();
+    _markPlotLayoutChanged();
     savePreferences();
     notifyListeners();
   }
@@ -1236,6 +1279,7 @@ class AppState extends ChangeNotifier {
       plot.clearViewRange();
     }
     _viewResetId++;
+    _notifyAllPlotsChanged();
     notifyListeners();
   }
 
@@ -1244,11 +1288,13 @@ class AppState extends ChangeNotifier {
     if (index == null) return;
     _plots[index].clearViewRange();
     _viewResetId++;
+    _notifyPlotChanged(index);
     notifyListeners();
   }
 
   void rebuild() {
     _invalidateFetchForSettingsChange();
+    _markPlotLayoutChanged();
     savePreferences();
     notifyListeners();
   }
@@ -1976,6 +2022,10 @@ class AppState extends ChangeNotifier {
       if (lastConfig != null && lastConfig.isNotEmpty) {
         _applyConfigJsonString(lastConfig);
       }
+      // Preferences may be restored after the first frame.  Theme/font
+      // changes are visual inputs of every plot, so advance the grid revision
+      // once rather than relying on a data-load notification.
+      _markPlotVisualChanged();
       notifyListeners();
       if (migrateLegacySettings && _filePreferenceKeys.any(prefs.containsKey)) {
         await savePreferences();
@@ -2450,6 +2500,7 @@ class AppState extends ChangeNotifier {
         _shotText = initialShot;
         _shotCtrl.text = initialShot;
       }
+      _markPlotLayoutChanged();
     } catch (_) {}
   }
 
@@ -2493,6 +2544,7 @@ class AppState extends ChangeNotifier {
         );
       }
     }
+    _markPlotLayoutChanged();
     _status = 'Default config loaded. Login + Refresh to fetch data.';
     notifyListeners();
   }
@@ -2599,6 +2651,7 @@ class AppState extends ChangeNotifier {
     sharedYMax = null;
     _viewResetId++;
     _rateViewResetId++;
+    _markPlotVisualChanged();
     _networkPermissionFailureDetails = '';
     _lastNetworkRetry = null;
     _stylusEraserMode = false;
@@ -2736,6 +2789,7 @@ class AppState extends ChangeNotifier {
           );
         }
       }
+      _markPlotLayoutChanged();
       _status =
           'Loaded: ${selection.name} (${_columns.length} cols, ${_plots.length} panels)';
       _pendingImportedShot =
@@ -3008,6 +3062,7 @@ class AppState extends ChangeNotifier {
     _ratePreparing = true;
     _status = '$rateLabel rate selected; preparing...';
     _beginGlobalPanelFetchTracking();
+    _notifyAllPlotsChanged();
     notifyListeners();
     // A zero-duration timer created directly by the input callback can run
     // before Flutter presents the notification above. Defer once past the
@@ -3028,14 +3083,17 @@ class AppState extends ChangeNotifier {
   void _performRateRefresh() {
     if (_disposed) {
       _ratePreparing = false;
+      _notifyAllPlotsChanged();
       return;
     }
     if (!_requireActiveSession('change waveform rate')) {
       _ratePreparing = false;
+      _notifyAllPlotsChanged();
       return;
     }
     if (_columns.isEmpty) {
       _ratePreparing = false;
+      _notifyAllPlotsChanged();
       return;
     }
     if (_shotCtrl.text.trim().isNotEmpty) {
@@ -3154,6 +3212,7 @@ class AppState extends ChangeNotifier {
         }
       }
     }
+    _notifyAllPlotsChanged();
   }
 
   void _beginGlobalPanelFetchTracking() {
@@ -3262,6 +3321,7 @@ class AppState extends ChangeNotifier {
         }
       }
     }
+    _notifyAllPlotsChanged();
   }
 
   ({
@@ -3436,6 +3496,7 @@ class AppState extends ChangeNotifier {
         series.error = null;
       }
     }
+    _notifyPlotChanged(plotIdx);
   }
 
   String _buildSshSettingsJson({bool forceTunnel = false}) {
@@ -3497,6 +3558,10 @@ class AppState extends ChangeNotifier {
     if (dataMode == '2') {
       _clearAllSeriesPoints();
     }
+    // Loading state and the first replacement frame are plot-local inputs.
+    // Invalidate all panels once at the fetch boundary; streamed results below
+    // invalidate only the panel that received the result.
+    _notifyAllPlotsChanged();
     notifyListeners();
 
     try {
@@ -3599,6 +3664,7 @@ class AppState extends ChangeNotifier {
       _streamedSignalKeys.clear();
       _streamNotifyTimer?.cancel();
       _streamNotifyTimer = null;
+      _notifyAllPlotsChanged();
       final loaded = _plots
           .where(
             (p) => p.series.any((s) => s?.hasData == true),
@@ -3628,6 +3694,7 @@ class AppState extends ChangeNotifier {
       _streamedSignalKeys.clear();
       _streamNotifyTimer?.cancel();
       _streamNotifyTimer = null;
+      _notifyAllPlotsChanged();
       _status = 'Error: $e';
       _markUnresolvedSeries('Loading this signal failed: $e');
       reportNetworkPermissionFailure(
@@ -3650,6 +3717,7 @@ class AppState extends ChangeNotifier {
     _loadedPanelIndexes.clear();
     _streamedSignalKeys.clear();
     _status = 'Stopped';
+    _notifyAllPlotsChanged();
     notifyListeners();
   }
 
@@ -3978,6 +4046,7 @@ class AppState extends ChangeNotifier {
         maxYBlocks: maxYBlocks,
         minMaxBlockSize: minMaxBlockSize,
       );
+      _notifyPlotChanged(pi);
     }
   }
 
@@ -3989,6 +4058,10 @@ class AppState extends ChangeNotifier {
     shotFocusNode.dispose();
     crosshairChanges.dispose();
     panelShortcutRequests.dispose();
+    for (final notifier in _plotChangeNotifiers.values) {
+      notifier.dispose();
+    }
+    _plotChangeNotifiers.clear();
     super.dispose();
   }
 }

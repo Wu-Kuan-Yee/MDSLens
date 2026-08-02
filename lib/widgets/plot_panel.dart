@@ -339,7 +339,14 @@ class _PlotPanelState extends State<PlotPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final app = context.watch<AppState>();
+    final app = context.read<AppState>();
+    return ListenableBuilder(
+      listenable: app.plotChanges(widget.plotIdx),
+      builder: (context, child) => _buildPlot(context, app),
+    );
+  }
+
+  Widget _buildPlot(BuildContext context, AppState app) {
     if (widget.plotIdx >= app.plots.length) return const SizedBox();
     final plot = app.plots[widget.plotIdx];
     if (_lastResetId < 0) {
