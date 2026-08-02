@@ -324,8 +324,7 @@ Future<void> showRateShortcutMenu(BuildContext context, AppState app) async {
     ],
   );
   if (value == null) return;
-  app.dataMode = value;
-  app.startRateRefresh();
+  app.changeDataModeAndRefresh(value);
 }
 
 class ResponsiveToolbar extends StatelessWidget {
@@ -640,8 +639,7 @@ class ToolbarWidget extends StatelessWidget {
               ),
             ],
             onChanged: (value) {
-              app.dataMode = value;
-              app.startRateRefresh();
+              app.changeDataModeAndRefresh(value);
             },
           ),
         ),

@@ -386,39 +386,51 @@ class _PlotPanelState extends State<PlotPanel> {
         MediaQuery.sizeOf(context).width / math.max(1, app.columns.length);
     final renderPointBudget = plotRenderPointBudget(approximatePanelWidth);
     double? viewMinX, viewMaxX, viewMinY, viewMaxY;
-    for (var i = 0; i < plot.series.length; i++) {
-      final s = plot.series[i];
-      if (s?.hasData != true) continue;
-      final series = s!;
-      if (i < sigSpecs.length && signalIsHidden(sigSpecs[i])) continue;
-      activeSeries.add(series);
-      final rendered = _renderCache.render(
-        series,
-        maxPoints: renderPointBudget,
-        minX: renderMinX,
-        maxX: renderMaxX,
-      );
-      final spots = rendered.spots;
-      viewMinX =
-          viewMinX == null ? rendered.minX : math.min(viewMinX, rendered.minX);
-      viewMaxX =
-          viewMaxX == null ? rendered.maxX : math.max(viewMaxX, rendered.maxX);
-      viewMinY =
-          viewMinY == null ? rendered.minY : math.min(viewMinY, rendered.minY);
-      viewMaxY =
-          viewMaxY == null ? rendered.maxY : math.max(viewMaxY, rendered.maxY);
-      bars.add(
-        LineChartBarData(
-          spots: spots,
-          isCurved: false,
-          color: _sigColor(i, sigSpecs),
-          barWidth: 1,
-          dotData: const FlDotData(show: false),
-          belowBarData: BarAreaData(show: false),
-        ),
-      );
+    // Rate changes publish a lightweight loading frame before the request is
+    // prepared. Do not rebuild every old chart in that frame: GTK/Skia can
+    // otherwise spend hundreds of milliseconds recreating bars for a large
+    // layout before the user sees that loading has started. The cache is
+    // retained and the existing curves are rendered again once preparation
+    // completes, so this does not discard waveform data.
+    if (!app.ratePreparing) {
+      for (var i = 0; i < plot.series.length; i++) {
+        final s = plot.series[i];
+        if (s?.hasData != true) continue;
+        final series = s!;
+        if (i < sigSpecs.length && signalIsHidden(sigSpecs[i])) continue;
+        activeSeries.add(series);
+        final rendered = _renderCache.render(
+          series,
+          maxPoints: renderPointBudget,
+          minX: renderMinX,
+          maxX: renderMaxX,
+        );
+        final spots = rendered.spots;
+        viewMinX = viewMinX == null
+            ? rendered.minX
+            : math.min(viewMinX, rendered.minX);
+        viewMaxX = viewMaxX == null
+            ? rendered.maxX
+            : math.max(viewMaxX, rendered.maxX);
+        viewMinY = viewMinY == null
+            ? rendered.minY
+            : math.min(viewMinY, rendered.minY);
+        viewMaxY = viewMaxY == null
+            ? rendered.maxY
+            : math.max(viewMaxY, rendered.maxY);
+        bars.add(
+          LineChartBarData(
+            spots: spots,
+            isCurved: false,
+            color: _sigColor(i, sigSpecs),
+            barWidth: 1,
+            dotData: const FlDotData(show: false),
+            belowBarData: BarAreaData(show: false),
+          ),
+        );
+      }
+      _renderCache.retain(activeSeries);
     }
-    _renderCache.retain(activeSeries);
 
     return Stack(
       children: [

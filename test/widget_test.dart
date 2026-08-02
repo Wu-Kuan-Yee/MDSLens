@@ -1788,7 +1788,9 @@ void main() {
     },
   );
 
-  test('Rate refresh preserves X range and resets Y range', () async {
+  testWidgets('Rate refresh preserves X range and resets Y range', (
+    tester,
+  ) async {
     final app = AppState(signalFetchWorker: (_, __, ___) async => '[]');
     await app.preferencesReady;
     addTearDown(app.dispose);
@@ -1800,7 +1802,8 @@ void main() {
 
     app.dataMode = 1;
     app.startRateRefresh();
-    await Future<void>.delayed(Duration.zero);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
 
     expect(app.viewResetId, fullReset);
     expect(app.rateViewResetId, rateReset + 1);
@@ -1808,6 +1811,28 @@ void main() {
     expect(app.plots.first.viewMaxX, 0.75);
     expect(app.plots.first.viewMinY, isNull);
     expect(app.plots.first.viewMaxY, isNull);
+  });
+
+  testWidgets('Rate changes publish one loading transition before preparation',
+      (
+    tester,
+  ) async {
+    final app = AppState(signalFetchWorker: (_, __, ___) async => '[]');
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setLoggedIn(true, 'test-token');
+
+    var notifications = 0;
+    app.addListener(() => notifications++);
+    app.changeDataModeAndRefresh(1);
+
+    expect(notifications, 1);
+    expect(app.ratePreparing, isTrue);
+    expect(app.status, 'Medium rate selected; preparing...');
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(app.ratePreparing, isFalse);
   });
 
   testWidgets('Rapid Full shot changes coalesce into the latest request', (
@@ -1871,7 +1896,11 @@ void main() {
 
     expect(requests, 0);
     expect(app.plots.first.series.first?.hasData, isTrue);
-    await tester.pump(const Duration(milliseconds: 119));
+    // The rate handoff is scheduled after the loading frame; flush the frame
+    // and the following event turn before measuring the Full-mode debounce.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump(const Duration(milliseconds: 118));
     expect(requests, 0);
     expect(app.plots.first.series.first?.hasData, isTrue);
     await tester.pump(const Duration(milliseconds: 1));

@@ -941,6 +941,18 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Changes the global waveform rate and starts its refresh as one state
+  /// transition. The toolbar used to assign [dataMode] and then call
+  /// [startRateRefresh], which caused two full-tree notifications. On GTK
+  /// that made every plot rebuild once before the loading state was visible.
+  void changeDataModeAndRefresh(int value) {
+    if (value == _dataMode) return;
+    _invalidateFetchForSettingsChange();
+    _dataMode = value;
+    savePreferences();
+    startRateRefresh();
+  }
+
   // Point mode: Esc locks crosshair in place; next click unlocks
   bool _pointLocked = false;
   bool get pointLocked => _pointLocked;
@@ -1262,6 +1274,8 @@ class AppState extends ChangeNotifier {
   // Fetch
   bool _fetching = false;
   bool get fetching => _fetching;
+  bool _ratePreparing = false;
+  bool get ratePreparing => _ratePreparing;
   int? _fetchingPlotIndex;
   final Map<int, int> _pendingPanelSignalCounts = {};
   final Set<int> _loadedPanelIndexes = {};
@@ -1280,7 +1294,6 @@ class AppState extends ChangeNotifier {
   _WaveformFetchRequest? _pendingWaveformFetch;
   bool _drainingWaveformFetches = false;
   Timer? _fullShotDebounceTimer;
-  Timer? _ratePreparationTimer;
   int _ratePreparationRevision = 0;
   DateTime? _lastFullShotScheduleAt;
   int _rapidFullShotChanges = 0;
@@ -1349,8 +1362,7 @@ class AppState extends ChangeNotifier {
   }
 
   void _cancelPendingRatePreparation() {
-    _ratePreparationTimer?.cancel();
-    _ratePreparationTimer = null;
+    _ratePreparing = false;
     _ratePreparationRevision++;
   }
 
@@ -2164,8 +2176,7 @@ class AppState extends ChangeNotifier {
     for (final column in columns) {
       for (final panel in column) {
         final panelShot = panel['shot']?.toString().trim() ?? '';
-        final inheritedShot =
-            panelShot.isNotEmpty ? panelShot : globalFallback;
+        final inheritedShot = panelShot.isNotEmpty ? panelShot : globalFallback;
         final signals = panel['signal_specs'];
         if (signals is! List) continue;
         for (final rawSignal in signals) {
@@ -2994,22 +3005,39 @@ class AppState extends ChangeNotifier {
     };
     _fetchingPlotIndex = null;
     _fetching = true;
+    _ratePreparing = true;
     _status = '$rateLabel rate selected; preparing...';
     _beginGlobalPanelFetchTracking();
     notifyListeners();
-    // Let Flutter paint the immediate loading state before cloning a large
-    // layout and preparing the native request.  On large configurations this
-    // removes the dead-looking pause between selecting Rate and "Fetching".
-    _ratePreparationTimer = Timer(Duration.zero, () {
-      _ratePreparationTimer = null;
+    // A zero-duration timer created directly by the input callback can run
+    // before Flutter presents the notification above. Defer once past the
+    // frame callback and once more to the next event turn: the loading frame
+    // must be handed to the compositor before cloning a large layout or
+    // starting the native worker. Explicitly request a frame for low-frequency
+    // desktop surfaces as well.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_disposed || revision != _ratePreparationRevision) return;
-      _performRateRefresh();
+      Timer.run(() {
+        if (_disposed || revision != _ratePreparationRevision) return;
+        _performRateRefresh();
+      });
     });
+    WidgetsBinding.instance.scheduleFrame();
   }
 
   void _performRateRefresh() {
-    if (_disposed || !_requireActiveSession('change waveform rate')) return;
-    if (_columns.isEmpty) return;
+    if (_disposed) {
+      _ratePreparing = false;
+      return;
+    }
+    if (!_requireActiveSession('change waveform rate')) {
+      _ratePreparing = false;
+      return;
+    }
+    if (_columns.isEmpty) {
+      _ratePreparing = false;
+      return;
+    }
     if (_shotCtrl.text.trim().isNotEmpty) {
       _shotText = _shotCtrl.text.trim();
     }
@@ -3172,6 +3200,10 @@ class AppState extends ChangeNotifier {
     if (!_streamedSignalKeys.add(key)) return;
 
     final decoded = _decodeLoadedSeries(signal['series']);
+    // The first streamed result is the earliest safe point at which the old
+    // curves can be replaced. Allow the next throttled notification to paint
+    // the new result instead of repeatedly rebuilding the loading shell.
+    _ratePreparing = false;
     _rememberLoadedSource(
       column,
       row,
@@ -3434,7 +3466,10 @@ class AppState extends ChangeNotifier {
     required String shot,
     bool preserveConfiguredShots = false,
   }) async {
-    if (!_requireActiveSession('load waveforms')) return;
+    if (!_requireActiveSession('load waveforms')) {
+      _ratePreparing = false;
+      return;
+    }
     // Start after queue/debounce coalescing has selected the request.  The
     // shared benchmark includes request preparation, old-series cleanup,
     // SSH/transport, decoding, and model updates, but stops before the next
@@ -3478,6 +3513,7 @@ class AppState extends ChangeNotifier {
       if (!_isCurrentFetch(generation)) return;
       if (raw.isEmpty) {
         _fetching = false;
+        _ratePreparing = false;
         _status = 'Empty raw from Rust';
         _markUnresolvedSeries(
           'The native data loader returned no response for this signal.',
@@ -3488,6 +3524,7 @@ class AppState extends ChangeNotifier {
       final json = jsonDecode(raw);
       if (json is! List) {
         _fetching = false;
+        _ratePreparing = false;
         _status =
             'Type: ${json.runtimeType} — ${raw.length > 300 ? raw.substring(0, 300) : raw}';
         _markUnresolvedSeries(
@@ -3498,6 +3535,7 @@ class AppState extends ChangeNotifier {
       }
       if (json.isEmpty && streamingWorker == null) {
         _fetching = false;
+        _ratePreparing = false;
         _status = 'Empty list';
         _markUnresolvedSeries(
           'No result was returned for the configured signal.',
@@ -3573,6 +3611,7 @@ class AppState extends ChangeNotifier {
           retry: () => _doFetch(shot: requestShot),
         );
       }
+      _ratePreparing = false;
       _publishWaveformLoadCompletion(
         stopwatch: loadStopwatch,
         generation: generation,
@@ -3583,6 +3622,7 @@ class AppState extends ChangeNotifier {
       if (_activeNativeFetchId == generation) _activeNativeFetchId = null;
       if (!_isCurrentFetch(generation)) return;
       _fetching = false;
+      _ratePreparing = false;
       _pendingPanelSignalCounts.clear();
       _loadedPanelIndexes.clear();
       _streamedSignalKeys.clear();
