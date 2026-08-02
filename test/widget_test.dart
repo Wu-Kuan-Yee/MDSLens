@@ -1592,8 +1592,10 @@ void main() {
         configParser: (_) =>
             '{"shot":"143850","columns":[[{"title":"Signals","shot":"143851",'
             '"signal_specs":['
-            '{"shot":"143852","y_expr":"\\\\first","experiment":"pcs_east"},'
-            '{"shot":"143853","y_expr":"\\\\second","experiment":"pcs_east"}'
+            '{"shot":"143852","shot_fixed":false,"y_expr":"\\\\first",'
+            '"experiment":"pcs_east"},'
+            '{"shot":"143853","shot_fixed":false,"y_expr":"\\\\second",'
+            '"experiment":"pcs_east"}'
             ']}]]}',
         signalFetchWorker: (configJson, _, __) async {
           requestedConfig = configJson;
@@ -1638,9 +1640,9 @@ void main() {
             '{"shot":"143850","columns":[[{"title":"Signals","shot":"143850",'
             '"signal_specs":['
             '{"shot":"143850","y_expr":"\\\\inherit","experiment":"pcs_east",'
-            '"server_ip":"202.127.204.12"},'
+            '"server_ip":"202.127.204.12","shot_fixed":false},'
             '{"shot":"143849","y_expr":"\\\\fixed","experiment":"pcs_east",'
-            '"server_ip":"202.127.204.12"}]}]]}',
+            '"server_ip":"202.127.204.12","shot_fixed":false}]}]]}',
         signalFetchWorker: (configJson, _, __) async {
           final config = Map<String, dynamic>.from(
             jsonDecode(configJson) as Map,
@@ -2345,6 +2347,88 @@ void main() {
 
     expect(app.shotText, '163999');
     expect(app.columns.single.single['title'], 'Imported layout');
+  });
+
+  test('Configuration import exposes every shot and fixed-shot choice',
+      () async {
+    ImportedConfigurationSummary? summary;
+    final requestedConfigs = <Map<String, dynamic>>[];
+    final app = AppState(
+      configOpenPicker: () async => ConfigOpenSelection(
+          name: 'multi-shot.toml', path: '/multi-shot.toml'),
+      configParser: (_) => '{"shot":"170000","columns":[[{"shot":"170001",'
+          '"signal_specs":['
+          '{"shot":"170002","shot_fixed":true,"y_expr":"\\\\fixed"},'
+          '{"shot":"170003","shot_fixed":false,"y_expr":"\\\\follow"}'
+          ']}]]}',
+      signalFetchWorker: (configJson, _, __) async {
+        requestedConfigs.add(jsonDecode(configJson) as Map<String, dynamic>);
+        return '[]';
+      },
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setLoggedIn(true, 'test-token');
+
+    await app.openFile(
+      importedConfigurationDecision: (value) async {
+        summary = value;
+        return const ImportedConfigurationDecision(
+          retainShots: true,
+          retainFixedShots: true,
+        );
+      },
+    );
+
+    expect(summary?.shots, ['170000', '170001', '170002', '170003']);
+    expect(summary?.signalCount, 2);
+    expect(summary?.fixedSignalCount, 1);
+    expect(app.shotText, '170000');
+    final firstRequest = requestedConfigs.single;
+    final panel = (firstRequest['columns'] as List).first.first as Map;
+    expect(panel['shot'], '170001');
+    final signals = panel['signal_specs'] as List;
+    expect((signals[0] as Map)['shot'], '170002');
+    expect((signals[0] as Map)['shot_fixed'], isTrue);
+    expect((signals[1] as Map)['shot'], '170003');
+    expect((signals[1] as Map)['shot_fixed'], isFalse);
+
+    app.shotText = '180000';
+    app.startRefresh();
+    await Future<void>.delayed(Duration.zero);
+    final refreshed = requestedConfigs.last;
+    final refreshedSignals = ((refreshed['columns'] as List).first.first
+        as Map)['signal_specs'] as List;
+    expect((refreshedSignals[0] as Map)['shot'], '170002');
+    expect((refreshedSignals[1] as Map)['shot'], '180000');
+  });
+
+  test('Legacy imported configurations assume signal shots are fixed',
+      () async {
+    ImportedConfigurationSummary? summary;
+    final app = AppState(
+      configOpenPicker: () async =>
+          ConfigOpenSelection(name: 'legacy.toml', path: '/legacy.toml'),
+      configParser: (_) => '{"shot":"170100","columns":[[{'
+          '"signal_specs":[{"shot":"170101","y_expr":"\\\\legacy"}]'
+          '}]]}',
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+
+    await app.openFile(
+      importedConfigurationDecision: (value) async {
+        summary = value;
+        return const ImportedConfigurationDecision(retainFixedShots: true);
+      },
+    );
+
+    expect(summary?.fixedSignalCount, 1);
+    expect(
+      ((app.columns.single.single['signal_specs'] as List).single
+          as Map)['shot_fixed'],
+      isTrue,
+    );
   });
 
   testWidgets('Toolbar restores and persists the default waveform layout', (

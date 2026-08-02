@@ -110,8 +110,14 @@ bool signalShotIsFixed(Map<dynamic, dynamic> signal) {
   };
 }
 
-void normalizeSignalShotSettings(Map<dynamic, dynamic> signal) {
-  signal['shot_fixed'] = signalShotIsFixed(signal);
+void normalizeSignalShotSettings(
+  Map<dynamic, dynamic> signal, {
+  bool defaultFixed = false,
+}) {
+  final hasFixedMetadata =
+      signal.containsKey('shot_fixed') || signal.containsKey('fixed_shot');
+  signal['shot_fixed'] =
+      hasFixedMetadata ? signalShotIsFixed(signal) : defaultFixed;
   signal.remove('fixed_shot');
 }
 
@@ -129,6 +135,49 @@ typedef ConfigSavePicker = Future<String?> Function(
 typedef ConfigParser = FutureOr<String> Function(String path);
 typedef ConfigEncoder = Future<Uint8List> Function(String configJson);
 typedef ImportedShotDecision = Future<bool> Function(String importedShot);
+
+/// The shot metadata discovered while parsing an external configuration.
+///
+/// A configuration can contain a global shot, panel-level shots, and
+/// per-signal overrides.  Keeping the complete set here lets the import UI
+/// make an explicit choice instead of silently reducing the document to one
+/// shot number.
+class ImportedConfigurationSummary {
+  const ImportedConfigurationSummary({
+    required this.shots,
+    required this.signalCount,
+    required this.fixedSignalCount,
+  });
+
+  final List<String> shots;
+  final int signalCount;
+  final int fixedSignalCount;
+
+  bool get hasShots => shots.isNotEmpty;
+  bool get hasSignals => signalCount > 0;
+  bool get hasFixedSignals => fixedSignalCount > 0;
+}
+
+/// The import choices selected by the user.
+class ImportedConfigurationDecision {
+  const ImportedConfigurationDecision({
+    this.retainShots = false,
+    this.retainFixedShots = false,
+  });
+
+  /// Preserve every global, panel, and signal shot found in the file for the
+  /// initial load.  When false, the current application shot remains active.
+  final bool retainShots;
+
+  /// Preserve each signal's fixed-shot flag and its fixed shot value.  When
+  /// false, all signals become inheritable on the next shot change.
+  final bool retainFixedShots;
+}
+
+typedef ImportedConfigurationDecisionHandler
+    = Future<ImportedConfigurationDecision?> Function(
+  ImportedConfigurationSummary summary,
+);
 typedef SshTestWorker = Future<String> Function(String settingsJson);
 typedef SshDisconnect = void Function();
 
@@ -173,19 +222,24 @@ typedef SignalPrewarmWorker = Future<void> Function(
 enum _WaveformFetchKind { global, panel }
 
 class _WaveformFetchRequest {
-  _WaveformFetchRequest.global(this.shot)
-      : kind = _WaveformFetchKind.global,
+  _WaveformFetchRequest.global(
+    this.shot, {
+    this.preserveConfiguredShots = false,
+  })  : kind = _WaveformFetchKind.global,
         plotIndex = null;
 
   _WaveformFetchRequest.panel(this.shot, this.plotIndex)
-      : kind = _WaveformFetchKind.panel;
+      : kind = _WaveformFetchKind.panel,
+        preserveConfiguredShots = false;
 
   final _WaveformFetchKind kind;
   final String shot;
+  final bool preserveConfiguredShots;
   final int? plotIndex;
   final Completer<void> completion = Completer<void>();
 
-  String key(int dataMode) => '${kind.name}|$shot|$plotIndex|$dataMode';
+  String key(int dataMode) =>
+      '${kind.name}|$shot|$plotIndex|$dataMode|$preserveConfiguredShots';
 }
 
 typedef ShotInfoFetchWorker = Future<String> Function(
@@ -697,12 +751,14 @@ class AppState extends ChangeNotifier {
   String _displayedShot = '';
   String get displayedShot => _displayedShot;
   String? _pendingImportedShot;
+  bool _pendingImportedPreserveShots = false;
   final _shotCtrl = TextEditingController();
   final shotFocusNode = FocusNode(debugLabel: 'main-shot-input');
   TextEditingController get shotCtrl => _shotCtrl;
   set shotText(String v) {
     _invalidateFetchForSettingsChange();
     _pendingImportedShot = null;
+    _pendingImportedPreserveShots = false;
     _shotText = v;
     _shotCtrl.text = v;
     savePreferences();
@@ -830,6 +886,7 @@ class AppState extends ChangeNotifier {
       if (_shotCtrl.text != _shotText) {
         _invalidateFetchForSettingsChange();
         _pendingImportedShot = null;
+        _pendingImportedPreserveShots = false;
         _shotText = _shotCtrl.text;
         savePreferences();
         notifyListeners();
@@ -842,6 +899,7 @@ class AppState extends ChangeNotifier {
   void setShotFromApi(String v) {
     _invalidateFetchForSettingsChange();
     _pendingImportedShot = null;
+    _pendingImportedPreserveShots = false;
     _shotText = v;
     _shotCtrl.text = v;
     // Move cursor to end
@@ -1345,7 +1403,10 @@ class AppState extends ChangeNotifier {
         _activeWaveformFetch = request;
         try {
           if (request.kind == _WaveformFetchKind.global) {
-            await _executeGlobalFetch(shot: request.shot);
+            await _executeGlobalFetch(
+              shot: request.shot,
+              preserveConfiguredShots: request.preserveConfiguredShots,
+            );
           } else {
             await _executeSinglePanelFetch(request.plotIndex!);
           }
@@ -2046,7 +2107,10 @@ class AppState extends ChangeNotifier {
     return value;
   }
 
-  void _normalizePanelDefaults(Map<String, dynamic> panel) {
+  void _normalizePanelDefaults(
+    Map<String, dynamic> panel, {
+    bool legacyMissingShotFixed = false,
+  }) {
     final rawPoints = panel['extraction_points'];
     final points = rawPoints is num
         ? rawPoints.toInt()
@@ -2061,7 +2125,10 @@ class AppState extends ChangeNotifier {
             () {
               final signal = Map<String, dynamic>.from(rawSignal);
               normalizeSignalHideSettings(signal);
-              normalizeSignalShotSettings(signal);
+              normalizeSignalShotSettings(
+                signal,
+                defaultFixed: legacyMissingShotFixed,
+              );
               return signal;
             }(),
       ];
@@ -2090,6 +2157,110 @@ class AppState extends ChangeNotifier {
       }
     }
     return '';
+  }
+
+  List<String> _configurationShots(
+    Map<dynamic, dynamic> json,
+    List<List<Map<String, dynamic>>> columns,
+  ) {
+    final shots = <String>[];
+    void add(Object? value) {
+      final shot = value?.toString().trim() ?? '';
+      if (shot.isNotEmpty && !shots.contains(shot)) shots.add(shot);
+    }
+
+    for (final key in const ['shot', 'default_shot', 'global_shot']) {
+      add(json[key]);
+    }
+    for (final column in columns) {
+      for (final panel in column) {
+        add(panel['shot']);
+        final signals = panel['signal_specs'];
+        if (signals is! List) continue;
+        for (final rawSignal in signals) {
+          if (rawSignal is Map) add(rawSignal['shot']);
+        }
+      }
+    }
+    return shots;
+  }
+
+  ImportedConfigurationSummary _configurationSummary(
+    Map<dynamic, dynamic> json,
+    List<List<Map<String, dynamic>>> columns,
+  ) {
+    var signalCount = 0;
+    var fixedSignalCount = 0;
+    for (final column in columns) {
+      for (final panel in column) {
+        final signals = panel['signal_specs'];
+        if (signals is! List) continue;
+        for (final rawSignal in signals) {
+          if (rawSignal is! Map) continue;
+          signalCount++;
+          if (signalShotIsFixed(rawSignal)) fixedSignalCount++;
+        }
+      }
+    }
+    return ImportedConfigurationSummary(
+      shots: List.unmodifiable(_configurationShots(json, columns)),
+      signalCount: signalCount,
+      fixedSignalCount: fixedSignalCount,
+    );
+  }
+
+  bool _configurationHasShotFixedMetadata(Map<dynamic, dynamic> json) {
+    final rawColumns = json['columns'];
+    if (rawColumns is! List) return false;
+    for (final rawColumn in rawColumns) {
+      if (rawColumn is! List) continue;
+      for (final rawPanel in rawColumn) {
+        if (rawPanel is! Map) continue;
+        final signals = rawPanel['signal_specs'];
+        if (signals is! List) continue;
+        for (final rawSignal in signals) {
+          if (rawSignal is Map &&
+              (rawSignal.containsKey('shot_fixed') ||
+                  rawSignal.containsKey('fixed_shot'))) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  void _applyImportedConfigurationDecision(
+    List<List<Map<String, dynamic>>> columns,
+    ImportedConfigurationDecision decision,
+    String initialShot,
+  ) {
+    for (final column in columns) {
+      for (final panel in column) {
+        if (!decision.retainShots) panel.remove('shot');
+        final signals = panel['signal_specs'];
+        if (signals is! List) continue;
+        for (final rawSignal in signals) {
+          if (rawSignal is! Map) continue;
+          final signal = Map<String, dynamic>.from(rawSignal);
+          final fixed = signalShotIsFixed(signal);
+          if (!decision.retainFixedShots) {
+            signal['shot_fixed'] = false;
+            signal.remove('fixed_shot');
+          }
+          if (!decision.retainShots && !(decision.retainFixedShots && fixed)) {
+            signal.remove('shot');
+          }
+          rawSignal
+            ..clear()
+            ..addAll(signal);
+        }
+      }
+    }
+    if (decision.retainShots && initialShot.isNotEmpty) {
+      _shotText = initialShot;
+      _shotCtrl.text = initialShot;
+    }
   }
 
   void _makeConfigurationShotInheritable(
@@ -2264,6 +2435,7 @@ class AppState extends ChangeNotifier {
   Future<void> restoreDefaultConfig() async {
     _invalidateFetchForSettingsChange();
     _pendingImportedShot = null;
+    _pendingImportedPreserveShots = false;
     selectedCol = -1;
     selectedRow = -1;
     _maximizedPlot = null;
@@ -2343,6 +2515,7 @@ class AppState extends ChangeNotifier {
     sourceIndexMemory.clear();
 
     _pendingImportedShot = null;
+    _pendingImportedPreserveShots = false;
     _shotText = '';
     _displayedShot = '';
     _shotCtrl.value = const TextEditingValue();
@@ -2374,6 +2547,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> openFile({
     ImportedShotDecision? importedShotDecision,
+    ImportedConfigurationDecisionHandler? importedConfigurationDecision,
     ConfigOpenSelection? selectionOverride,
   }) async {
     Directory? temporaryDirectory;
@@ -2435,25 +2609,47 @@ class AppState extends ChangeNotifier {
         notifyListeners();
         return;
       }
+      final legacyMissingShotFixed = !_configurationHasShotFixedMetadata(json);
       final cols = (json['columns'] as List).map((col) {
         return (col as List).map((panel) {
           final m = Map<String, dynamic>.from(panel as Map);
-          _normalizePanelDefaults(m);
+          _normalizePanelDefaults(
+            m,
+            legacyMissingShotFixed: legacyMissingShotFixed,
+          );
           return m;
         }).toList();
       }).toList();
       if (cols.every((column) => column.isEmpty)) cols.clear();
       _invalidateFetchForSettingsChange();
       final fileShot = _configurationInitialShot(json, cols);
-      final useFileShot = fileShot.isNotEmpty &&
-          (await importedShotDecision?.call(fileShot) ?? false);
-      if (useFileShot) {
-        _makeConfigurationShotInheritable(cols, fileShot);
-        _shotText = fileShot;
-        _shotCtrl.text = _shotText;
+      final summary = _configurationSummary(json, cols);
+      var preserveImportedShots = false;
+      final shouldAskAboutMetadata = summary.hasShots || summary.hasSignals;
+      if (importedConfigurationDecision != null && shouldAskAboutMetadata) {
+        final decision = await importedConfigurationDecision(summary);
+        preserveImportedShots = decision?.retainShots ?? false;
+        _applyImportedConfigurationDecision(
+          cols,
+          decision ?? const ImportedConfigurationDecision(),
+          fileShot,
+        );
       } else {
-        _removeConfigurationShots(cols);
+        // Keep the original callback contract for programmatic callers and
+        // older integrations.  The toolbar/drop target use the richer
+        // decision callback above.
+        final useFileShot = fileShot.isNotEmpty &&
+            (await importedShotDecision?.call(fileShot) ?? false);
+        if (useFileShot) {
+          _makeConfigurationShotInheritable(cols, fileShot);
+          _shotText = fileShot;
+          _shotCtrl.text = _shotText;
+        } else {
+          _removeConfigurationShots(cols);
+        }
       }
+      _pendingImportedPreserveShots =
+          importedConfigurationDecision != null && preserveImportedShots;
       _columns = cols;
       _plots.clear();
       _displayedShot = '';
@@ -2528,7 +2724,6 @@ class AppState extends ChangeNotifier {
             (col) => col.map((panel) {
               final m = Map<String, dynamic>.from(panel);
               m['signal_specs'] = _configurationSignalsFor(m);
-              m.remove('shot');
               _normalizePanelDefaults(m);
               if (m['custom_x_range'] != true) {
                 m
@@ -2582,6 +2777,7 @@ class AppState extends ChangeNotifier {
   void _synchronizeSignalRuntimeSettings(
     String shot, {
     bool resetTemporaryHides = true,
+    bool updateShots = true,
   }) {
     for (final col in _columns) {
       for (final p in col) {
@@ -2597,7 +2793,9 @@ class AppState extends ChangeNotifier {
                       hideMode == signalHideModeTemporary) {
                     hideMode = signalHideModeVisible;
                   }
-                  if (!signalShotIsFixed(signal)) signal['shot'] = shot;
+                  if (updateShots && !signalShotIsFixed(signal)) {
+                    signal['shot'] = shot;
+                  }
                   signal['read_mode'] = _dataMode;
                   signal['hide_mode'] = hideMode;
                   signal['hidden'] = hideMode != signalHideModeVisible;
@@ -2621,6 +2819,7 @@ class AppState extends ChangeNotifier {
 
   void startRefresh() {
     _pendingImportedShot = null;
+    _pendingImportedPreserveShots = false;
     if (!_requireActiveSession('load a shot')) return;
     if (_columns.isEmpty) return;
     if (_shotCtrl.text.trim().isNotEmpty) {
@@ -2663,13 +2862,21 @@ class AppState extends ChangeNotifier {
     if (shot == null || shot.isEmpty) return;
     if (!_requireActiveSession('load the imported configuration')) return;
     if (_columns.isEmpty) return;
+    final preserveConfiguredShots = _pendingImportedPreserveShots;
     _shotText = shot;
     _shotCtrl.text = shot;
-    _synchronizeSignalRuntimeSettings(shot);
+    _synchronizeSignalRuntimeSettings(
+      shot,
+      updateShots: !_pendingImportedPreserveShots,
+    );
+    _pendingImportedPreserveShots = false;
     _addToHistory(shot);
     await savePreferences();
     _viewResetId++;
-    await _doFetch(shot: shot);
+    await _doFetch(
+      shot: shot,
+      preserveConfiguredShots: preserveConfiguredShots,
+    );
     if (_displayedShot == shot &&
         _plots.any(
           (plot) => plot.series.any(
@@ -2677,6 +2884,7 @@ class AppState extends ChangeNotifier {
           ),
         )) {
       _pendingImportedShot = null;
+      _pendingImportedPreserveShots = false;
     }
   }
 
@@ -2696,6 +2904,7 @@ class AppState extends ChangeNotifier {
 
   void startRefreshPreserveView() {
     _pendingImportedShot = null;
+    _pendingImportedPreserveShots = false;
     if (!_requireActiveSession('load a shot')) return;
     if (_columns.isEmpty) return;
     if (_shotCtrl.text.trim().isNotEmpty) {
@@ -2713,6 +2922,7 @@ class AppState extends ChangeNotifier {
 
   void startRateRefresh() {
     _pendingImportedShot = null;
+    _pendingImportedPreserveShots = false;
     if (!_requireActiveSession('change waveform rate')) return;
     if (_columns.isEmpty) return;
     _cancelPendingRatePreparation();
@@ -2758,12 +2968,21 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  String _buildSignalConfigJson(String shot, int requestId) {
+  String _buildSignalConfigJson(
+    String shot,
+    int requestId, {
+    bool preserveConfiguredShots = false,
+  }) {
     final cols = _columns
         .map(
           (col) => col.map((p) {
             final panel = Map<String, dynamic>.from(p);
-            panel['shot'] = shot;
+            final configuredPanelShot = panel['shot']?.toString().trim() ?? '';
+            if (!preserveConfiguredShots || configuredPanelShot.isEmpty) {
+              // Keep an imported panel override, but materialize the
+              // imported global shot for panels that intentionally inherit it.
+              panel['shot'] = shot;
+            }
             final signals = p['signal_specs'];
             if (signals is List) {
               panel['signal_specs'] = [
@@ -2772,7 +2991,10 @@ class AppState extends ChangeNotifier {
                     () {
                       final signal = Map<String, dynamic>.from(rawSignal);
                       final hideMode = signalHideModeOf(signal);
-                      if (!signalShotIsFixed(signal)) signal['shot'] = shot;
+                      if (!preserveConfiguredShots &&
+                          !signalShotIsFixed(signal)) {
+                        signal['shot'] = shot;
+                      }
                       signal['read_mode'] = _dataMode;
                       signal['hide_mode'] = hideMode;
                       signal['hidden'] = hideMode != signalHideModeVisible;
@@ -3124,11 +3346,22 @@ class AppState extends ChangeNotifier {
     });
   }
 
-  Future<void> _doFetch({required String shot}) {
-    return _queueWaveformFetch(_WaveformFetchRequest.global(shot));
+  Future<void> _doFetch({
+    required String shot,
+    bool preserveConfiguredShots = false,
+  }) {
+    return _queueWaveformFetch(
+      _WaveformFetchRequest.global(
+        shot,
+        preserveConfiguredShots: preserveConfiguredShots,
+      ),
+    );
   }
 
-  Future<void> _executeGlobalFetch({required String shot}) async {
+  Future<void> _executeGlobalFetch({
+    required String shot,
+    bool preserveConfiguredShots = false,
+  }) async {
     if (!_requireActiveSession('load waveforms')) return;
     // Start after queue/debounce coalescing has selected the request.  The
     // shared benchmark includes request preparation, old-series cleanup,
@@ -3138,7 +3371,11 @@ class AppState extends ChangeNotifier {
     _cancelActiveNativeFetch();
     final generation = ++_fetchGeneration;
     final requestShot = shot;
-    final configJson = _buildSignalConfigJson(requestShot, generation);
+    final configJson = _buildSignalConfigJson(
+      requestShot,
+      generation,
+      preserveConfiguredShots: preserveConfiguredShots,
+    );
     final dataMode = _dataMode.toString();
     final sshSettings = _buildSshSettingsJson();
     _fetchingPlotIndex = null;

@@ -226,7 +226,11 @@ pub fn parse_toml_environment(path: &str) -> LayoutConfig {
                     .get("shot_fixed")
                     .and_then(|v| v.as_bool())
                     .or_else(|| sig.get("fixed_shot").and_then(|v| v.as_bool()))
-                    .unwrap_or(false);
+                    // Before MDSLens added the per-signal flag, a signal
+                    // shot was an explicit override in both TOML and
+                    // WebScope files. Treat that legacy form as fixed so
+                    // importing it cannot silently retarget the signal.
+                    .unwrap_or(true);
                 if let Some(v) = sig.get("tree").and_then(|v| v.as_str()) {
                     signal.experiment = v.to_string();
                 }
@@ -390,7 +394,14 @@ pub fn parse_webscp_environment(path: &str) -> LayoutConfig {
                         .map(|v| v.as_str())
                         .unwrap_or(""),
                 );
-                sig.shot_fixed = parse_i32(&map, &format!("{}shot_fixed_{}", prefix, s), 0) != 0;
+                let fixed_key = format!("{}shot_fixed_{}", prefix, s);
+                // Legacy WebScope files have no shot_fixed_N key. Their
+                // per-signal shot values were always explicit, so preserve
+                // them as fixed when the metadata is absent.
+                sig.shot_fixed = map
+                    .get(&fixed_key)
+                    .map(|value| value.trim().parse::<i32>().unwrap_or(0) != 0)
+                    .unwrap_or(true);
                 sig.y_expr = trim_quotes(
                     map.get(&format!("{}y_expr_{}", prefix, s))
                         .map(|v| v.as_str())
@@ -735,10 +746,13 @@ pub fn encode_environment_toml(config: &LayoutConfig) -> String {
 
     for (c, column) in config.columns.iter().enumerate() {
         for (r, plot) in column.iter().enumerate() {
-            let _panel_shot = plot.shot.trim();
+            let panel_shot = plot.shot.trim();
             out.push_str("[[panels]]\n");
             writeln!(out, "column = {}", c + 1).unwrap();
             writeln!(out, "row = {}", r + 1).unwrap();
+            if !panel_shot.is_empty() {
+                writeln!(out, "shot = {:?}", panel_shot).unwrap();
+            }
             if !plot.title.is_empty() {
                 writeln!(out, "title = {:?}", plot.title).unwrap();
             }
@@ -963,6 +977,7 @@ y = "\\pcrl01"
         assert_eq!(plot.signal_specs.len(), 1);
         assert_eq!(plot.signal_specs[0].y_expr, "\\pcrl01");
         assert_eq!(plot.signal_specs[0].experiment, "pcs_east");
+        assert!(plot.signal_specs[0].shot_fixed);
 
         std::fs::remove_file(&tmp).ok();
     }
@@ -992,6 +1007,7 @@ cols: 1
         assert_eq!(plot.title, "Test");
         assert_eq!(plot.signal_specs.len(), 1);
         assert_eq!(plot.signal_specs[0].y_expr, "\\pcrl01");
+        assert!(plot.signal_specs[0].shot_fixed);
 
         std::fs::remove_file(&tmp).ok();
     }

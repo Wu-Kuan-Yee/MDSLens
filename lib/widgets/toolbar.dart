@@ -17,6 +17,7 @@ import 'plot_panel.dart';
 import 'polished_dropdown.dart';
 import 'polished_popup_menu.dart';
 import 'responsive_plot_layout.dart';
+import 'configuration_import_prompt.dart';
 
 class _LayoutDragData {
   const _LayoutDragData.column(this.column) : row = null;
@@ -3336,7 +3337,8 @@ class ToolbarWidget extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: colors.errorContainer.withValues(alpha: 0.28),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: colors.error.withValues(alpha: 0.32)),
+                  border:
+                      Border.all(color: colors.error.withValues(alpha: 0.32)),
                 ),
                 child: const Text(
                   'This restores the entire application to its initial state. '
@@ -3379,8 +3381,8 @@ class ToolbarWidget extends StatelessWidget {
 
   Future<void> _openConfiguration(BuildContext context, AppState app) {
     return app.openFile(
-      importedShotDecision: (shot) =>
-          _confirmUseImportedConfigurationShot(context, shot),
+      importedConfigurationDecision: (summary) =>
+          showImportedConfigurationDecision(context, summary),
     );
   }
 
@@ -3490,58 +3492,6 @@ class ToolbarWidget extends StatelessWidget {
       await Future<void>.delayed(Duration.zero);
       await app.saveFile(format: format);
     }
-  }
-
-  Future<bool> _confirmUseImportedConfigurationShot(
-    BuildContext context,
-    String shot,
-  ) async {
-    if (!context.mounted) return false;
-    final useImportedShot = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        final colors = Theme.of(dialogContext).colorScheme;
-        return KeyboardSafeDialog(
-          maxWidth: 500,
-          title: const Row(
-            children: [
-              Icon(Icons.numbers_rounded),
-              SizedBox(width: 10),
-              Flexible(child: Text('Use the configuration shot?')),
-            ],
-          ),
-          content: Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: colors.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: colors.outlineVariant),
-            ),
-            child: Text(
-              'This configuration contains shot $shot. By default, MDSLens '
-              'keeps the currently selected shot and imports only the other '
-              'settings. You can instead use $shot as the initial shot.',
-            ),
-          ),
-          actions: [
-            FilledButton.icon(
-              key: const ValueKey('ignore-imported-configuration-shot'),
-              autofocus: true,
-              onPressed: () => Navigator.pop(dialogContext, false),
-              icon: const Icon(Icons.visibility_off_outlined),
-              label: const Text('Ignore shot'),
-            ),
-            OutlinedButton.icon(
-              key: const ValueKey('use-imported-configuration-shot'),
-              onPressed: () => Navigator.pop(dialogContext, true),
-              icon: const Icon(Icons.check_circle_outline_rounded),
-              label: Text('Use $shot'),
-            ),
-          ],
-        );
-      },
-    );
-    return useImportedShot ?? false;
   }
 
   Widget _toolbarIconButton(

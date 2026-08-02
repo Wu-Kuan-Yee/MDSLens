@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../models/app_state.dart';
 import 'dialogs/keyboard_safe_dialog.dart';
+import 'configuration_import_prompt.dart';
 
 bool isSupportedConfigurationFileName(String name) {
   final lower = name.trim().toLowerCase();
@@ -183,46 +184,9 @@ class _ConfigurationDropRegionState extends State<ConfigurationDropRegion> {
     final app = context.read<AppState>();
     await app.openFile(
       selectionOverride: ConfigOpenSelection(name: fileName, bytes: bytes),
-      importedShotDecision: (shot) =>
-          _confirmUseImportedConfigurationShot(context, shot),
+      importedConfigurationDecision: (summary) =>
+          showImportedConfigurationDecision(context, summary),
     );
-  }
-
-  Future<bool> _confirmUseImportedConfigurationShot(
-    BuildContext context,
-    String shot,
-  ) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => KeyboardSafeDialog(
-        maxWidth: 500,
-        title: const Row(
-          children: [
-            Icon(Icons.numbers_rounded),
-            SizedBox(width: 10),
-            Flexible(child: Text('Use the configuration shot?')),
-          ],
-        ),
-        content: Text(
-          'The dropped configuration contains shot $shot. Keep the current '
-          'shot, or use $shot as the initial shot?',
-        ),
-        actions: [
-          FilledButton.icon(
-            autofocus: true,
-            onPressed: () => Navigator.pop(dialogContext, false),
-            icon: const Icon(Icons.visibility_off_outlined),
-            label: const Text('Keep current shot'),
-          ),
-          OutlinedButton.icon(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            icon: const Icon(Icons.check_circle_outline_rounded),
-            label: Text('Use $shot'),
-          ),
-        ],
-      ),
-    );
-    return result ?? false;
   }
 
   void _showError(String message) {

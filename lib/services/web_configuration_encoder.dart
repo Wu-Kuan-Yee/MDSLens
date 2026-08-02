@@ -96,10 +96,14 @@ class WebConfigurationEncoder {
       final column = columns[columnIndex];
       for (var rowIndex = 0; rowIndex < column.length; rowIndex++) {
         final panel = column[rowIndex];
+        final panelShot = _text(panel['shot']).trim();
         out
           ..writeln('[[panels]]')
           ..writeln('column = ${columnIndex + 1}')
           ..writeln('row = ${rowIndex + 1}');
+        if (panelShot.isNotEmpty) {
+          out.writeln('shot = ${_tomlString(panelShot)}');
+        }
         for (final entry in const [
           ('title', 'title'),
           ('x_label', 'x_label'),
@@ -131,7 +135,6 @@ class WebConfigurationEncoder {
         }
         out.writeln();
 
-        final panelShot = _text(panel['shot']).trim();
         final signals = _signals(panel);
         for (var signalIndex = 0; signalIndex < signals.length; signalIndex++) {
           final signal = signals[signalIndex];

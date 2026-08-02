@@ -9,6 +9,7 @@ void main() {
     'columns': [
       [
         {
+          'shot': '163702',
           'title': 'Plasma "current"',
           'x_label': 'time',
           'y_label': 'A',
@@ -20,6 +21,7 @@ void main() {
           'signal_specs': [
             {
               'shot': '163701',
+              'shot_fixed': true,
               'experiment': 'pcs_east',
               'server_ip': '202.127.204.12',
               'y_expr': r'\pcrl01',
@@ -41,11 +43,13 @@ void main() {
       WebConfigurationEncoder.encode(configuration, 'toml'),
     );
     expect(text, contains('shot = "163701"'));
+    expect(text, contains('shot = "163702"'));
     expect(text, contains(r'title = "Plasma \"current\""'));
     expect(text, contains('[[panels.signals]]'));
     expect(text, contains(r'y = "\\pcrl01"'));
     expect(text, contains('hide_mode = "persistent"'));
     expect(text, contains('read_mode = "medium"'));
+    expect(text, contains('shot_fixed = true'));
   });
 
   test('encodes WebSCP locally without a gateway', () {
@@ -57,5 +61,6 @@ void main() {
     expect(text, contains(r'1_1.y_expr_1:\pcrl01'));
     expect(text, contains('1_1.hide_mode_1:persistent'));
     expect(text, contains('1_1.read_mode_1:medium'));
+    expect(text, contains('1_1.shot_fixed_1:1'));
   });
 }
