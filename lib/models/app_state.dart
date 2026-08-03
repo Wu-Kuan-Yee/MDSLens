@@ -869,6 +869,10 @@ class AppState extends ChangeNotifier {
   String get shotText => _shotText;
   String _displayedShot = '';
   String get displayedShot => _displayedShot;
+  // The server's latest-shot value is kept separately from the shot currently
+  // displayed.  This mirrors the desktop client: Next must stop at the
+  // server boundary instead of blindly incrementing forever.
+  String _latestKnownShot = '';
   String? _pendingImportedShot;
   bool _pendingImportedPreserveShots = false;
   final _shotCtrl = TextEditingController();
@@ -1496,7 +1500,7 @@ class AppState extends ChangeNotifier {
     stopwatch.stop();
     final seconds =
         stopwatch.elapsedMicroseconds / Duration.microsecondsPerSecond;
-    _status = '$status · Load time: ${seconds.toStringAsFixed(3)} s';
+    _status = '$status, Load time: ${seconds.toStringAsFixed(3)} s';
     notifyListeners();
   }
 
@@ -1871,6 +1875,7 @@ class AppState extends ChangeNotifier {
     if (v == _loggedIn && token == _authToken) return;
     _sessionGeneration++;
     _invalidateFetchForSettingsChange();
+    _latestKnownShot = '';
     _loggedIn = v;
     _authToken = token;
     _explicitlyLoggedOut = !v;
@@ -1883,6 +1888,7 @@ class AppState extends ChangeNotifier {
     _invalidateFetchForSettingsChange();
     _loggedIn = false;
     _authToken = '';
+    _latestKnownShot = '';
     _explicitlyLoggedOut = true;
     if (kIsWeb) {
       unawaited(WebGatewayClient.instance.logout());
@@ -1986,6 +1992,7 @@ class AppState extends ChangeNotifier {
       _loginApiUrl = apiUrl;
       _loginUser = user;
       _loginPass = password;
+      _latestKnownShot = '';
       _loggedIn = true;
       _authToken = result.token;
       _explicitlyLoggedOut = false;
@@ -3186,12 +3193,52 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  void loadRelativeShot(int delta) {
+  Future<int?> _latestShotForNavigation() async {
+    final cached = int.tryParse(_latestKnownShot.trim());
+    if (cached != null) return cached;
+    if (!hasActiveSession) return null;
+
+    final sessionGeneration = _sessionGeneration;
+    final apiUrl = _loginApiUrl;
+    final token = _authToken;
+    final sshSettings = _buildSshSettingsJson();
+    try {
+      final data = await _latestShotWorker(apiUrl, token, sshSettings);
+      if (_disposed || sessionGeneration != _sessionGeneration) return null;
+      final rawShot =
+          data is Map ? (data['shot'] ?? _findShot(data)) : _findShot(data);
+      final latest = int.tryParse(rawShot?.toString().trim() ?? '');
+      if (latest != null) {
+        _latestKnownShot = latest.toString();
+      }
+      return latest;
+    } catch (_) {
+      // A failed boundary check must not make navigation unusable. The
+      // authoritative waveform request below will report any connectivity
+      // problem in the same way as other shot actions.
+      return null;
+    }
+  }
+
+  Future<void> loadRelativeShot(int delta) async {
     final current =
         _shotCtrl.text.trim().isNotEmpty ? _shotCtrl.text.trim() : _shotText;
     final shot = int.tryParse(current);
     if (shot == null) return;
-    shotText = (shot + delta).toString();
+
+    final latest = delta > 0 ? await _latestShotForNavigation() : null;
+    final next = shot + delta;
+    if (latest != null && delta > 0 && next > latest) {
+      if (shot != latest) {
+        shotText = latest.toString();
+        startRefresh();
+      } else {
+        setStatus('Already at latest shot $latest');
+      }
+      return;
+    }
+
+    shotText = next.toString();
     startRefresh();
   }
 
@@ -4331,6 +4378,7 @@ class AppState extends ChangeNotifier {
       final shot =
           data is Map ? (data['shot'] ?? _findShot(data)) : _findShot(data);
       if (shot != null) {
+        _latestKnownShot = shot.toString();
         setShotFromApi(shot.toString());
         if (data is Map) {
           _shotInfoIp = data['ip']?.toString() ?? '';

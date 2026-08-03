@@ -1155,6 +1155,7 @@ void main() {
     () async {
       final requestedShots = <String>[];
       final app = AppState(
+        latestShotWorker: (_, __, ___) async => {'shot': 163701},
         signalFetchWorker: (configJson, _, __) async {
           final config = jsonDecode(configJson) as Map<String, dynamic>;
           final panel = (config['columns'] as List).first.first as Map;
@@ -1179,6 +1180,12 @@ void main() {
       expect(app.shotText, '163701');
       expect(app.shotCtrl.text, '163701');
       expect(requestedShots, ['163700', '163701']);
+
+      app.loadRelativeShot(1);
+      await Future<void>.delayed(Duration.zero);
+      expect(app.shotText, '163701');
+      expect(app.shotCtrl.text, '163701');
+      expect(app.status, 'Already at latest shot 163701');
     },
   );
 
@@ -2768,7 +2775,7 @@ void main() {
       expect(app.fetching, isFalse);
       expect(app.plots[0].series[0]!.points![0][1], 222);
       expect(app.status, contains('163702'));
-      expect(app.status, matches(RegExp(r'Load time: \d+\.\d{3} s$')));
+      expect(app.status, matches(RegExp(r', Load time: \d+\.\d{3} s$')));
     },
   );
 
