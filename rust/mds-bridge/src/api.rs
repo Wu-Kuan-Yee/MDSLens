@@ -839,8 +839,10 @@ mod tests {
         };
         let frb = FrbSignalSeries::from(orig);
         let json = serde_json::to_string(&frb).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         assert_eq!(frb.points, vec![[1.0, 2.0]]);
+        assert_eq!(value["points"], serde_json::json!([[1.0, 2.0]]));
         assert!(!json.contains("null"));
     }
 
