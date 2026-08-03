@@ -635,8 +635,8 @@ fn fetch_east_length_sampled(socket: &mut TcpStream, req: &FetchRequest, result:
 // ── Medium mode ───────────────────────────────────────────────────────────
 
 fn fetch_medium(socket: &mut TcpStream, req: &FetchRequest, result: &mut FetchResult) {
-    // Medium uses stride sampling at finer resolution than Thin.
-    // It preserves spike amplitude without final downsample.
+    // Medium follows the original client's request budget while preserving
+    // its higher-fidelity server-side sampling strategy.
     if is_east_signal(req) {
         if let Some(series) = fetch_east_fixed_resolution(socket, req) {
             result.series = series;
@@ -650,15 +650,14 @@ fn fetch_medium(socket: &mut TcpStream, req: &FetchRequest, result: &mut FetchRe
             result.series = series;
             return;
         }
-        // Use length-sampled with a little more budget, then the generic
-        // expression path if the EAST metadata is unavailable.
-        let budget = req.max_points.saturating_mul(4);
-        fetch_east_length_sampled_with_budget(socket, req, result, budget);
+        // Keep the same fallback budget as the original client, then use the
+        // generic expression path if EAST metadata is unavailable.
+        fetch_east_length_sampled_with_budget(socket, req, result, req.max_points);
         if !result.series.has_data() {
             fetch_generic_thin(socket, req, result);
         }
     } else {
-        fetch_generic_thin(socket, req, result); // same path, higher budget implicit
+        fetch_generic_thin(socket, req, result);
     }
 }
 
