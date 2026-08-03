@@ -21,6 +21,7 @@ import sys
 import tarfile
 import tempfile
 import textwrap
+import time
 from pathlib import Path
 from typing import NoReturn
 
@@ -32,6 +33,8 @@ FLUTTER_BASELINE = "3.44.7"
 RUST_BASELINE = "1.92.0"
 ANDROID_API = "36"
 ANDROID_NDK = "28.2.13676358"
+APPLE_FLUTTER_BUILD_RETRIES = 4
+APPLE_FLUTTER_RETRY_DELAY_SECONDS = 15
 
 PLATFORM_FORMATS = {
     "windows": {"exe", "msi", "msix", "zip", "7z", "tar.gz", "tar.xz", "tar.bz2"},
@@ -626,10 +629,28 @@ def selected(formats: set[str], name: str) -> bool:
     return "all" in formats or name in formats
 
 
+def clear_flutter_package_checkout(target: str) -> None:
+    """Remove an incomplete Xcode Swift Package checkout before retrying.
+
+    Xcode stores source packages under Flutter's build directory.  A network
+    failure during `git clone` can leave a bare repository that makes the next
+    invocation fail immediately instead of retrying the download.  This only
+    touches generated build output; the checked-in Package.resolved files are
+    never changed.
+    """
+
+    package_dir = ROOT / "build" / target / "SourcePackages"
+    if package_dir.is_symlink() or not package_dir.exists():
+        return
+    if package_dir.is_dir():
+        log(f"Removing incomplete {target} Swift Package checkout before retry")
+        shutil.rmtree(package_dir)
+
+
 def flutter_build(target: str, *arguments: str) -> None:
     version = project_version()
     run("flutter", "pub", "get")
-    run(
+    command = (
         "flutter",
         "build",
         target,
@@ -641,6 +662,21 @@ def flutter_build(target: str, *arguments: str) -> None:
         str(release_build_number(version)),
         *arguments,
     )
+    attempts = APPLE_FLUTTER_BUILD_RETRIES if target in {"ios", "macos"} else 1
+    for attempt in range(1, attempts + 1):
+        try:
+            run(*command)
+            return
+        except subprocess.CalledProcessError:
+            if attempt == attempts:
+                raise
+            clear_flutter_package_checkout(target)
+            delay = APPLE_FLUTTER_RETRY_DELAY_SECONDS * attempt
+            log(
+                f"{target} build failed while resolving native packages; "
+                f"retrying in {delay}s ({attempt + 1}/{attempts})"
+            )
+            time.sleep(delay)
 
 
 def prepare_macos_application(app: Path) -> None:

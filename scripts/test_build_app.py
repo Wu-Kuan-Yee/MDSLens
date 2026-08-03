@@ -7,6 +7,7 @@ import json
 import os
 import plistlib
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -113,6 +114,18 @@ class BuildAppTests(unittest.TestCase):
                 "1002003",
             ),
         )
+
+    def test_apple_flutter_build_retries_native_package_resolution(self) -> None:
+        failure = subprocess.CalledProcessError(1, ["flutter", "build", "ios"])
+        with mock.patch.object(build_app, "project_version", return_value="1.2.3"):
+            with mock.patch.object(build_app, "run", side_effect=[None, failure, None]) as run:
+                with mock.patch.object(build_app, "clear_flutter_package_checkout") as clear:
+                    with mock.patch.object(build_app.time, "sleep") as sleep:
+                        build_app.flutter_build("ios")
+
+        self.assertEqual(run.call_count, 3)
+        clear.assert_called_once_with("ios")
+        sleep.assert_called_once_with(build_app.APPLE_FLUTTER_RETRY_DELAY_SECONDS)
 
     def test_packaged_application_icon_checks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
