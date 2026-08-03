@@ -1039,7 +1039,7 @@ mod tests {
                 uniform_y: vec![1.25, 2.5],
                 uniform_start: -0.1,
                 uniform_step: 0.05,
-                points: vec![vec![3.0, 4.0]],
+                points: vec![[3.0, 4.0]],
                 ..Default::default()
             },
         };
