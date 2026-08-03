@@ -266,4 +266,45 @@ void main() {
     expect(triggered, [MdsShortcutCommand.showAllPanels]);
     dispatcher.dispose();
   });
+
+  test('Linux Point lock chord wins over the H/J/K/L navigation prefix', () {
+    final bindings = <MdsShortcutCommand, MdsShortcutBinding>{
+      MdsShortcutCommand.panelDown: MdsShortcutBinding(
+        primary: MdsShortcutSequence.single(
+          MdsShortcutStroke(LogicalKeyboardKey.keyJ),
+        ),
+      ),
+      MdsShortcutCommand.exitPoint: MdsShortcutBinding(
+        primary: MdsShortcutSequence([
+          MdsShortcutStroke(LogicalKeyboardKey.keyJ),
+          MdsShortcutStroke(LogicalKeyboardKey.keyK),
+        ]),
+      ),
+    };
+    final dispatcher = MdsShortcutDispatcher();
+    final triggered = <MdsShortcutCommand>[];
+
+    expect(
+      dispatcher.handle(
+        const MdsShortcutStroke(LogicalKeyboardKey.keyJ),
+        bindings: bindings,
+        isEnabled: (_) => true,
+        onTrigger: triggered.add,
+      ),
+      isTrue,
+    );
+    expect(triggered, isEmpty);
+
+    expect(
+      dispatcher.handle(
+        const MdsShortcutStroke(LogicalKeyboardKey.keyK),
+        bindings: bindings,
+        isEnabled: (_) => true,
+        onTrigger: triggered.add,
+      ),
+      isTrue,
+    );
+    expect(triggered, [MdsShortcutCommand.exitPoint]);
+    dispatcher.dispose();
+  });
 }
