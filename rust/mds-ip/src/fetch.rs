@@ -140,6 +140,7 @@ pub struct SamplingPlan {
 /// Fetch a single signal on an already-open socket. Dispatches by read mode.
 pub fn fetch_signal(socket: &mut TcpStream, request: &FetchRequest) -> FetchResult {
     let started = Instant::now();
+    let read_started = Instant::now();
     let mut result = FetchResult {
         loaded_index: request.loaded_index,
         series: SignalSeries {
@@ -153,19 +154,30 @@ pub fn fetch_signal(socket: &mut TcpStream, request: &FetchRequest) -> FetchResu
         DataReadMode::Medium => fetch_medium(socket, request, &mut result),
         DataReadMode::Full => fetch_full(socket, request, &mut result),
     }
+    let read_us = read_started.elapsed().as_micros();
 
+    let metadata_started = Instant::now();
     if result.series.has_data() {
         populate_series_metadata(socket, request, &mut result.series);
+    }
+    let metadata_us = metadata_started.elapsed().as_micros();
+
+    let minmax_started = Instant::now();
+    if result.series.has_data() {
         if result.series.has_uniform_data()
             && result.series.uniform_y.len() >= MIN_MAX_INDEX_MIN_POINTS
         {
             mds_core::sampling::build_min_max_index(&mut result.series, MIN_MAX_BLOCK_SIZE);
         }
     }
+    let minmax_us = minmax_started.elapsed().as_micros();
     if trace_fetch_enabled() {
         eprintln!(
-            "[mds-ip] signal_ms={} shot={} tree={} y={} points={} error={}",
+            "[mds-ip] signal_ms={} read_us={} metadata_us={} minmax_us={} shot={} tree={} y={} points={} error={}",
             started.elapsed().as_millis(),
+            read_us,
+            metadata_us,
+            minmax_us,
             request.shot,
             request.sig.experiment,
             request.sig.y_expr,
