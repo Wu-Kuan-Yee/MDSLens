@@ -16,9 +16,39 @@ void main() {
       2,
     );
     expect(
-      bindings[MdsShortcutCommand.exitPoint]!.primary!.strokes.single.key,
-      LogicalKeyboardKey.escape,
+      bindings[MdsShortcutCommand.resetCurrentScale]!.primary!.strokes,
+      hasLength(2),
     );
+    expect(
+      bindings[MdsShortcutCommand.resetCurrentScale]!
+          .primary!
+          .strokes
+          .first
+          .key,
+      LogicalKeyboardKey.keyR,
+    );
+    expect(
+      bindings[MdsShortcutCommand.resetAllScales]!.primary!.strokes.first.key,
+      LogicalKeyboardKey.keyR,
+    );
+    expect(
+      bindings[MdsShortcutCommand.panelLeft]!.primary!.strokes.single.alt,
+      isFalse,
+    );
+    final exitSequence = bindings[MdsShortcutCommand.exitPoint]!.primary!;
+    expect(
+      exitSequence.strokes.first.key,
+      defaultTargetPlatform == TargetPlatform.linux
+          ? LogicalKeyboardKey.keyJ
+          : LogicalKeyboardKey.escape,
+    );
+    if (defaultTargetPlatform == TargetPlatform.linux) {
+      expect(exitSequence.strokes, hasLength(2));
+      expect(
+        bindings[MdsShortcutCommand.exitPoint]!.alternative!.strokes.single.key,
+        LogicalKeyboardKey.escape,
+      );
+    }
   });
 
   test('shortcut settings survive JSON encoding and decoding', () {
@@ -82,8 +112,7 @@ void main() {
     final decoded = decodeMdsShortcutBindings(legacy);
     expect(
       decoded[MdsShortcutCommand.refreshData]!.primary!.displayText,
-      defaultMdsShortcutBindings()
-          [MdsShortcutCommand.refreshData]!
+      defaultMdsShortcutBindings()[MdsShortcutCommand.refreshData]!
           .primary!
           .displayText,
     );
@@ -93,7 +122,45 @@ void main() {
     );
   });
 
-  test('sequence settings round-trip while accepting legacy single strokes', () {
+  test('legacy temporary panel and scale mappings migrate to original defaults',
+      () {
+    final defaults = defaultMdsShortcutBindings();
+    final legacy = encodeMdsShortcutBindings(defaults);
+    final panel = MdsShortcutCommand.panelLeft;
+    legacy[shortcutDefinition(panel).id] = MdsShortcutBinding(
+      primary: MdsShortcutSequence.single(
+        MdsShortcutStroke(
+          defaultTargetPlatform == TargetPlatform.linux
+              ? LogicalKeyboardKey.keyH
+              : LogicalKeyboardKey.arrowLeft,
+          alt: true,
+        ),
+      ),
+    ).toJson();
+    legacy[shortcutDefinition(MdsShortcutCommand.resetCurrentScale).id] =
+        MdsShortcutBinding(
+      primary: MdsShortcutSequence.single(
+        MdsShortcutStroke(
+          LogicalKeyboardKey.keyR,
+          control: defaultTargetPlatform != TargetPlatform.macOS,
+          meta: defaultTargetPlatform == TargetPlatform.macOS,
+        ),
+      ),
+    ).toJson();
+
+    final decoded = decodeMdsShortcutBindings(legacy);
+    expect(
+      decoded[panel]!.primary!.strokes.single.alt,
+      isFalse,
+    );
+    expect(
+      decoded[MdsShortcutCommand.resetCurrentScale]!.primary!.strokes,
+      hasLength(2),
+    );
+  });
+
+  test('sequence settings round-trip while accepting legacy single strokes',
+      () {
     final sequence = MdsShortcutSequence([
       MdsShortcutStroke(LogicalKeyboardKey.keyG, control: true),
       MdsShortcutStroke(LogicalKeyboardKey.keyL),
@@ -154,7 +221,8 @@ void main() {
     dispatcher.dispose();
   });
 
-  test('dispatcher fires a prefix command when the sequence times out', () async {
+  test('dispatcher fires a prefix command when the sequence times out',
+      () async {
     final bindings = <MdsShortcutCommand, MdsShortcutBinding>{
       MdsShortcutCommand.showAllPanels: MdsShortcutBinding(
         primary: MdsShortcutSequence.single(

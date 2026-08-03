@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -1083,6 +1083,36 @@ void main() {
       isTrue,
     );
   });
+
+  testWidgets(
+    'Global shortcuts remain active after the page loses child focus',
+    (tester) async {
+      final app = AppState();
+      await app.preferencesReady;
+      addTearDown(app.dispose);
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: app,
+          child: const MaterialApp(home: MainPage()),
+        ),
+      );
+      await tester.pump();
+
+      // This is the state produced by tapping empty waveform space: no
+      // editable control owns focus, but the page route is still active.
+      FocusManager.instance.primaryFocus?.unfocus();
+      final modifier = defaultTargetPlatform == TargetPlatform.macOS
+          ? LogicalKeyboardKey.metaLeft
+          : LogicalKeyboardKey.controlLeft;
+      await tester.sendKeyDownEvent(modifier);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
+      await tester.sendKeyUpEvent(modifier);
+      await tester.pump();
+
+      expect(app.interactionMode, 1);
+    },
+  );
 
   test(
     'Shot navigation discards a draft and advances from the displayed shot',

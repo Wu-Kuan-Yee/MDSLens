@@ -445,6 +445,15 @@ class MdsShortcutBinding {
     if (alternative != null && !alternative!.isEmpty) yield alternative!;
   }
 
+  @override
+  bool operator ==(Object other) =>
+      other is MdsShortcutBinding &&
+      other.primary == primary &&
+      other.alternative == alternative;
+
+  @override
+  int get hashCode => Object.hash(primary, alternative);
+
   Map<String, dynamic> toJson() => {
         'primary': primary?.toJson(),
         'alternative': alternative?.toJson(),
@@ -528,10 +537,10 @@ Map<MdsShortcutCommand, MdsShortcutBinding> defaultMdsShortcutBindings() {
       primary: modifiedSequence(LogicalKeyboardKey.keyA),
     ),
     MdsShortcutCommand.resetCurrentScale: MdsShortcutBinding(
-      primary: modifiedSequence(LogicalKeyboardKey.keyR),
+      primary: chord(LogicalKeyboardKey.keyR, LogicalKeyboardKey.keyC),
     ),
     MdsShortcutCommand.resetAllScales: MdsShortcutBinding(
-      primary: chord(LogicalKeyboardKey.keyA, LogicalKeyboardKey.keyR),
+      primary: chord(LogicalKeyboardKey.keyR, LogicalKeyboardKey.keyA),
     ),
     MdsShortcutCommand.sameXScale: MdsShortcutBinding(
       primary: modifiedSequence(LogicalKeyboardKey.keyX),
@@ -576,9 +585,16 @@ Map<MdsShortcutCommand, MdsShortcutBinding> defaultMdsShortcutBindings() {
       ),
     ),
     MdsShortcutCommand.exitPoint: MdsShortcutBinding(
-      primary: MdsShortcutSequence.single(
-        MdsShortcutStroke(LogicalKeyboardKey.escape),
-      ),
+      primary: linux
+          ? chord(LogicalKeyboardKey.keyJ, LogicalKeyboardKey.keyK)
+          : MdsShortcutSequence.single(
+              MdsShortcutStroke(LogicalKeyboardKey.escape),
+            ),
+      alternative: linux
+          ? MdsShortcutSequence.single(
+              MdsShortcutStroke(LogicalKeyboardKey.escape),
+            )
+          : null,
     ),
     MdsShortcutCommand.panelRate: MdsShortcutBinding(
       primary: chord(LogicalKeyboardKey.keyT, LogicalKeyboardKey.keyR),
@@ -596,7 +612,6 @@ Map<MdsShortcutCommand, MdsShortcutBinding> defaultMdsShortcutBindings() {
       primary: single(
         MdsShortcutStroke(
           linux ? LogicalKeyboardKey.keyH : LogicalKeyboardKey.arrowLeft,
-          alt: true,
         ),
       ),
     ),
@@ -604,7 +619,6 @@ Map<MdsShortcutCommand, MdsShortcutBinding> defaultMdsShortcutBindings() {
       primary: single(
         MdsShortcutStroke(
           linux ? LogicalKeyboardKey.keyJ : LogicalKeyboardKey.arrowDown,
-          alt: true,
         ),
       ),
     ),
@@ -612,7 +626,6 @@ Map<MdsShortcutCommand, MdsShortcutBinding> defaultMdsShortcutBindings() {
       primary: single(
         MdsShortcutStroke(
           linux ? LogicalKeyboardKey.keyK : LogicalKeyboardKey.arrowUp,
-          alt: true,
         ),
       ),
     ),
@@ -620,7 +633,6 @@ Map<MdsShortcutCommand, MdsShortcutBinding> defaultMdsShortcutBindings() {
       primary: single(
         MdsShortcutStroke(
           linux ? LogicalKeyboardKey.keyL : LogicalKeyboardKey.arrowRight,
-          alt: true,
         ),
       ),
     ),
@@ -665,7 +677,8 @@ Map<MdsShortcutCommand, MdsShortcutBinding>
 Map<MdsShortcutCommand, MdsShortcutBinding> decodeMdsShortcutBindings(
   dynamic value,
 ) {
-  final result = defaultMdsShortcutBindings();
+  final defaults = defaultMdsShortcutBindings();
+  final result = Map<MdsShortcutCommand, MdsShortcutBinding>.of(defaults);
   if (value is! Map) return result;
   final hasRefreshBinding = value.containsKey('refresh_data');
   for (final definition in mdsShortcutDefinitions) {
@@ -676,9 +689,19 @@ Map<MdsShortcutCommand, MdsShortcutBinding> decodeMdsShortcutBindings(
       alternative: MdsShortcutSequence.fromJson(raw['alternative']),
     );
   }
+  // Older MDSLens builds persisted a few temporary mappings while the
+  // desktop shortcut set was being brought in.  Treat those exact old
+  // defaults as defaults rather than preserving them forever, while leaving
+  // every other user-customized binding untouched.
+  final legacyDefaults = _legacyMdsShortcutBindings();
+  for (final entry in legacyDefaults.entries) {
+    if (result[entry.key] == entry.value) {
+      result[entry.key] = defaults[entry.key]!;
+    }
+  }
   // MDSLens used Ctrl/Cmd+Shift+R for Reset All before Refresh had its own
   // command. Preserve that old setting as the new Refresh shortcut, while
-  // moving Reset All to the non-conflicting Ctrl/Cmd+A, R sequence. An
+  // moving Reset All to the original Ctrl/Cmd+R, A sequence. An
   // explicitly saved refresh binding (including an empty one) always wins.
   if (!hasRefreshBinding) {
     final legacyReset = result[MdsShortcutCommand.resetAllScales]?.primary;
@@ -688,10 +711,53 @@ Map<MdsShortcutCommand, MdsShortcutBinding> decodeMdsShortcutBindings(
         primary: legacyRefresh,
       );
       result[MdsShortcutCommand.resetAllScales] =
-          defaultMdsShortcutBindings()[MdsShortcutCommand.resetAllScales]!;
+          defaults[MdsShortcutCommand.resetAllScales]!;
     }
   }
   return result;
+}
+
+Map<MdsShortcutCommand, MdsShortcutBinding> _legacyMdsShortcutBindings() {
+  final platform = defaultTargetPlatform;
+  final mac = platform == TargetPlatform.macOS;
+  final linux = platform == TargetPlatform.linux;
+  MdsShortcutStroke modified(LogicalKeyboardKey key, {bool shift = false}) =>
+      MdsShortcutStroke(key, control: !mac, meta: mac, shift: shift);
+  final panelKeys = <MdsShortcutCommand, LogicalKeyboardKey>{
+    MdsShortcutCommand.panelLeft:
+        linux ? LogicalKeyboardKey.keyH : LogicalKeyboardKey.arrowLeft,
+    MdsShortcutCommand.panelDown:
+        linux ? LogicalKeyboardKey.keyJ : LogicalKeyboardKey.arrowDown,
+    MdsShortcutCommand.panelUp:
+        linux ? LogicalKeyboardKey.keyK : LogicalKeyboardKey.arrowUp,
+    MdsShortcutCommand.panelRight:
+        linux ? LogicalKeyboardKey.keyL : LogicalKeyboardKey.arrowRight,
+  };
+  return {
+    ...{
+      MdsShortcutCommand.resetCurrentScale: MdsShortcutBinding(
+        primary: MdsShortcutSequence.single(modified(LogicalKeyboardKey.keyR)),
+      ),
+      MdsShortcutCommand.resetAllScales: MdsShortcutBinding(
+        primary: MdsShortcutSequence([
+          modified(LogicalKeyboardKey.keyA),
+          const MdsShortcutStroke(LogicalKeyboardKey.keyR),
+        ]),
+      ),
+      if (linux)
+        MdsShortcutCommand.exitPoint: MdsShortcutBinding(
+          primary: MdsShortcutSequence.single(
+            MdsShortcutStroke(LogicalKeyboardKey.escape),
+          ),
+        ),
+    },
+    for (final entry in panelKeys.entries)
+      entry.key: MdsShortcutBinding(
+        primary: MdsShortcutSequence.single(
+          MdsShortcutStroke(entry.value, alt: true),
+        ),
+      ),
+  };
 }
 
 MdsShortcutSequence? _legacyRefreshSequence() {

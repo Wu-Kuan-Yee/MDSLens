@@ -1606,6 +1606,38 @@ class AppState extends ChangeNotifier {
     return false;
   }
 
+  /// Start Point tracking at the middle of the selected panel's first usable
+  /// series.  Desktop shortcuts enter Point mode and immediately activate the
+  /// current plot; doing the same here makes arrow/point-step shortcuts useful
+  /// even before the pointer has visited a chart.
+  void activatePointForCurrentPanel() {
+    if (_interactionMode != 1) return;
+    var plotIndex = selectedPlotIndex ?? -1;
+    if (plotIndex < 0 || plotIndex >= _plots.length) {
+      plotIndex = _plots.indexWhere(
+        (plot) => plot.series
+            .any((series) => series != null && series.pointCount > 0),
+      );
+    }
+    if (plotIndex < 0 || plotIndex >= _plots.length) {
+      return;
+    }
+    final plot = _plots[plotIndex];
+    for (var seriesIndex = 0; seriesIndex < plot.series.length; seriesIndex++) {
+      final series = plot.series[seriesIndex];
+      if (series == null || series.pointCount == 0) continue;
+      final x = series.pointXAt(series.pointCount ~/ 2);
+      if (!x.isFinite) continue;
+      pointLocked = false;
+      setCrosshair(
+        x,
+        sourcePlot: plotIndex,
+        sourceSeries: seriesIndex,
+      );
+      return;
+    }
+  }
+
   // Dialogs
   bool _showLogin = false;
   bool get showLogin => _showLogin;

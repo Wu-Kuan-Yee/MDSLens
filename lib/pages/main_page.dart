@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/app_state.dart';
 import '../services/keyboard_shortcuts.dart';
@@ -21,7 +22,7 @@ bool allowShortcutWhileEditing(
       command == MdsShortcutCommand.globalLayout ||
       command == MdsShortcutCommand.globalExport ||
       command == MdsShortcutCommand.refreshData ||
-      command == MdsShortcutCommand.toggleRefresh) {
+      command == MdsShortcutCommand.exitPoint) {
     return true;
   }
   return shotInputFocused &&
@@ -41,7 +42,21 @@ class _MainPageState extends State<MainPage> {
   final _shortcutDispatcher = MdsShortcutDispatcher();
 
   @override
+  void initState() {
+    super.initState();
+    // A Focus.onKeyEvent callback only receives events while this page (or
+    // one of its descendants) owns focus. Clicking an empty chart area can
+    // intentionally leave the page without a focused child, which made all
+    // shortcuts appear to stop working until another control was focused.
+    // HardwareKeyboard is the application-wide event boundary and lets the
+    // shortcuts remain available in that state while still respecting modal
+    // dialogs and popup menus below.
+    HardwareKeyboard.instance.addHandler(_handleGlobalKeyEvent);
+  }
+
+  @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleGlobalKeyEvent);
     _shortcutDispatcher.dispose();
     super.dispose();
   }
@@ -55,7 +70,6 @@ class _MainPageState extends State<MainPage> {
     );
     return Focus(
       autofocus: true,
-      onKeyEvent: _handleKeyEvent,
       child: Scaffold(
           body: SafeArea(
             child: GestureDetector(
@@ -123,9 +137,13 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+  bool _handleGlobalKeyEvent(KeyEvent event) {
+    if (!mounted) return false;
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return false;
+
     final stroke = shortcutStrokeFromEvent(event);
-    if (stroke == null) return KeyEventResult.ignored;
+    if (stroke == null) return false;
     final app = context.read<AppState>();
     final handled = _shortcutDispatcher.handle(
       stroke,
@@ -137,7 +155,7 @@ class _MainPageState extends State<MainPage> {
       ),
       onTrigger: (command) => _triggerShortcut(app, command),
     );
-    return handled ? KeyEventResult.handled : KeyEventResult.ignored;
+    return handled;
   }
 
   bool _shortcutEnabled(
@@ -145,6 +163,8 @@ class _MainPageState extends State<MainPage> {
     MdsShortcutCommand command, {
     required bool shotInputFocused,
   }) {
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return false;
     if (_editingText() &&
         !allowShortcutWhileEditing(
           command,
@@ -155,8 +175,11 @@ class _MainPageState extends State<MainPage> {
     switch (command) {
       case MdsShortcutCommand.pointPrevious:
       case MdsShortcutCommand.pointNext:
-      case MdsShortcutCommand.exitPoint:
         return app.interactionMode == 1 && app.crosshairX != null;
+      case MdsShortcutCommand.exitPoint:
+        // Escape is also the global cancel/restore key (for example after
+        // maximizing a panel), so it must not depend on an active crosshair.
+        return true;
       case MdsShortcutCommand.panelLeft:
       case MdsShortcutCommand.panelDown:
       case MdsShortcutCommand.panelUp:
@@ -173,9 +196,12 @@ class _MainPageState extends State<MainPage> {
       case MdsShortcutCommand.menuDown:
       case MdsShortcutCommand.menuUp:
       case MdsShortcutCommand.menuRight:
-      case MdsShortcutCommand.menuActivate:
         // PopupMenuRoute owns its focus and arrow/Enter handling.
         return false;
+      case MdsShortcutCommand.menuActivate:
+        // PopupMenuRoute owns Enter while it is open.  On the main page the
+        // same key resumes Point tracking, matching the desktop client.
+        return app.interactionMode == 1 && !app.pointLocked;
       default:
         return true;
     }
@@ -207,12 +233,17 @@ class _MainPageState extends State<MainPage> {
         break;
       case MdsShortcutCommand.pointMode:
         app.interactionMode = 1;
+        app.activatePointForCurrentPanel();
         break;
       case MdsShortcutCommand.zoomMode:
         app.interactionMode = 0;
         break;
       case MdsShortcutCommand.focusShot:
         app.shotFocusNode.requestFocus();
+        app.shotCtrl.selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: app.shotCtrl.text.length,
+        );
         break;
       case MdsShortcutCommand.refreshData:
         app.refreshDisplayedShot();
@@ -289,11 +320,13 @@ class _MainPageState extends State<MainPage> {
       case MdsShortcutCommand.exitPoint:
         app.handleEscapeKey();
         break;
+      case MdsShortcutCommand.menuActivate:
+        app.activatePointForCurrentPanel();
+        break;
       case MdsShortcutCommand.menuLeft:
       case MdsShortcutCommand.menuDown:
       case MdsShortcutCommand.menuUp:
       case MdsShortcutCommand.menuRight:
-      case MdsShortcutCommand.menuActivate:
         break;
     }
   }
