@@ -84,7 +84,10 @@ pub struct FrbSignalSeries {
     pub min_y_blocks: Vec<f32>,
     pub max_y_blocks: Vec<f32>,
     pub min_max_block_size: i32,
-    pub points: Vec<Vec<f64>>, // [[x,y], ...]
+    // Fixed-size pairs keep the native representation compact.  Serde still
+    // emits the same JSON arrays ([[x,y], ...]), while the binary streaming
+    // bridge can interleave them without allocating one Vec per point.
+    pub points: Vec<[f64; 2]>,
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -190,11 +193,10 @@ impl From<mds_core::types::SignalSeries> for FrbSignalSeries {
         // this field again to build its binary interleaved buffer; iterating
         // by reference here kept the original `Vec<[f64; 2]>` alive and
         // duplicated every point before that move.
-        let points: Vec<Vec<f64>> = s
+        let points: Vec<[f64; 2]> = s
             .points
             .into_iter()
             .filter(|p| p[0].is_finite() && p[1].is_finite())
-            .map(|p| vec![p[0], p[1]])
             .collect();
         if had_samples && points.is_empty() && !had_uniform_samples && error.is_empty() {
             error = "signal contains no finite numeric samples".into();
@@ -786,7 +788,7 @@ mod tests {
         };
         let frb = FrbSignalSeries::from(orig);
         assert_eq!(frb.points.len(), 2);
-        assert_eq!(frb.points[0], vec![0.0, 1.0]);
+        assert_eq!(frb.points[0], [0.0, 1.0]);
     }
 
     #[test]
@@ -799,7 +801,7 @@ mod tests {
         let frb = FrbSignalSeries::from(orig);
         let json = serde_json::to_string(&frb).unwrap();
 
-        assert_eq!(frb.points, vec![vec![1.0, 2.0]]);
+        assert_eq!(frb.points, vec![[1.0, 2.0]]);
         assert!(!json.contains("null"));
     }
 
