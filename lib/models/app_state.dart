@@ -1428,6 +1428,10 @@ class AppState extends ChangeNotifier {
   final Map<int, int> _pendingPanelSignalCounts = {};
   final Set<int> _loadedPanelIndexes = {};
   final Set<String> _streamedSignalKeys = {};
+  final Set<String> _waveformConfiguredSignalKeys = {};
+  final Set<String> _waveformLoadedSignalKeys = {};
+  final Set<String> _waveformFailedSignalKeys = {};
+  final Set<int> _waveformLoadedPanelIndexes = {};
   Timer? _streamNotifyTimer;
   bool isPlotFetching(int plotIdx) =>
       _fetching &&
@@ -1503,6 +1507,10 @@ class AppState extends ChangeNotifier {
     _cancelActiveNativeFetch();
     _fetchGeneration++;
     _fetchingPlotIndex = null;
+    _waveformConfiguredSignalKeys.clear();
+    _waveformLoadedSignalKeys.clear();
+    _waveformFailedSignalKeys.clear();
+    _waveformLoadedPanelIndexes.clear();
     if (_fetching) {
       _fetching = false;
       _status = 'Settings changed. Previous load discarded.';
@@ -3436,6 +3444,10 @@ class AppState extends ChangeNotifier {
     _pendingPanelSignalCounts.clear();
     _loadedPanelIndexes.clear();
     _streamedSignalKeys.clear();
+    _waveformConfiguredSignalKeys.clear();
+    _waveformLoadedSignalKeys.clear();
+    _waveformFailedSignalKeys.clear();
+    _waveformLoadedPanelIndexes.clear();
     var plotIndex = 0;
     for (final column in _columns) {
       for (final panel in column) {
@@ -3446,10 +3458,123 @@ class AppState extends ChangeNotifier {
                     signalHideModeOf(signal) == signalHideModeVisible)
                 .length ??
             0;
-        if (count > 0) _pendingPanelSignalCounts[plotIndex] = count;
+        if (count > 0) {
+          _pendingPanelSignalCounts[plotIndex] = count;
+          for (var signalIndex = 0;
+              signalIndex < (signals?.length ?? 0);
+              signalIndex++) {
+            final signal = signals?[signalIndex];
+            if (signal is Map &&
+                signalHideModeOf(signal) == signalHideModeVisible) {
+              _waveformConfiguredSignalKeys
+                  .add('$plotIndex:$signalIndex');
+            }
+          }
+        }
         plotIndex++;
       }
     }
+  }
+
+  bool _decodedSeriesHasData(dynamic decoded) {
+    return decoded.points?.isNotEmpty == true ||
+        decoded.interleavedPoints?.isNotEmpty == true ||
+        (decoded.uniformY?.isNotEmpty == true && decoded.uniformStep != 0);
+  }
+
+  void _recordWaveformSignalResult(
+    int plotIndex,
+    int signalIndex, {
+    required bool hasData,
+  }) {
+    final key = '$plotIndex:$signalIndex';
+    if (!_waveformConfiguredSignalKeys.contains(key)) return;
+    if (hasData) {
+      _waveformLoadedSignalKeys.add(key);
+      _waveformFailedSignalKeys.remove(key);
+      _waveformLoadedPanelIndexes.add(plotIndex);
+    } else {
+      _waveformFailedSignalKeys.add(key);
+      _waveformLoadedSignalKeys.remove(key);
+    }
+  }
+
+  /// Summarizes the configured signals after a fetch has reached its model
+  /// completion boundary.  Hidden signals are intentionally excluded: they
+  /// are not requested and should not make a successful load look partial.
+  ({int totalPanels, int dataPanels, int totalSignals, int failedSignals})
+  _waveformLoadStats() {
+    if (_waveformConfiguredSignalKeys.isNotEmpty) {
+      final unresolved = _waveformConfiguredSignalKeys
+          .difference(_waveformLoadedSignalKeys)
+          .difference(_waveformFailedSignalKeys)
+          .length;
+      return (
+        totalPanels: _plots.length,
+        dataPanels: _waveformLoadedPanelIndexes.length,
+        totalSignals: _waveformConfiguredSignalKeys.length,
+        failedSignals: _waveformFailedSignalKeys.length + unresolved,
+      );
+    }
+
+    var dataPanels = 0;
+    var totalSignals = 0;
+    var failedSignals = 0;
+    var plotIndex = 0;
+
+    for (final column in _columns) {
+      for (final panel in column) {
+        final visibleSignals = <int>[];
+        final rawSignals = panel['signal_specs'];
+        if (rawSignals is List) {
+          for (var index = 0; index < rawSignals.length; index++) {
+            final signal = rawSignals[index];
+            if (signal is Map &&
+                signalHideModeOf(signal) == signalHideModeVisible) {
+              visibleSignals.add(index);
+            }
+          }
+        }
+        totalSignals += visibleSignals.length;
+
+        var panelHasData = false;
+        for (final signalIndex in visibleSignals) {
+          final series = plotIndex < _plots.length &&
+                  signalIndex < _plots[plotIndex].series.length
+              ? _plots[plotIndex].series[signalIndex]
+              : null;
+          if (series?.hasData == true) {
+            panelHasData = true;
+          } else {
+            failedSignals++;
+          }
+        }
+        if (panelHasData) dataPanels++;
+        plotIndex++;
+      }
+    }
+
+    return (
+      totalPanels: _plots.length,
+      dataPanels: dataPanels,
+      totalSignals: totalSignals,
+      failedSignals: failedSignals,
+    );
+  }
+
+  String _formatWaveformLoadSummary(
+    String shot, {
+    String? firstError,
+  }) {
+    final stats = _waveformLoadStats();
+    final shotLabel = shot.trim().isEmpty ? 'Current shot' : 'Shot $shot';
+    final summary =
+        '$shotLabel: ${stats.dataPanels} panels with data '
+        '(${stats.totalPanels} panels total), ${stats.totalSignals} signals '
+        '(${stats.totalSignals - stats.failedSignals} loaded, '
+        '${stats.failedSignals} failed)';
+    final error = firstError?.trim() ?? '';
+    return error.isEmpty ? summary : '$summary · First failure: $error';
   }
 
   int? _plotIndexFor(int column, int row) {
@@ -3508,6 +3633,11 @@ class AppState extends ChangeNotifier {
 
     final plotIndex = _plotIndexFor(column, row);
     if (plotIndex != null) {
+      _recordWaveformSignalResult(
+        plotIndex,
+        signalIndex,
+        hasData: _decodedSeriesHasData(decoded),
+      );
       final remaining = (_pendingPanelSignalCounts[plotIndex] ?? 1) - 1;
       if (remaining <= 0) {
         _pendingPanelSignalCounts.remove(plotIndex);
@@ -3796,33 +3926,52 @@ class AppState extends ChangeNotifier {
       if (raw.isEmpty) {
         _fetching = false;
         _ratePreparing = false;
-        _status = 'Empty raw from Rust';
         _markUnresolvedSeries(
           'The native data loader returned no response for this signal.',
         );
-        notifyListeners();
+        _publishWaveformLoadCompletion(
+          stopwatch: loadStopwatch,
+          generation: generation,
+          status: _formatWaveformLoadSummary(
+            requestShot,
+            firstError:
+                'The native data loader returned no response for this signal.',
+          ),
+        );
         return;
       }
       final json = jsonDecode(raw);
       if (json is! List) {
         _fetching = false;
         _ratePreparing = false;
-        _status =
-            'Type: ${json.runtimeType} — ${raw.length > 300 ? raw.substring(0, 300) : raw}';
         _markUnresolvedSeries(
           'The native data loader returned an invalid response.',
         );
-        notifyListeners();
+        _publishWaveformLoadCompletion(
+          stopwatch: loadStopwatch,
+          generation: generation,
+          status: _formatWaveformLoadSummary(
+            requestShot,
+            firstError:
+                'The native data loader returned an invalid response.',
+          ),
+        );
         return;
       }
       if (json.isEmpty && streamingWorker == null) {
         _fetching = false;
         _ratePreparing = false;
-        _status = 'Empty list';
         _markUnresolvedSeries(
           'No result was returned for the configured signal.',
         );
-        notifyListeners();
+        _publishWaveformLoadCompletion(
+          stopwatch: loadStopwatch,
+          generation: generation,
+          status: _formatWaveformLoadSummary(
+            requestShot,
+            firstError: 'No result was returned for the configured signal.',
+          ),
+        );
         return;
       }
       // Streaming replaces each old curve when its new result arrives. Batch
@@ -3844,6 +3993,14 @@ class AppState extends ChangeNotifier {
           final decoded = _decodeLoadedSeries(sig['series']);
           final err = decoded.error;
           if (err != null && err.isNotEmpty) firstErr ??= err;
+          final plotIndex = _plotIndexFor(col, row);
+          if (plotIndex != null) {
+            _recordWaveformSignalResult(
+              plotIndex,
+              signal,
+              hasData: _decodedSeriesHasData(decoded),
+            );
+          }
           _rememberLoadedSource(
             col,
             row,
@@ -3882,12 +4039,6 @@ class AppState extends ChangeNotifier {
       _streamNotifyTimer?.cancel();
       _streamNotifyTimer = null;
       _notifyAllPlotsChanged();
-      final loaded = _plots
-          .where(
-            (p) => p.series.any((s) => s?.hasData == true),
-          )
-          .length;
-      _status = 'Shot $requestShot: ${firstErr ?? "$loaded panels with data"}';
       if (firstErr != null) {
         reportNetworkPermissionFailure(
           firstErr,
@@ -3898,7 +4049,10 @@ class AppState extends ChangeNotifier {
       _publishWaveformLoadCompletion(
         stopwatch: loadStopwatch,
         generation: generation,
-        status: _status,
+        status: _formatWaveformLoadSummary(
+          requestShot,
+          firstError: firstErr,
+        ),
       );
       unawaited(_fetchTopInfo(requestShot, generation));
     } catch (e) {
@@ -3912,11 +4066,19 @@ class AppState extends ChangeNotifier {
       _streamNotifyTimer?.cancel();
       _streamNotifyTimer = null;
       _notifyAllPlotsChanged();
-      _status = 'Error: $e';
       _markUnresolvedSeries('Loading this signal failed: $e');
       reportNetworkPermissionFailure(
         e,
         retry: () => _doFetch(shot: requestShot),
+      );
+      _ratePreparing = false;
+      _publishWaveformLoadCompletion(
+        stopwatch: loadStopwatch,
+        generation: generation,
+        status: _formatWaveformLoadSummary(
+          requestShot,
+          firstError: 'Loading this signal failed: $e',
+        ),
       );
     }
     if (_isCurrentFetch(generation)) notifyListeners();
@@ -3933,6 +4095,10 @@ class AppState extends ChangeNotifier {
     _pendingPanelSignalCounts.clear();
     _loadedPanelIndexes.clear();
     _streamedSignalKeys.clear();
+    _waveformConfiguredSignalKeys.clear();
+    _waveformLoadedSignalKeys.clear();
+    _waveformFailedSignalKeys.clear();
+    _waveformLoadedPanelIndexes.clear();
     _status = 'Stopped';
     _notifyAllPlotsChanged();
     notifyListeners();
@@ -3964,6 +4130,10 @@ class AppState extends ChangeNotifier {
     _pendingPanelSignalCounts.clear();
     _loadedPanelIndexes.clear();
     _streamedSignalKeys.clear();
+    _waveformConfiguredSignalKeys.clear();
+    _waveformLoadedSignalKeys.clear();
+    _waveformFailedSignalKeys.clear();
+    _waveformLoadedPanelIndexes.clear();
   }
 
   Future<void> fetchSinglePanel(int plotIdx) {

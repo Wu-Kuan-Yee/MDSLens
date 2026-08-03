@@ -2340,6 +2340,7 @@ void main() {
         contains('no finite numeric samples'),
       );
       expect(app.status, contains('no finite numeric samples'));
+      expect(app.status, contains('6 signals (0 loaded, 6 failed)'));
     },
   );
 
@@ -2395,6 +2396,7 @@ void main() {
       [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
     );
     expect(app.status, contains('9 panels with data'));
+    expect(app.status, contains('9 signals (9 loaded, 0 failed)'));
   });
 
   test(
@@ -3704,10 +3706,27 @@ void main() {
       signalLegendLabel({'y_expr': r'\DFSDEV', 'legend': 'Density'}),
       'Density',
     );
+    expect(
+      signalLegendDisplayLabel({
+        'y_expr': r'\PCRL01',
+        'shot': '163714',
+        'shot_fixed': true,
+      }),
+      'PCRL01 163714',
+    );
+    expect(
+      signalLegendDisplayLabel(
+        {'y_expr': r'\DFSDEV', 'legend': 'Density'},
+        displayedShot: '163715',
+        inputShot: '999999',
+      ),
+      'Density 163715',
+    );
 
     final app = AppState();
     await app.preferencesReady;
     addTearDown(app.dispose);
+    app.shotText = '163715';
     app.columns[0][0]['signal_specs'] = [
       {'y_expr': r'\PCRL01', 'color_name': '#123456'},
       {'y_expr': r'\DFSDEV', 'legend': 'Density', 'color_name': '#654321'},
@@ -3748,8 +3767,10 @@ void main() {
 
     expect(find.byKey(const ValueKey('plot-legend-0-0')), findsOneWidget);
     expect(find.byKey(const ValueKey('plot-legend-0-1')), findsOneWidget);
-    expect(find.text('PCRL01'), findsOneWidget);
-    expect(find.text('Density'), findsOneWidget);
+    expect(find.text('PCRL01 163715'), findsOneWidget);
+    expect(find.text('Density 163715'), findsOneWidget);
+    expect(find.text('PCRL01'), findsNothing);
+    expect(find.text('Density'), findsNothing);
     expect(find.text(r'\PCRL01'), findsNothing);
   });
 

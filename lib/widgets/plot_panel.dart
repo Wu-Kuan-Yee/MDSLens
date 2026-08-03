@@ -58,6 +58,30 @@ String signalLegendLabel(Map<dynamic, dynamic> signal) {
   );
 }
 
+/// Formats a legend entry like the desktop client: the configured signal
+/// name followed by the shot whose data is currently represented by it.
+/// Fixed-shot signals keep their own shot; inheriting signals follow the
+/// currently displayed shot instead of retaining an old imported value.
+String signalLegendDisplayLabel(
+  Map<dynamic, dynamic> signal, {
+  String panelShot = '',
+  String displayedShot = '',
+  String inputShot = '',
+}) {
+  final label = signalLegendLabel(signal);
+  if (label.isEmpty) return '';
+
+  final fixed = signalShotIsEffectivelyFixed(signal);
+  final shot = fixed
+      ? (signal['shot']?.toString().trim() ?? '')
+      : (displayedShot.trim().isNotEmpty
+            ? displayedShot.trim()
+            : (inputShot.trim().isNotEmpty
+                  ? inputShot.trim()
+                  : panelShot.trim()));
+  return shot.isEmpty ? label : '$label $shot';
+}
+
 double? interpolateWaveformY(List<List<double>> points, double x) {
   if (points.isEmpty || !x.isFinite) return null;
   if (points.length == 1) return points.first[1];
@@ -934,7 +958,12 @@ class _PlotPanelState extends State<PlotPanel> {
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                signalLegendLabel(entry.signal),
+                                signalLegendDisplayLabel(
+                                  entry.signal,
+                                  panelShot: panel['shot']?.toString() ?? '',
+                                  displayedShot: app.displayedShot,
+                                  inputShot: app.shotText,
+                                ),
                                 style: TextStyle(
                                   color: theme.colorScheme.onSurface,
                                   fontFamily: app.effectiveFontFamily,
