@@ -482,8 +482,22 @@ String _shortcutTooltip(
   AppState app,
   String label,
   MdsShortcutCommand command,
+) =>
+    _shortcutTooltipFor(app, label, [command]);
+
+String _shortcutTooltipFor(
+  AppState app,
+  String label,
+  Iterable<MdsShortcutCommand> commands,
 ) {
-  final shortcut = app.shortcutText(command);
+  final shortcuts = <String>{
+    for (final command in commands)
+      ...app
+          .shortcutText(command)
+          .split(' / ')
+          .where((text) => text.isNotEmpty),
+  };
+  final shortcut = shortcuts.join(' / ');
   return shortcut.isEmpty ? label : '$label ($shortcut)';
 }
 
@@ -592,13 +606,21 @@ class ToolbarWidget extends StatelessWidget {
         _toolbarIconButton(
           context,
           icon: Icons.folder_open_rounded,
-          tooltip: 'Open configuration',
+          tooltip: _shortcutTooltip(
+            app,
+            'Open configuration',
+            MdsShortcutCommand.openFile,
+          ),
           onPressed: () => _openConfiguration(context, app),
         ),
         _toolbarIconButton(
           context,
           icon: Icons.save_rounded,
-          tooltip: 'Save configuration',
+          tooltip: _shortcutTooltip(
+            app,
+            'Save configuration',
+            MdsShortcutCommand.saveConfiguration,
+          ),
           onPressed: () => _chooseConfigurationSaveFormat(context, app),
         ),
         _toolbarIconButton(
@@ -610,7 +632,13 @@ class ToolbarWidget extends StatelessWidget {
         _toolbarIconButton(
           context,
           icon: app.fetching ? Icons.stop_circle_outlined : Icons.refresh,
-          tooltip: app.fetching ? 'Stop loading' : 'Refresh waveforms',
+          tooltip: _shortcutTooltip(
+            app,
+            app.fetching ? 'Stop loading' : 'Refresh waveforms',
+            app.fetching
+                ? MdsShortcutCommand.toggleRefresh
+                : MdsShortcutCommand.refreshData,
+          ),
           onPressed: () =>
               app.fetching ? app.stopFetch() : app.refreshDisplayedShot(),
           active: app.fetching,
@@ -636,6 +664,11 @@ class ToolbarWidget extends StatelessWidget {
             leadingIcon: Icons.speed_rounded,
             fontSize: uiSize,
             minimumMenuWidth: 190,
+            tooltip: _shortcutTooltip(
+              app,
+              'Rate',
+              MdsShortcutCommand.globalRate,
+            ),
             options: const [
               PolishedDropdownOption(
                 value: 0,
@@ -1105,11 +1138,13 @@ class ToolbarWidget extends StatelessWidget {
           value: 'web',
           icon: Icons.language_rounded,
           label: 'Internal web pages',
+          shortcut: app.shortcutText(MdsShortcutCommand.openWebMenu),
         ),
         _settingsMenuItem(
           value: 'layout',
           icon: Icons.dashboard_customize_rounded,
           label: 'Layout setup',
+          shortcut: app.shortcutText(MdsShortcutCommand.globalLayout),
         ),
         _settingsMenuItem(
           value: 'fonts',
@@ -1139,15 +1174,28 @@ class ToolbarWidget extends StatelessWidget {
     required String value,
     required IconData icon,
     required String label,
+    String? shortcut,
   }) {
+    final tooltip =
+        shortcut == null || shortcut.isEmpty ? label : '$label ($shortcut)';
     return PopupMenuItem(
       value: value,
-      child: Row(
-        children: [
-          Icon(icon, size: 21),
-          const SizedBox(width: 12),
-          Expanded(child: Text(label)),
-        ],
+      child: Tooltip(
+        message: tooltip,
+        child: Row(
+          children: [
+            Icon(icon, size: 21),
+            const SizedBox(width: 12),
+            Expanded(child: Text(label)),
+            if (shortcut != null && shortcut.isNotEmpty) ...[
+              const SizedBox(width: 12),
+              Text(
+                '($shortcut)',
+                style: const TextStyle(fontSize: 11),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

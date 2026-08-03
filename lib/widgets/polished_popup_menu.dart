@@ -7,12 +7,14 @@ class PolishedPopupMenuOption<T> {
     required this.label,
     required this.icon,
     required this.id,
+    this.shortcutCommand,
   });
 
   final T value;
   final String label;
   final IconData icon;
   final String id;
+  final MdsShortcutCommand? shortcutCommand;
 }
 
 class PolishedPopupMenuGroup<T> {
@@ -162,6 +164,15 @@ Future<T?> showPolishedPopupMenu<T>({
         );
       }
       final option = group.options[optionIndex];
+      final shortcut = option.shortcutCommand == null
+          ? ''
+          : (keyboardShortcuts ?? const {})[option.shortcutCommand!]
+                  ?.sequences
+                  .map((sequence) => sequence.displayText)
+                  .join(' / ') ??
+              '';
+      final optionTooltip =
+          shortcut.isEmpty ? option.label : '${option.label} ($shortcut)';
       entries.add(
         _KeyboardPopupMenuItem<T>(
           key: ValueKey('$id-${option.id}'),
@@ -171,31 +182,43 @@ Future<T?> showPolishedPopupMenu<T>({
           autofocus: groupIndex == 0 && optionIndex == 0,
           height: 46,
           padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Row(
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: colors.primary.withValues(alpha: 0.11),
-                  borderRadius: BorderRadius.circular(9),
+          child: Tooltip(
+            message: optionTooltip,
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: colors.primary.withValues(alpha: 0.11),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Icon(option.icon, size: 19, color: colors.primary),
                 ),
-                child: Icon(option.icon, size: 19, color: colors.primary),
-              ),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Text(
-                  option.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colors.onSurface,
-                    fontWeight: FontWeight.w500,
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Text(
+                    option.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colors.onSurface,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 6),
-            ],
+                if (shortcut.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    '($shortcut)',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+                const SizedBox(width: 6),
+              ],
+            ),
           ),
         ),
       );

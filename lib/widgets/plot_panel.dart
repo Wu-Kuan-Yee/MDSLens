@@ -10,6 +10,7 @@ import 'polished_dropdown.dart';
 import 'polished_popup_menu.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/app_state.dart';
+import '../services/keyboard_shortcuts.dart';
 import '../services/platform_file_dialog.dart';
 import '../services/source_index.dart';
 import 'dialogs/keyboard_safe_dialog.dart';
@@ -2071,6 +2072,7 @@ class _PlotPanelState extends State<PlotPanel> {
                 value: 'showAll',
                 label: 'Show All Panels',
                 icon: Icons.grid_view_rounded,
+                shortcutCommand: MdsShortcutCommand.showAllPanels,
               )
             else
               const PolishedPopupMenuOption(
@@ -2078,18 +2080,21 @@ class _PlotPanelState extends State<PlotPanel> {
                 value: 'max',
                 label: 'Maximize Panel',
                 icon: Icons.fullscreen_rounded,
+                shortcutCommand: MdsShortcutCommand.maximizePanel,
               ),
             const PolishedPopupMenuOption(
               id: 'reset-current',
               value: 'reset',
               label: 'Reset Current Scale',
               icon: Icons.center_focus_strong_rounded,
+              shortcutCommand: MdsShortcutCommand.resetCurrentScale,
             ),
             const PolishedPopupMenuOption(
               id: 'reset-all',
               value: 'resetAll',
               label: 'Reset All Panels',
               icon: Icons.restart_alt_rounded,
+              shortcutCommand: MdsShortcutCommand.resetAllScales,
             ),
           ],
         ),
@@ -2101,12 +2106,14 @@ class _PlotPanelState extends State<PlotPanel> {
               value: 'sameX',
               label: 'All Same X Scale',
               icon: Icons.swap_horiz_rounded,
+              shortcutCommand: MdsShortcutCommand.sameXScale,
             ),
             PolishedPopupMenuOption(
               id: 'same-y',
               value: 'sameY',
               label: 'All Same Y Scale',
               icon: Icons.swap_vert_rounded,
+              shortcutCommand: MdsShortcutCommand.sameYScale,
             ),
           ],
         ),
@@ -2118,12 +2125,14 @@ class _PlotPanelState extends State<PlotPanel> {
               value: 'export',
               label: 'Export Data',
               icon: Icons.file_download_outlined,
+              shortcutCommand: MdsShortcutCommand.panelExport,
             ),
             PolishedPopupMenuOption(
               id: 'export-multiple',
               value: 'exportMultiple',
               label: 'Export Multiple Panels',
               icon: Icons.library_add_check_rounded,
+              shortcutCommand: MdsShortcutCommand.globalExport,
             ),
           ],
         ),
@@ -2135,12 +2144,14 @@ class _PlotPanelState extends State<PlotPanel> {
               value: 'dataSource',
               label: 'Data Source Setup',
               icon: Icons.storage_rounded,
+              shortcutCommand: MdsShortcutCommand.panelSourceSetup,
             ),
             PolishedPopupMenuOption(
               id: 'panel-setup',
               value: 'setup',
               label: 'Panel Setup',
               icon: Icons.tune_rounded,
+              shortcutCommand: MdsShortcutCommand.panelSetup,
             ),
           ],
         ),

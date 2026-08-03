@@ -40,6 +40,11 @@ import 'package:mdslens/widgets/toolbar.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+Finder tooltipStartingWith(String prefix) => find.byWidgetPredicate(
+      (widget) =>
+          widget is Tooltip && (widget.message?.startsWith(prefix) ?? false),
+    );
+
 void main() {
   setUp(() {
     UserDataStore.disableFileStorageForTests = true;
@@ -2474,12 +2479,12 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byTooltip('Open configuration'));
+    await tester.tap(tooltipStartingWith('Open configuration'));
     await tester.pumpAndSettle();
     expect(openCalls, 1);
     expect(app.columns[0][0]['title'], 'Toolbar open');
 
-    await tester.tap(find.byTooltip('Save configuration'));
+    await tester.tap(tooltipStartingWith('Save configuration'));
     await tester.pumpAndSettle();
     expect(find.text('Save configuration as'), findsOneWidget);
     expect(find.byKey(const ValueKey('save-format-toml')), findsOneWidget);
@@ -2510,7 +2515,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byTooltip('Open configuration'));
+    await tester.tap(tooltipStartingWith('Open configuration'));
     await tester.pumpAndSettle();
 
     expect(find.text('Use the configuration shot?'), findsOneWidget);
@@ -2667,7 +2672,7 @@ void main() {
         child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
       ),
     );
-    await tester.tap(find.byTooltip('Restore default configuration'));
+    await tester.tap(tooltipStartingWith('Restore default configuration'));
     await tester.pumpAndSettle();
 
     expect(find.text('Restore default configuration?'), findsOneWidget);
@@ -2675,7 +2680,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(app.columns, hasLength(1));
 
-    await tester.tap(find.byTooltip('Restore default configuration'));
+    await tester.tap(tooltipStartingWith('Restore default configuration'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('restore-default-confirm')));
     await tester.pumpAndSettle();
@@ -4626,10 +4631,13 @@ void main() {
       ),
       findsNWidgets(3),
     );
-    expect(find.byTooltip('Open configuration'), findsOneWidget);
-    expect(find.byTooltip('Save configuration'), findsOneWidget);
-    expect(find.byTooltip('Restore default configuration'), findsOneWidget);
-    expect(find.byTooltip('Refresh waveforms'), findsOneWidget);
+    expect(tooltipStartingWith('Open configuration'), findsOneWidget);
+    expect(tooltipStartingWith('Save configuration'), findsOneWidget);
+    expect(
+      tooltipStartingWith('Restore default configuration'),
+      findsOneWidget,
+    );
+    expect(tooltipStartingWith('Refresh waveforms'), findsOneWidget);
     Finder shortcutTooltip(String prefix) => find.byWidgetPredicate(
           (widget) =>
               widget is Tooltip &&
@@ -4640,8 +4648,37 @@ void main() {
     expect(shortcutTooltip('Latest shot'), findsOneWidget);
     expect(shortcutTooltip('Zoom and move mode'), findsOneWidget);
     expect(shortcutTooltip('Point mode'), findsOneWidget);
+
+    final customizedShortcuts = Map<MdsShortcutCommand, MdsShortcutBinding>.of(
+      app.keyboardShortcuts,
+    )
+      ..[MdsShortcutCommand.openFile] = MdsShortcutBinding(
+        primary: MdsShortcutSequence.single(
+          const MdsShortcutStroke(LogicalKeyboardKey.f12),
+        ),
+      )
+      ..[MdsShortcutCommand.globalRate] = MdsShortcutBinding(
+        primary: MdsShortcutSequence([
+          const MdsShortcutStroke(LogicalKeyboardKey.keyG),
+          const MdsShortcutStroke(LogicalKeyboardKey.keyQ),
+        ]),
+      );
+    app.applyKeyboardShortcuts(customizedShortcuts);
+    await tester.pump();
+    final openTooltip = tester.widget<Tooltip>(
+      tooltipStartingWith('Open configuration'),
+    );
     expect(
-      tester.getSize(find.byTooltip('Open configuration')).height,
+      openTooltip.message,
+      'Open configuration (${app.shortcutText(MdsShortcutCommand.openFile)})',
+    );
+    final rateTooltip = tester.widget<Tooltip>(tooltipStartingWith('Rate'));
+    expect(
+      rateTooltip.message,
+      'Rate (${app.shortcutText(MdsShortcutCommand.globalRate)})',
+    );
+    expect(
+      tester.getSize(tooltipStartingWith('Open configuration')).height,
       greaterThanOrEqualTo(44),
     );
 
@@ -5001,6 +5038,15 @@ void main() {
     expect(find.byIcon(Icons.storage_rounded), findsOneWidget);
     expect(
       find.byKey(const ValueKey('plot-context-menu-group-divider-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Tooltip &&
+            widget.message ==
+                'Maximize Panel (${app.shortcutText(MdsShortcutCommand.maximizePanel)})',
+      ),
       findsOneWidget,
     );
 
