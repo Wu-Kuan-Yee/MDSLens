@@ -332,7 +332,12 @@ fn build_requests(config: &LayoutConfig, read_mode: DataReadMode) -> Vec<FetchRe
                 let mode = effective_read_mode(read_mode, sig.read_mode);
                 let max_pts = match mode {
                     DataReadMode::Thin => plot.extraction_points.max(1) as usize,
-                    DataReadMode::Medium => (plot.extraction_points * 2).max(1) as usize,
+                    // Medium uses the same request budget as the original
+                    // client.  Its higher-fidelity behavior comes from the
+                    // Medium server-side strategy, not from doubling the
+                    // envelope/stride point budget.  Doubling here made the
+                    // fallback path request twice as much data as Qt.
+                    DataReadMode::Medium => plot.extraction_points.max(1) as usize,
                     DataReadMode::Full => usize::MAX,
                 };
 
@@ -527,6 +532,14 @@ mod tests {
         assert_eq!(requests[0].read_mode, DataReadMode::Thin);
         assert_eq!(requests[0].max_points, 2000);
         assert_eq!(global_wave_limit(&requests), MAX_GLOBAL_SOCKETS);
+    }
+
+    #[test]
+    fn medium_keeps_the_original_extraction_budget() {
+        let requests = build_requests(&make_test_config(), DataReadMode::Medium);
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].read_mode, DataReadMode::Medium);
+        assert_eq!(requests[0].max_points, 2000);
     }
 
     #[test]
