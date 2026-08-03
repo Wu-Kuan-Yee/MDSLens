@@ -23,6 +23,37 @@ macro_rules! ffi_string {
     };
 }
 
+fn emit_binary_payload(
+    loaded: a::FrbLoadedSignal,
+    uniform: Vec<f32>,
+    points: Vec<[f64; 2]>,
+    delivered: &Arc<Mutex<HashSet<(i32, i32, i32)>>>,
+    callback: Option<SignalBinaryStreamCallback>,
+) {
+    let key = (loaded.column, loaded.row, loaded.signal);
+    if !delivered
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .insert(key)
+    {
+        return;
+    }
+    let Some(callback) = callback else { return };
+    let mut interleaved = Vec::with_capacity(points.len() * 2);
+    for point in points {
+        interleaved.push(point[0]);
+        interleaved.push(point[1]);
+    }
+    let metadata = serde_json::to_string(&loaded).unwrap_or_default();
+    callback(
+        ffi_string!(metadata),
+        uniform.as_ptr(),
+        uniform.len(),
+        interleaved.as_ptr(),
+        interleaved.len() / 2,
+    );
+}
+
 fn to_rust(ptr: *const c_char) -> String {
     unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() }
 }
@@ -210,38 +241,14 @@ pub extern "C" fn mds_fetch_signals_ssh_streaming_binary(
     let delivered = Arc::new(Mutex::new(HashSet::<(i32, i32, i32)>::new()));
     let emit = {
         let delivered = delivered.clone();
-        Arc::new(move |mut loaded: a::FrbLoadedSignal| {
-            let key = (loaded.column, loaded.row, loaded.signal);
-            if !delivered
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
-                .insert(key)
-            {
-                return;
-            }
-            let Some(callback) = callback else { return };
-            let uniform = std::mem::take(&mut loaded.series.uniform_y);
-            let points = std::mem::take(&mut loaded.series.points);
-            let mut interleaved = Vec::with_capacity(points.len() * 2);
-            for point in points {
-                if point.len() >= 2 {
-                    interleaved.push(point[0]);
-                    interleaved.push(point[1]);
-                }
-            }
-            let metadata = serde_json::to_string(&loaded).unwrap_or_default();
-            callback(
-                ffi_string!(metadata),
-                uniform.as_ptr(),
-                uniform.len(),
-                interleaved.as_ptr(),
-                interleaved.len() / 2,
-            );
+        Arc::new(move |loaded: mds_core::types::LoadedSignal| {
+            let (loaded, uniform, points) = a::into_binary_stream_parts(loaded);
+            emit_binary_payload(loaded, uniform, points, &delivered, callback);
         })
     };
     let stream_emit = emit.clone();
     let stream_callback: mds_ip::pipeline::SignalCallback = Box::new(move |loaded| {
-        stream_emit(a::FrbLoadedSignal::from(loaded));
+        stream_emit(loaded);
     });
     let results = a::fetch_signals_ssh_streaming(
         to_rust(config_json),
@@ -249,8 +256,10 @@ pub extern "C" fn mds_fetch_signals_ssh_streaming_binary(
         to_rust(ssh_settings_json),
         stream_callback,
     );
-    for loaded in results {
-        emit(loaded);
+    for mut loaded in results {
+        let uniform = std::mem::take(&mut loaded.series.uniform_y);
+        let points = std::mem::take(&mut loaded.series.points);
+        emit_binary_payload(loaded, uniform, points, &delivered, callback);
     }
     ffi_string!("[]")
 }

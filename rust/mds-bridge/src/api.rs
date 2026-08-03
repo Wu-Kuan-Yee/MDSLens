@@ -232,6 +232,45 @@ impl From<mds_core::types::LoadedSignal> for FrbLoadedSignal {
     }
 }
 
+/// Split one native signal for the binary streaming ABI without first
+/// materializing its waveform into the JSON representation.  The metadata
+/// envelope intentionally contains empty waveform fields because the native
+/// callback sends those buffers through typed pointers below.
+pub(crate) fn into_binary_stream_parts(
+    loaded: mds_core::types::LoadedSignal,
+) -> (FrbLoadedSignal, Vec<f32>, Vec<[f64; 2]>) {
+    let mds_core::types::LoadedSignal {
+        column,
+        row,
+        signal,
+        shot,
+        mut series,
+    } = loaded;
+    let uniform_y = std::mem::take(&mut series.uniform_y);
+    let had_uniform_samples = !uniform_y.is_empty();
+    let mut points = std::mem::take(&mut series.points);
+    let had_point_samples = !points.is_empty();
+    points.retain(|point| point[0].is_finite() && point[1].is_finite());
+    if (had_uniform_samples || had_point_samples)
+        && uniform_y.is_empty()
+        && points.is_empty()
+        && series.error.is_empty()
+    {
+        series.error = "signal contains no finite numeric samples".into();
+    }
+    (
+        FrbLoadedSignal {
+            column,
+            row,
+            signal,
+            shot,
+            series: FrbSignalSeries::from(series),
+        },
+        uniform_y,
+        points,
+    )
+}
+
 // ── Reverse converters (Frb → Rust) ────────────────────────────────────
 
 impl FrbLayoutConfig {
@@ -803,6 +842,28 @@ mod tests {
 
         assert_eq!(frb.points, vec![[1.0, 2.0]]);
         assert!(!json.contains("null"));
+    }
+
+    #[test]
+    fn binary_stream_parts_move_waveforms_out_of_metadata() {
+        let orig = mds_core::types::LoadedSignal {
+            column: 2,
+            row: 3,
+            signal: 4,
+            shot: "170001".into(),
+            series: mds_core::types::SignalSeries {
+                name: "stream".into(),
+                uniform_y: vec![1.0, 2.0],
+                points: vec![[0.0, 3.0], [1.0, 4.0]],
+                ..Default::default()
+            },
+        };
+        let (metadata, uniform, points) = into_binary_stream_parts(orig);
+        assert_eq!((metadata.column, metadata.row, metadata.signal), (2, 3, 4));
+        assert_eq!(uniform, vec![1.0, 2.0]);
+        assert_eq!(points, vec![[0.0, 3.0], [1.0, 4.0]]);
+        assert!(metadata.series.uniform_y.is_empty());
+        assert!(metadata.series.points.is_empty());
     }
 
     #[test]
