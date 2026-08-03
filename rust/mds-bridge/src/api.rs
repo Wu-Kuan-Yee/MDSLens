@@ -185,11 +185,16 @@ impl From<mds_core::types::SignalSeries> for FrbSignalSeries {
         let had_uniform_samples = s.has_uniform_data();
         let had_samples = !s.points.is_empty() || had_uniform_samples;
         let mut error = s.error;
+        // Consume the native point buffer while converting it to the JSON
+        // compatible representation.  The streaming FFI immediately moves
+        // this field again to build its binary interleaved buffer; iterating
+        // by reference here kept the original `Vec<[f64; 2]>` alive and
+        // duplicated every point before that move.
         let points: Vec<Vec<f64>> = s
             .points
-            .iter()
+            .into_iter()
             .filter(|p| p[0].is_finite() && p[1].is_finite())
-            .map(|p| p.to_vec())
+            .map(|p| vec![p[0], p[1]])
             .collect();
         if had_samples && points.is_empty() && !had_uniform_samples && error.is_empty() {
             error = "signal contains no finite numeric samples".into();
