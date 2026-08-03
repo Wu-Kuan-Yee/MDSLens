@@ -146,6 +146,14 @@ class _MainPageState extends State<MainPage> {
     final stroke = shortcutStrokeFromEvent(event);
     if (stroke == null) return false;
     final app = context.read<AppState>();
+    final fixedPointSeries = fixedPointSeriesOrdinal(stroke);
+    if (fixedPointSeries != null &&
+        !_editingText() &&
+        app.interactionMode == 1 &&
+        !app.pointLocked) {
+      app.activatePointForCurrentPanel(seriesOrdinal: fixedPointSeries);
+      return true;
+    }
     final handled = _shortcutDispatcher.handle(
       stroke,
       bindings: app.keyboardShortcuts,
@@ -288,10 +296,10 @@ class _MainPageState extends State<MainPage> {
         app.fetchLatestShot();
         break;
       case MdsShortcutCommand.pointPrevious:
-        _stepCrosshair(app, -1);
+        app.stepActivePoint(-1);
         break;
       case MdsShortcutCommand.pointNext:
-        _stepCrosshair(app, 1);
+        app.stepActivePoint(1);
         break;
       case MdsShortcutCommand.panelRate:
         unawaited(
@@ -348,21 +356,6 @@ class _MainPageState extends State<MainPage> {
     if (!app.shotFocusNode.hasFocus) return;
     app.shotFocusNode.unfocus();
     app.restoreDisplayedShotForNavigation();
-  }
-
-  static void _stepCrosshair(AppState app, int dir) {
-    final cx = app.crosshairX;
-    if (cx == null) return;
-    // Find data series, binary-search nearest sample, step to adjacent
-    for (final plot in app.plots) {
-      for (final s in plot.series) {
-        if (s == null || s.pointCount < 2) continue;
-        final nearest = s.nearestPointIndex(cx);
-        final next = (nearest + dir).clamp(0, s.pointCount - 1);
-        app.setCrosshair(s.pointXAt(next));
-        return;
-      }
-    }
   }
 
   static void _applySelectedSharedScale(AppState app, {required bool x}) {

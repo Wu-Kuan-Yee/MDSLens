@@ -1676,12 +1676,54 @@ class AppState extends ChangeNotifier {
     return false;
   }
 
+  /// Move the current Point marker to a neighboring sample in the same series
+  /// that owns the marker.  Keeping the source plot and series together is
+  /// important when several panels or curves are synchronized: stepping must
+  /// not silently switch to the first available curve in the layout.
+  bool stepActivePoint(int delta) {
+    if (delta == 0 || _interactionMode != 1 || crosshairX == null) {
+      return false;
+    }
+    var plotIndex = crosshairSourcePlot;
+    if (plotIndex == null || plotIndex < 0 || plotIndex >= _plots.length) {
+      plotIndex = selectedPlotIndex;
+    }
+    if (plotIndex == null || plotIndex < 0 || plotIndex >= _plots.length) {
+      return false;
+    }
+    final plot = _plots[plotIndex];
+    var seriesIndex = crosshairSourceSeries;
+    SeriesData? series = seriesIndex >= 0 && seriesIndex < plot.series.length
+        ? plot.series[seriesIndex]
+        : null;
+    if (series == null || series.pointCount < 2) {
+      final fallback = plot.series.indexWhere(
+        (candidate) => candidate != null && candidate.pointCount >= 2,
+      );
+      if (fallback < 0) return false;
+      seriesIndex = fallback;
+      series = plot.series[fallback];
+    }
+    if (series == null || series.pointCount < 2) return false;
+    final nearest = series.nearestPointIndex(crosshairX!);
+    final target = (nearest + delta).clamp(0, series.pointCount - 1).toInt();
+    if (target == nearest) return false;
+    final x = series.pointXAt(target);
+    if (!x.isFinite) return false;
+    setCrosshair(
+      x,
+      sourcePlot: plotIndex,
+      sourceSeries: seriesIndex,
+    );
+    return true;
+  }
+
   /// Start Point tracking at the middle of the selected panel's first usable
-  /// series.  Desktop shortcuts enter Point mode and immediately activate the
-  /// current plot; doing the same here makes arrow/point-step shortcuts useful
-  /// even before the pointer has visited a chart.
-  void activatePointForCurrentPanel() {
-    if (_interactionMode != 1) return;
+  /// series.  When [seriesOrdinal] is provided, it selects the corresponding
+  /// data-bearing curve in that panel, matching the desktop client's fixed
+  /// number-key shortcuts.
+  bool activatePointForCurrentPanel({int? seriesOrdinal}) {
+    if (_interactionMode != 1) return false;
     var plotIndex = selectedPlotIndex ?? -1;
     if (plotIndex < 0 || plotIndex >= _plots.length) {
       plotIndex = _plots.indexWhere(
@@ -1690,22 +1732,38 @@ class AppState extends ChangeNotifier {
       );
     }
     if (plotIndex < 0 || plotIndex >= _plots.length) {
-      return;
+      return false;
     }
     final plot = _plots[plotIndex];
+    final dataSeries = <int>[];
     for (var seriesIndex = 0; seriesIndex < plot.series.length; seriesIndex++) {
       final series = plot.series[seriesIndex];
-      if (series == null || series.pointCount == 0) continue;
-      final x = series.pointXAt(series.pointCount ~/ 2);
-      if (!x.isFinite) continue;
-      pointLocked = false;
-      setCrosshair(
-        x,
-        sourcePlot: plotIndex,
-        sourceSeries: seriesIndex,
-      );
-      return;
+      if (series != null && series.pointCount > 0) {
+        dataSeries.add(seriesIndex);
+      }
     }
+    if (dataSeries.isEmpty) {
+      _status = 'No point data is available in the current panel';
+      notifyListeners();
+      return false;
+    }
+    final ordinal = seriesOrdinal ?? 0;
+    if (ordinal < 0 || ordinal >= dataSeries.length) {
+      _status = 'Point curve ${ordinal + 1} is unavailable';
+      notifyListeners();
+      return false;
+    }
+    final seriesIndex = dataSeries[ordinal];
+    final series = plot.series[seriesIndex]!;
+    final x = series.pointXAt(series.pointCount ~/ 2);
+    if (!x.isFinite) return false;
+    pointLocked = false;
+    setCrosshair(
+      x,
+      sourcePlot: plotIndex,
+      sourceSeries: seriesIndex,
+    );
+    return true;
   }
 
   // Dialogs

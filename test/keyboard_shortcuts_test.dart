@@ -39,6 +39,18 @@ void main() {
     final recent = bindings[MdsShortcutCommand.openRecentFiles]!.primary!;
     expect(recent.strokes.single.key, LogicalKeyboardKey.keyO);
     expect(recent.strokes.single.shift, isTrue);
+    expect(
+      fixedPointSeriesOrdinal(
+        const MdsShortcutStroke(LogicalKeyboardKey.digit3),
+      ),
+      2,
+    );
+    expect(
+      fixedPointSeriesOrdinal(
+        const MdsShortcutStroke(LogicalKeyboardKey.digit3, control: true),
+      ),
+      isNull,
+    );
     final exitSequence = bindings[MdsShortcutCommand.exitPoint]!.primary!;
     expect(
       exitSequence.strokes.first.key,

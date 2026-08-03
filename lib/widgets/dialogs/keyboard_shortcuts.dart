@@ -149,6 +149,14 @@ Set<MdsShortcutSequence> _conflictingSequences(
       }
     }
   }
+  // Unmodified 1–9 are reserved for selecting a Point curve, matching the
+  // desktop client.  Mark a user-assigned digit as a conflict so saving a
+  // custom shortcut cannot make the fixed Point action ambiguous.
+  for (final entry in entries) {
+    if (isFixedPointShortcutSequence(entry.$2)) {
+      counts[entry.$2] = 2;
+    }
+  }
   return {
     for (final entry in counts.entries)
       if (entry.value > 1) entry.key,

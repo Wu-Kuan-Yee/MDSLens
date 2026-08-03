@@ -473,6 +473,37 @@ void main() {
     );
   });
 
+  test('Point stepping stays on the active plot and curve', () async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.selectPanel(0, 0);
+    app.interactionMode = 1;
+    app.plots[0].series = [
+      SeriesData(points: [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+      ]),
+      SeriesData(points: [
+        [10, 4],
+        [11, 5],
+        [12, 6],
+      ]),
+    ];
+
+    app.activatePointForCurrentPanel(seriesOrdinal: 1);
+    expect(app.crosshairSourcePlot, 0);
+    expect(app.crosshairSourceSeries, 1);
+    expect(app.crosshairX, 11);
+
+    expect(app.stepActivePoint(-1), isTrue);
+    expect(app.crosshairX, 10);
+    expect(app.crosshairSourceSeries, 1);
+    expect(app.stepActivePoint(1), isTrue);
+    expect(app.crosshairX, 11);
+  });
+
   test(
     'Login responses reject empty bodies without exposing JSON parser errors',
     () {

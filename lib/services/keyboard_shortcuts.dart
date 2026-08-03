@@ -366,6 +366,33 @@ class MdsShortcutStroke {
   int get hashCode => Object.hash(key, control, alt, shift, meta);
 }
 
+/// The desktop client reserves unmodified number keys for selecting the
+/// corresponding data-bearing curve while Point mode is active.  Keep this
+/// outside the configurable command list so users cannot accidentally replace
+/// a normal text-input digit with a workspace command.
+int? fixedPointSeriesOrdinal(MdsShortcutStroke stroke) {
+  if (stroke.control || stroke.alt || stroke.shift || stroke.meta) {
+    return null;
+  }
+  const keys = <LogicalKeyboardKey>[
+    LogicalKeyboardKey.digit1,
+    LogicalKeyboardKey.digit2,
+    LogicalKeyboardKey.digit3,
+    LogicalKeyboardKey.digit4,
+    LogicalKeyboardKey.digit5,
+    LogicalKeyboardKey.digit6,
+    LogicalKeyboardKey.digit7,
+    LogicalKeyboardKey.digit8,
+    LogicalKeyboardKey.digit9,
+  ];
+  final index = keys.indexOf(stroke.key);
+  return index < 0 ? null : index;
+}
+
+bool isFixedPointShortcutSequence(MdsShortcutSequence sequence) =>
+    sequence.isSingle &&
+    fixedPointSeriesOrdinal(sequence.strokes.single) != null;
+
 /// A shortcut may contain up to four key combinations, matching the
 /// multi-stroke shortcuts supported by the desktop version.  A one-stroke
 /// sequence is used for the existing shortcuts and is encoded in the legacy
@@ -826,13 +853,13 @@ String _displayKey(LogicalKeyboardKey key) {
 
 String shortcutPlatformDescription() {
   if (defaultTargetPlatform == TargetPlatform.macOS) {
-    return 'macOS defaults use Command shortcuts and native key symbols.';
+    return 'macOS defaults use Command shortcuts and native key symbols. In Point mode, unmodified 1–9 select curves.';
   }
   if (defaultTargetPlatform == TargetPlatform.windows) {
-    return 'Windows defaults use Ctrl shortcuts and arrow-key navigation.';
+    return 'Windows defaults use Ctrl shortcuts and arrow-key navigation. In Point mode, unmodified 1–9 select curves.';
   }
   if (defaultTargetPlatform == TargetPlatform.linux) {
-    return 'Linux defaults include H/J/K/L navigation alongside Ctrl shortcuts.';
+    return 'Linux defaults include H/J/K/L navigation alongside Ctrl shortcuts. In Point mode, unmodified 1–9 select curves.';
   }
   return 'Shortcuts take effect when a hardware keyboard is connected.';
 }
