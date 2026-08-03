@@ -337,6 +337,7 @@ jobs:
             launch: false
     name: Portable Linux / ${{ matrix.name }}
     steps:
+      - uses: actions/checkout@v4
       - name: Install Ubuntu verifier runtime
         if: matrix.family == 'debian'
         shell: bash
@@ -354,10 +355,7 @@ jobs:
           xorg-x11-server-Xvfb
       - name: Install Enterprise Linux verifier runtime
         if: matrix.family == 'enterprise'
-        run: >-
-          dnf --disablerepo=extras install -y binutils git gtk3 libepoxy libsecret libstdc++
-          python3 unzip
-      - uses: actions/checkout@v4
+        run: bash scripts/install_enterprise_linux_runtime.sh
       - uses: actions/download-artifact@v4
         with:
           name: mdslens-linux-${{ matrix.arch }}
