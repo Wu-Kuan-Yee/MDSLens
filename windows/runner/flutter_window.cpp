@@ -369,6 +369,12 @@ bool FlutterWindow::OnCreate() {
   if (!Win32Window::OnCreate()) {
     return false;
   }
+  // Surface the native window before constructing the Flutter engine.  Cold
+  // starts can spend several seconds loading the engine and Rust plugins on
+  // slower machines; keeping the window visible avoids making that work look
+  // like a failed launch.  The Flutter view is attached immediately below
+  // and replaces the native background as soon as its first frame is ready.
+  Show();
   ConfigureTaskbarProperties(GetHandle());
 
   RECT frame = GetClientArea();

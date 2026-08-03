@@ -13,6 +13,15 @@ struct _MyApplication {
   char** dart_entrypoint_arguments;
 };
 
+// Flutter engine creation and plugin registration can take a noticeable
+// amount of time on Linux, especially on a cold start.  Keep the native
+// window responsive while that work is deferred to the next main-loop turn.
+struct FlutterViewBootstrap {
+  MyApplication* application;
+  GtkWindow* window;
+  GtkWidget* splash;
+};
+
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
 static gint compare_font_family_names(gconstpointer left,
@@ -86,6 +95,77 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
 }
 
+static GtkWidget* create_startup_splash() {
+  GtkWidget* box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+  gtk_widget_set_halign(box, GTK_ALIGN_CENTER);
+  gtk_widget_set_valign(box, GTK_ALIGN_CENTER);
+
+  GtkWidget* title = gtk_label_new("MDSLens");
+  gtk_widget_set_name(title, "mdslens-startup-title");
+  gtk_widget_set_halign(title, GTK_ALIGN_CENTER);
+  gtk_box_pack_start(GTK_BOX(box), title, FALSE, FALSE, 0);
+
+  GtkWidget* spinner = gtk_spinner_new();
+  gtk_spinner_start(GTK_SPINNER(spinner));
+  gtk_widget_set_halign(spinner, GTK_ALIGN_CENTER);
+  gtk_box_pack_start(GTK_BOX(box), spinner, FALSE, FALSE, 0);
+
+  GtkWidget* detail = gtk_label_new("Starting...");
+  gtk_widget_set_halign(detail, GTK_ALIGN_CENTER);
+  gtk_box_pack_start(GTK_BOX(box), detail, FALSE, FALSE, 0);
+  return box;
+}
+
+static void destroy_flutter_view_bootstrap(gpointer data) {
+  auto* bootstrap = static_cast<FlutterViewBootstrap*>(data);
+  if (bootstrap->window != nullptr) {
+    g_object_unref(bootstrap->window);
+  }
+  g_free(bootstrap);
+}
+
+static gboolean initialize_flutter_view(gpointer data) {
+  auto* bootstrap = static_cast<FlutterViewBootstrap*>(data);
+  GtkWindow* window = bootstrap->window;
+  if (!gtk_widget_get_visible(GTK_WIDGET(window))) {
+    return G_SOURCE_REMOVE;
+  }
+
+  if (bootstrap->splash != nullptr) {
+    gtk_widget_destroy(bootstrap->splash);
+    bootstrap->splash = nullptr;
+  }
+
+  g_autoptr(FlDartProject) project = fl_dart_project_new();
+  fl_dart_project_set_dart_entrypoint_arguments(
+      project, bootstrap->application->dart_entrypoint_arguments);
+
+  FlView* view = fl_view_new(project);
+  FlEngine* engine = fl_view_get_engine(view);
+  FlBinaryMessenger* messenger = fl_engine_get_binary_messenger(engine);
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  g_autoptr(FlMethodChannel) system_fonts_channel =
+      fl_method_channel_new(messenger, "mdslens/system_fonts",
+                            FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(
+      system_fonts_channel, system_fonts_method_call_cb, bootstrap->application,
+      nullptr);
+  GdkRGBA background_color;
+  gdk_rgba_parse(&background_color, "#000000");
+  fl_view_set_background_color(view, &background_color);
+  gtk_widget_show(GTK_WIDGET(view));
+  gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
+
+  // Show the native window immediately; the Flutter surface takes over after
+  // its first frame without delaying the user's first visual response.
+  g_signal_connect_swapped(view, "first-frame", G_CALLBACK(first_frame_cb),
+                           bootstrap->application);
+  gtk_widget_realize(GTK_WIDGET(view));
+  fl_register_plugins(FL_PLUGIN_REGISTRY(view));
+  gtk_widget_grab_focus(GTK_WIDGET(view));
+  return G_SOURCE_REMOVE;
+}
+
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
@@ -121,37 +201,16 @@ static void my_application_activate(GApplication* application) {
 
   set_window_icon(window);
   gtk_window_set_default_size(window, 1440, 920);
+  GtkWidget* splash = create_startup_splash();
+  gtk_container_add(GTK_CONTAINER(window), splash);
+  gtk_widget_show_all(GTK_WIDGET(window));
 
-  g_autoptr(FlDartProject) project = fl_dart_project_new();
-  fl_dart_project_set_dart_entrypoint_arguments(
-      project, self->dart_entrypoint_arguments);
-
-  FlView* view = fl_view_new(project);
-  FlEngine* engine = fl_view_get_engine(view);
-  FlBinaryMessenger* messenger = fl_engine_get_binary_messenger(engine);
-  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
-  g_autoptr(FlMethodChannel) system_fonts_channel =
-      fl_method_channel_new(messenger, "mdslens/system_fonts",
-                            FL_METHOD_CODEC(codec));
-  fl_method_channel_set_method_call_handler(
-      system_fonts_channel, system_fonts_method_call_cb, self, nullptr);
-  GdkRGBA background_color;
-  // Background defaults to black, override it here if necessary, e.g. #00000000
-  // for transparent.
-  gdk_rgba_parse(&background_color, "#000000");
-  fl_view_set_background_color(view, &background_color);
-  gtk_widget_show(GTK_WIDGET(view));
-  gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
-
-  // Show the window when Flutter renders.
-  // Requires the view to be realized so we can start rendering.
-  g_signal_connect_swapped(view, "first-frame", G_CALLBACK(first_frame_cb),
-                           self);
-  gtk_widget_realize(GTK_WIDGET(view));
-
-  fl_register_plugins(FL_PLUGIN_REGISTRY(view));
-
-  gtk_widget_grab_focus(GTK_WIDGET(view));
+  auto* bootstrap = g_new0(FlutterViewBootstrap, 1);
+  bootstrap->application = self;
+  bootstrap->window = GTK_WINDOW(g_object_ref(window));
+  bootstrap->splash = splash;
+  g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, initialize_flutter_view, bootstrap,
+                  destroy_flutter_view_bootstrap);
 }
 
 // Implements GApplication::local_command_line.
