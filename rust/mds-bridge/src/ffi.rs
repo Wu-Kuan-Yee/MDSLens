@@ -39,18 +39,23 @@ fn emit_binary_payload(
         return;
     }
     let Some(callback) = callback else { return };
-    let mut interleaved = Vec::with_capacity(points.len() * 2);
-    for point in points {
-        interleaved.push(point[0]);
-        interleaved.push(point[1]);
-    }
     let metadata = serde_json::to_string(&loaded).unwrap_or_default();
+    // `[f64; 2]` has the same contiguous layout as the Dart-side interleaved
+    // Float64List.  The callback copies the bytes synchronously into
+    // TransferableTypedData before returning, so the native Vec can stay
+    // owned here without an intermediate Rust allocation or point-by-point
+    // copy.
+    let (point_pointer, point_length) = if points.is_empty() {
+        (std::ptr::null(), 0)
+    } else {
+        (points.as_ptr().cast::<f64>(), points.len())
+    };
     callback(
         ffi_string!(metadata),
         uniform.as_ptr(),
         uniform.len(),
-        interleaved.as_ptr(),
-        interleaved.len() / 2,
+        point_pointer,
+        point_length,
     );
 }
 
