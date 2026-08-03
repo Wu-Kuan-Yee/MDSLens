@@ -63,6 +63,7 @@ const _filePreferenceKeys = <String>[
   'shotHistoryLimit',
   'webBookmarks',
   'shotHistory',
+  'recentConfigurations',
   'sourceIndexMemory',
   'lastConfigJson',
   'loggedIn',
@@ -140,6 +141,30 @@ class ConfigOpenSelection {
   final String name;
   final String? path;
   final Uint8List? bytes;
+}
+
+/// A previously opened local configuration.  Recent entries intentionally
+/// store only desktop file paths; mobile document-provider URIs and browser
+/// object/data URLs are not stable enough to reopen after a restart.
+@immutable
+class RecentConfiguration {
+  const RecentConfiguration({required this.name, required this.path});
+
+  final String name;
+  final String path;
+
+  Map<String, String> toJson() => {'name': name, 'path': path};
+
+  static RecentConfiguration? fromJson(dynamic value) {
+    if (value is! Map) return null;
+    final name = value['name']?.toString().trim() ?? '';
+    final path = value['path']?.toString().trim() ?? '';
+    if (path.isEmpty) return null;
+    return RecentConfiguration(
+      name: name.isEmpty ? File(path).uri.pathSegments.last : name,
+      path: path,
+    );
+  }
 }
 
 typedef ConfigOpenPicker = Future<ConfigOpenSelection?> Function();
@@ -633,6 +658,7 @@ class PanelShortcutRequest {
 class AppState extends ChangeNotifier {
   static const int defaultShotHistoryLimit = 50;
   static const int maximumShotHistoryLimit = 10000;
+  static const int maximumRecentConfigurations = 12;
   static const String defaultLoginApiUrl = 'http://202.127.204.26:80/api';
 
   final SignalFetchWorker _signalFetchWorker;
@@ -653,6 +679,50 @@ class AppState extends ChangeNotifier {
   // Config
   List<List<Map<String, dynamic>>> _columns = [];
   List<List<Map<String, dynamic>>> get columns => _columns;
+
+  final List<RecentConfiguration> _recentConfigurations = [];
+  List<RecentConfiguration> get recentConfigurations =>
+      List.unmodifiable(_recentConfigurations);
+
+  bool get _supportsStableRecentConfigurationPaths =>
+      !kIsWeb && !Platform.isAndroid && !Platform.isIOS;
+
+  Future<void> _rememberRecentConfiguration(
+    ConfigOpenSelection selection,
+  ) async {
+    if (!_supportsStableRecentConfigurationPaths) return;
+    final path = selection.path?.trim() ?? '';
+    if (path.isEmpty || path.startsWith('content://')) return;
+    final file = File(path);
+    if (!file.existsSync()) return;
+    final name = selection.name.trim().isEmpty
+        ? file.uri.pathSegments.last
+        : selection.name.trim();
+    final entry = RecentConfiguration(name: name, path: path);
+    _recentConfigurations.removeWhere((item) => item.path == path);
+    _recentConfigurations.insert(0, entry);
+    if (_recentConfigurations.length > maximumRecentConfigurations) {
+      _recentConfigurations.removeRange(
+        maximumRecentConfigurations,
+        _recentConfigurations.length,
+      );
+    }
+    notifyListeners();
+    await savePreferences();
+  }
+
+  Future<void> openRecentConfiguration(RecentConfiguration entry) async {
+    if (!_supportsStableRecentConfigurationPaths ||
+        !File(entry.path).existsSync()) {
+      _recentConfigurations.removeWhere((item) => item.path == entry.path);
+      await savePreferences();
+      notifyListeners();
+      _status = 'Recent configuration is no longer available: ${entry.name}';
+      notifyListeners();
+      return;
+    }
+    await openConfigurationPath(entry.path);
+  }
 
   // Waveform panels have a much higher update frequency than the rest of the
   // application state: streaming loads can deliver one signal every few
@@ -2062,6 +2132,25 @@ class AppState extends ChangeNotifier {
         }
       }
 
+      final recentConfigurationsJson =
+          setting('recentConfigurations')?.toString();
+      if (_supportsStableRecentConfigurationPaths &&
+          recentConfigurationsJson != null &&
+          recentConfigurationsJson.isNotEmpty) {
+        final list = jsonDecode(recentConfigurationsJson);
+        if (list is List) {
+          _recentConfigurations
+            ..clear()
+            ..addAll(
+              list
+                  .map(RecentConfiguration.fromJson)
+                  .whereType<RecentConfiguration>()
+                  .where((entry) => File(entry.path).existsSync())
+                  .take(maximumRecentConfigurations),
+            );
+        }
+      }
+
       final shotHistoryJson = setting('shotHistory')?.toString();
       if (shotHistoryJson != null) {
         final list = jsonDecode(shotHistoryJson);
@@ -2144,6 +2233,9 @@ class AppState extends ChangeNotifier {
         'shotHistoryLimit': _shotHistoryLimit,
         'webBookmarks': jsonEncode(_webBookmarks),
         'shotHistory': jsonEncode(_shotHistory),
+        'recentConfigurations': jsonEncode(
+          _recentConfigurations.map((entry) => entry.toJson()).toList(),
+        ),
         'sourceIndexMemory': jsonEncode(sourceIndexMemory.toJson()),
         'lastConfigJson': configJson,
       };
@@ -2156,7 +2248,8 @@ class AppState extends ChangeNotifier {
           ..remove('loginUser')
           ..remove('sshHost')
           ..remove('sshUser')
-          ..remove('sshIdentity');
+          ..remove('sshIdentity')
+          ..remove('recentConfigurations');
       }
       final storedInPrivateDirectory = await _userDataStore.writeSettings(
         fileSettings,
@@ -2692,6 +2785,7 @@ class AppState extends ChangeNotifier {
     _limitShotHistory = true;
     _shotHistoryLimit = defaultShotHistoryLimit;
     _shotHistory.clear();
+    _recentConfigurations.clear();
     _webBookmarks.clear();
     sourceIndexMemory.clear();
 
@@ -2791,6 +2885,7 @@ class AppState extends ChangeNotifier {
         notifyListeners();
         return;
       }
+      await _rememberRecentConfiguration(selection);
       final legacyMissingShotFixed = !_configurationHasShotFixedMetadata(json);
       final cols = (json['columns'] as List).map((col) {
         return (col as List).map((panel) {

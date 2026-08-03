@@ -1367,6 +1367,48 @@ void main() {
     },
   );
 
+  test('Recent local configurations are persisted and reopenable', () async {
+    final temporary = await Directory.systemTemp.createTemp(
+      'mdslens-recent-config-test-',
+    );
+    addTearDown(() => temporary.delete(recursive: true));
+    final store = UserDataStore(
+      rootOverride: Directory('${temporary.path}/.mdslens'),
+    );
+    final configuration = File('${temporary.path}/saved.toml');
+    await configuration.writeAsString('version = 1\n');
+    const parsedConfig = '{"columns":[[{"title":"Recent panel",'
+        '"x_label":"s","y_label":"A",'
+        '"signal_specs":[{"y_expr":"\\\\ip"}]}]]}';
+
+    final first = AppState(
+      userDataStore: store,
+      configOpenPicker: () async => ConfigOpenSelection(
+        name: 'saved.toml',
+        path: configuration.path,
+      ),
+      configParser: (_) => parsedConfig,
+    );
+    await first.preferencesReady;
+    addTearDown(first.dispose);
+    await first.openFile();
+
+    expect(first.recentConfigurations, hasLength(1));
+    expect(first.recentConfigurations.single.path, configuration.path);
+
+    final second = AppState(
+      userDataStore: store,
+      configParser: (_) => parsedConfig,
+    );
+    await second.preferencesReady;
+    addTearDown(second.dispose);
+    expect(second.recentConfigurations, hasLength(1));
+    expect(second.recentConfigurations.single.name, 'saved.toml');
+
+    await second.openRecentConfiguration(second.recentConfigurations.single);
+    expect(second.columns.single.single['title'], 'Recent panel');
+  });
+
   test(
     'Configuration open never imports the legacy shared config directory',
     () async {
@@ -2573,7 +2615,8 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       final refreshedSignal = ((requestedConfigs.last['columns'] as List)
-          .first.first as Map)['signal_specs'] as List;
+          .first
+          .first as Map)['signal_specs'] as List;
       expect((refreshedSignal.single as Map)['shot_fixed'], isTrue);
       expect((refreshedSignal.single as Map)['shot'], '170100');
     },

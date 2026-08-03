@@ -8,6 +8,7 @@ void main() {
     final bindings = defaultMdsShortcutBindings();
 
     expect(bindings, contains(MdsShortcutCommand.openFile));
+    expect(bindings, contains(MdsShortcutCommand.openRecentFiles));
     expect(bindings, contains(MdsShortcutCommand.refreshData));
     expect(bindings, contains(MdsShortcutCommand.panelSetup));
     expect(bindings, contains(MdsShortcutCommand.menuActivate));
@@ -35,6 +36,9 @@ void main() {
       bindings[MdsShortcutCommand.panelLeft]!.primary!.strokes.single.alt,
       isFalse,
     );
+    final recent = bindings[MdsShortcutCommand.openRecentFiles]!.primary!;
+    expect(recent.strokes.single.key, LogicalKeyboardKey.keyO);
+    expect(recent.strokes.single.shift, isTrue);
     final exitSequence = bindings[MdsShortcutCommand.exitPoint]!.primary!;
     expect(
       exitSequence.strokes.first.key,

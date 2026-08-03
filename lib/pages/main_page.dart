@@ -16,6 +16,7 @@ bool allowShortcutWhileEditing(
 }) {
   if (command == MdsShortcutCommand.exitPoint) return true;
   if (command == MdsShortcutCommand.openFile ||
+      command == MdsShortcutCommand.openRecentFiles ||
       command == MdsShortcutCommand.openWebMenu ||
       command == MdsShortcutCommand.saveConfiguration ||
       command == MdsShortcutCommand.globalRate ||
@@ -71,68 +72,68 @@ class _MainPageState extends State<MainPage> {
     return Focus(
       autofocus: true,
       child: Scaffold(
-          body: SafeArea(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: () {
-                FocusManager.instance.primaryFocus?.unfocus();
-                app.clearSelectedPanel();
-              },
-              child: Column(
-                children: [
-                  const ResponsiveToolbar(),
-                  Expanded(
-                    child: ConfigurationDropRegion(
-                      child: app.columns.isEmpty
-                          ? const Center(
-                              child: SelectableText(
-                                'This configuration contains no panels. '
-                                'Use Settings > Layout Setup to add one.',
-                                textAlign: TextAlign.center,
-                              ),
-                            )
-                          : const PlotGrid(),
-                    ),
-                  ),
-                  Container(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.surfaceContainerHighest,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    child: Row(
-                      children: [
-                        if (app.fetching)
-                          const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        const SizedBox(width: 8),
-                        if (app.crosshairX != null &&
-                            app.crosshairReadout.isNotEmpty)
-                          Expanded(
+        body: SafeArea(
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: () {
+              FocusManager.instance.primaryFocus?.unfocus();
+              app.clearSelectedPanel();
+            },
+            child: Column(
+              children: [
+                const ResponsiveToolbar(),
+                Expanded(
+                  child: ConfigurationDropRegion(
+                    child: app.columns.isEmpty
+                        ? const Center(
                             child: SelectableText(
-                              'x=${app.crosshairX!.toStringAsFixed(4)}  ${app.crosshairReadout.map((e) => '${e.name}:${e.y.toStringAsFixed(4)}').join('  ')}',
-                              style: statusStyle,
+                              'This configuration contains no panels. '
+                              'Use Settings > Layout Setup to add one.',
+                              textAlign: TextAlign.center,
                             ),
                           )
-                        else
-                          Expanded(
-                            child: SelectableText(
-                              app.status,
-                              style: statusStyle,
-                            ),
-                          ),
-                      ],
-                    ),
+                        : const PlotGrid(),
                   ),
-                ],
-              ),
+                ),
+                Container(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.surfaceContainerHighest,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  child: Row(
+                    children: [
+                      if (app.fetching)
+                        const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      const SizedBox(width: 8),
+                      if (app.crosshairX != null &&
+                          app.crosshairReadout.isNotEmpty)
+                        Expanded(
+                          child: SelectableText(
+                            'x=${app.crosshairX!.toStringAsFixed(4)}  ${app.crosshairReadout.map((e) => '${e.name}:${e.y.toStringAsFixed(4)}').join('  ')}',
+                            style: statusStyle,
+                          ),
+                        )
+                      else
+                        Expanded(
+                          child: SelectableText(
+                            app.status,
+                            style: statusStyle,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
+        ),
       ),
     );
   }
@@ -212,6 +213,11 @@ class _MainPageState extends State<MainPage> {
       case MdsShortcutCommand.openFile:
         unawaited(
           const ToolbarWidget().openConfigurationShortcut(context, app),
+        );
+        break;
+      case MdsShortcutCommand.openRecentFiles:
+        unawaited(
+          const ToolbarWidget().openRecentConfigurationsShortcut(context, app),
         );
         break;
       case MdsShortcutCommand.openWebMenu:
@@ -366,10 +372,26 @@ class _MainPageState extends State<MainPage> {
     for (final series in app.plots[index].series) {
       final bounds = series?.dataBounds();
       if (bounds == null) continue;
-      minX = minX == null ? bounds[0] : minX < bounds[0] ? minX : bounds[0];
-      maxX = maxX == null ? bounds[1] : maxX > bounds[1] ? maxX : bounds[1];
-      minY = minY == null ? bounds[2] : minY < bounds[2] ? minY : bounds[2];
-      maxY = maxY == null ? bounds[3] : maxY > bounds[3] ? maxY : bounds[3];
+      minX = minX == null
+          ? bounds[0]
+          : minX < bounds[0]
+              ? minX
+              : bounds[0];
+      maxX = maxX == null
+          ? bounds[1]
+          : maxX > bounds[1]
+              ? maxX
+              : bounds[1];
+      minY = minY == null
+          ? bounds[2]
+          : minY < bounds[2]
+              ? minY
+              : bounds[2];
+      maxY = maxY == null
+          ? bounds[3]
+          : maxY > bounds[3]
+              ? maxY
+              : bounds[3];
     }
     if (x && minX != null && maxX != null) {
       app.applySharedXScale(minX, maxX);

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -547,6 +548,12 @@ class ToolbarWidget extends StatelessWidget {
     AppState app,
   ) =>
       _openConfiguration(context, app);
+
+  Future<void> openRecentConfigurationsShortcut(
+    BuildContext context,
+    AppState app,
+  ) =>
+      _showRecentConfigurations(context, app);
 
   Future<void> saveConfigurationShortcut(
     BuildContext context,
@@ -3390,6 +3397,91 @@ class ToolbarWidget extends StatelessWidget {
       importedConfigurationDecision: (summary) =>
           showImportedConfigurationDecision(context, summary),
     );
+  }
+
+  Future<void> _showRecentConfigurations(
+    BuildContext context,
+    AppState app,
+  ) async {
+    final selected = await showDialog<RecentConfiguration>(
+      context: context,
+      builder: (dialogContext) {
+        final colors = Theme.of(dialogContext).colorScheme;
+        final entries = app.recentConfigurations;
+        return KeyboardSafeDialog(
+          key: const ValueKey('recent-configurations-dialog'),
+          maxWidth: 620,
+          title: Row(
+            children: [
+              Icon(Icons.history_rounded, color: colors.primary),
+              const SizedBox(width: 10),
+              const Flexible(child: Text('Recent configurations')),
+            ],
+          ),
+          content: entries.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  child: Text(
+                    'No local configurations have been opened yet. '
+                    'Use Open configuration to choose one.',
+                    style: TextStyle(color: colors.onSurfaceVariant),
+                  ),
+                )
+              : SizedBox(
+                  height: math.min(380, 88.0 * entries.length),
+                  child: Scrollbar(
+                    thumbVisibility: entries.length > 4,
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: entries.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (itemContext, index) {
+                        final entry = entries[index];
+                        return ListTile(
+                          key: ValueKey('recent-configuration-$index'),
+                          leading: CircleAvatar(
+                            backgroundColor: colors.primaryContainer,
+                            foregroundColor: colors.onPrimaryContainer,
+                            child: const Icon(Icons.description_outlined),
+                          ),
+                          title: Text(
+                            entry.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            entry.path,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: () => Navigator.pop(dialogContext, entry),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Close'),
+            ),
+            FilledButton.icon(
+              key: const ValueKey('recent-configurations-open-file'),
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                unawaited(_openConfiguration(context, app));
+              },
+              icon: const Icon(Icons.folder_open_rounded),
+              label: const Text('Open configuration'),
+            ),
+          ],
+        );
+      },
+    );
+    if (selected != null) {
+      await app.openRecentConfiguration(selected);
+    }
   }
 
   Future<void> _chooseConfigurationSaveFormat(

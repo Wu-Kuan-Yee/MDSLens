@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 
 enum MdsShortcutCommand {
   openFile,
+  openRecentFiles,
   openWebMenu,
   saveConfiguration,
   globalRate,
@@ -58,6 +59,12 @@ const mdsShortcutDefinitions = <MdsShortcutDefinition>[
     'open_file',
     'General',
     'Open configuration',
+  ),
+  MdsShortcutDefinition(
+    MdsShortcutCommand.openRecentFiles,
+    'open_recent_files',
+    'General',
+    'Open recent configurations',
   ),
   MdsShortcutDefinition(
     MdsShortcutCommand.openWebMenu,
@@ -411,8 +418,7 @@ class MdsShortcutSequence {
 
   @override
   bool operator ==(Object other) =>
-      other is MdsShortcutSequence &&
-      listEquals(other.strokes, strokes);
+      other is MdsShortcutSequence && listEquals(other.strokes, strokes);
 
   @override
   int get hashCode => Object.hashAll(strokes);
@@ -488,6 +494,9 @@ Map<MdsShortcutCommand, MdsShortcutBinding> defaultMdsShortcutBindings() {
   return {
     MdsShortcutCommand.openFile: MdsShortcutBinding(
       primary: modifiedSequence(LogicalKeyboardKey.keyO),
+    ),
+    MdsShortcutCommand.openRecentFiles: MdsShortcutBinding(
+      primary: modifiedSequence(LogicalKeyboardKey.keyO, shift: true),
     ),
     MdsShortcutCommand.openWebMenu: MdsShortcutBinding(
       primary: modifiedSequence(LogicalKeyboardKey.keyW),
@@ -837,7 +846,8 @@ typedef MdsShortcutCommandCallback = void Function(
 /// a key that belongs to a longer sequence. For example, Ctrl+A can remain a
 /// usable command while Ctrl+A, R is also assigned to another command.
 class MdsShortcutDispatcher {
-  MdsShortcutDispatcher({this.sequenceTimeout = const Duration(milliseconds: 850)});
+  MdsShortcutDispatcher(
+      {this.sequenceTimeout = const Duration(milliseconds: 850)});
 
   final Duration sequenceTimeout;
   final _pending = <MdsShortcutStroke>[];
@@ -967,7 +977,10 @@ class MdsShortcutDispatcher {
   ) =>
       prefix.isNotEmpty &&
       prefix.length < sequence.length &&
-      prefix.asMap().entries.every((entry) => sequence[entry.key] == entry.value);
+      prefix
+          .asMap()
+          .entries
+          .every((entry) => sequence[entry.key] == entry.value);
 }
 
 class _ShortcutMatch {
