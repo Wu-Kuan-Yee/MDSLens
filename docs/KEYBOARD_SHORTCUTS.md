@@ -6,16 +6,25 @@ Windows/Linux use Ctrl. Arrow keys and H/J/K/L navigation are available on all
 desktop platforms. A hardware keyboard is required on mobile devices; touch
 and stylus controls are unchanged.
 
-## Vim mode
+## Keyboard mode and Vim mode
 
-**Settings > Vim mode (keyboard-only)** is an independent, opt-in mode and is
-off by default. When enabled, the workspace keeps the ordinary shortcuts but
-adds a keyboard-first command line: press `:` (Shift+;) anywhere outside a text
-field, type a command name, and press Enter. Use `j`/`k` or the arrow keys to
-move through matching commands, and Escape to cancel. Every application action
-listed in the shortcut settings is available from this command line, so the
-main workspace can be operated without a mouse. Tab/Shift+Tab and Enter/Space
-continue to operate focused controls and dialog buttons normally.
+**Settings > Keyboard mode** opens a dedicated mode panel. Standard shortcuts
+remain the default; **Vim keyboard-only** is opt-in and keeps all ordinary
+shortcuts while adding a complete keyboard-first workspace.
+
+In Vim mode, press `:` (Shift+;) outside a text field to search every command,
+then press Enter to run it. Use `j`/`k` or the arrow keys to move through the
+results, and Escape to cancel. The same settings list is available without a
+pointer through the `Open settings` command in that palette.
+
+For the waveform workspace, `h`/`j`/`k`/`l` select the neighboring panel, `c`
+opens the selected panel's context menu, and the menu itself accepts
+`h`/`j`/`k`/`l` plus Enter. In Zoom/Move mode, Shift+H/J/K/L pans the selected
+plot and `[`/`]` zoom out/in; `0` resets its scale. `p` and `z` switch Point
+and Zoom/Move modes. In Point mode, h/l step the active crosshair. Open and
+recent configurations are available with `o` and Shift+O, and save with `s`.
+Tab/Shift+Tab and Enter/Space continue to operate focused controls and dialog
+buttons normally.
 
 ## Shortcut sequences
 
@@ -43,8 +52,8 @@ that the same gesture becomes Refresh; Reset All receives the new
   active.
 - Popup menus keep their own native focus and arrow/Enter behavior. Configured
   menu navigation shortcuts, including one-to-four-stroke sequences, are
-  handled inside the open menu; the page dispatcher does not steal those
-  events.
+  handled inside the open menu; Vim mode additionally maps H/J/K/L there. The
+  page dispatcher does not steal those events.
 
 While an input field is being edited, ordinary navigation and mode shortcuts
 are suppressed so typing remains safe. Shot history navigation, global file

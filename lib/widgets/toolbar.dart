@@ -13,6 +13,7 @@ import 'dialogs/ssh.dart';
 import 'dialogs/about.dart';
 import 'dialogs/keyboard_safe_dialog.dart';
 import 'dialogs/keyboard_shortcuts.dart';
+import 'dialogs/keyboard_mode.dart';
 import 'dropdown_items.dart';
 import 'plot_panel.dart';
 import 'polished_dropdown.dart';
@@ -658,6 +659,10 @@ class ToolbarWidget extends StatelessWidget {
           ),
           onPressed: () => _openConfiguration(context, app),
         ),
+        _toolbarRecentConfigurationButton(
+          context,
+          app,
+        ),
         _toolbarIconButton(
           context,
           icon: Icons.save_rounded,
@@ -1173,8 +1178,8 @@ class ToolbarWidget extends StatelessWidget {
           case 'shortcuts':
             KeyboardShortcutsDialog.show(ctx);
             break;
-          case 'vim-mode':
-            app.setVimMode(!app.vimMode);
+          case 'keyboard-mode':
+            KeyboardModeDialog.show(ctx, previewToggle: true);
             break;
           case 'restore-all':
             _confirmRestoreAllSettings(ctx, app);
@@ -1207,11 +1212,13 @@ class ToolbarWidget extends StatelessWidget {
           icon: Icons.keyboard_alt_outlined,
           label: 'Keyboard shortcuts',
         ),
-        _settingsToggleMenuItem(
-          value: 'vim-mode',
+        _settingsMenuItem(
+          key: const ValueKey('settings-vim-mode'),
+          value: 'keyboard-mode',
           icon: Icons.terminal_rounded,
-          label: 'Vim mode (keyboard-only)',
-          checked: app.vimMode,
+          label: 'Keyboard mode',
+          trailing: app.vimMode ? 'Vim' : 'Standard',
+          caption: 'Vim mode (keyboard-only)',
         ),
         _settingsMenuItem(
           value: 'restore-all',
@@ -1228,14 +1235,18 @@ class ToolbarWidget extends StatelessWidget {
   }
 
   PopupMenuItem<String> _settingsMenuItem({
+    Key? key,
     required String value,
     required IconData icon,
     required String label,
     String? shortcut,
+    String? trailing,
+    String? caption,
   }) {
     final tooltip =
         shortcut == null || shortcut.isEmpty ? label : '$label ($shortcut)';
     return PopupMenuItem(
+      key: key,
       value: value,
       child: Tooltip(
         message: tooltip,
@@ -1243,7 +1254,27 @@ class ToolbarWidget extends StatelessWidget {
           children: [
             Icon(icon, size: 21),
             const SizedBox(width: 12),
-            Expanded(child: Text(label)),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label),
+                  if (caption != null)
+                    Text(
+                      caption,
+                      style: const TextStyle(fontSize: 10),
+                    ),
+                ],
+              ),
+            ),
+            if (trailing != null && trailing.isNotEmpty) ...[
+              const SizedBox(width: 12),
+              Text(
+                trailing,
+                style: const TextStyle(fontSize: 11),
+              ),
+            ],
             if (shortcut != null && shortcut.isNotEmpty) ...[
               const SizedBox(width: 12),
               Text(
@@ -1253,26 +1284,6 @@ class ToolbarWidget extends StatelessWidget {
             ],
           ],
         ),
-      ),
-    );
-  }
-
-  PopupMenuItem<String> _settingsToggleMenuItem({
-    required String value,
-    required IconData icon,
-    required String label,
-    required bool checked,
-  }) {
-    return CheckedPopupMenuItem<String>(
-      key: ValueKey('settings-$value'),
-      value: value,
-      checked: checked,
-      child: Row(
-        children: [
-          Icon(icon, size: 21),
-          const SizedBox(width: 12),
-          Expanded(child: Text(label)),
-        ],
       ),
     );
   }
@@ -3530,79 +3541,131 @@ class ToolbarWidget extends StatelessWidget {
   ) async {
     final selected = await showDialog<RecentConfiguration>(
       context: context,
-      builder: (dialogContext) {
-        final colors = Theme.of(dialogContext).colorScheme;
-        final entries = app.recentConfigurations;
-        return KeyboardSafeDialog(
-          key: const ValueKey('recent-configurations-dialog'),
-          maxWidth: 620,
-          title: Row(
-            children: [
-              Icon(Icons.history_rounded, color: colors.primary),
-              const SizedBox(width: 10),
-              const Flexible(child: Text('Recent configurations')),
-            ],
-          ),
-          content: entries.isEmpty
-              ? Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  child: Text(
-                    'No local configurations have been opened yet. '
-                    'Use Open configuration to choose one.',
-                    style: TextStyle(color: colors.onSurfaceVariant),
-                  ),
-                )
-              : SizedBox(
-                  height: math.min(380, 88.0 * entries.length),
-                  child: Scrollbar(
-                    thumbVisibility: entries.length > 4,
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: entries.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (itemContext, index) {
-                        final entry = entries[index];
-                        return ListTile(
-                          key: ValueKey('recent-configuration-$index'),
-                          leading: CircleAvatar(
-                            backgroundColor: colors.primaryContainer,
-                            foregroundColor: colors.onPrimaryContainer,
-                            child: const Icon(Icons.description_outlined),
-                          ),
-                          title: Text(
-                            entry.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            entry.path,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: const Icon(Icons.chevron_right_rounded),
-                          onTap: () => Navigator.pop(dialogContext, entry),
-                        );
-                      },
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final colors = Theme.of(dialogContext).colorScheme;
+          final entries = app.recentConfigurations;
+          return KeyboardSafeDialog(
+            key: const ValueKey('recent-configurations-dialog'),
+            maxWidth: 620,
+            title: Row(
+              children: [
+                Icon(Icons.history_rounded, color: colors.primary),
+                const SizedBox(width: 10),
+                const Flexible(child: Text('Recent configurations')),
+              ],
+            ),
+            content: entries.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    child: Text(
+                      'No local configurations have been opened yet. '
+                      'Use Open configuration to choose one.',
+                      style: TextStyle(color: colors.onSurfaceVariant),
+                    ),
+                  )
+                : SizedBox(
+                    height: math.min(380, 88.0 * entries.length),
+                    child: Scrollbar(
+                      thumbVisibility: entries.length > 4,
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: entries.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (itemContext, index) {
+                          final entry = entries[index];
+                          return ListTile(
+                            key: ValueKey('recent-configuration-$index'),
+                            leading: CircleAvatar(
+                              backgroundColor: colors.primaryContainer,
+                              foregroundColor: colors.onPrimaryContainer,
+                              child: const Icon(Icons.description_outlined),
+                            ),
+                            title: Text(
+                              entry.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              entry.path,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  key: ValueKey(
+                                    'recent-configuration-remove-$index',
+                                  ),
+                                  tooltip: 'Remove from recent list',
+                                  onPressed: () async {
+                                    await app.removeRecentConfiguration(entry);
+                                    setDialogState(() {});
+                                  },
+                                  icon: const Icon(Icons.close_rounded),
+                                ),
+                                const Icon(Icons.chevron_right_rounded),
+                              ],
+                            ),
+                            onTap: () => Navigator.pop(dialogContext, entry),
+                          );
+                        },
+                      ),
                     ),
                   ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Close'),
+              ),
+              if (entries.isNotEmpty)
+                TextButton.icon(
+                  key: const ValueKey('recent-configurations-clear'),
+                  onPressed: () async {
+                    final confirmed = await showDialog<bool>(
+                      context: dialogContext,
+                      builder: (confirmContext) => AlertDialog(
+                        title: const Text('Clear recent configurations?'),
+                        content: const Text(
+                          'This removes the entries from the recent list. '
+                          'The configuration files themselves will not be deleted.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () =>
+                                Navigator.pop(confirmContext, false),
+                            child: const Text('Cancel'),
+                          ),
+                          FilledButton(
+                            onPressed: () =>
+                                Navigator.pop(confirmContext, true),
+                            child: const Text('Clear list'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmed == true) {
+                      await app.clearRecentConfigurations();
+                      setDialogState(() {});
+                    }
+                  },
+                  icon: const Icon(Icons.delete_sweep_rounded),
+                  label: const Text('Clear list'),
                 ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Close'),
-            ),
-            FilledButton.icon(
-              key: const ValueKey('recent-configurations-open-file'),
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                unawaited(_openConfiguration(context, app));
-              },
-              icon: const Icon(Icons.folder_open_rounded),
-              label: const Text('Open configuration'),
-            ),
-          ],
-        );
-      },
+              FilledButton.icon(
+                key: const ValueKey('recent-configurations-open-file'),
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                  unawaited(_openConfiguration(context, app));
+                },
+                icon: const Icon(Icons.folder_open_rounded),
+                label: const Text('Open configuration'),
+              ),
+            ],
+          );
+        },
+      ),
     );
     if (selected != null) {
       await app.openRecentConfiguration(selected);
@@ -3770,6 +3833,48 @@ class ToolbarWidget extends StatelessWidget {
             child: Icon(
               icon,
               size: context.read<AppState>().iconSize.toDouble(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _toolbarRecentConfigurationButton(
+    BuildContext context,
+    AppState app,
+  ) {
+    final colors = Theme.of(context).colorScheme;
+    final tooltip = _shortcutTooltip(
+      app,
+      'Recent configurations',
+      MdsShortcutCommand.openRecentFiles,
+    );
+    return Semantics(
+      button: true,
+      label: tooltip,
+      child: Tooltip(
+        message: tooltip,
+        child: Material(
+          color: Colors.transparent,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 44),
+            child: Ink(
+              decoration: BoxDecoration(
+                border: Border.all(color: colors.outlineVariant),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () => _showRecentConfigurations(context, app),
+                child: Center(
+                  child: Icon(
+                    Icons.history_rounded,
+                    size: app.iconSize.toDouble(),
+                    color: colors.onSurface,
+                  ),
+                ),
+              ),
             ),
           ),
         ),

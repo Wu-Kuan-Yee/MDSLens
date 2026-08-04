@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/keyboard_shortcuts.dart';
 
 class PolishedPopupMenuOption<T> {
@@ -32,6 +33,7 @@ class _KeyboardPopupMenuItem<T> extends PopupMenuItem<T> {
     required this.keyboardShortcuts,
     required this.dispatcher,
     required this.autofocus,
+    required this.vimMode,
     super.height,
     super.padding,
   });
@@ -39,6 +41,7 @@ class _KeyboardPopupMenuItem<T> extends PopupMenuItem<T> {
   final Map<MdsShortcutCommand, MdsShortcutBinding> keyboardShortcuts;
   final MdsShortcutDispatcher dispatcher;
   final bool autofocus;
+  final bool vimMode;
 
   @override
   PopupMenuItemState<T, _KeyboardPopupMenuItem<T>> createState() =>
@@ -66,6 +69,31 @@ class _KeyboardPopupMenuItemState<T>
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (widget.vimMode &&
+        (event is KeyDownEvent || event is KeyRepeatEvent) &&
+        !_hasModifier(event)) {
+      switch (event.logicalKey) {
+        case LogicalKeyboardKey.keyH:
+        case LogicalKeyboardKey.arrowLeft:
+          _moveMenuFocus(context, backward: true);
+          return KeyEventResult.handled;
+        case LogicalKeyboardKey.keyK:
+        case LogicalKeyboardKey.arrowUp:
+          _moveMenuFocus(context, backward: true);
+          return KeyEventResult.handled;
+        case LogicalKeyboardKey.keyJ:
+        case LogicalKeyboardKey.arrowDown:
+        case LogicalKeyboardKey.keyL:
+        case LogicalKeyboardKey.arrowRight:
+          _moveMenuFocus(context, backward: false);
+          return KeyEventResult.handled;
+        case LogicalKeyboardKey.enter:
+          handleTap();
+          return KeyEventResult.handled;
+        default:
+          break;
+      }
+    }
     final stroke = shortcutStrokeFromEvent(event);
     if (stroke == null) return KeyEventResult.ignored;
     final handled = widget.dispatcher.handle(
@@ -75,6 +103,14 @@ class _KeyboardPopupMenuItemState<T>
       onTrigger: (command) => _triggerMenuShortcut(context, command),
     );
     return handled ? KeyEventResult.handled : KeyEventResult.ignored;
+  }
+
+  bool _hasModifier(KeyEvent event) {
+    final keyboard = HardwareKeyboard.instance;
+    return keyboard.isControlPressed ||
+        keyboard.isAltPressed ||
+        keyboard.isMetaPressed ||
+        keyboard.isShiftPressed;
   }
 
   void _triggerMenuShortcut(
@@ -147,6 +183,7 @@ Future<T?> showPolishedPopupMenu<T>({
   required String id,
   required List<PolishedPopupMenuGroup<T>> groups,
   Map<MdsShortcutCommand, MdsShortcutBinding>? keyboardShortcuts,
+  bool vimMode = false,
 }) {
   final theme = Theme.of(context);
   final colors = theme.colorScheme;
@@ -217,6 +254,7 @@ Future<T?> showPolishedPopupMenu<T>({
           keyboardShortcuts: menuShortcuts,
           dispatcher: menuDispatcher,
           autofocus: groupIndex == 0 && optionIndex == 0,
+          vimMode: vimMode,
           height: 46,
           padding: const EdgeInsets.symmetric(horizontal: 8),
           child: Tooltip(

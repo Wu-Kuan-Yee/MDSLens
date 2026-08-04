@@ -75,10 +75,10 @@ String signalLegendDisplayLabel(
   final shot = fixed
       ? (signal['shot']?.toString().trim() ?? '')
       : (displayedShot.trim().isNotEmpty
-            ? displayedShot.trim()
-            : (inputShot.trim().isNotEmpty
-                  ? inputShot.trim()
-                  : panelShot.trim()));
+          ? displayedShot.trim()
+          : (inputShot.trim().isNotEmpty
+              ? inputShot.trim()
+              : panelShot.trim()));
   return shot.isEmpty ? label : '$label $shot';
 }
 
@@ -359,7 +359,71 @@ class _PlotPanelState extends State<PlotPanel> {
           allowPanelSelection: false,
         );
         break;
+      case 'context':
+        final renderObject = _listenerKey.currentContext?.findRenderObject();
+        if (renderObject is RenderBox && renderObject.hasSize) {
+          final globalPosition = renderObject.localToGlobal(
+            renderObject.size.center(Offset.zero),
+          );
+          await _showContextMenu(context, globalPosition);
+        }
+        break;
+      case 'pan-left':
+        _applyKeyboardPan(const Offset(-1, 0));
+        break;
+      case 'pan-right':
+        _applyKeyboardPan(const Offset(1, 0));
+        break;
+      case 'pan-up':
+        _applyKeyboardPan(const Offset(0, -1));
+        break;
+      case 'pan-down':
+        _applyKeyboardPan(const Offset(0, 1));
+        break;
+      case 'zoom-in':
+        _applyKeyboardZoom(1.22);
+        break;
+      case 'zoom-out':
+        _applyKeyboardZoom(1 / 1.22);
+        break;
     }
+  }
+
+  void _applyKeyboardPan(Offset direction) {
+    final app = context.read<AppState>();
+    if (app.interactionMode != 0 || !_ensureViewInitialized(app)) return;
+    final plot = app.plots[widget.plotIdx];
+    final rangeX = _viewMaxX - _viewMinX;
+    final rangeY = _viewMaxY - _viewMinY;
+    if (!rangeX.isFinite || !rangeY.isFinite) return;
+    setState(() {
+      final stepX = rangeX * 0.12;
+      final stepY = rangeY * 0.12;
+      _viewMinX += direction.dx * stepX;
+      _viewMaxX += direction.dx * stepX;
+      _viewMinY += direction.dy * stepY;
+      _viewMaxY += direction.dy * stepY;
+      _storeView(plot);
+    });
+  }
+
+  void _applyKeyboardZoom(double factor) {
+    final app = context.read<AppState>();
+    if (app.interactionMode != 0 || !_ensureViewInitialized(app)) return;
+    final plot = app.plots[widget.plotIdx];
+    final renderObject = _listenerKey.currentContext?.findRenderObject();
+    final center = renderObject is RenderBox && renderObject.hasSize
+        ? renderObject.size.center(Offset.zero)
+        : Offset.zero;
+    final cx = _pxToDataX(center.dx);
+    final cy = _pxToDataY(center.dy);
+    setState(() {
+      _viewMinX = cx - (cx - _viewMinX) / factor;
+      _viewMaxX = cx + (_viewMaxX - cx) / factor;
+      _viewMinY = cy - (cy - _viewMinY) / factor;
+      _viewMaxY = cy + (_viewMaxY - cy) / factor;
+      _storeView(plot);
+    });
   }
 
   @override
@@ -2091,6 +2155,7 @@ class _PlotPanelState extends State<PlotPanel> {
       globalPosition: globalPosition,
       id: 'plot-context-menu',
       keyboardShortcuts: app.keyboardShortcuts,
+      vimMode: app.vimMode,
       groups: [
         PolishedPopupMenuGroup(
           label: 'View',

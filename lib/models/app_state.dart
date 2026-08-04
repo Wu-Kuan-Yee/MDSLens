@@ -725,6 +725,25 @@ class AppState extends ChangeNotifier {
     await openConfigurationPath(entry.path);
   }
 
+  /// Remove one item from the local recent-configuration history.
+  Future<void> removeRecentConfiguration(RecentConfiguration entry) async {
+    final before = _recentConfigurations.length;
+    _recentConfigurations.removeWhere((item) => item.path == entry.path);
+    final removed = _recentConfigurations.length != before;
+    if (!removed) return;
+    notifyListeners();
+    await savePreferences();
+  }
+
+  /// Clear the local recent-configuration history without touching the
+  /// configuration documents themselves.
+  Future<void> clearRecentConfigurations() async {
+    if (_recentConfigurations.isEmpty) return;
+    _recentConfigurations.clear();
+    notifyListeners();
+    await savePreferences();
+  }
+
   // Waveform panels have a much higher update frequency than the rest of the
   // application state: streaming loads can deliver one signal every few
   // milliseconds. Keep a small per-panel notifier so a signal arriving in
@@ -2173,9 +2192,8 @@ class AppState extends ChangeNotifier {
       _toolbarCollapsed = setting('toolbarCollapsed') is bool
           ? setting('toolbarCollapsed') as bool
           : _toolbarCollapsed;
-      _vimMode = setting('vimMode') is bool
-          ? setting('vimMode') as bool
-          : _vimMode;
+      _vimMode =
+          setting('vimMode') is bool ? setting('vimMode') as bool : _vimMode;
       _autoCheckUpdates = setting('autoCheckUpdates') is bool
           ? setting('autoCheckUpdates') as bool
           : _autoCheckUpdates;
@@ -3531,8 +3549,7 @@ class AppState extends ChangeNotifier {
             final signal = signals?[signalIndex];
             if (signal is Map &&
                 signalHideModeOf(signal) == signalHideModeVisible) {
-              _waveformConfiguredSignalKeys
-                  .add('$plotIndex:$signalIndex');
+              _waveformConfiguredSignalKeys.add('$plotIndex:$signalIndex');
             }
           }
         }
@@ -3568,7 +3585,7 @@ class AppState extends ChangeNotifier {
   /// completion boundary.  Hidden signals are intentionally excluded: they
   /// are not requested and should not make a successful load look partial.
   ({int totalPanels, int dataPanels, int totalSignals, int failedSignals})
-  _waveformLoadStats() {
+      _waveformLoadStats() {
     if (_waveformConfiguredSignalKeys.isNotEmpty) {
       final unresolved = _waveformConfiguredSignalKeys
           .difference(_waveformLoadedSignalKeys)
@@ -3633,8 +3650,7 @@ class AppState extends ChangeNotifier {
   }) {
     final stats = _waveformLoadStats();
     final shotLabel = shot.trim().isEmpty ? 'Current shot' : 'Shot $shot';
-    final summary =
-        '$shotLabel: ${stats.dataPanels} panels with data '
+    final summary = '$shotLabel: ${stats.dataPanels} panels with data '
         '(${stats.totalPanels} panels total), ${stats.totalSignals} signals '
         '(${stats.totalSignals - stats.failedSignals} loaded, '
         '${stats.failedSignals} failed)';
@@ -4017,8 +4033,7 @@ class AppState extends ChangeNotifier {
           generation: generation,
           status: _formatWaveformLoadSummary(
             requestShot,
-            firstError:
-                'The native data loader returned an invalid response.',
+            firstError: 'The native data loader returned an invalid response.',
           ),
         );
         return;

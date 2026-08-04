@@ -7,6 +7,8 @@ import '../models/app_state.dart';
 import '../services/keyboard_shortcuts.dart';
 import '../widgets/configuration_drop_region.dart';
 import '../widgets/dialogs/multi_panel_export.dart';
+import '../widgets/dialogs/keyboard_mode.dart';
+import '../widgets/dialogs/keyboard_settings_palette.dart';
 import '../widgets/dialogs/vim_command_palette.dart';
 import '../widgets/toolbar.dart';
 import '../widgets/plot_grid.dart';
@@ -159,6 +161,9 @@ class _MainPageState extends State<MainPage> {
       unawaited(_openVimCommandPalette(app));
       return true;
     }
+    if (app.vimMode && _handleVimWorkspaceKey(event, stroke, app)) {
+      return true;
+    }
     final fixedPointSeries = fixedPointSeriesOrdinal(stroke);
     if (fixedPointSeries != null &&
         !_editingText() &&
@@ -184,6 +189,116 @@ class _MainPageState extends State<MainPage> {
     final command = await VimCommandPalette.show(context, app);
     if (!mounted || command == null) return;
     _triggerShortcut(app, command);
+  }
+
+  /// Direct Vim workspace motions.  The command palette remains available for
+  /// every action, while these keys make the high-frequency chart workflow
+  /// usable without repeatedly opening a dialog.
+  bool _handleVimWorkspaceKey(
+    KeyEvent event,
+    MdsShortcutStroke stroke,
+    AppState app,
+  ) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
+    if (stroke.control || stroke.alt || stroke.meta) return false;
+    final key = stroke.key;
+    final shift = stroke.shift;
+
+    if (app.interactionMode == 1 &&
+        !shift &&
+        app.crosshairX != null &&
+        (key == LogicalKeyboardKey.keyH || key == LogicalKeyboardKey.keyL)) {
+      app.stepActivePoint(key == LogicalKeyboardKey.keyH ? -1 : 1);
+      return true;
+    }
+
+    if (key == LogicalKeyboardKey.keyH) {
+      if (shift) {
+        app.requestSelectedPanelShortcut('pan-left');
+      } else {
+        app.movePanelSelection(-1, 0);
+      }
+      return true;
+    }
+    if (key == LogicalKeyboardKey.keyL) {
+      if (shift) {
+        app.requestSelectedPanelShortcut('pan-right');
+      } else {
+        app.movePanelSelection(1, 0);
+      }
+      return true;
+    }
+    if (key == LogicalKeyboardKey.keyJ) {
+      if (shift) {
+        app.requestSelectedPanelShortcut('pan-down');
+      } else {
+        app.movePanelSelection(0, 1);
+      }
+      return true;
+    }
+    if (key == LogicalKeyboardKey.keyK) {
+      if (shift) {
+        app.requestSelectedPanelShortcut('pan-up');
+      } else {
+        app.movePanelSelection(0, -1);
+      }
+      return true;
+    }
+
+    // Enter or c opens the same context menu as a mouse right click on the
+    // selected panel.  The panel computes its own on-screen anchor.
+    if (key == LogicalKeyboardKey.keyC) {
+      if (app.selectedPlotIndex != null) {
+        app.requestSelectedPanelShortcut('context');
+        return true;
+      }
+      app.movePanelSelection(0, 0);
+      return true;
+    }
+    if (key == LogicalKeyboardKey.keyP) {
+      app.interactionMode = 1;
+      app.activatePointForCurrentPanel();
+      return true;
+    }
+    if (key == LogicalKeyboardKey.keyZ) {
+      app.interactionMode = 0;
+      return true;
+    }
+    if (key == LogicalKeyboardKey.equal && shift) {
+      app.requestSelectedPanelShortcut('zoom-in');
+      return true;
+    }
+    if (key == LogicalKeyboardKey.minus && !shift) {
+      app.requestSelectedPanelShortcut('zoom-out');
+      return true;
+    }
+    if (key == LogicalKeyboardKey.bracketLeft) {
+      app.requestSelectedPanelShortcut('zoom-out');
+      return true;
+    }
+    if (key == LogicalKeyboardKey.bracketRight) {
+      app.requestSelectedPanelShortcut('zoom-in');
+      return true;
+    }
+    if (key == LogicalKeyboardKey.digit0 && !shift) {
+      app.resetSelectedView();
+      return true;
+    }
+    if (key == LogicalKeyboardKey.keyO && !shift) {
+      unawaited(const ToolbarWidget().openConfigurationShortcut(context, app));
+      return true;
+    }
+    if (key == LogicalKeyboardKey.keyO && shift) {
+      unawaited(
+        const ToolbarWidget().openRecentConfigurationsShortcut(context, app),
+      );
+      return true;
+    }
+    if (key == LogicalKeyboardKey.keyS && !shift) {
+      unawaited(const ToolbarWidget().saveConfigurationShortcut(context, app));
+      return true;
+    }
+    return false;
   }
 
   bool _shortcutEnabled(
@@ -279,6 +394,12 @@ class _MainPageState extends State<MainPage> {
         break;
       case MdsShortcutCommand.openKeyboardShortcuts:
         const ToolbarWidget().openKeyboardShortcutsShortcut(context);
+        break;
+      case MdsShortcutCommand.openSettings:
+        unawaited(_openKeyboardSettings(app));
+        break;
+      case MdsShortcutCommand.openKeyboardMode:
+        unawaited(KeyboardModeDialog.show(context));
         break;
       case MdsShortcutCommand.openAbout:
         const ToolbarWidget().openAboutShortcut(context);
@@ -404,6 +525,16 @@ class _MainPageState extends State<MainPage> {
       case MdsShortcutCommand.menuRight:
         break;
     }
+  }
+
+  Future<void> _openKeyboardSettings(AppState app) async {
+    final command = await KeyboardSettingsPalette.show(context, app);
+    if (!mounted ||
+        command == null ||
+        command == MdsShortcutCommand.openSettings) {
+      return;
+    }
+    _triggerShortcut(app, command);
   }
 
   static bool _editingText() {

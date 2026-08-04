@@ -53,6 +53,8 @@ enum MdsShortcutCommand {
   menuUp,
   menuRight,
   menuActivate,
+  openSettings,
+  openKeyboardMode,
 }
 
 class MdsShortcutDefinition {
@@ -352,6 +354,18 @@ const mdsShortcutDefinitions = <MdsShortcutDefinition>[
     'menu_activate',
     'Popup menu navigation',
     'Activate selected item',
+  ),
+  MdsShortcutDefinition(
+    MdsShortcutCommand.openSettings,
+    'open_settings',
+    'Settings',
+    'Open settings',
+  ),
+  MdsShortcutDefinition(
+    MdsShortcutCommand.openKeyboardMode,
+    'open_keyboard_mode',
+    'Settings',
+    'Choose keyboard mode',
   ),
 ];
 
