@@ -7,6 +7,7 @@ import '../models/app_state.dart';
 import '../services/keyboard_shortcuts.dart';
 import '../widgets/configuration_drop_region.dart';
 import '../widgets/dialogs/multi_panel_export.dart';
+import '../widgets/dialogs/vim_command_palette.dart';
 import '../widgets/toolbar.dart';
 import '../widgets/plot_grid.dart';
 
@@ -71,66 +72,69 @@ class _MainPageState extends State<MainPage> {
     );
     return Focus(
       autofocus: true,
-      child: Scaffold(
-        body: SafeArea(
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onTap: () {
-              FocusManager.instance.primaryFocus?.unfocus();
-              app.clearSelectedPanel();
-            },
-            child: Column(
-              children: [
-                const ResponsiveToolbar(),
-                Expanded(
-                  child: ConfigurationDropRegion(
-                    child: app.columns.isEmpty
-                        ? const Center(
+      child: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: Scaffold(
+          body: SafeArea(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () {
+                FocusManager.instance.primaryFocus?.unfocus();
+                app.clearSelectedPanel();
+              },
+              child: Column(
+                children: [
+                  const ResponsiveToolbar(),
+                  Expanded(
+                    child: ConfigurationDropRegion(
+                      child: app.columns.isEmpty
+                          ? const Center(
+                              child: SelectableText(
+                                'This configuration contains no panels. '
+                                'Use Settings > Layout Setup to add one.',
+                                textAlign: TextAlign.center,
+                              ),
+                            )
+                          : const PlotGrid(),
+                    ),
+                  ),
+                  Container(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    child: Row(
+                      children: [
+                        if (app.fetching)
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        const SizedBox(width: 8),
+                        if (app.crosshairX != null &&
+                            app.crosshairReadout.isNotEmpty)
+                          Expanded(
                             child: SelectableText(
-                              'This configuration contains no panels. '
-                              'Use Settings > Layout Setup to add one.',
-                              textAlign: TextAlign.center,
+                              'x=${app.crosshairX!.toStringAsFixed(4)}  ${app.crosshairReadout.map((e) => '${e.name}:${e.y.toStringAsFixed(4)}').join('  ')}',
+                              style: statusStyle,
                             ),
                           )
-                        : const PlotGrid(),
-                  ),
-                ),
-                Container(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.surfaceContainerHighest,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
-                  child: Row(
-                    children: [
-                      if (app.fetching)
-                        const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      const SizedBox(width: 8),
-                      if (app.crosshairX != null &&
-                          app.crosshairReadout.isNotEmpty)
-                        Expanded(
-                          child: SelectableText(
-                            'x=${app.crosshairX!.toStringAsFixed(4)}  ${app.crosshairReadout.map((e) => '${e.name}:${e.y.toStringAsFixed(4)}').join('  ')}',
-                            style: statusStyle,
+                        else
+                          Expanded(
+                            child: SelectableText(
+                              app.status,
+                              style: statusStyle,
+                            ),
                           ),
-                        )
-                      else
-                        Expanded(
-                          child: SelectableText(
-                            app.status,
-                            style: statusStyle,
-                          ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -146,6 +150,15 @@ class _MainPageState extends State<MainPage> {
     final stroke = shortcutStrokeFromEvent(event);
     if (stroke == null) return false;
     final app = context.read<AppState>();
+    if (app.vimMode &&
+        !_editingText() &&
+        (event.logicalKey == LogicalKeyboardKey.colon ||
+            (event.logicalKey == LogicalKeyboardKey.semicolon &&
+                HardwareKeyboard.instance.isShiftPressed)) &&
+        (event is KeyDownEvent || event is KeyRepeatEvent)) {
+      unawaited(_openVimCommandPalette(app));
+      return true;
+    }
     final fixedPointSeries = fixedPointSeriesOrdinal(stroke);
     if (fixedPointSeries != null &&
         !_editingText() &&
@@ -165,6 +178,12 @@ class _MainPageState extends State<MainPage> {
       onTrigger: (command) => _triggerShortcut(app, command),
     );
     return handled;
+  }
+
+  Future<void> _openVimCommandPalette(AppState app) async {
+    final command = await VimCommandPalette.show(context, app);
+    if (!mounted || command == null) return;
+    _triggerShortcut(app, command);
   }
 
   bool _shortcutEnabled(
@@ -235,6 +254,48 @@ class _MainPageState extends State<MainPage> {
         unawaited(
           const ToolbarWidget().saveConfigurationShortcut(context, app),
         );
+        break;
+      case MdsShortcutCommand.restoreDefaultConfiguration:
+        unawaited(
+          const ToolbarWidget().restoreDefaultConfigurationShortcut(
+            context,
+            app,
+          ),
+        );
+        break;
+      case MdsShortcutCommand.openLogin:
+        const ToolbarWidget().openLoginShortcut(context);
+        break;
+      case MdsShortcutCommand.openSshTunnel:
+        const ToolbarWidget().openSshTunnelShortcut(context);
+        break;
+      case MdsShortcutCommand.openFontSettings:
+        const ToolbarWidget().openFontSettingsShortcut(context, app);
+        break;
+      case MdsShortcutCommand.openShotHistory:
+        unawaited(
+          const ToolbarWidget().openShotHistoryShortcut(context, app),
+        );
+        break;
+      case MdsShortcutCommand.openKeyboardShortcuts:
+        const ToolbarWidget().openKeyboardShortcutsShortcut(context);
+        break;
+      case MdsShortcutCommand.openAbout:
+        const ToolbarWidget().openAboutShortcut(context);
+        break;
+      case MdsShortcutCommand.restoreAllSettings:
+        unawaited(
+          const ToolbarWidget().restoreAllSettingsShortcut(context, app),
+        );
+        break;
+      case MdsShortcutCommand.setLightTheme:
+        app.themeMode = 0;
+        break;
+      case MdsShortcutCommand.setAutoTheme:
+        app.themeMode = 2;
+        break;
+      case MdsShortcutCommand.setDarkTheme:
+        app.themeMode = 1;
         break;
       case MdsShortcutCommand.globalRate:
         unawaited(showRateShortcutMenu(context, app));

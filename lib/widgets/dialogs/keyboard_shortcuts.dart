@@ -115,6 +115,7 @@ class KeyboardShortcutsDialog {
 
 const _categories = [
   'General',
+  'Settings',
   'Global',
   'Panel',
   'Shot',

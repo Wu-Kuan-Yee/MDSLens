@@ -582,6 +582,44 @@ class ToolbarWidget extends StatelessWidget {
   ) =>
       _chooseConfigurationSaveFormat(context, app);
 
+  Future<void> restoreDefaultConfigurationShortcut(
+    BuildContext context,
+    AppState app,
+  ) =>
+      _confirmRestoreDefaultConfiguration(context, app);
+
+  void openLoginShortcut(BuildContext context) {
+    LoginDialog.show(context);
+  }
+
+  void openSshTunnelShortcut(BuildContext context) {
+    SshDialog.show(context);
+  }
+
+  void openFontSettingsShortcut(BuildContext context, AppState app) {
+    _showFontDialog(context, app);
+  }
+
+  Future<void> openShotHistoryShortcut(
+    BuildContext context,
+    AppState app,
+  ) =>
+      _showShotHistoryManager(context, app);
+
+  void openKeyboardShortcutsShortcut(BuildContext context) {
+    KeyboardShortcutsDialog.show(context);
+  }
+
+  void openAboutShortcut(BuildContext context) {
+    AboutDialogWidget.show(context);
+  }
+
+  Future<void> restoreAllSettingsShortcut(
+    BuildContext context,
+    AppState app,
+  ) =>
+      _confirmRestoreAllSettings(context, app);
+
   void openInternalWebPagesShortcut(BuildContext context, AppState app) {
     _showWebBookmarks(context, app);
   }
@@ -1135,6 +1173,9 @@ class ToolbarWidget extends StatelessWidget {
           case 'shortcuts':
             KeyboardShortcutsDialog.show(ctx);
             break;
+          case 'vim-mode':
+            app.setVimMode(!app.vimMode);
+            break;
           case 'restore-all':
             _confirmRestoreAllSettings(ctx, app);
             break;
@@ -1165,6 +1206,12 @@ class ToolbarWidget extends StatelessWidget {
           value: 'shortcuts',
           icon: Icons.keyboard_alt_outlined,
           label: 'Keyboard shortcuts',
+        ),
+        _settingsToggleMenuItem(
+          value: 'vim-mode',
+          icon: Icons.terminal_rounded,
+          label: 'Vim mode (keyboard-only)',
+          checked: app.vimMode,
         ),
         _settingsMenuItem(
           value: 'restore-all',
@@ -1206,6 +1253,26 @@ class ToolbarWidget extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  PopupMenuItem<String> _settingsToggleMenuItem({
+    required String value,
+    required IconData icon,
+    required String label,
+    required bool checked,
+  }) {
+    return CheckedPopupMenuItem<String>(
+      key: ValueKey('settings-$value'),
+      value: value,
+      checked: checked,
+      child: Row(
+        children: [
+          Icon(icon, size: 21),
+          const SizedBox(width: 12),
+          Expanded(child: Text(label)),
+        ],
       ),
     );
   }

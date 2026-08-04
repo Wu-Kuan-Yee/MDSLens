@@ -172,6 +172,60 @@ void main() {
     );
   });
 
+  testWidgets('Vim mode opens a keyboard command palette', (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: MainPage()),
+      ),
+    );
+    await tester.pump();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyDownEvent(
+      LogicalKeyboardKey.semicolon,
+      character: ':',
+      physicalKey: PhysicalKeyboardKey.semicolon,
+    );
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.semicolon);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('vim-command-palette')), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('vim-command-query')),
+      'Point mode',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(app.interactionMode, 1);
+
+    // With an empty command line, Vim j selects the next command and Enter
+    // runs it without requiring a mouse click.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyDownEvent(
+      LogicalKeyboardKey.semicolon,
+      character: ':',
+      physicalKey: PhysicalKeyboardKey.semicolon,
+    );
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.semicolon);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('recent-configurations-dialog')),
+      findsOneWidget,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('Multiple panel export selects loaded panels in one dialog', (
     tester,
   ) async {
@@ -1209,6 +1263,7 @@ void main() {
     first.interactionMode = 1;
     first.themeMode = 0;
     first.toolbarCollapsed = true;
+    first.setVimMode(true);
     first.setAutoCheckUpdates(false);
     first.shotText = '163701';
     first.applyFontSettings(
@@ -1235,6 +1290,7 @@ void main() {
     expect(second.interactionMode, 1);
     expect(second.themeMode, 0);
     expect(second.toolbarCollapsed, isTrue);
+    expect(second.vimMode, isTrue);
     expect(second.autoCheckUpdates, isFalse);
     expect(second.shotText, '163701');
     expect(second.fontFamily, 'Courier New');
@@ -4814,7 +4870,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    expect(find.byType(PopupMenuDivider), findsNWidgets(5));
+    expect(find.byType(PopupMenuDivider), findsNWidgets(6));
   });
 
   testWidgets('Shot history uses the polished compact dropdown', (
@@ -5596,6 +5652,7 @@ void main() {
       ),
     );
 
+    expect(app.vimMode, isFalse);
     expect(find.byTooltip('About MDSLens'), findsNothing);
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
@@ -5603,12 +5660,16 @@ void main() {
     expect(find.byIcon(Icons.language_rounded), findsOneWidget);
     expect(find.byIcon(Icons.dashboard_customize_rounded), findsOneWidget);
     expect(find.byIcon(Icons.font_download_outlined), findsOneWidget);
+    expect(find.text('Vim mode (keyboard-only)'), findsOneWidget);
     expect(find.byIcon(Icons.restore_rounded), findsOneWidget);
     expect(
       find.byKey(const ValueKey('settings-auto-update-check')),
       findsNothing,
     );
     expect(find.byIcon(Icons.info_outline_rounded), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('settings-vim-mode')));
+    await tester.pumpAndSettle();
+    expect(app.vimMode, isTrue);
   });
 
   testWidgets('Settings can restore every preference after confirmation', (
@@ -5619,6 +5680,7 @@ void main() {
     addTearDown(app.dispose);
     app.themeMode = 1;
     app.dataMode = 2;
+    app.setVimMode(true);
     app.applyFontSettings('Arial', 17, 12, 13, 16, iconSize: 30);
     app.addWebBookmark('Example', 'https://example.com');
     app.shotText = '163714';
@@ -5652,6 +5714,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(app.themeMode, 2);
+    expect(app.vimMode, isFalse);
     expect(app.dataMode, 0);
     expect(app.fontFamily, 'System');
     expect(app.fontLegendSize, 11);

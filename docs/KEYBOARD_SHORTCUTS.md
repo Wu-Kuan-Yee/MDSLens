@@ -1,10 +1,21 @@
 # Keyboard shortcuts
 
 MDSLens exposes its desktop keyboard commands from **Settings > Keyboard
-shortcuts**. The defaults adapt to the host platform: macOS uses Command,
-Windows and Linux use Ctrl, and Linux also offers H/J/K/L navigation. A
-hardware keyboard is required on mobile devices; touch and stylus controls are
-unchanged.
+shortcuts**. The defaults adapt to the host platform: macOS uses Command and
+Windows/Linux use Ctrl. Arrow keys and H/J/K/L navigation are available on all
+desktop platforms. A hardware keyboard is required on mobile devices; touch
+and stylus controls are unchanged.
+
+## Vim mode
+
+**Settings > Vim mode (keyboard-only)** is an independent, opt-in mode and is
+off by default. When enabled, the workspace keeps the ordinary shortcuts but
+adds a keyboard-first command line: press `:` (Shift+;) anywhere outside a text
+field, type a command name, and press Enter. Use `j`/`k` or the arrow keys to
+move through matching commands, and Escape to cancel. Every application action
+listed in the shortcut settings is available from this command line, so the
+main workspace can be operated without a mouse. Tab/Shift+Tab and Enter/Space
+continue to operate focused controls and dialog buttons normally.
 
 ## Shortcut sequences
 

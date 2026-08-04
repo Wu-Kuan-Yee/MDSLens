@@ -51,6 +51,7 @@ const _filePreferenceKeys = <String>[
   'interactionMode',
   'themeMode',
   'toolbarCollapsed',
+  'vimMode',
   'autoCheckUpdates',
   'fontFamily',
   'fontLegendSize',
@@ -1157,6 +1158,18 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Vim mode is an opt-in keyboard-first workspace.  Keep it separate from
+  // the ordinary shortcut bindings so enabling it never rewrites a user's
+  // custom shortcuts.
+  bool _vimMode = false;
+  bool get vimMode => _vimMode;
+  void setVimMode(bool enabled) {
+    if (_vimMode == enabled) return;
+    _vimMode = enabled;
+    savePreferences();
+    notifyListeners();
+  }
+
   bool _autoCheckUpdates = true;
   bool get autoCheckUpdates => _autoCheckUpdates;
   void setAutoCheckUpdates(bool enabled) {
@@ -2160,6 +2173,9 @@ class AppState extends ChangeNotifier {
       _toolbarCollapsed = setting('toolbarCollapsed') is bool
           ? setting('toolbarCollapsed') as bool
           : _toolbarCollapsed;
+      _vimMode = setting('vimMode') is bool
+          ? setting('vimMode') as bool
+          : _vimMode;
       _autoCheckUpdates = setting('autoCheckUpdates') is bool
           ? setting('autoCheckUpdates') as bool
           : _autoCheckUpdates;
@@ -2292,6 +2308,7 @@ class AppState extends ChangeNotifier {
         'interactionMode': _interactionMode,
         'themeMode': _themeMode,
         'toolbarCollapsed': _toolbarCollapsed,
+        'vimMode': _vimMode,
         'autoCheckUpdates': _autoCheckUpdates,
         'fontFamily': _fontFamily,
         'fontLegendSize': _fontLegendSize,
@@ -2846,6 +2863,7 @@ class AppState extends ChangeNotifier {
     _interactionMode = 0;
     _themeMode = 2;
     _toolbarCollapsed = false;
+    _vimMode = false;
     _autoCheckUpdates = true;
     _fontFamily = 'System';
     _fontLegendSize = 11;
