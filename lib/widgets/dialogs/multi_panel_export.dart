@@ -11,6 +11,7 @@ import '../../services/platform_file_dialog.dart';
 import '../../services/simple_zip.dart';
 import '../polished_dropdown.dart';
 import 'keyboard_safe_dialog.dart';
+import '../vim_focus.dart';
 
 enum PanelExportFormat {
   text('Text', 'txt', Icons.description_outlined),
@@ -274,6 +275,7 @@ Future<PanelExportRequest?> showMultiPanelExportDialog(
                           child: TextField(
                             key: const ValueKey('panel-export-x-min'),
                             controller: xMinController,
+                            readOnly: vimTextFieldReadOnly(context),
                             keyboardType: const TextInputType.numberWithOptions(
                               signed: true,
                               decimal: true,
@@ -287,6 +289,7 @@ Future<PanelExportRequest?> showMultiPanelExportDialog(
                           child: TextField(
                             key: const ValueKey('panel-export-x-max'),
                             controller: xMaxController,
+                            readOnly: vimTextFieldReadOnly(context),
                             keyboardType: const TextInputType.numberWithOptions(
                               signed: true,
                               decimal: true,

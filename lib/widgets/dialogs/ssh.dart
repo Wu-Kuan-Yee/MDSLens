@@ -6,6 +6,7 @@ import '../../models/app_state.dart';
 import '../../services/identity_file_access.dart';
 import '../polished_dropdown.dart';
 import 'keyboard_safe_dialog.dart';
+import '../vim_focus.dart';
 
 class SshDialog extends StatelessWidget {
   const SshDialog({super.key});
@@ -192,6 +193,7 @@ class SshDialog extends StatelessWidget {
                     controller: hostCtrl,
                     focusNode: hostFocus,
                     autofocus: true,
+                    readOnly: vimTextFieldReadOnly(ctx),
                     decoration: const InputDecoration(
                       labelText: 'Host',
                       hintText: 'ssh.example.com',
@@ -211,6 +213,7 @@ class SshDialog extends StatelessWidget {
                           key: const ValueKey('ssh-user'),
                           controller: userCtrl,
                           focusNode: userFocus,
+                          readOnly: vimTextFieldReadOnly(ctx),
                           decoration: const InputDecoration(labelText: 'User'),
                           textInputAction: TextInputAction.next,
                           autofillHints: const [AutofillHints.username],
@@ -225,6 +228,7 @@ class SshDialog extends StatelessWidget {
                           key: const ValueKey('ssh-port'),
                           controller: portCtrl,
                           focusNode: portFocus,
+                          readOnly: vimTextFieldReadOnly(ctx),
                           decoration: const InputDecoration(labelText: 'Port'),
                           keyboardType: TextInputType.number,
                           textInputAction: TextInputAction.next,
@@ -242,6 +246,7 @@ class SshDialog extends StatelessWidget {
                     key: const ValueKey('ssh-password'),
                     controller: passCtrl,
                     focusNode: passFocus,
+                    readOnly: vimTextFieldReadOnly(ctx),
                     decoration: const InputDecoration(labelText: 'Password'),
                     obscureText: true,
                     enableSuggestions: false,
@@ -263,6 +268,7 @@ class SshDialog extends StatelessWidget {
                           key: const ValueKey('ssh-identity'),
                           controller: keyCtrl,
                           focusNode: keyFocus,
+                          readOnly: vimTextFieldReadOnly(ctx),
                           decoration: const InputDecoration(
                             labelText: 'Identity File',
                             hintText: '~/.ssh/id_ed25519',

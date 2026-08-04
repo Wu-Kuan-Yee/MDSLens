@@ -21,6 +21,7 @@ import 'polished_dropdown.dart';
 import 'polished_popup_menu.dart';
 import 'responsive_plot_layout.dart';
 import 'configuration_import_prompt.dart';
+import 'vim_focus.dart';
 
 class _LayoutDragData {
   const _LayoutDragData.column(this.column) : row = null;
@@ -805,6 +806,7 @@ class ToolbarWidget extends StatelessWidget {
           child: TextField(
             controller: app.shotCtrl,
             focusNode: app.shotFocusNode,
+            readOnly: vimTextFieldReadOnly(context),
             style: TextStyle(fontSize: uiSize),
             decoration: InputDecoration(
               isDense: true,
@@ -1417,11 +1419,13 @@ class ToolbarWidget extends StatelessWidget {
           children: [
             TextField(
               controller: aliasCtrl,
+              readOnly: vimTextFieldReadOnly(ctx),
               decoration: const InputDecoration(labelText: 'Alias'),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: urlCtrl,
+              readOnly: vimTextFieldReadOnly(ctx),
               decoration: const InputDecoration(labelText: 'URL'),
             ),
           ],
@@ -1479,6 +1483,7 @@ class ToolbarWidget extends StatelessWidget {
                 key: const ValueKey('edit-web-page-alias'),
                 controller: aliasCtrl,
                 autofocus: true,
+                readOnly: vimTextFieldReadOnly(dialogContext),
                 decoration: const InputDecoration(
                   labelText: 'Alias',
                   prefixIcon: Icon(Icons.label_outline_rounded),
@@ -1491,6 +1496,7 @@ class ToolbarWidget extends StatelessWidget {
               TextFormField(
                 key: const ValueKey('edit-web-page-url'),
                 controller: urlCtrl,
+                readOnly: vimTextFieldReadOnly(dialogContext),
                 keyboardType: TextInputType.url,
                 autocorrect: false,
                 decoration: const InputDecoration(
@@ -3138,6 +3144,7 @@ class ToolbarWidget extends StatelessWidget {
                                     'shot-history-retention-limit',
                                   ),
                                   controller: limitController,
+                                  readOnly: vimTextFieldReadOnly(context),
                                   enabled: app.limitShotHistory,
                                   keyboardType: TextInputType.number,
                                   decoration: InputDecoration(

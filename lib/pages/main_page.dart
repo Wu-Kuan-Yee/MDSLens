@@ -46,10 +46,17 @@ class MainPage extends StatefulWidget {
 
 class _MainPageState extends State<MainPage> {
   final _shortcutDispatcher = MdsShortcutDispatcher();
+  final _vimWorkspaceFocusNode = FocusNode(debugLabel: 'vim-workspace');
 
   @override
   void initState() {
     super.initState();
+    registerVimWorkspaceFocus(_vimWorkspaceFocusNode);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && context.read<AppState>().vimMode) {
+        _vimWorkspaceFocusNode.requestFocus();
+      }
+    });
     // A Focus.onKeyEvent callback only receives events while this page (or
     // one of its descendants) owns focus. Clicking an empty chart area can
     // intentionally leave the page without a focused child, which made all
@@ -64,6 +71,8 @@ class _MainPageState extends State<MainPage> {
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handleGlobalKeyEvent);
     _shortcutDispatcher.dispose();
+    unregisterVimWorkspaceFocus(_vimWorkspaceFocusNode);
+    _vimWorkspaceFocusNode.dispose();
     super.dispose();
   }
 
@@ -75,7 +84,7 @@ class _MainPageState extends State<MainPage> {
       fontSize: app.fontUiSize.toDouble(),
     );
     return Focus(
-      canRequestFocus: false,
+      focusNode: _vimWorkspaceFocusNode,
       skipTraversal: true,
       child: FocusTraversalGroup(
         policy: OrderedTraversalPolicy(),
@@ -85,6 +94,7 @@ class _MainPageState extends State<MainPage> {
               behavior: HitTestBehavior.translucent,
               onTap: () {
                 FocusManager.instance.primaryFocus?.unfocus();
+                if (app.vimMode) _vimWorkspaceFocusNode.requestFocus();
                 app.clearSelectedPanel();
               },
               child: Column(
@@ -204,13 +214,14 @@ class _MainPageState extends State<MainPage> {
   ) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
     if (stroke.control || stroke.alt || stroke.meta) return false;
+    final inputResult = handleVimInputModeKey(context, event);
+    if (inputResult == KeyEventResult.handled) return true;
     final key = stroke.key;
     final shift = stroke.shift;
     final focusedPlot = _focusedPlot();
 
     if (key == LogicalKeyboardKey.escape && !shift && vimEditingText()) {
-      leaveVimTextEditing(context);
-      return true;
+      if (leaveVimTextEditing(context)) return true;
     }
     if (key == LogicalKeyboardKey.escape && !shift && focusedPlot) {
       if (app.crosshairX != null) {

@@ -2624,6 +2624,7 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
             TextField(
               key: const ValueKey('panel-setup-title'),
               controller: _titleCtrl,
+              readOnly: vimTextFieldReadOnly(ctx),
               decoration: const InputDecoration(
                 labelText: 'Title',
                 isDense: true,
@@ -2633,6 +2634,7 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
             TextField(
               key: const ValueKey('panel-setup-x-label'),
               controller: _xLabelCtrl,
+              readOnly: vimTextFieldReadOnly(ctx),
               decoration: const InputDecoration(
                 labelText: 'X Label',
                 isDense: true,
@@ -2642,6 +2644,7 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
             TextField(
               key: const ValueKey('panel-setup-y-label'),
               controller: _yLabelCtrl,
+              readOnly: vimTextFieldReadOnly(ctx),
               decoration: const InputDecoration(
                 labelText: 'Y Label',
                 isDense: true,
@@ -2651,6 +2654,7 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
             TextField(
               key: const ValueKey('panel-setup-extraction-points'),
               controller: _pointsCtrl,
+              readOnly: vimTextFieldReadOnly(ctx),
               decoration: const InputDecoration(
                 labelText: 'Extraction Points',
                 isDense: true,
@@ -2680,6 +2684,7 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
                   Expanded(
                     child: TextField(
                       controller: _xMinCtrl,
+                      readOnly: vimTextFieldReadOnly(ctx),
                       decoration: const InputDecoration(
                         labelText: 'X min',
                         isDense: true,
@@ -2691,6 +2696,7 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
                   Expanded(
                     child: TextField(
                       controller: _xMaxCtrl,
+                      readOnly: vimTextFieldReadOnly(ctx),
                       decoration: const InputDecoration(
                         labelText: 'X max',
                         isDense: true,
@@ -2715,6 +2721,7 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
                   Expanded(
                     child: TextField(
                       controller: _yMinCtrl,
+                      readOnly: vimTextFieldReadOnly(ctx),
                       decoration: const InputDecoration(
                         labelText: 'Y min',
                         isDense: true,
@@ -2726,6 +2733,7 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
                   Expanded(
                     child: TextField(
                       controller: _yMaxCtrl,
+                      readOnly: vimTextFieldReadOnly(ctx),
                       decoration: const InputDecoration(
                         labelText: 'Y max',
                         isDense: true,
@@ -3181,6 +3189,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                             child: TextField(
                               key: ValueKey('data-shot-$i'),
                               controller: _rows[i].shot,
+                              readOnly: vimTextFieldReadOnly(ctx),
                               decoration: _dsDeco(),
                               style: const TextStyle(fontSize: 12),
                             ),
@@ -3254,6 +3263,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                             child: TextField(
                               key: ValueKey('data-legend-$i'),
                               controller: _rows[i].legend,
+                              readOnly: vimTextFieldReadOnly(ctx),
                               decoration: _dsDeco().copyWith(
                                 hintText: signalLegendLabel({
                                   'y_expr': _rows[i].y.text,
@@ -3267,6 +3277,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                             child: TextField(
                               key: ValueKey('data-server-$i'),
                               controller: _rows[i].server,
+                              readOnly: vimTextFieldReadOnly(ctx),
                               decoration: _dsDeco(),
                               style: const TextStyle(fontSize: 12),
                             ),
@@ -3615,6 +3626,7 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
           groupId: _tapRegionGroup,
           controller: widget.controller,
           focusNode: _node,
+          readOnly: vimTextFieldReadOnly(ctx),
           decoration: _DataSourceDialogState._dsDeco(),
           style: const TextStyle(fontSize: 12),
           onTap: _update,
@@ -3732,6 +3744,7 @@ class _ColorPicker extends StatelessWidget {
                         const Text('#'),
                         Expanded(
                           child: TextField(
+                            readOnly: vimTextFieldReadOnly(ctx),
                             decoration: const InputDecoration(isDense: true),
                             onSubmitted: (v) {
                               final cleaned = v.replaceFirst('#', '');

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/app_state.dart';
 import 'keyboard_safe_dialog.dart';
+import '../vim_focus.dart';
 
 class LoginDialog extends StatelessWidget {
   const LoginDialog({super.key});
@@ -110,6 +111,7 @@ class LoginDialog extends StatelessWidget {
                   controller: apiCtrl,
                   focusNode: apiFocus,
                   autofocus: true,
+                  readOnly: vimTextFieldReadOnly(ctx),
                   enabled: !loading,
                   decoration: const InputDecoration(labelText: 'API URL'),
                   keyboardType: TextInputType.url,
@@ -122,6 +124,7 @@ class LoginDialog extends StatelessWidget {
                   key: const ValueKey('login-username'),
                   controller: userCtrl,
                   focusNode: userFocus,
+                  readOnly: vimTextFieldReadOnly(ctx),
                   enabled: !loading,
                   decoration: const InputDecoration(labelText: 'Username'),
                   textInputAction: TextInputAction.next,
@@ -136,6 +139,7 @@ class LoginDialog extends StatelessWidget {
                   key: const ValueKey('login-password'),
                   controller: passCtrl,
                   focusNode: passFocus,
+                  readOnly: vimTextFieldReadOnly(ctx),
                   enabled: !loading,
                   decoration: const InputDecoration(labelText: 'Password'),
                   obscureText: true,

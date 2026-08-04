@@ -58,7 +58,7 @@ class _KeyboardPopupMenuItemState<T>
     if (!widget.autofocus) return;
     _menuFocusNode = FocusNode(debugLabel: 'polished-popup-menu-item');
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _menuFocusNode?.requestFocus();
+      _requestInitialFocus();
     });
   }
 
@@ -138,18 +138,34 @@ class _KeyboardPopupMenuItemState<T>
     final current = FocusManager.instance.primaryFocus;
     final policy = FocusTraversalGroup.maybeOf(context);
     if (current != null && policy != null) {
-      if (backward) {
-        policy.inDirection(current, TraversalDirection.up);
-      } else {
-        policy.inDirection(current, TraversalDirection.down);
-      }
-      return;
+      final moved = policy.inDirection(
+        current,
+        backward ? TraversalDirection.up : TraversalDirection.down,
+      );
+      if (moved) return;
     }
-    if (backward) {
-      FocusScope.of(context).previousFocus();
-    } else {
-      FocusScope.of(context).nextFocus();
-    }
+    final scope = FocusScope.of(context);
+    final moved = backward ? scope.previousFocus() : scope.nextFocus();
+    if (moved) return;
+
+    // Keep menu navigation inside this popup and wrap at its edges. The
+    // directional policy can otherwise jump between visually unrelated menu
+    // groups, especially when a menu is opened near a screen edge.
+    final descendants = scope.traversalDescendants
+        .where((node) => node.canRequestFocus && !node.skipTraversal)
+        .toList(growable: false);
+    if (descendants.isEmpty) return;
+    (backward ? descendants.last : descendants.first).requestFocus();
+  }
+
+  void _requestInitialFocus() {
+    if (!widget.autofocus || !mounted) return;
+    _menuFocusNode?.requestFocus();
+    // PopupMenuRoute may perform its own focus request after the first frame;
+    // repeat once so the first enabled option remains the actual Vim target.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _menuFocusNode?.requestFocus();
+    });
   }
 
   @override

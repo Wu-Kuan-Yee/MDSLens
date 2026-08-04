@@ -157,12 +157,17 @@ class KeyboardSafeDialog extends StatelessWidget {
     final tinyScreen = tinyWidth || tinyHeight;
 
     Widget focusShell(Widget dialog) {
-      return FocusTraversalGroup(
-        child: Focus(
-          canRequestFocus: false,
-          skipTraversal: true,
-          onKeyEvent: (node, event) => handleVimDialogKey(context, event),
-          child: dialog,
+      return PopScope(
+        onPopInvokedWithResult: (_, __) {
+          VimInputModeScope.setMode(context, VimInputMode.normal);
+        },
+        child: FocusTraversalGroup(
+          child: Focus(
+            canRequestFocus: false,
+            skipTraversal: true,
+            onKeyEvent: (node, event) => handleVimDialogKey(context, event),
+            child: dialog,
+          ),
         ),
       );
     }

@@ -68,10 +68,64 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
   late final FocusNode _focusNode = FocusNode(
     debugLabel: 'dropdown-${widget.id}',
   );
+  FocusNode? _actionFocusNode;
+  final List<FocusNode> _optionFocusNodes = <FocusNode>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _syncMenuFocusNodes();
+  }
+
+  @override
+  void didUpdateWidget(covariant PolishedDropdown<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncMenuFocusNodes();
+  }
+
+  void _syncMenuFocusNodes() {
+    if (widget.menuAction != null && _actionFocusNode == null) {
+      _actionFocusNode = FocusNode(
+        debugLabel: 'dropdown-${widget.id}-menu-action',
+      );
+    } else if (widget.menuAction == null && _actionFocusNode != null) {
+      _actionFocusNode!.dispose();
+      _actionFocusNode = null;
+    }
+    while (_optionFocusNodes.length < widget.options.length) {
+      final index = _optionFocusNodes.length;
+      _optionFocusNodes.add(
+        FocusNode(debugLabel: 'dropdown-${widget.id}-option-$index'),
+      );
+    }
+    while (_optionFocusNodes.length > widget.options.length) {
+      _optionFocusNodes.removeLast().dispose();
+    }
+  }
+
+  void _focusFirstOption() {
+    if (!_open || _optionFocusNodes.isEmpty) return;
+    void request() {
+      if (!_open || !mounted || _optionFocusNodes.isEmpty) return;
+      _optionFocusNodes.first.requestFocus();
+    }
+
+    // MenuAnchor inserts its menu route after onOpen. The second frame is
+    // intentional: it makes the first option deterministic even when the
+    // menu has an entrance animation or is opened from a keyboard event.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      request();
+      WidgetsBinding.instance.addPostFrameCallback((_) => request());
+    });
+  }
 
   @override
   void dispose() {
     _focusNode.dispose();
+    _actionFocusNode?.dispose();
+    for (final node in _optionFocusNodes) {
+      node.dispose();
+    }
     super.dispose();
   }
 
@@ -88,7 +142,10 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
     return MenuAnchor(
       animated: true,
       consumeOutsideTap: false,
-      onOpen: () => setState(() => _open = true),
+      onOpen: () {
+        setState(() => _open = true);
+        _focusFirstOption();
+      },
       onClose: () => setState(() => _open = false),
       alignmentOffset: const Offset(0, 6),
       style: MenuStyle(
@@ -216,6 +273,7 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
       padding: const EdgeInsets.fromLTRB(2, 1, 2, 4),
       child: MenuItemButton(
         key: ValueKey('${widget.id}-menu-action'),
+        focusNode: _actionFocusNode,
         onPressed: () {
           MenuController.maybeOf(context)?.close();
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -341,6 +399,7 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
     final isSelected = option.value == widget.value;
     return MenuItemButton(
       key: ValueKey('${widget.id}-option-$index'),
+      focusNode: _optionFocusNodes[index],
       onPressed: () => widget.onChanged(option.value),
       leadingIcon: option.icon == null
           ? null

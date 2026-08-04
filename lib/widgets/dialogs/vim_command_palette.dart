@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../models/app_state.dart';
 import '../../services/keyboard_shortcuts.dart';
 import 'keyboard_safe_dialog.dart';
+import '../vim_focus.dart';
 
 /// A small Vim-style command line.  It gives every application action a
 /// discoverable keyboard path without requiring users to memorize shortcuts.
@@ -37,6 +38,8 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
   final _queryFocus = FocusNode(debugLabel: 'vim-command-query');
   final _listController = ScrollController();
   int _selectedIndex = 0;
+  bool _suppressQueryChanged = false;
+  bool _closing = false;
 
   List<MdsShortcutDefinition> get _commands {
     final query = _queryController.text.trim().toLowerCase();
@@ -63,8 +66,10 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
   @override
   void initState() {
     super.initState();
+    HardwareKeyboard.instance.addHandler(_handleGlobalKey);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
+        VimInputModeScope.setMode(context, VimInputMode.insert);
         _queryFocus.requestFocus();
         _ensureSelectedVisible();
       }
@@ -73,10 +78,18 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleGlobalKey);
     _queryController.dispose();
     _queryFocus.dispose();
     _listController.dispose();
     super.dispose();
+  }
+
+  bool _handleGlobalKey(KeyEvent event) {
+    if (!mounted) return false;
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return false;
+    return _handleKeyEvent(_queryFocus, event) == KeyEventResult.handled;
   }
 
   void _ensureSelectedVisible() {
@@ -105,17 +118,42 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
     _ensureSelectedVisible();
   }
 
+  void _handleQueryChanged(String value) {
+    if (_suppressQueryChanged || value.isEmpty) {
+      _selectIndex(0);
+      return;
+    }
+    // A blank Vim command line uses j/k for list navigation. Handling the
+    // character at the controller boundary also covers platforms where the
+    // editable text node consumes the physical key before its parent Focus.
+    final appVim = VimModeScope.enabled(context);
+    if (appVim && (value == 'j' || value == 'k')) {
+      _suppressQueryChanged = true;
+      _queryController.clear();
+      _suppressQueryChanged = false;
+      final commands = _commands;
+      if (commands.isNotEmpty) {
+        final next = value == 'j'
+            ? (_selectedIndex + 1) % commands.length
+            : (_selectedIndex - 1 + commands.length) % commands.length;
+        _selectIndex(next);
+      }
+      return;
+    }
+    _selectIndex(0);
+  }
+
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
     final commands = _commands;
     if (event.logicalKey == LogicalKeyboardKey.escape) {
-      Navigator.pop(context);
+      _pop();
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.enter && commands.isNotEmpty) {
-      Navigator.pop(context, commands[_selectedIndex].command);
+      _pop(commands[_selectedIndex].command);
       return KeyEventResult.handled;
     }
     final backwards = event.logicalKey == LogicalKeyboardKey.arrowUp ||
@@ -139,8 +177,23 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
   void _submit() {
     final commands = _commands;
     if (commands.isNotEmpty) {
-      Navigator.pop(context, commands[_selectedIndex].command);
+      _pop(commands[_selectedIndex].command);
     }
+  }
+
+  void _pop([MdsShortcutCommand? command]) {
+    if (_closing) return;
+    _closing = true;
+    _queryFocus.unfocus();
+    VimInputModeScope.setMode(context, VimInputMode.normal);
+    Navigator.pop(context, command);
+    requestVimWorkspaceFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      requestVimWorkspaceFocus();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        requestVimWorkspaceFocus();
+      });
+    });
   }
 
   @override
@@ -168,6 +221,7 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
               controller: _queryController,
               focusNode: _queryFocus,
               autofocus: true,
+              readOnly: false,
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.search_rounded),
@@ -181,7 +235,7 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
                   icon: const Icon(Icons.clear_rounded),
                 ),
               ),
-              onChanged: (_) => _selectIndex(0),
+              onChanged: _handleQueryChanged,
               onSubmitted: (_) => _submit(),
             ),
             const SizedBox(height: 12),
@@ -229,7 +283,7 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
                           fontSize: 12,
                         ),
                       ),
-                      onTap: () => Navigator.pop(context, definition.command),
+                      onTap: () => _pop(definition.command),
                     );
                   },
                 ),
@@ -238,7 +292,7 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: _pop,
             child: const Text('Cancel'),
           ),
           FilledButton.icon(

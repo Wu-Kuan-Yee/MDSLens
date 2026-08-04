@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../models/app_state.dart';
 import '../../services/keyboard_shortcuts.dart';
 import 'keyboard_safe_dialog.dart';
+import '../vim_focus.dart';
 
 /// A keyboard-addressable equivalent of the Settings popup.  It is opened by
 /// the Vim command palette, so settings remain reachable even when no pointer
@@ -47,6 +48,8 @@ class _KeyboardSettingsPaletteState extends State<KeyboardSettingsPalette> {
   final _queryController = TextEditingController();
   final _queryFocus = FocusNode(debugLabel: 'keyboard-settings-query');
   int _selectedIndex = 0;
+  bool _suppressQueryChanged = false;
+  bool _closing = false;
 
   List<MdsShortcutCommand> get _filteredOptions {
     final query = _queryController.text.trim().toLowerCase();
@@ -64,16 +67,28 @@ class _KeyboardSettingsPaletteState extends State<KeyboardSettingsPalette> {
   @override
   void initState() {
     super.initState();
+    HardwareKeyboard.instance.addHandler(_handleGlobalKey);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _queryFocus.requestFocus();
+      if (mounted) {
+        VimInputModeScope.setMode(context, VimInputMode.insert);
+        _queryFocus.requestFocus();
+      }
     });
   }
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleGlobalKey);
     _queryController.dispose();
     _queryFocus.dispose();
     super.dispose();
+  }
+
+  bool _handleGlobalKey(KeyEvent event) {
+    if (!mounted) return false;
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return false;
+    return _handleKeyEvent(_queryFocus, event) == KeyEventResult.handled;
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
@@ -82,11 +97,11 @@ class _KeyboardSettingsPaletteState extends State<KeyboardSettingsPalette> {
     }
     final options = _filteredOptions;
     if (event.logicalKey == LogicalKeyboardKey.escape) {
-      Navigator.pop(context);
+      _pop();
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.enter && options.isNotEmpty) {
-      Navigator.pop(context, options[_selectedIndex]);
+      _pop(options[_selectedIndex]);
       return KeyEventResult.handled;
     }
     final backwards = event.logicalKey == LogicalKeyboardKey.arrowUp ||
@@ -106,6 +121,43 @@ class _KeyboardSettingsPaletteState extends State<KeyboardSettingsPalette> {
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
+  }
+
+  void _pop([MdsShortcutCommand? command]) {
+    if (_closing) return;
+    _closing = true;
+    _queryFocus.unfocus();
+    VimInputModeScope.setMode(context, VimInputMode.normal);
+    Navigator.pop(context, command);
+    requestVimWorkspaceFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      requestVimWorkspaceFocus();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        requestVimWorkspaceFocus();
+      });
+    });
+  }
+
+  void _handleQueryChanged(String value) {
+    if (_suppressQueryChanged || value.isEmpty) {
+      setState(() => _selectedIndex = 0);
+      return;
+    }
+    if (VimModeScope.enabled(context) && (value == 'j' || value == 'k')) {
+      _suppressQueryChanged = true;
+      _queryController.clear();
+      _suppressQueryChanged = false;
+      final options = _filteredOptions;
+      if (options.isNotEmpty) {
+        setState(() {
+          _selectedIndex = value == 'j'
+              ? (_selectedIndex + 1) % options.length
+              : (_selectedIndex - 1 + options.length) % options.length;
+        });
+      }
+      return;
+    }
+    setState(() => _selectedIndex = 0);
   }
 
   @override
@@ -133,11 +185,12 @@ class _KeyboardSettingsPaletteState extends State<KeyboardSettingsPalette> {
               controller: _queryController,
               focusNode: _queryFocus,
               autofocus: true,
+              readOnly: false,
               decoration: const InputDecoration(
                 prefixIcon: Icon(Icons.search_rounded),
                 hintText: 'Search settings, then press Enter',
               ),
-              onChanged: (_) => setState(() => _selectedIndex = 0),
+              onChanged: _handleQueryChanged,
             ),
             const SizedBox(height: 12),
             if (options.isEmpty)
@@ -173,7 +226,7 @@ class _KeyboardSettingsPaletteState extends State<KeyboardSettingsPalette> {
                         widget.app.shortcutText(command),
                         style: TextStyle(color: colors.onSurfaceVariant),
                       ),
-                      onTap: () => Navigator.pop(context, command),
+                      onTap: () => _pop(command),
                     );
                   },
                 ),
@@ -182,14 +235,13 @@ class _KeyboardSettingsPaletteState extends State<KeyboardSettingsPalette> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: _pop,
             child: const Text('Cancel'),
           ),
           FilledButton.icon(
             key: const ValueKey('keyboard-settings-run'),
-            onPressed: options.isEmpty
-                ? null
-                : () => Navigator.pop(context, options[_selectedIndex]),
+            onPressed:
+                options.isEmpty ? null : () => _pop(options[_selectedIndex]),
             icon: const Icon(Icons.play_arrow_rounded),
             label: const Text('Open'),
           ),
