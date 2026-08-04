@@ -2373,10 +2373,12 @@ class ToolbarWidget extends StatelessWidget {
                   ),
                 ),
                 TextButton(
+                  key: const ValueKey('layout-cancel'),
                   onPressed: () => Navigator.pop(ctx),
                   child: const Text('Cancel'),
                 ),
                 TextButton(
+                  key: const ValueKey('layout-apply'),
                   onPressed: () {
                     app.applyLayoutColumns(draftColumns);
                     if (app.plots.isNotEmpty) {

@@ -34,10 +34,36 @@ class VimInputState extends ChangeNotifier {
   VimInputMode _mode = VimInputMode.normal;
   VimVisualMode _visualMode = VimVisualMode.character;
   int? _visualAnchor;
+  FocusNode? _editingNode;
+  TextEditingValue? _editingSnapshot;
 
   VimInputMode get mode => _mode;
   VimVisualMode get visualMode => _visualMode;
   int? get visualAnchor => _visualAnchor;
+
+  /// Save the value that was present immediately before entering Insert mode.
+  /// A single active editor is enough: Vim only has one primary focus at a
+  /// time, and keeping the snapshot here means Escape works consistently in
+  /// dialogs, popups, and the main page.
+  void beginTextEdit(FocusNode node, TextEditingValue value) {
+    if (identical(_editingNode, node) && _editingSnapshot != null) return;
+    _editingNode = node;
+    _editingSnapshot = value;
+  }
+
+  TextEditingValue? takeTextEditSnapshot(FocusNode node) {
+    if (!identical(_editingNode, node)) return null;
+    final snapshot = _editingSnapshot;
+    _editingNode = null;
+    _editingSnapshot = null;
+    return snapshot;
+  }
+
+  void commitTextEdit([FocusNode? node]) {
+    if (node != null && !identical(_editingNode, node)) return;
+    _editingNode = null;
+    _editingSnapshot = null;
+  }
 
   void setMode(
     VimInputMode mode, {
@@ -244,6 +270,22 @@ class _VimFocusHostState extends State<VimFocusHost>
     if (vimEditingText()) return false;
     if (handleVimPlotEditingKey(focusContext ?? context, event)) return true;
     if (enterVimPlotEditing(focusContext ?? context, event)) return true;
+    final hasLineEdgeModifier = !HardwareKeyboard.instance.isControlPressed &&
+        !HardwareKeyboard.instance.isAltPressed &&
+        !HardwareKeyboard.instance.isMetaPressed;
+    if (hasLineEdgeModifier &&
+        (event.logicalKey == LogicalKeyboardKey.caret ||
+            event.logicalKey == LogicalKeyboardKey.dollar ||
+            (HardwareKeyboard.instance.isShiftPressed &&
+                (event.logicalKey == LogicalKeyboardKey.digit6 ||
+                    event.logicalKey == LogicalKeyboardKey.digit4)))) {
+      final lineEnd = event.logicalKey == LogicalKeyboardKey.dollar ||
+          (HardwareKeyboard.instance.isShiftPressed &&
+              event.logicalKey == LogicalKeyboardKey.digit4);
+      if (moveVimLineEdge(focusContext ?? context, last: lineEnd)) {
+        return true;
+      }
+    }
     if (_handleVimPageSequence(focusContext ?? context, event)) return true;
     if (event.logicalKey == LogicalKeyboardKey.escape && focusContext != null) {
       final route = ModalRoute.of(focusContext);
@@ -561,6 +603,7 @@ void _copyEditableSelection(
     ClipboardData(
         text: controller.text.substring(selection.start, selection.end)),
   );
+  VimInputModeScope.maybeOf(context)?.commitTextEdit(node);
   VimInputModeScope.setMode(context, VimInputMode.normal);
 }
 
@@ -580,6 +623,7 @@ void _deleteEditableSelection(
   if (start == end) return;
   controller.text = controller.text.replaceRange(start, end, '');
   _setEditableSelection(controller, base: start, extent: start);
+  VimInputModeScope.maybeOf(context)?.commitTextEdit(node);
   VimInputModeScope.setMode(context, VimInputMode.normal);
 }
 
@@ -591,6 +635,7 @@ void _enterVimInsertMode(
   final controller = _editableController(node);
   if (controller == null) return;
   final next = cursor ?? _editableCursor(controller);
+  VimInputModeScope.maybeOf(context)?.beginTextEdit(node, controller.value);
   _setEditableSelection(controller, base: next, extent: next);
   VimInputModeScope.setMode(context, VimInputMode.insert);
   WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -624,6 +669,18 @@ KeyEventResult handleVimInputModeKey(
 
   if (input.mode == VimInputMode.insert) {
     if (key == LogicalKeyboardKey.escape) {
+      final controller = _editableController(node);
+      final snapshot = input.takeTextEditSnapshot(node);
+      if (controller != null && snapshot != null) {
+        controller.value = snapshot;
+      }
+      input.setMode(VimInputMode.normal);
+      SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      input.commitTextEdit(node);
       input.setMode(VimInputMode.normal);
       SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
       return KeyEventResult.handled;
@@ -638,7 +695,13 @@ KeyEventResult handleVimInputModeKey(
   }
 
   if (input.mode == VimInputMode.visual) {
+    if (key == LogicalKeyboardKey.enter) {
+      input.commitTextEdit(node);
+      input.setMode(VimInputMode.normal);
+      return KeyEventResult.handled;
+    }
     if (key == LogicalKeyboardKey.keyV) {
+      input.commitTextEdit(node);
       input.setMode(VimInputMode.normal);
       return KeyEventResult.handled;
     }
@@ -729,13 +792,24 @@ KeyEventResult handleVimInputModeKey(
     }
     return KeyEventResult.handled;
   }
-  if (key == LogicalKeyboardKey.dollar) {
+  if (key == LogicalKeyboardKey.dollar ||
+      (shift && key == LogicalKeyboardKey.digit4)) {
     final controller = _editableController(node);
     if (controller != null) {
       final cursor = _editableCursor(controller);
       final lineEnd = controller.text.indexOf('\n', cursor);
       final end = lineEnd < 0 ? controller.text.length : lineEnd;
       _setEditableSelection(controller, base: end, extent: end);
+    }
+    return KeyEventResult.handled;
+  }
+  if (key == LogicalKeyboardKey.caret ||
+      (shift && key == LogicalKeyboardKey.digit6)) {
+    final controller = _editableController(node);
+    if (controller != null) {
+      final cursor = _editableCursor(controller);
+      final lineStart = controller.text.lastIndexOf('\n', cursor - 1) + 1;
+      _setEditableSelection(controller, base: lineStart, extent: lineStart);
     }
     return KeyEventResult.handled;
   }
@@ -756,6 +830,11 @@ bool leaveVimTextEditing(BuildContext context) {
       VimInputModeScope.maybeOf(context) != null) {
     final input = VimInputModeScope.maybeOf(context)!;
     if (input.mode != VimInputMode.normal) {
+      final controller = _editableController(current);
+      final snapshot = input.takeTextEditSnapshot(current);
+      if (controller != null && snapshot != null) {
+        controller.value = snapshot;
+      }
       input.setMode(VimInputMode.normal);
       SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
       return true;
@@ -832,22 +911,18 @@ class _VimFocusPage {
       var bestDistance = double.infinity;
       for (var index = 0; index < rows.length; index++) {
         final row = rows[index];
-        final minTop =
-            row.map((item) => item.rect.top).reduce((a, b) => a < b ? a : b);
-        final maxBottom =
-            row.map((item) => item.rect.bottom).reduce((a, b) => a > b ? a : b);
         final minHeight =
             row.map((item) => item.rect.height).reduce((a, b) => a < b ? a : b);
-        final overlap =
-            (target.rect.bottom < maxBottom ? target.rect.bottom : maxBottom) -
-                (target.rect.top > minTop ? target.rect.top : minTop);
         final center =
             row.map((item) => item.rect.center.dy).reduce((a, b) => a + b) /
                 row.length;
         final centerDistance = (target.rect.center.dy - center).abs();
-        final tolerance = (minHeight * 0.45).clamp(10.0, 28.0).toDouble();
-        final sameRow =
-            overlap >= minHeight * 0.35 || centerDistance <= tolerance;
+        // Use visual centers rather than rectangle overlap. A tall card can
+        // overlap the action row below it even though those controls are two
+        // distinct Vim lines; overlap-based grouping made G and J/K jump to
+        // the wrong controls in compact dialogs such as Layout Setup.
+        final tolerance = (minHeight * 0.35).clamp(12.0, 24.0).toDouble();
+        final sameRow = centerDistance <= tolerance;
         if (!sameRow || centerDistance >= bestDistance) continue;
         bestRow = index;
         bestDistance = centerDistance;
@@ -871,8 +946,13 @@ class _VimFocusPage {
     return rows;
   }
 
+  /// The first line is geometric so `gg` starts at the visible top of a route.
+  /// The last line uses traversal order: geometric sorting can put an
+  /// off-screen child of a scroll view after a dialog's action bar merely
+  /// because its global rectangle extends below the viewport.
   List<_VimFocusTarget> get readingOrder => [
-        for (final row in rows) ...row,
+        ...rows.firstOrNull ?? const <_VimFocusTarget>[],
+        ...targets.skip(1),
       ];
 
   int rowOf(_VimFocusTarget target) {
@@ -899,7 +979,11 @@ FocusScopeNode? _vimFocusScope(BuildContext context) {
     final parent = scope!.parent! as FocusScopeNode;
     final parentRoute =
         parent.context == null ? null : ModalRoute.of(parent.context!);
-    if (route != null && parentRoute != route) break;
+    // Some FocusScopeNodes (notably the scopes created by dialogs and
+    // traversal groups) do not expose a BuildContext. They still belong to
+    // the active route, so only stop when a non-null parent route explicitly
+    // differs from the active route.
+    if (route != null && parentRoute != null && parentRoute != route) break;
     if (route == null && parent.context != null && parentRoute != null) break;
     scope = parent;
   }
@@ -980,15 +1064,88 @@ void _requestVimFocus(_VimFocusTarget target) {
   // delaying the key event itself.
   WidgetsBinding.instance.addPostFrameCallback((_) {
     if (!targetContext.mounted) return;
-    unawaited(
-      Scrollable.ensureVisible(
-        targetContext,
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOutCubic,
-        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
-      ),
-    );
+    void reveal() {
+      if (!targetContext.mounted) return;
+      _revealVimTargetInAncestorScrollables(targetContext);
+      // Scrollable.ensureVisible walks every ancestor scrollable. Calling it
+      // once after focus and once on the following frame is intentional: in
+      // Layout Setup the outer horizontal viewport and the per-column
+      // vertical viewport can be laid out in separate passes after a focus
+      // change.
+      unawaited(
+        Scrollable.ensureVisible(
+          targetContext,
+          alignment: 0.5,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOutCubic,
+          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+        ),
+      );
+    }
+
+    reveal();
+    WidgetsBinding.instance.addPostFrameCallback((_) => reveal());
   });
+}
+
+/// Reveal a focused control in every ancestor scroll view. Flutter's
+/// `Scrollable.ensureVisible` normally handles this, but a Layout Setup column
+/// is a horizontal scroll view containing independent vertical scroll views;
+/// when a child is laid out outside the vertical viewport, the default helper
+/// can decide that the nearest viewport already owns the reveal and leave the
+/// column controller at zero. Rect-based correction is deterministic and also
+/// works for custom/adaptive scroll containers on desktop and mobile.
+void _revealVimTargetInAncestorScrollables(BuildContext targetContext) {
+  final renderObject = targetContext.findRenderObject();
+  if (renderObject is! RenderBox ||
+      !renderObject.attached ||
+      !renderObject.hasSize) {
+    return;
+  }
+  final scrollables = <ScrollableState>[];
+  targetContext.visitAncestorElements((element) {
+    if (element is StatefulElement && element.state is ScrollableState) {
+      scrollables.add(element.state as ScrollableState);
+    }
+    return true;
+  });
+
+  // Nearest first: after a per-column controller moves, the target's global
+  // rectangle is recomputed before checking an outer horizontal viewport.
+  for (final scrollable in scrollables) {
+    if (!scrollable.mounted || !scrollable.position.hasContentDimensions) {
+      continue;
+    }
+    final viewport = scrollable.context.findRenderObject();
+    if (viewport is! RenderBox || !viewport.attached || !viewport.hasSize) {
+      continue;
+    }
+    final targetTopLeft = renderObject.localToGlobal(Offset.zero);
+    final targetRect = targetTopLeft & renderObject.size;
+    final viewportTopLeft = viewport.localToGlobal(Offset.zero);
+    final viewportRect = viewportTopLeft & viewport.size;
+    var delta = 0.0;
+    if (scrollable.position.axis == Axis.vertical) {
+      if (targetRect.top < viewportRect.top) {
+        delta = targetRect.top - viewportRect.top;
+      } else if (targetRect.bottom > viewportRect.bottom) {
+        delta = targetRect.bottom - viewportRect.bottom;
+      }
+    } else {
+      if (targetRect.left < viewportRect.left) {
+        delta = targetRect.left - viewportRect.left;
+      } else if (targetRect.right > viewportRect.right) {
+        delta = targetRect.right - viewportRect.right;
+      }
+    }
+    if (delta.abs() < 0.5) continue;
+    final desired = (scrollable.position.pixels + delta)
+        .clamp(0.0, scrollable.position.maxScrollExtent)
+        .toDouble();
+    if ((desired - scrollable.position.pixels).abs() >= 0.5) {
+      scrollable.position.jumpTo(desired);
+    }
+  }
 }
 
 bool _isVimPlotContext(BuildContext? context) {
@@ -1136,9 +1293,36 @@ _VimFocusPage? _vimFocusPage(BuildContext context) {
 bool moveVimPageEdge(BuildContext context, {required bool last}) {
   final page = _vimFocusPage(context);
   if (page == null) return false;
-  final ordered = page.readingOrder;
-  if (ordered.isEmpty) return false;
-  _requestVimFocus(last ? ordered.last : ordered.first);
+  final target =
+      last ? page.targets.lastOrNull : page.rows.firstOrNull?.firstOrNull;
+  if (target == null) return false;
+  _requestVimFocus(target);
+  return true;
+}
+
+/// Move to the first or last focusable control in the current virtual Vim
+/// line. `^` and `$` therefore behave like their text-editor counterparts on
+/// every route, including dialogs whose action buttons are laid out in a
+/// separate bottom row.
+bool moveVimLineEdge(BuildContext context, {required bool last}) {
+  if (vimEditingText()) return false;
+  final page = _vimFocusPage(context);
+  final current = FocusManager.instance.primaryFocus;
+  if (page == null || current == null) return false;
+  final currentRect = _vimNodeRect(current);
+  if (currentRect == null) return false;
+  _VimFocusTarget? currentTarget;
+  for (final target in page.targets) {
+    if (target.node == current || _sameVimRect(target.rect, currentRect)) {
+      currentTarget = target;
+      break;
+    }
+  }
+  final rowIndex = currentTarget == null ? -1 : page.rowOf(currentTarget);
+  if (rowIndex < 0 || rowIndex >= page.rows.length) return false;
+  final row = page.rows[rowIndex];
+  if (row.isEmpty) return false;
+  _requestVimFocus(last ? row.last : row.first);
   return true;
 }
 
@@ -1159,14 +1343,11 @@ bool moveVimFocus(BuildContext context, TraversalDirection direction) {
   if (currentRect == null ||
       current is FocusScopeNode ||
       (current?.skipTraversal ?? false)) {
-    final target = switch (direction) {
-      TraversalDirection.left ||
-      TraversalDirection.up =>
-        page.readingOrder.firstOrNull,
-      TraversalDirection.right ||
-      TraversalDirection.down =>
-        page.readingOrder.lastOrNull,
-    };
+    // A newly opened dialog may have a scope focused but no actionable
+    // descendant yet. Enter it at the first virtual character, regardless of
+    // which direction key opened it; choosing the last item for J/L made
+    // bottom action buttons appear to swallow the first navigation key.
+    final target = page.readingOrder.firstOrNull;
     if (target == null) return false;
     _requestVimFocus(target);
     return true;
@@ -1272,6 +1453,22 @@ KeyEventResult handleVimDialogKey(
     return KeyEventResult.handled;
   }
   if (vimEditingText()) return KeyEventResult.ignored;
+  final noModifier = !HardwareKeyboard.instance.isControlPressed &&
+      !HardwareKeyboard.instance.isAltPressed &&
+      !HardwareKeyboard.instance.isMetaPressed;
+  if (noModifier &&
+      (event.logicalKey == LogicalKeyboardKey.caret ||
+          event.logicalKey == LogicalKeyboardKey.dollar ||
+          (HardwareKeyboard.instance.isShiftPressed &&
+              (event.logicalKey == LogicalKeyboardKey.digit6 ||
+                  event.logicalKey == LogicalKeyboardKey.digit4)))) {
+    final lineEnd = event.logicalKey == LogicalKeyboardKey.dollar ||
+        (HardwareKeyboard.instance.isShiftPressed &&
+            event.logicalKey == LogicalKeyboardKey.digit4);
+    return moveVimLineEdge(context, last: lineEnd)
+        ? KeyEventResult.handled
+        : KeyEventResult.ignored;
+  }
   final direction = switch (event.logicalKey) {
     LogicalKeyboardKey.keyH ||
     LogicalKeyboardKey.arrowLeft =>

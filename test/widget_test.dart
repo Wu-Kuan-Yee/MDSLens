@@ -412,12 +412,24 @@ void main() {
     final field =
         find.descendant(of: shotField, matching: find.byType(TextField));
     expect(tester.widget<TextField>(field).readOnly, isTrue);
+    final originalShot = app.shotCtrl.text;
     await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
     await tester.pump();
     expect(tester.widget<TextField>(field).readOnly, isFalse);
+    await tester.enterText(field, 'vim-cancelled');
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
     expect(tester.widget<TextField>(field).readOnly, isTrue);
+    expect(app.shotCtrl.text, originalShot);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pump();
+    app.shotCtrl.text = 'vim-committed';
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(tester.widget<TextField>(field).readOnly, isTrue);
+    expect(app.shotCtrl.text, 'vim-committed');
   });
 
   testWidgets('Vim plot navigation follows columns and Point edit mode', (
@@ -507,6 +519,88 @@ void main() {
       FocusManager.instance.primaryFocus?.debugLabel,
       'vim-popup-menu-first-item',
     );
+  });
+
+  testWidgets('Vim Layout Setup exposes its action row and scroll targets',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    app.applyLayoutList([6, 1, 1, 1, 1]);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 900);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Layout setup'));
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    final applyElement = tester.element(
+      find.byKey(const ValueKey('layout-apply')),
+    );
+    final applyFocus = Focus.maybeOf(applyElement, scopeOk: false);
+    expect(applyFocus, isNotNull);
+    expect(
+      FocusManager.instance.primaryFocus == applyFocus ||
+          FocusManager.instance.primaryFocus?.ancestors.contains(applyFocus) ==
+              true,
+      isTrue,
+    );
+
+    final mainContext = tester.element(find.byType(MainPage));
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    for (var i = 0; i < 12; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+      await tester.pump();
+    }
+    final verticalDuringNavigation = tester.widget<Scrollbar>(
+      find.byKey(const ValueKey('layout-column-scrollbar-0')),
+    );
+    expect(
+      verticalDuringNavigation.controller?.position.pixels,
+      greaterThan(0),
+    );
+    for (var i = 0; i < 5; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
+      await tester.pump();
+    }
+    final horizontalDuringNavigation = tester.widget<Scrollbar>(
+      find.byKey(const ValueKey('layout-horizontal-scrollbar')),
+    );
+    expect(
+      horizontalDuringNavigation.controller?.position.pixels,
+      greaterThan(0),
+    );
+    // H/J/K/L can enter the newly opened route even if Flutter has only
+    // focused its scope, and repeated J reaches the bottom action row.
+    for (var i = 0; i < 24; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+      await tester.pump();
+    }
+    // The horizontal and first column vertical scroll positions are both
+    // allowed to change when focus moves to an off-screen panel.
+    final horizontal = tester.widget<Scrollbar>(
+      find.byKey(const ValueKey('layout-horizontal-scrollbar')),
+    );
+    expect(horizontal.controller?.position.maxScrollExtent, greaterThan(0));
+    final vertical = tester.widget<Scrollbar>(
+      find.byKey(const ValueKey('layout-column-scrollbar-0')),
+    );
+    expect(vertical.controller?.position.maxScrollExtent, greaterThan(0));
+    expect(VimInputModeScope.mode(mainContext), VimInputMode.normal);
   });
 
   testWidgets('Multiple panel export selects loaded panels in one dialog', (
