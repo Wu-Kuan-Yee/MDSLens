@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -30,8 +32,10 @@ class VimCommandPalette extends StatefulWidget {
 }
 
 class _VimCommandPaletteState extends State<VimCommandPalette> {
+  static const _commandItemExtent = 72.0;
   final _queryController = TextEditingController();
   final _queryFocus = FocusNode(debugLabel: 'vim-command-query');
+  final _listController = ScrollController();
   int _selectedIndex = 0;
 
   List<MdsShortcutDefinition> get _commands {
@@ -60,7 +64,10 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _queryFocus.requestFocus();
+      if (mounted) {
+        _queryFocus.requestFocus();
+        _ensureSelectedVisible();
+      }
     });
   }
 
@@ -68,7 +75,34 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
   void dispose() {
     _queryController.dispose();
     _queryFocus.dispose();
+    _listController.dispose();
     super.dispose();
+  }
+
+  void _ensureSelectedVisible() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final commands = _commands;
+      if (commands.isEmpty || _selectedIndex >= commands.length) return;
+      if (!_listController.hasClients) return;
+      final position = _listController.position;
+      final centeredOffset = _selectedIndex * _commandItemExtent -
+          (position.viewportDimension - _commandItemExtent) / 2;
+      final target = centeredOffset.clamp(0.0, position.maxScrollExtent);
+      if ((position.pixels - target).abs() < 0.5) return;
+      unawaited(
+        _listController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOutCubic,
+        ),
+      );
+    });
+  }
+
+  void _selectIndex(int index) {
+    setState(() => _selectedIndex = index);
+    _ensureSelectedVisible();
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
@@ -92,11 +126,10 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
             _queryController.text.isEmpty);
     if (backwards || forwards) {
       if (commands.isNotEmpty) {
-        setState(() {
-          _selectedIndex = forwards
-              ? (_selectedIndex + 1) % commands.length
-              : (_selectedIndex - 1 + commands.length) % commands.length;
-        });
+        final nextIndex = forwards
+            ? (_selectedIndex + 1) % commands.length
+            : (_selectedIndex - 1 + commands.length) % commands.length;
+        _selectIndex(nextIndex);
       }
       return KeyEventResult.handled;
     }
@@ -143,12 +176,12 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
                   tooltip: 'Clear command',
                   onPressed: () {
                     _queryController.clear();
-                    setState(() => _selectedIndex = 0);
+                    _selectIndex(0);
                   },
                   icon: const Icon(Icons.clear_rounded),
                 ),
               ),
-              onChanged: (_) => setState(() => _selectedIndex = 0),
+              onChanged: (_) => _selectIndex(0),
               onSubmitted: (_) => _submit(),
             ),
             const SizedBox(height: 12),
@@ -166,6 +199,8 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
                 height: 390,
                 child: ListView.builder(
                   key: const ValueKey('vim-command-list'),
+                  controller: _listController,
+                  itemExtent: _commandItemExtent,
                   itemCount: commands.length,
                   itemBuilder: (context, index) {
                     final definition = commands[index];
