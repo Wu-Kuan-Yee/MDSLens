@@ -152,9 +152,9 @@ class SshDialog extends StatelessWidget {
                     child: Text(
                       'Mode',
                       style: Theme.of(ctx).textTheme.labelMedium?.copyWith(
-                        color: Theme.of(ctx).colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                      ),
+                            color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -191,6 +191,7 @@ class SshDialog extends StatelessWidget {
                     key: const ValueKey('ssh-host'),
                     controller: hostCtrl,
                     focusNode: hostFocus,
+                    autofocus: true,
                     decoration: const InputDecoration(
                       labelText: 'Host',
                       hintText: 'ssh.example.com',
@@ -293,9 +294,8 @@ class SshDialog extends StatelessWidget {
                 ),
                 OutlinedButton(
                   key: const ValueKey('ssh-dialog-test'),
-                  onPressed: testing
-                      ? null
-                      : () => testConnection(setState, ctx),
+                  onPressed:
+                      testing ? null : () => testConnection(setState, ctx),
                   child: Text(testing ? 'Connecting...' : 'Test'),
                 ),
                 FilledButton(

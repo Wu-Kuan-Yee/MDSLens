@@ -11,6 +11,7 @@ import 'theme/mdslens_theme.dart';
 import 'pages/main_page.dart';
 import 'widgets/dialogs/about.dart';
 import 'widgets/network_permission_gate.dart';
+import 'widgets/vim_focus.dart';
 
 typedef AutomaticUpdateChecker = Future<void> Function(BuildContext context);
 
@@ -187,6 +188,10 @@ class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
         iconSize: app.iconSize.toDouble(),
       ),
       themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
+      builder: (context, child) => VimModeScope(
+        notifier: app,
+        child: VimFocusHost(child: child ?? const SizedBox.shrink()),
+      ),
       home: NetworkPermissionGate(
         app: app,
         requestOnStartup: false,

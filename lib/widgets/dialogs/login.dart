@@ -109,6 +109,7 @@ class LoginDialog extends StatelessWidget {
                   key: const ValueKey('login-api-url'),
                   controller: apiCtrl,
                   focusNode: apiFocus,
+                  autofocus: true,
                   enabled: !loading,
                   decoration: const InputDecoration(labelText: 'API URL'),
                   keyboardType: TextInputType.url,

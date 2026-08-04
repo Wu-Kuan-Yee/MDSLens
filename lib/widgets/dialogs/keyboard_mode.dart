@@ -133,9 +133,10 @@ class _KeyboardModePanelState extends State<_KeyboardModePanel> {
               icon: Icons.terminal_rounded,
               title: 'Vim keyboard-only',
               description:
-                  'Use : to search every command, H/J/K/L to select panels, '
-                  'C to open a selected panel menu, Shift + H/J/K/L to pan, '
-                  'and [ / ] to zoom.',
+                  'Use H/J/K/L to move the purple-pink selection between '
+                  'controls, Enter to activate, and Esc to cancel. Use : '
+                  'to search every command; on a selected plot, Enter opens '
+                  'its menu and Shift + H/J/K/L pans.',
               onTap: () => setState(() => _selectedVim = true),
             ),
             const SizedBox(height: 14),

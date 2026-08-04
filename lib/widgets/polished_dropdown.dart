@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class PolishedDropdownOption<T> {
   const PolishedDropdownOption({
@@ -64,6 +65,15 @@ class PolishedDropdown<T> extends StatefulWidget {
 
 class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
   bool _open = false;
+  late final FocusNode _focusNode = FocusNode(
+    debugLabel: 'dropdown-${widget.id}',
+  );
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -123,51 +133,70 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
           _menuOption(context, widget.options[index], index),
         ],
       ],
-      builder: (context, controller, _) => Tooltip(
-        message: widget.tooltip ?? widget.id,
-        child: Semantics(
-          button: true,
-          expanded: _open,
-          label: widget.iconOnly
-              ? (widget.tooltip ?? widget.id)
-              : '${widget.id}: ${selected.label}',
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () =>
-                  controller.isOpen ? controller.close() : controller.open(),
-              child: AnimatedContainer(
-                key: ValueKey('${widget.id}-anchor'),
-                duration: const Duration(milliseconds: 150),
-                width: widget.iconOnly ? widget.height : null,
-                height: widget.height,
-                padding: widget.iconOnly
-                    ? EdgeInsets.zero
-                    : const EdgeInsets.fromLTRB(10, 0, 7, 0),
-                decoration: BoxDecoration(
-                  color: _open
-                      ? Color.alphaBlend(
-                          colors.primary.withValues(alpha: 0.09),
-                          colors.surfaceContainerLow,
-                        )
-                      : colors.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: _open ? colors.primary : colors.outlineVariant,
-                    width: _open ? 1.5 : 1,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: colors.shadow.withValues(alpha: 0.08),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+      builder: (context, controller, _) => Focus(
+        focusNode: _focusNode,
+        onKeyEvent: (node, event) {
+          if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+            return KeyEventResult.ignored;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.escape &&
+              controller.isOpen) {
+            controller.close();
+            return KeyEventResult.handled;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.enter ||
+              event.logicalKey == LogicalKeyboardKey.space) {
+            controller.isOpen ? controller.close() : controller.open();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: Tooltip(
+          message: widget.tooltip ?? widget.id,
+          child: Semantics(
+            button: true,
+            expanded: _open,
+            label: widget.iconOnly
+                ? (widget.tooltip ?? widget.id)
+                : '${widget.id}: ${selected.label}',
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () =>
+                    controller.isOpen ? controller.close() : controller.open(),
+                child: AnimatedContainer(
+                  key: ValueKey('${widget.id}-anchor'),
+                  duration: const Duration(milliseconds: 150),
+                  width: widget.iconOnly ? widget.height : null,
+                  height: widget.height,
+                  padding: widget.iconOnly
+                      ? EdgeInsets.zero
+                      : const EdgeInsets.fromLTRB(10, 0, 7, 0),
+                  decoration: BoxDecoration(
+                    color: _open
+                        ? Color.alphaBlend(
+                            colors.primary.withValues(alpha: 0.09),
+                            colors.surfaceContainerLow,
+                          )
+                        : colors.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _open ? colors.primary : colors.outlineVariant,
+                      width: _open ? 1.5 : 1,
                     ),
-                  ],
+                    boxShadow: [
+                      BoxShadow(
+                        color: colors.shadow.withValues(alpha: 0.08),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: widget.iconOnly
+                      ? _compactAnchor(colors)
+                      : _regularAnchor(theme, colors, selected),
                 ),
-                child: widget.iconOnly
-                    ? _compactAnchor(colors)
-                    : _regularAnchor(theme, colors, selected),
               ),
             ),
           ),
@@ -178,9 +207,8 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
 
   Widget _menuAction(BuildContext context, PolishedDropdownAction action) {
     final colors = Theme.of(context).colorScheme;
-    final foreground = action.destructive
-        ? colors.error
-        : colors.onSurfaceVariant;
+    final foreground =
+        action.destructive ? colors.error : colors.onSurfaceVariant;
     final background = action.destructive
         ? colors.errorContainer.withValues(alpha: 0.46)
         : colors.surfaceContainerHighest;
@@ -212,9 +240,9 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
           foregroundColor: WidgetStatePropertyAll(foreground),
           textStyle: WidgetStatePropertyAll(
             Theme.of(context).textTheme.bodyMedium?.copyWith(
-              fontSize: widget.fontSize,
-              fontWeight: FontWeight.w700,
-            ),
+                  fontSize: widget.fontSize,
+                  fontWeight: FontWeight.w700,
+                ),
           ),
         ),
         child: Text(action.label, maxLines: 1),
@@ -344,9 +372,9 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
         foregroundColor: WidgetStatePropertyAll(colors.onSurface),
         textStyle: WidgetStatePropertyAll(
           Theme.of(context).textTheme.bodyMedium?.copyWith(
-            fontSize: widget.fontSize,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-          ),
+                fontSize: widget.fontSize,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+              ),
         ),
       ),
       child: Text(

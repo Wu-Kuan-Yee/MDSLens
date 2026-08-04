@@ -12,6 +12,8 @@ import '../widgets/dialogs/keyboard_settings_palette.dart';
 import '../widgets/dialogs/vim_command_palette.dart';
 import '../widgets/toolbar.dart';
 import '../widgets/plot_grid.dart';
+import '../widgets/plot_panel.dart';
+import '../widgets/vim_focus.dart';
 
 bool allowShortcutWhileEditing(
   MdsShortcutCommand command, {
@@ -73,7 +75,8 @@ class _MainPageState extends State<MainPage> {
       fontSize: app.fontUiSize.toDouble(),
     );
     return Focus(
-      autofocus: true,
+      canRequestFocus: false,
+      skipTraversal: true,
       child: FocusTraversalGroup(
         policy: OrderedTraversalPolicy(),
         child: Scaffold(
@@ -203,6 +206,42 @@ class _MainPageState extends State<MainPage> {
     if (stroke.control || stroke.alt || stroke.meta) return false;
     final key = stroke.key;
     final shift = stroke.shift;
+    final focusedPlot = _focusedPlot();
+
+    if (key == LogicalKeyboardKey.escape && !shift && vimEditingText()) {
+      leaveVimTextEditing(context);
+      return true;
+    }
+    if (key == LogicalKeyboardKey.escape && !shift && focusedPlot) {
+      if (app.crosshairX != null) {
+        app.handleEscapeKey();
+      } else {
+        app.clearSelectedPanel();
+        FocusManager.instance.primaryFocus?.unfocus();
+        _focusFirstVimControl();
+      }
+      return true;
+    }
+    if (key == LogicalKeyboardKey.enter && !shift && focusedPlot) {
+      app.requestSelectedPanelShortcut('context');
+      return true;
+    }
+    if (key == LogicalKeyboardKey.escape && !shift && !focusedPlot) {
+      FocusManager.instance.primaryFocus?.unfocus();
+      return true;
+    }
+    if (vimEditingText() && key != LogicalKeyboardKey.escape) return false;
+
+    if (!focusedPlot && !shift) {
+      final direction = switch (key) {
+        LogicalKeyboardKey.keyH => TraversalDirection.left,
+        LogicalKeyboardKey.keyJ => TraversalDirection.down,
+        LogicalKeyboardKey.keyK => TraversalDirection.up,
+        LogicalKeyboardKey.keyL => TraversalDirection.right,
+        _ => null,
+      };
+      if (direction != null && moveVimFocus(context, direction)) return true;
+    }
 
     if (app.interactionMode == 1 &&
         !shift &&
@@ -248,12 +287,11 @@ class _MainPageState extends State<MainPage> {
     // Enter or c opens the same context menu as a mouse right click on the
     // selected panel.  The panel computes its own on-screen anchor.
     if (key == LogicalKeyboardKey.keyC) {
-      if (app.selectedPlotIndex != null) {
+      if (focusedPlot && app.selectedPlotIndex != null) {
         app.requestSelectedPanelShortcut('context');
         return true;
       }
-      app.movePanelSelection(0, 0);
-      return true;
+      return false;
     }
     if (key == LogicalKeyboardKey.keyP) {
       app.interactionMode = 1;
@@ -535,6 +573,22 @@ class _MainPageState extends State<MainPage> {
       return;
     }
     _triggerShortcut(app, command);
+  }
+
+  bool _focusedPlot() {
+    final focusContext = FocusManager.instance.primaryFocus?.context;
+    return focusContext?.findAncestorWidgetOfExactType<PlotPanel>() != null;
+  }
+
+  void _focusFirstVimControl() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !context.read<AppState>().vimMode) return;
+      final scope = Focus.maybeOf(context, scopeOk: true)?.nearestScope;
+      final first = scope?.traversalDescendants
+          .where((node) => node.canRequestFocus && !node.skipTraversal)
+          .firstOrNull;
+      first?.requestFocus();
+    });
   }
 
   static bool _editingText() {

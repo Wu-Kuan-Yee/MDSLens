@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../vim_focus.dart';
 
 void focusAndShowKeyboard(BuildContext context, FocusNode focusNode) {
   void ensureInputConnection() {
@@ -155,61 +156,73 @@ class KeyboardSafeDialog extends StatelessWidget {
     final tinyHeight = screenSize.height < 480;
     final tinyScreen = tinyWidth || tinyHeight;
 
+    Widget focusShell(Widget dialog) {
+      return FocusTraversalGroup(
+        child: Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          onKeyEvent: (node, event) => handleVimDialogKey(context, event),
+          child: dialog,
+        ),
+      );
+    }
+
     Widget header() => Padding(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-      child: DefaultTextStyle(style: theme.textTheme.titleLarge!, child: title),
-    );
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+          child: DefaultTextStyle(
+              style: theme.textTheme.titleLarge!, child: title),
+        );
 
     Widget actionBar() => Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-      child: Align(
-        alignment: Alignment.centerRight,
-        child: Wrap(
-          alignment: WrapAlignment.end,
-          spacing: 8,
-          runSpacing: 8,
-          children: actions,
-        ),
-      ),
-    );
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 8,
+              runSpacing: 8,
+              children: actions,
+            ),
+          ),
+        );
 
     if (tinyScreen) {
-      final viewportWidth = (screenSize.width - 24)
-          .clamp(80.0, maxWidth)
-          .toDouble();
-      final viewportHeight = (screenSize.height - 24)
-          .clamp(80.0, maxHeight)
-          .toDouble();
+      final viewportWidth =
+          (screenSize.width - 24).clamp(80.0, maxWidth).toDouble();
+      final viewportHeight =
+          (screenSize.height - 24).clamp(80.0, maxHeight).toDouble();
       final contentWidth = tinyWidth ? 320.0 : viewportWidth;
-      return Dialog(
-        key: const ValueKey('keyboard-safe-dialog'),
-        insetPadding: const EdgeInsets.all(12),
-        clipBehavior: Clip.antiAlias,
-        child: SizedBox(
-          width: viewportWidth,
-          height: viewportHeight,
-          child: AdaptiveTwoAxisScrollView(
-            keyPrefix: 'adaptive-dialog',
-            enableHorizontal: tinyWidth,
-            enableVertical: true,
-            showHorizontalScrollbar: tinyWidth,
-            showVerticalScrollbar: true,
-            minContentWidth: contentWidth,
-            child: SizedBox(
-              width: contentWidth,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  header(),
-                  Divider(height: 1, color: theme.dividerColor),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                    child: content,
-                  ),
-                  Divider(height: 1, color: theme.dividerColor),
-                  actionBar(),
-                ],
+      return focusShell(
+        Dialog(
+          key: const ValueKey('keyboard-safe-dialog'),
+          insetPadding: const EdgeInsets.all(12),
+          clipBehavior: Clip.antiAlias,
+          child: SizedBox(
+            width: viewportWidth,
+            height: viewportHeight,
+            child: AdaptiveTwoAxisScrollView(
+              keyPrefix: 'adaptive-dialog',
+              enableHorizontal: tinyWidth,
+              enableVertical: true,
+              showHorizontalScrollbar: tinyWidth,
+              showVerticalScrollbar: true,
+              minContentWidth: contentWidth,
+              child: SizedBox(
+                width: contentWidth,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    header(),
+                    Divider(height: 1, color: theme.dividerColor),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                      child: content,
+                    ),
+                    Divider(height: 1, color: theme.dividerColor),
+                    actionBar(),
+                  ],
+                ),
               ),
             ),
           ),
@@ -217,32 +230,34 @@ class KeyboardSafeDialog extends StatelessWidget {
       );
     }
 
-    return Dialog(
-      key: const ValueKey('keyboard-safe-dialog'),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      clipBehavior: Clip.antiAlias,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxWidth, maxHeight: maxHeight),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            header(),
-            Divider(height: 1, color: theme.dividerColor),
-            Flexible(
-              child: Scrollbar(
-                child: SingleChildScrollView(
-                  key: const ValueKey('keyboard-safe-dialog-scroll'),
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                  child: content,
+    return focusShell(
+      Dialog(
+        key: const ValueKey('keyboard-safe-dialog'),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        clipBehavior: Clip.antiAlias,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxWidth, maxHeight: maxHeight),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              header(),
+              Divider(height: 1, color: theme.dividerColor),
+              Flexible(
+                child: Scrollbar(
+                  child: SingleChildScrollView(
+                    key: const ValueKey('keyboard-safe-dialog-scroll'),
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                    child: content,
+                  ),
                 ),
               ),
-            ),
-            Divider(height: 1, color: theme.dividerColor),
-            actionBar(),
-          ],
+              Divider(height: 1, color: theme.dividerColor),
+              actionBar(),
+            ],
+          ),
         ),
       ),
     );

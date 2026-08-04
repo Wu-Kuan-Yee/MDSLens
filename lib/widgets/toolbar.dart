@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/app_state.dart';
 import '../services/external_url_launcher.dart';
@@ -384,6 +385,56 @@ class ResponsiveToolbar extends StatelessWidget {
         final metadata = _shotMetadata(
           app,
         ).map((entry) => '${entry.$1}: ${entry.$2}').join('   •   ');
+        Widget collapseToggle({required bool collapsed}) {
+          final label = collapsed ? 'Expand controls' : 'Collapse controls';
+          return Focus(
+            onKeyEvent: (node, event) {
+              if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+                return KeyEventResult.ignored;
+              }
+              if (event.logicalKey == LogicalKeyboardKey.enter ||
+                  event.logicalKey == LogicalKeyboardKey.space) {
+                app.toolbarCollapsed = !collapsed;
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: InkWell(
+              key: const ValueKey('toolbar-collapse-control'),
+              onTap: () => app.toolbarCollapsed = !collapsed,
+              child: SizedBox(
+                height: 40,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Row(
+                    children: [
+                      Icon(
+                        collapsed
+                            ? Icons.keyboard_arrow_down_rounded
+                            : Icons.keyboard_arrow_up_rounded,
+                        size: 22,
+                        color: theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
         final collapseBar = app.toolbarCollapsed
             ? SizedBox(
                 height: 40,
@@ -391,34 +442,7 @@ class ResponsiveToolbar extends StatelessWidget {
                   children: [
                     SizedBox(
                       width: collapseControlWidth,
-                      child: InkWell(
-                        key: const ValueKey('toolbar-collapse-control'),
-                        onTap: () => app.toolbarCollapsed = false,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.keyboard_arrow_down_rounded,
-                                size: 22,
-                                color: theme.colorScheme.primary,
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  'Expand controls',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: theme.colorScheme.primary,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                      child: collapseToggle(collapsed: true),
                     ),
                     VerticalDivider(
                       width: 1,
@@ -433,37 +457,7 @@ class ResponsiveToolbar extends StatelessWidget {
                   ],
                 ),
               )
-            : InkWell(
-                key: const ValueKey('toolbar-collapse-control'),
-                onTap: () => app.toolbarCollapsed = true,
-                child: SizedBox(
-                  height: 40,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.keyboard_arrow_up_rounded,
-                          size: 22,
-                          color: theme.colorScheme.primary,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            'Collapse controls',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: theme.colorScheme.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
+            : collapseToggle(collapsed: false);
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -3853,25 +3847,38 @@ class ToolbarWidget extends StatelessWidget {
     return Semantics(
       button: true,
       label: tooltip,
-      child: Tooltip(
-        message: tooltip,
-        child: Material(
-          color: Colors.transparent,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 44),
-            child: Ink(
-              decoration: BoxDecoration(
-                border: Border.all(color: colors.outlineVariant),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(10),
-                onTap: () => _showRecentConfigurations(context, app),
-                child: Center(
-                  child: Icon(
-                    Icons.history_rounded,
-                    size: app.iconSize.toDouble(),
-                    color: colors.onSurface,
+      child: Focus(
+        onKeyEvent: (node, event) {
+          if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+            return KeyEventResult.ignored;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.enter ||
+              event.logicalKey == LogicalKeyboardKey.space) {
+            _showRecentConfigurations(context, app);
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: Tooltip(
+          message: tooltip,
+          child: Material(
+            color: Colors.transparent,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 44),
+              child: Ink(
+                decoration: BoxDecoration(
+                  border: Border.all(color: colors.outlineVariant),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () => _showRecentConfigurations(context, app),
+                  child: Center(
+                    child: Icon(
+                      Icons.history_rounded,
+                      size: app.iconSize.toDouble(),
+                      color: colors.onSurface,
+                    ),
                   ),
                 ),
               ),
@@ -4013,27 +4020,40 @@ class ToolbarWidget extends StatelessWidget {
     required VoidCallback onTap,
   }) {
     return Expanded(
-      child: Semantics(
-        key: key,
-        button: true,
-        selected: active,
-        label: label,
-        child: Tooltip(
-          message: label,
-          child: InkResponse(
-            onTap: onTap,
-            radius: 18,
-            containedInkWell: true,
-            customBorder: const CircleBorder(),
-            child: Center(
-              child: CustomPaint(
-                size: const Size.square(22),
-                painter: _ThemeGlyphPainter(
-                  glyph,
-                  active
-                      ? activeColor
-                      : Theme.of(ctx).colorScheme.onSurfaceVariant,
-                  filled: active,
+      child: Focus(
+        onKeyEvent: (node, event) {
+          if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+            return KeyEventResult.ignored;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.enter ||
+              event.logicalKey == LogicalKeyboardKey.space) {
+            onTap();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: Semantics(
+          key: key,
+          button: true,
+          selected: active,
+          label: label,
+          child: Tooltip(
+            message: label,
+            child: InkResponse(
+              onTap: onTap,
+              radius: 18,
+              containedInkWell: true,
+              customBorder: const CircleBorder(),
+              child: Center(
+                child: CustomPaint(
+                  size: const Size.square(22),
+                  painter: _ThemeGlyphPainter(
+                    glyph,
+                    active
+                        ? activeColor
+                        : Theme.of(ctx).colorScheme.onSurfaceVariant,
+                    filled: active,
+                  ),
                 ),
               ),
             ),

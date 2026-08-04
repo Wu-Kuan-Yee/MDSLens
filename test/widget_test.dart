@@ -226,6 +226,62 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('Vim mode gives dialogs and plots a complete keyboard path', (
+    tester,
+  ) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The login action can be opened with Enter once its toolbar control owns
+    // focus, and the first field is immediately ready for keyboard input.
+    await tester.tap(find.byTooltip('Login'));
+    await tester.pumpAndSettle();
+    final apiFocus = tester
+        .widget<TextField>(
+          find.byKey(const ValueKey('login-api-url')),
+        )
+        .focusNode!;
+    expect(apiFocus.hasFocus, isTrue);
+
+    // Escape leaves text-editing mode without dismissing the dialog; a second
+    // Escape cancels the dialog itself.
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('login-api-url')), findsOneWidget);
+    expect(apiFocus.hasFocus, isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('login-api-url')), findsNothing);
+
+    // A focused plot is a first-class Vim control: Enter opens its context
+    // menu and Escape returns to the control surface.
+    final plot = find.byType(PlotPanel).first;
+    await tester.tap(plot);
+    await tester.pump();
+    expect(app.selectedPlotIndex, isNotNull);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('plot-context-menu-maximize')),
+      findsOneWidget,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('plot-context-menu-maximize')),
+      findsNothing,
+    );
+  });
+
   testWidgets('Multiple panel export selects loaded panels in one dialog', (
     tester,
   ) async {

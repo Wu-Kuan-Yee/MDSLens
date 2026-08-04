@@ -15,6 +15,7 @@ import '../services/platform_file_dialog.dart';
 import '../services/source_index.dart';
 import 'dialogs/keyboard_safe_dialog.dart';
 import 'dialogs/multi_panel_export.dart';
+import 'vim_focus.dart';
 
 const _colors = [
   Color(0xFF2364aa),
@@ -275,6 +276,9 @@ class PlotPanel extends StatefulWidget {
 class _PlotPanelState extends State<PlotPanel> {
   final _chartAreaKey = GlobalKey();
   final _listenerKey = GlobalKey();
+  late final FocusNode _vimFocusNode = FocusNode(
+    debugLabel: 'plot-panel-${widget.plotIdx}',
+  );
   final _renderCache = PlotRenderCache();
   double _viewMinX = double.nan,
       _viewMaxX = double.nan,
@@ -307,6 +311,7 @@ class _PlotPanelState extends State<PlotPanel> {
   void initState() {
     super.initState();
     widget.panelShortcutRequests?.addListener(_handlePanelShortcutRequest);
+    if (widget.selected) _requestVimFocus();
   }
 
   @override
@@ -318,13 +323,28 @@ class _PlotPanelState extends State<PlotPanel> {
       );
       widget.panelShortcutRequests?.addListener(_handlePanelShortcutRequest);
     }
+    if (widget.selected && !oldWidget.selected) _requestVimFocus();
   }
 
   @override
   void dispose() {
     widget.panelShortcutRequests?.removeListener(_handlePanelShortcutRequest);
     _longPressTimer?.cancel();
+    _vimFocusNode.dispose();
     super.dispose();
+  }
+
+  void _requestVimFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !widget.selected) return;
+      final app = context.read<AppState>();
+      if (!app.vimMode || _vimFocusNode.hasFocus) return;
+      final current = FocusManager.instance.primaryFocus;
+      if (current != null && current.hasFocus && current != _vimFocusNode) {
+        return;
+      }
+      _vimFocusNode.requestFocus();
+    });
   }
 
   void _handlePanelShortcutRequest() {
@@ -528,124 +548,138 @@ class _PlotPanelState extends State<PlotPanel> {
       _renderCache.retain(activeSeries);
     }
 
-    return Stack(
-      children: [
-        GestureDetector(
-          onTapDown: (_) => widget.onTap?.call(),
-          onTapUp: (details) {
-            final a = context.read<AppState>();
-            if (a.interactionMode != 1) return;
-            if (a.pointLocked) a.pointLocked = false;
-            _updatePointCrosshair(details.localPosition, chooseSeries: true);
-          },
-          onSecondaryTapUp: (details) {
-            if (_isStylusKind(details.kind)) return;
-            _showContextMenu(context, details.globalPosition);
-          },
-          // Long press handled manually via _longPressTimer in onPointerDown/Up for mobile compatibility
-          child: Listener(
-            key: _listenerKey,
-            onPointerSignal: _handleScrollWheel,
-            onPointerPanZoomStart: _handleTrackpadGestureStart,
-            onPointerPanZoomUpdate: _handleTrackpadGestureUpdate,
-            onPointerPanZoomEnd: _handleTrackpadGestureEnd,
-            onPointerDown: (e) {
-              _handlePointerDown(e);
-              if (e.kind == PointerDeviceKind.touch &&
-                  _activeStylusPointer == null &&
-                  !_multiTouchActive) {
-                _startLongPressTimer(e);
-              }
-            },
-            onPointerMove: (e) {
-              _handlePointerMove(e);
-              _cancelLongPressIfMoved(e);
-            },
-            onPointerHover: _handlePointerHover,
-            onPointerUp: (e) {
-              _handlePointerUp(e);
-              _cancelLongPressTimer();
-            },
-            onPointerCancel: (e) {
-              _handlePointerCancel(e);
-              _cancelLongPressTimer();
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(2),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surface,
-                    border: Border.all(
-                      color: widget.selected
-                          ? const Color(0xFFFF00FF)
-                          : theme.dividerColor.withValues(alpha: 0.3),
-                      width: widget.selected ? 2 : 1,
-                    ),
+    return VimPlotFocus(
+      child: Focus(
+        focusNode: _vimFocusNode,
+        onFocusChange: (focused) {
+          if (focused) widget.onTap?.call();
+        },
+        child: Stack(
+          children: [
+            GestureDetector(
+              onTapDown: (_) {
+                final a = context.read<AppState>();
+                if (a.vimMode) _vimFocusNode.requestFocus();
+                widget.onTap?.call();
+              },
+              onTapUp: (details) {
+                final a = context.read<AppState>();
+                if (a.interactionMode != 1) return;
+                if (a.pointLocked) a.pointLocked = false;
+                _updatePointCrosshair(details.localPosition,
+                    chooseSeries: true);
+              },
+              onSecondaryTapUp: (details) {
+                if (_isStylusKind(details.kind)) return;
+                _showContextMenu(context, details.globalPosition);
+              },
+              // Long press handled manually via _longPressTimer in onPointerDown/Up for mobile compatibility
+              child: Listener(
+                key: _listenerKey,
+                onPointerSignal: _handleScrollWheel,
+                onPointerPanZoomStart: _handleTrackpadGestureStart,
+                onPointerPanZoomUpdate: _handleTrackpadGestureUpdate,
+                onPointerPanZoomEnd: _handleTrackpadGestureEnd,
+                onPointerDown: (e) {
+                  _handlePointerDown(e);
+                  if (e.kind == PointerDeviceKind.touch &&
+                      _activeStylusPointer == null &&
+                      !_multiTouchActive) {
+                    _startLongPressTimer(e);
+                  }
+                },
+                onPointerMove: (e) {
+                  _handlePointerMove(e);
+                  _cancelLongPressIfMoved(e);
+                },
+                onPointerHover: _handlePointerHover,
+                onPointerUp: (e) {
+                  _handlePointerUp(e);
+                  _cancelLongPressTimer();
+                },
+                onPointerCancel: (e) {
+                  _handlePointerCancel(e);
+                  _cancelLongPressTimer();
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: ClipRRect(
                     borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Column(
-                    children: [
-                      Expanded(
-                        child: bars.isEmpty
-                            ? isLoading
-                                ? _buildLoadingIndicator(app, theme)
-                                : Center(
-                                    child: Text(
-                                      _getPlaceholderText(plot),
-                                      style: TextStyle(
-                                        color: Colors.grey,
-                                        fontFamily: app.effectiveFontFamily,
-                                        fontSize: app.fontUiSize.toDouble(),
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  )
-                            : Stack(
-                                key: _chartAreaKey,
-                                children: [
-                                  _buildChart(
-                                    bars,
-                                    plot,
-                                    panel,
-                                    theme,
-                                    viewMinX,
-                                    viewMaxX,
-                                    viewMinY,
-                                    viewMaxY,
-                                  ),
-                                ],
-                              ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surface,
+                        border: Border.all(
+                          color: widget.selected
+                              ? const Color(0xFFFF00FF)
+                              : theme.dividerColor.withValues(alpha: 0.3),
+                          width: widget.selected ? 2 : 1,
+                        ),
+                        borderRadius: BorderRadius.circular(4),
                       ),
-                    ],
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: bars.isEmpty
+                                ? isLoading
+                                    ? _buildLoadingIndicator(app, theme)
+                                    : Center(
+                                        child: Text(
+                                          _getPlaceholderText(plot),
+                                          style: TextStyle(
+                                            color: Colors.grey,
+                                            fontFamily: app.effectiveFontFamily,
+                                            fontSize: app.fontUiSize.toDouble(),
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      )
+                                : Stack(
+                                    key: _chartAreaKey,
+                                    children: [
+                                      _buildChart(
+                                        bars,
+                                        plot,
+                                        panel,
+                                        theme,
+                                        viewMinX,
+                                        viewMaxX,
+                                        viewMinY,
+                                        viewMaxY,
+                                      ),
+                                    ],
+                                  ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ),
-        if (isLoading && bars.isNotEmpty)
-          Positioned.fill(
-            child: IgnorePointer(child: _buildLoadingIndicator(app, theme)),
-          ),
-        if (_inRubberBand && _rubberBandRect != null)
-          Positioned(
-            key: ValueKey('plot-rubber-band-${widget.plotIdx}'),
-            left: _rubberBandRect!.left,
-            top: _rubberBandRect!.top,
-            width: _rubberBandRect!.width,
-            height: _rubberBandRect!.height,
-            child: IgnorePointer(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0x180000FF),
-                  border: Border.all(color: const Color(0xFF0000FF), width: 1),
+            if (isLoading && bars.isNotEmpty)
+              Positioned.fill(
+                child: IgnorePointer(child: _buildLoadingIndicator(app, theme)),
+              ),
+            if (_inRubberBand && _rubberBandRect != null)
+              Positioned(
+                key: ValueKey('plot-rubber-band-${widget.plotIdx}'),
+                left: _rubberBandRect!.left,
+                top: _rubberBandRect!.top,
+                width: _rubberBandRect!.width,
+                height: _rubberBandRect!.height,
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0x180000FF),
+                      border:
+                          Border.all(color: const Color(0xFF0000FF), width: 1),
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-      ],
+          ],
+        ),
+      ),
     );
   }
 
