@@ -107,7 +107,7 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
     if (!_open || _optionFocusNodes.isEmpty) return;
     void request() {
       if (!_open || !mounted || _optionFocusNodes.isEmpty) return;
-      _optionFocusNodes.first.requestFocus();
+      (_actionFocusNode ?? _optionFocusNodes.first).requestFocus();
     }
 
     // MenuAnchor inserts its menu route after onOpen. The second frame is
@@ -192,6 +192,12 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
       ],
       builder: (context, controller, _) => Focus(
         focusNode: _focusNode,
+        canRequestFocus: true,
+        skipTraversal: false,
+        // The anchor is one Vim control. Menu items are rendered in the
+        // overlay and have their own focus nodes, so nested anchor nodes must
+        // not create a second, unreachable target in the main toolbar.
+        descendantsAreTraversable: false,
         onKeyEvent: (node, event) {
           if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
             return KeyEventResult.ignored;

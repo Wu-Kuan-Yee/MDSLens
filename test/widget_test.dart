@@ -333,6 +333,62 @@ void main() {
     );
   });
 
+  testWidgets('Vim Normal-mode inputs release HJKL to nearby controls', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'shotHistory': '["163702"]',
+      'shot': '163703',
+    });
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final shot = find.byKey(const ValueKey('toolbar-shot-entry'));
+    await tester.tap(find.descendant(of: shot, matching: find.byType(TextField)));
+    await tester.pump();
+    expect(app.shotFocusNode.hasFocus, isTrue);
+
+    // Normal mode treats the field as a control. H must immediately reach the
+    // recent-shot dropdown instead of being consumed by the text cursor.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyH);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<PolishedDropdown<String>>(),
+      isNotNull,
+    );
+  });
+
+  testWidgets('Vim settings menu focuses its first option', (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'vim-popup-menu-first-item',
+    );
+  });
+
   testWidgets('Multiple panel export selects loaded panels in one dialog', (
     tester,
   ) async {

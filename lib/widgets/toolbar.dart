@@ -389,6 +389,9 @@ class ResponsiveToolbar extends StatelessWidget {
         Widget collapseToggle({required bool collapsed}) {
           final label = collapsed ? 'Expand controls' : 'Collapse controls';
           return Focus(
+            canRequestFocus: true,
+            skipTraversal: false,
+            descendantsAreTraversable: false,
             onKeyEvent: (node, event) {
               if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
                 return KeyEventResult.ignored;
@@ -1241,9 +1244,10 @@ class ToolbarWidget extends StatelessWidget {
   }) {
     final tooltip =
         shortcut == null || shortcut.isEmpty ? label : '$label ($shortcut)';
-    return PopupMenuItem(
+    return VimPopupMenuItem(
       key: key,
       value: value,
+      autofocus: value == 'web',
       child: Tooltip(
         message: tooltip,
         child: Row(
@@ -3855,6 +3859,9 @@ class ToolbarWidget extends StatelessWidget {
       button: true,
       label: tooltip,
       child: Focus(
+        canRequestFocus: true,
+        skipTraversal: false,
+        descendantsAreTraversable: false,
         onKeyEvent: (node, event) {
           if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
             return KeyEventResult.ignored;
@@ -4028,6 +4035,9 @@ class ToolbarWidget extends StatelessWidget {
   }) {
     return Expanded(
       child: Focus(
+        canRequestFocus: true,
+        skipTraversal: false,
+        descendantsAreTraversable: false,
         onKeyEvent: (node, event) {
           if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
             return KeyEventResult.ignored;

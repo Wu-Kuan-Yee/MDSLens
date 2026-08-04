@@ -346,16 +346,17 @@ void _setEditableSelection(
   );
 }
 
-void _moveEditableCursor(
+bool _moveEditableCursor(
   BuildContext context,
   FocusNode node,
   int delta, {
   required bool extendSelection,
 }) {
   final controller = _editableController(node);
-  if (controller == null) return;
+  if (controller == null) return false;
   final current = _editableCursor(controller);
   final next = (current + delta).clamp(0, controller.text.length).toInt();
+  if (next == current) return false;
   final selection = controller.selection;
   final base = extendSelection ? selection.baseOffset : next;
   _setEditableSelection(controller, base: base, extent: next);
@@ -363,6 +364,7 @@ void _moveEditableCursor(
     VimInputModeScope.maybeOf(context)
         ?.updateVisualAnchor(selection.baseOffset);
   }
+  return true;
 }
 
 bool _moveEditableCursorVertical(
@@ -529,21 +531,28 @@ KeyEventResult handleVimInputModeKey(
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.keyJ) {
-      _moveEditableCursorVertical(context, node, 1, extendSelection: true);
-      return KeyEventResult.handled;
+      return _moveEditableCursorVertical(
+              context, node, 1, extendSelection: true)
+          ? KeyEventResult.handled
+          : KeyEventResult.ignored;
     }
     if (key == LogicalKeyboardKey.keyK) {
-      _moveEditableCursorVertical(context, node, -1, extendSelection: true);
-      return KeyEventResult.handled;
+      return _moveEditableCursorVertical(
+              context, node, -1, extendSelection: true)
+          ? KeyEventResult.handled
+          : KeyEventResult.ignored;
     }
     if (key == LogicalKeyboardKey.keyH || key == LogicalKeyboardKey.arrowLeft) {
-      _moveEditableCursor(context, node, -1, extendSelection: true);
-      return KeyEventResult.handled;
+      return _moveEditableCursor(
+              context, node, -1, extendSelection: true)
+          ? KeyEventResult.handled
+          : KeyEventResult.ignored;
     }
     if (key == LogicalKeyboardKey.keyL ||
         key == LogicalKeyboardKey.arrowRight) {
-      _moveEditableCursor(context, node, 1, extendSelection: true);
-      return KeyEventResult.handled;
+      return _moveEditableCursor(context, node, 1, extendSelection: true)
+          ? KeyEventResult.handled
+          : KeyEventResult.ignored;
     }
     return KeyEventResult.ignored;
   }
@@ -592,14 +601,6 @@ KeyEventResult handleVimInputModeKey(
     );
     return KeyEventResult.handled;
   }
-  if (key == LogicalKeyboardKey.keyJ) {
-    _moveEditableCursorVertical(context, node, 1, extendSelection: false);
-    return KeyEventResult.handled;
-  }
-  if (key == LogicalKeyboardKey.keyK) {
-    _moveEditableCursorVertical(context, node, -1, extendSelection: false);
-    return KeyEventResult.handled;
-  }
   if (key == LogicalKeyboardKey.digit0) {
     final controller = _editableController(node);
     if (controller != null) {
@@ -621,14 +622,6 @@ KeyEventResult handleVimInputModeKey(
   }
   if (key == LogicalKeyboardKey.keyX) {
     _deleteEditableSelection(context, node, characterUnderCursor: true);
-    return KeyEventResult.handled;
-  }
-  if (key == LogicalKeyboardKey.keyH || key == LogicalKeyboardKey.arrowLeft) {
-    _moveEditableCursor(context, node, -1, extendSelection: false);
-    return KeyEventResult.handled;
-  }
-  if (key == LogicalKeyboardKey.keyL || key == LogicalKeyboardKey.arrowRight) {
-    _moveEditableCursor(context, node, 1, extendSelection: false);
     return KeyEventResult.handled;
   }
   return KeyEventResult.ignored;

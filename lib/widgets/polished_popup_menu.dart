@@ -177,6 +177,84 @@ class _KeyboardPopupMenuItemState<T>
       );
 }
 
+/// A plain Material popup item with a deterministic focus target. Flutter's
+/// stock [PopupMenuItem] exposes a focusable InkWell, but it does not provide
+/// an initial focus request or an activation handler for an ancestor Vim
+/// focus node. This small variant keeps the stock visuals while making the
+/// first item reliably selectable with Enter.
+class VimPopupMenuItem<T> extends PopupMenuItem<T> {
+  const VimPopupMenuItem({
+    super.key,
+    required super.value,
+    required super.child,
+    this.autofocus = false,
+    super.height,
+    super.padding,
+    super.enabled,
+    super.onTap,
+    super.labelTextStyle,
+    super.mouseCursor,
+  });
+
+  final bool autofocus;
+
+  @override
+  PopupMenuItemState<T, VimPopupMenuItem<T>> createState() =>
+      _VimPopupMenuItemState<T>();
+}
+
+class _VimPopupMenuItemState<T>
+    extends PopupMenuItemState<T, VimPopupMenuItem<T>> {
+  FocusNode? _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = FocusNode(debugLabel: 'vim-popup-menu-first-item');
+    if (!widget.autofocus) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _requestInitialFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode?.dispose();
+    super.dispose();
+  }
+
+  void _requestInitialFocus() {
+    if (!mounted || !widget.enabled) return;
+    _focusNode?.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.enabled) _focusNode?.requestFocus();
+    });
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.space) {
+      handleTap();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = super.build(context);
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: widget.autofocus,
+      onKeyEvent: _handleKeyEvent,
+      child: item,
+    );
+  }
+}
+
 Map<MdsShortcutCommand, MdsShortcutBinding> _menuShortcutBindings(
   Map<MdsShortcutCommand, MdsShortcutBinding>? configured,
 ) {
