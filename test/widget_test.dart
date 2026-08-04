@@ -353,7 +353,8 @@ void main() {
     await tester.pumpAndSettle();
 
     final shot = find.byKey(const ValueKey('toolbar-shot-entry'));
-    await tester.tap(find.descendant(of: shot, matching: find.byType(TextField)));
+    await tester
+        .tap(find.descendant(of: shot, matching: find.byType(TextField)));
     await tester.pump();
     expect(app.shotFocusNode.hasFocus, isTrue);
 
@@ -366,6 +367,56 @@ void main() {
           ?.findAncestorWidgetOfExactType<PolishedDropdown<String>>(),
       isNotNull,
     );
+  });
+
+  testWidgets('Vim virtual pages support gg, G, and i field editing', (
+    tester,
+  ) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final plot = find.byType(PlotPanel).first;
+    await tester.tap(plot);
+    await tester.pump();
+    final plotRect = tester.getRect(plot);
+
+    // A virtual page is ordered like text: gg reaches its first row and G
+    // reaches its last row, regardless of the nested Flutter focus groups.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus!.rect.bottom,
+        lessThan(plotRect.top));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus!.rect.top,
+        greaterThanOrEqualTo(plotRect.top));
+
+    // Reaching a TextField selects it as one virtual character cell.  Normal
+    // mode is read-only; i enters Insert mode and toggles the real field.
+    app.shotFocusNode.requestFocus();
+    await tester.pump();
+    final shotField = find.byKey(const ValueKey('toolbar-shot-entry'));
+    final field =
+        find.descendant(of: shotField, matching: find.byType(TextField));
+    expect(tester.widget<TextField>(field).readOnly, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pump();
+    expect(tester.widget<TextField>(field).readOnly, isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(tester.widget<TextField>(field).readOnly, isTrue);
   });
 
   testWidgets('Vim settings menu focuses its first option', (tester) async {

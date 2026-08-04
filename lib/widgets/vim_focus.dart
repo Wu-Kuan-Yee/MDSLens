@@ -134,6 +134,8 @@ class VimFocusHost extends StatefulWidget {
 
 class _VimFocusHostState extends State<VimFocusHost> {
   final _vimInputState = VimInputState();
+  Timer? _vimSequenceTimer;
+  bool _pendingVimG = false;
 
   @override
   void initState() {
@@ -146,8 +148,46 @@ class _VimFocusHostState extends State<VimFocusHost> {
   void dispose() {
     FocusManager.instance.removeListener(_focusChanged);
     HardwareKeyboard.instance.removeHandler(_handleGlobalFocusKey);
+    _vimSequenceTimer?.cancel();
     _vimInputState.dispose();
     super.dispose();
+  }
+
+  void _clearVimSequence() {
+    _pendingVimG = false;
+    _vimSequenceTimer?.cancel();
+    _vimSequenceTimer = null;
+  }
+
+  bool _handleVimPageSequence(BuildContext context, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
+    final keyboard = HardwareKeyboard.instance;
+    if (keyboard.isControlPressed ||
+        keyboard.isAltPressed ||
+        keyboard.isMetaPressed) {
+      _clearVimSequence();
+      return false;
+    }
+    if (event.logicalKey != LogicalKeyboardKey.keyG) {
+      if (_pendingVimG) _clearVimSequence();
+      return false;
+    }
+    if (keyboard.isShiftPressed) {
+      _clearVimSequence();
+      return moveVimPageEdge(context, last: true);
+    }
+    if (_pendingVimG) {
+      _clearVimSequence();
+      return moveVimPageEdge(context, last: false);
+    }
+    _pendingVimG = true;
+    _vimSequenceTimer?.cancel();
+    _vimSequenceTimer = Timer(const Duration(milliseconds: 850), () {
+      if (mounted) _clearVimSequence();
+    });
+    // A lone `g` is a pending Vim prefix, not text and not an application
+    // shortcut.  Consume it until the second `g` or the timeout arrives.
+    return true;
   }
 
   void _focusChanged() {
@@ -166,6 +206,7 @@ class _VimFocusHostState extends State<VimFocusHost> {
     final inputResult = handleVimInputModeKey(focusContext ?? context, event);
     if (inputResult == KeyEventResult.handled) return true;
     if (vimEditingText()) return false;
+    if (_handleVimPageSequence(focusContext ?? context, event)) return true;
     if (event.logicalKey == LogicalKeyboardKey.escape && focusContext != null) {
       final route = ModalRoute.of(focusContext);
       if (route is PopupRoute) {
@@ -275,14 +316,16 @@ bool _isEditableContext(BuildContext? context) {
 }
 
 bool vimFocusedEditable() {
-  return _isEditableContext(FocusManager.instance.primaryFocus?.context);
+  final node = FocusManager.instance.primaryFocus;
+  return node != null && _isEditableNode(node);
 }
 
 bool vimEditingText() {
-  final context = FocusManager.instance.primaryFocus?.context;
-  if (!_isEditableContext(context)) return false;
+  final node = FocusManager.instance.primaryFocus;
+  if (node == null || !_isEditableNode(node)) return false;
   // In Normal mode a focused text field is a selectable control, not an
   // active editor. Its readOnly property is switched by vimTextFieldReadOnly.
+  final context = node.context;
   if (context != null && VimModeScope.enabled(context)) {
     return VimInputModeScope.mode(context) != VimInputMode.normal;
   }
@@ -294,7 +337,14 @@ bool vimTextFieldReadOnly(BuildContext context) {
 }
 
 bool _isEditableNode(FocusNode node) {
-  return _isEditableContext(node.context);
+  // A TextField's public FocusNode is attached to an ancestor Focus widget,
+  // while the actual EditableTextState is its descendant.  Looking only at
+  // ancestors made a field reachable by H/J/K/L but caused `i` to be ignored.
+  // Focus scopes can contain many editable descendants, but the scope itself
+  // is never an editor.  Excluding it prevents the second Escape from being
+  // mistaken for another text-field transition after the field is unfocused.
+  if (node is FocusScopeNode) return false;
+  return _isEditableContext(node.context) || _editableState(node) != null;
 }
 
 EditableTextState? _editableState(FocusNode node) {
@@ -313,6 +363,8 @@ EditableTextState? _editableState(FocusNode node) {
 
   if (context is Element) {
     final element = context;
+    result = element.findAncestorStateOfType<EditableTextState>();
+    if (result != null) return result;
     if (element is StatefulElement && element.state is EditableTextState) {
       result = element.state as EditableTextState;
     } else {
@@ -531,20 +583,19 @@ KeyEventResult handleVimInputModeKey(
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.keyJ) {
-      return _moveEditableCursorVertical(
-              context, node, 1, extendSelection: true)
+      return _moveEditableCursorVertical(context, node, 1,
+              extendSelection: true)
           ? KeyEventResult.handled
           : KeyEventResult.ignored;
     }
     if (key == LogicalKeyboardKey.keyK) {
-      return _moveEditableCursorVertical(
-              context, node, -1, extendSelection: true)
+      return _moveEditableCursorVertical(context, node, -1,
+              extendSelection: true)
           ? KeyEventResult.handled
           : KeyEventResult.ignored;
     }
     if (key == LogicalKeyboardKey.keyH || key == LogicalKeyboardKey.arrowLeft) {
-      return _moveEditableCursor(
-              context, node, -1, extendSelection: true)
+      return _moveEditableCursor(context, node, -1, extendSelection: true)
           ? KeyEventResult.handled
           : KeyEventResult.ignored;
     }
@@ -682,6 +733,87 @@ class _VimFocusTarget {
   final int depth;
 }
 
+/// A virtual Vim page is the set of focusable controls on the active route.
+///
+/// Flutter exposes focus nodes as a tree, but that tree is not the mental
+/// model a keyboard-only user sees.  A toolbar, a dialog, a popup, and the
+/// plot grid are all pages made of rows; each row contains controls from left
+/// to right, just like characters in a text line.  We derive those rows from
+/// the rendered rectangles so the model follows responsive layout changes
+/// without requiring every control to carry a hand-maintained row number.
+class _VimFocusPage {
+  _VimFocusPage(List<_VimFocusTarget> targets)
+      : rows = _buildRows(targets),
+        targets = List.unmodifiable(targets);
+
+  final List<_VimFocusTarget> targets;
+  final List<List<_VimFocusTarget>> rows;
+
+  static List<List<_VimFocusTarget>> _buildRows(
+    List<_VimFocusTarget> targets,
+  ) {
+    final ordered = [...targets]..sort((a, b) {
+        final byY = a.rect.center.dy.compareTo(b.rect.center.dy);
+        if (byY != 0) return byY;
+        return a.rect.center.dx.compareTo(b.rect.center.dx);
+      });
+    final rows = <List<_VimFocusTarget>>[];
+    for (final target in ordered) {
+      var bestRow = -1;
+      var bestDistance = double.infinity;
+      for (var index = 0; index < rows.length; index++) {
+        final row = rows[index];
+        final minTop =
+            row.map((item) => item.rect.top).reduce((a, b) => a < b ? a : b);
+        final maxBottom =
+            row.map((item) => item.rect.bottom).reduce((a, b) => a > b ? a : b);
+        final minHeight =
+            row.map((item) => item.rect.height).reduce((a, b) => a < b ? a : b);
+        final overlap =
+            (target.rect.bottom < maxBottom ? target.rect.bottom : maxBottom) -
+                (target.rect.top > minTop ? target.rect.top : minTop);
+        final center =
+            row.map((item) => item.rect.center.dy).reduce((a, b) => a + b) /
+                row.length;
+        final centerDistance = (target.rect.center.dy - center).abs();
+        final tolerance = (minHeight * 0.45).clamp(10.0, 28.0).toDouble();
+        final sameRow =
+            overlap >= minHeight * 0.35 || centerDistance <= tolerance;
+        if (!sameRow || centerDistance >= bestDistance) continue;
+        bestRow = index;
+        bestDistance = centerDistance;
+      }
+      if (bestRow < 0) {
+        rows.add([target]);
+      } else {
+        rows[bestRow].add(target);
+      }
+    }
+    for (final row in rows) {
+      row.sort((a, b) => a.rect.center.dx.compareTo(b.rect.center.dx));
+    }
+    rows.sort((a, b) {
+      final aTop =
+          a.map((item) => item.rect.top).reduce((x, y) => x < y ? x : y);
+      final bTop =
+          b.map((item) => item.rect.top).reduce((x, y) => x < y ? x : y);
+      return aTop.compareTo(bTop);
+    });
+    return rows;
+  }
+
+  List<_VimFocusTarget> get readingOrder => [
+        for (final row in rows) ...row,
+      ];
+
+  int rowOf(_VimFocusTarget target) {
+    for (var index = 0; index < rows.length; index++) {
+      if (rows[index].contains(target)) return index;
+    }
+    return -1;
+  }
+}
+
 FocusScopeNode? _vimFocusScope(BuildContext context) {
   final current = FocusManager.instance.primaryFocus;
   var scope = current?.nearestScope ??
@@ -696,9 +828,8 @@ FocusScopeNode? _vimFocusScope(BuildContext context) {
       : ModalRoute.of(current!.context!);
   while (scope?.parent is FocusScopeNode) {
     final parent = scope!.parent! as FocusScopeNode;
-    final parentRoute = parent.context == null
-        ? null
-        : ModalRoute.of(parent.context!);
+    final parentRoute =
+        parent.context == null ? null : ModalRoute.of(parent.context!);
     if (route != null && parentRoute != route) break;
     if (route == null && parent.context != null && parentRoute != null) break;
     scope = parent;
@@ -766,92 +897,6 @@ List<_VimFocusTarget> _vimFocusTargets(FocusScopeNode scope) {
   return targets;
 }
 
-bool _vimInDirection(
-    Rect candidate, Offset origin, TraversalDirection direction) {
-  const epsilon = 0.5;
-  final center = candidate.center;
-  return switch (direction) {
-    TraversalDirection.left => center.dx < origin.dx - epsilon,
-    TraversalDirection.right => center.dx > origin.dx + epsilon,
-    TraversalDirection.up => center.dy < origin.dy - epsilon,
-    TraversalDirection.down => center.dy > origin.dy + epsilon,
-  };
-}
-
-bool _vimSharesNavigationLane(
-  Rect candidate,
-  Rect origin,
-  TraversalDirection direction,
-) {
-  return switch (direction) {
-    TraversalDirection.left ||
-    TraversalDirection.right =>
-      candidate.top <= origin.bottom && candidate.bottom >= origin.top,
-    TraversalDirection.up ||
-    TraversalDirection.down =>
-      candidate.left <= origin.right && candidate.right >= origin.left,
-  };
-}
-
-double _vimDirectionalScore(
-  Rect candidate,
-  Offset origin,
-  TraversalDirection direction,
-) {
-  final center = candidate.center;
-  final primary = switch (direction) {
-    TraversalDirection.left ||
-    TraversalDirection.right =>
-      (center.dx - origin.dx).abs(),
-    TraversalDirection.up ||
-    TraversalDirection.down =>
-      (center.dy - origin.dy).abs(),
-  };
-  final cross = switch (direction) {
-    TraversalDirection.left ||
-    TraversalDirection.right =>
-      (center.dy - origin.dy).abs(),
-    TraversalDirection.up ||
-    TraversalDirection.down =>
-      (center.dx - origin.dx).abs(),
-  };
-  final crossOverlaps = switch (direction) {
-    TraversalDirection.left ||
-    TraversalDirection.right =>
-      candidate.top <= origin.dy && candidate.bottom >= origin.dy,
-    TraversalDirection.up ||
-    TraversalDirection.down =>
-      candidate.left <= origin.dx && candidate.right >= origin.dx,
-  };
-  // A control in the same row/column wins over a nearer control in an
-  // unrelated row/column. This prevents the old traversal policy from
-  // skipping toolbar controls or jumping diagonally across the plot grid.
-  return primary + (crossOverlaps ? cross * 0.12 : cross * 4.0);
-}
-
-_VimFocusTarget? _vimEdgeTarget(
-  List<_VimFocusTarget> targets,
-  TraversalDirection direction,
-) {
-  if (targets.isEmpty) return null;
-  final sorted = [...targets]..sort((a, b) {
-      final primary = switch (direction) {
-        TraversalDirection.left ||
-        TraversalDirection.right =>
-          a.rect.center.dx.compareTo(b.rect.center.dx),
-        TraversalDirection.up ||
-        TraversalDirection.down =>
-          a.rect.center.dy.compareTo(b.rect.center.dy),
-      };
-      if (primary != 0) return primary;
-      return a.rect.center.dx.compareTo(b.rect.center.dx);
-    });
-  return switch (direction) {
-    TraversalDirection.left || TraversalDirection.up => sorted.first,
-    TraversalDirection.right || TraversalDirection.down => sorted.last,
-  };
-}
-
 void _requestVimFocus(_VimFocusTarget target) {
   target.node.requestFocus();
   final targetContext = target.node.context;
@@ -872,6 +917,26 @@ void _requestVimFocus(_VimFocusTarget target) {
   });
 }
 
+_VimFocusPage? _vimFocusPage(BuildContext context) {
+  final scope = _vimFocusScope(context);
+  if (scope == null) return null;
+  final targets = _vimFocusTargets(scope);
+  if (targets.isEmpty) return null;
+  return _VimFocusPage(targets);
+}
+
+/// Put Vim on the first or last control of the active virtual page.  `gg`
+/// and `G` use this reading order, so they remain meaningful when a route is
+/// responsive and its controls reflow into a different number of rows.
+bool moveVimPageEdge(BuildContext context, {required bool last}) {
+  final page = _vimFocusPage(context);
+  if (page == null) return false;
+  final ordered = page.readingOrder;
+  if (ordered.isEmpty) return false;
+  _requestVimFocus(last ? ordered.last : ordered.first);
+  return true;
+}
+
 /// Move focus geometrically across the active route, including nested
 /// FocusTraversalGroups. Flutter's directional policy is intentionally not
 /// used here: it treats each nested group as a separate island and can skip
@@ -881,49 +946,101 @@ void _requestVimFocus(_VimFocusTarget target) {
 bool moveVimFocus(BuildContext context, TraversalDirection direction) {
   if (vimEditingText()) return false;
   final current = FocusManager.instance.primaryFocus;
-  final scope = _vimFocusScope(context);
-  if (scope == null) return false;
-  final targets = _vimFocusTargets(scope);
-  if (targets.isEmpty) return false;
+  final page = _vimFocusPage(context);
+  if (page == null) return false;
+  final targets = page.targets;
 
   final currentRect = current == null ? null : _vimNodeRect(current);
   if (currentRect == null ||
       current is FocusScopeNode ||
       (current?.skipTraversal ?? false)) {
-    final target = _vimEdgeTarget(targets, direction);
+    final target = switch (direction) {
+      TraversalDirection.left ||
+      TraversalDirection.up =>
+        page.readingOrder.firstOrNull,
+      TraversalDirection.right ||
+      TraversalDirection.down =>
+        page.readingOrder.lastOrNull,
+    };
     if (target == null) return false;
     _requestVimFocus(target);
     return true;
   }
 
-  final candidates = targets.where((target) {
-    if (target.node == current || _sameVimRect(target.rect, currentRect)) {
-      return false;
+  // Match the current node by identity first, then by rectangle.  TextField
+  // focus nodes and their EditableText descendants can represent the same
+  // visual control; the rectangle fallback keeps both forms in the same
+  // virtual character cell.
+  _VimFocusTarget? currentTarget;
+  for (final candidate in targets) {
+    if (candidate.node == current ||
+        _sameVimRect(candidate.rect, currentRect)) {
+      currentTarget = candidate;
+      break;
     }
-    return _vimInDirection(target.rect, currentRect.center, direction);
-  }).toList();
-  // Prefer controls in the same visual row/column before considering a
-  // diagonal fallback. This makes H/L behave like Vim's horizontal motion:
-  // adjacent controls are visited in order instead of jumping to a nearer
-  // control on the row above or below.
-  final laneCandidates = candidates
-      .where((target) =>
-          _vimSharesNavigationLane(target.rect, currentRect, direction))
-      .toList();
-  final orderedCandidates =
-      (laneCandidates.isNotEmpty ? laneCandidates : candidates)
-        ..sort((a, b) => _vimDirectionalScore(
-              a.rect,
-              currentRect.center,
-              direction,
-            ).compareTo(_vimDirectionalScore(
-              b.rect,
-              currentRect.center,
-              direction,
-            )));
-  final target = orderedCandidates.isNotEmpty
-      ? orderedCandidates.first
-      : _vimEdgeTarget(targets, direction);
+  }
+  final rowIndex = currentTarget == null ? -1 : page.rowOf(currentTarget);
+  if (rowIndex < 0 || page.rows.isEmpty) {
+    final target = direction == TraversalDirection.left ||
+            direction == TraversalDirection.up
+        ? page.readingOrder.firstOrNull
+        : page.readingOrder.lastOrNull;
+    if (target == null) return false;
+    _requestVimFocus(target);
+    return true;
+  }
+
+  final currentCenter = currentRect.center;
+  _VimFocusTarget? target;
+  if (direction == TraversalDirection.left ||
+      direction == TraversalDirection.right) {
+    final row = page.rows[rowIndex];
+    final candidates = row.where((candidate) {
+      if (candidate.node == current ||
+          _sameVimRect(candidate.rect, currentRect)) {
+        return false;
+      }
+      return direction == TraversalDirection.left
+          ? candidate.rect.center.dx < currentCenter.dx - 0.5
+          : candidate.rect.center.dx > currentCenter.dx + 0.5;
+    }).toList();
+    candidates.sort((a, b) {
+      final aDistance = (a.rect.center.dx - currentCenter.dx).abs();
+      final bDistance = (b.rect.center.dx - currentCenter.dx).abs();
+      return aDistance.compareTo(bDistance);
+    });
+    // Like moving across a text line, H/L wrap within the current row.  It
+    // prevents the old global-edge fallback from jumping to an unrelated
+    // toolbar row when the user reaches a row boundary.
+    target = candidates.firstOrNull ??
+        (direction == TraversalDirection.left
+            ? page.rows[rowIndex].lastOrNull
+            : page.rows[rowIndex].firstOrNull);
+  } else {
+    final step = direction == TraversalDirection.up ? -1 : 1;
+    final rowIndices = <int>[];
+    for (var index = rowIndex + step;
+        index >= 0 && index < page.rows.length;
+        index += step) {
+      rowIndices.add(index);
+    }
+    final candidateRowIndex = rowIndices.firstOrNull;
+    if (candidateRowIndex != null) {
+      final row = page.rows[candidateRowIndex];
+      final candidates = [...row]..sort((a, b) {
+          final aDistance = (a.rect.center.dx - currentCenter.dx).abs();
+          final bDistance = (b.rect.center.dx - currentCenter.dx).abs();
+          return aDistance.compareTo(bDistance);
+        });
+      target = candidates.firstOrNull;
+    } else {
+      // Vertical movement wraps to the opposite page edge, preserving Vim's
+      // ability to reach every control without a dead end.
+      target = direction == TraversalDirection.up
+          ? page.rows.lastOrNull?.firstOrNull
+          : page.rows.firstOrNull?.firstOrNull;
+    }
+  }
   if (target == null || target.node == current) return false;
   _requestVimFocus(target);
   return true;
