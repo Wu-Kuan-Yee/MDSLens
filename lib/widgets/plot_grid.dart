@@ -25,6 +25,8 @@ class PlotGrid extends StatelessWidget {
           if (idx >= app.plots.length) return const SizedBox();
           return PlotPanel(
             plotIdx: idx,
+            vimColumn: 0,
+            vimRow: 0,
             selected: true,
             panelShortcutRequests: app.panelShortcutRequests,
           );
@@ -63,12 +65,13 @@ class PlotGrid extends StatelessWidget {
 
   Widget _panelForCell(AppState app, ResponsivePlotCell cell) {
     if (cell.plotIndex >= app.plots.length) return const SizedBox();
-    final selected =
-        app.selectedCol == cell.sourceColumn &&
+    final selected = app.selectedCol == cell.sourceColumn &&
         app.selectedRow == cell.sourceRow;
     return PlotPanel(
       key: ValueKey('plot-panel-${cell.plotIndex}'),
       plotIdx: cell.plotIndex,
+      vimColumn: cell.sourceColumn,
+      vimRow: cell.sourceRow,
       selected: selected,
       panelShortcutRequests: app.panelShortcutRequests,
       onTap: () => app.selectPanel(cell.sourceColumn, cell.sourceRow),

@@ -216,6 +216,10 @@ class _MainPageState extends State<MainPage> {
     if (stroke.control || stroke.alt || stroke.meta) return false;
     final inputResult = handleVimInputModeKey(context, event);
     if (inputResult == KeyEventResult.handled) return true;
+    final focusedContext =
+        FocusManager.instance.primaryFocus?.context ?? context;
+    if (handleVimPlotEditingKey(focusedContext, event)) return true;
+    if (enterVimPlotEditing(focusedContext, event)) return true;
     final key = stroke.key;
     final shift = stroke.shift;
     final focusedPlot = _focusedPlot();
@@ -243,11 +247,32 @@ class _MainPageState extends State<MainPage> {
     }
     if (vimEditingText() && key != LogicalKeyboardKey.escape) return false;
 
-    // H/J/K/L are the Vim focus cursor in every part of the workspace,
-    // including the plot grid. The old plot-only branch intercepted these
-    // keys and changed panel selection instead, which made the toolbar
-    // unreachable from a plot and caused controls to be skipped. Shifted
-    // motions remain available for chart panning below.
+    // The plot grid has its own virtual matrix: a source Column is a Vim
+    // column and a Panel is its row. This branch runs before generic page
+    // geometry so a Point-mode plot cannot steal H/L for crosshair movement.
+    if (!shift && focusedPlot) {
+      final direction = switch (key) {
+        LogicalKeyboardKey.keyH ||
+        LogicalKeyboardKey.arrowLeft =>
+          TraversalDirection.left,
+        LogicalKeyboardKey.keyJ ||
+        LogicalKeyboardKey.arrowDown =>
+          TraversalDirection.down,
+        LogicalKeyboardKey.keyK ||
+        LogicalKeyboardKey.arrowUp =>
+          TraversalDirection.up,
+        LogicalKeyboardKey.keyL ||
+        LogicalKeyboardKey.arrowRight =>
+          TraversalDirection.right,
+        _ => null,
+      };
+      if (direction != null && moveVimPlotFocus(focusedContext, direction)) {
+        return true;
+      }
+    }
+
+    // H/J/K/L are the Vim focus cursor in every non-plot part of the
+    // workspace. Shifted motions remain available for chart panning below.
     if (!shift) {
       final direction = switch (key) {
         LogicalKeyboardKey.keyH => TraversalDirection.left,
@@ -257,14 +282,6 @@ class _MainPageState extends State<MainPage> {
         _ => null,
       };
       if (direction != null && moveVimFocus(context, direction)) return true;
-    }
-
-    if (app.interactionMode == 1 &&
-        !shift &&
-        app.crosshairX != null &&
-        (key == LogicalKeyboardKey.keyH || key == LogicalKeyboardKey.keyL)) {
-      app.stepActivePoint(key == LogicalKeyboardKey.keyH ? -1 : 1);
-      return true;
     }
 
     if (key == LogicalKeyboardKey.keyH) {

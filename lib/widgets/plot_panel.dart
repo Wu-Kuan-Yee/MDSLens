@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'plot_render_cache.dart';
 import 'polished_dropdown.dart';
@@ -253,6 +254,8 @@ Future<bool> showDataSourceSetupEditor(
 
 class PlotPanel extends StatefulWidget {
   final int plotIdx;
+  final int vimColumn;
+  final int vimRow;
   final bool selected;
   final void Function()? onTap;
   final void Function(String action)? onContextAction;
@@ -262,6 +265,8 @@ class PlotPanel extends StatefulWidget {
   const PlotPanel({
     super.key,
     required this.plotIdx,
+    this.vimColumn = -1,
+    this.vimRow = -1,
     this.onTap,
     this.onContextAction,
     this.exportSaveDialog,
@@ -557,8 +562,49 @@ class _PlotPanelState extends State<PlotPanel> {
     }
 
     return VimPlotFocus(
+      column: widget.vimColumn,
+      row: widget.vimRow,
       child: Focus(
         focusNode: _vimFocusNode,
+        onKeyEvent: (node, event) {
+          final app = context.read<AppState>();
+          if (!app.vimMode ||
+              (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
+            return KeyEventResult.ignored;
+          }
+          final focusContext = node.context ?? context;
+          if (handleVimPlotEditingKey(focusContext, event)) {
+            return KeyEventResult.handled;
+          }
+          if (enterVimPlotEditing(focusContext, event)) {
+            return KeyEventResult.handled;
+          }
+          if (HardwareKeyboard.instance.isShiftPressed ||
+              HardwareKeyboard.instance.isControlPressed ||
+              HardwareKeyboard.instance.isAltPressed ||
+              HardwareKeyboard.instance.isMetaPressed) {
+            return KeyEventResult.ignored;
+          }
+          final direction = switch (event.logicalKey) {
+            LogicalKeyboardKey.keyH ||
+            LogicalKeyboardKey.arrowLeft =>
+              TraversalDirection.left,
+            LogicalKeyboardKey.keyJ ||
+            LogicalKeyboardKey.arrowDown =>
+              TraversalDirection.down,
+            LogicalKeyboardKey.keyK ||
+            LogicalKeyboardKey.arrowUp =>
+              TraversalDirection.up,
+            LogicalKeyboardKey.keyL ||
+            LogicalKeyboardKey.arrowRight =>
+              TraversalDirection.right,
+            _ => null,
+          };
+          if (direction != null && moveVimPlotFocus(focusContext, direction)) {
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
         onFocusChange: (focused) {
           if (focused) widget.onTap?.call();
         },

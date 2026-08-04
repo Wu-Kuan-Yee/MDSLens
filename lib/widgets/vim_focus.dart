@@ -26,7 +26,7 @@ class VimModeScope extends InheritedNotifier<AppState> {
 /// The transient editor state used by Vim mode. It intentionally is not part
 /// of AppState preferences: reopening the application always starts in Normal
 /// mode, just like a Vim buffer does after a fresh launch.
-enum VimInputMode { normal, insert, visual }
+enum VimInputMode { normal, insert, visual, plot }
 
 enum VimVisualMode { character, line, block }
 
@@ -132,14 +132,25 @@ class VimFocusHost extends StatefulWidget {
   State<VimFocusHost> createState() => _VimFocusHostState();
 }
 
-class _VimFocusHostState extends State<VimFocusHost> {
+class _VimFocusHostState extends State<VimFocusHost>
+    with SingleTickerProviderStateMixin {
   final _vimInputState = VimInputState();
+  late final AnimationController _focusRingController;
   Timer? _vimSequenceTimer;
   bool _pendingVimG = false;
 
   @override
   void initState() {
     super.initState();
+    _focusRingController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 760),
+      lowerBound: 0.24,
+      upperBound: 1,
+    )
+      ..addListener(_focusRingTick)
+      ..value = 1;
+    _vimInputState.addListener(_inputModeChanged);
     FocusManager.instance.addListener(_focusChanged);
     HardwareKeyboard.instance.addHandler(_handleGlobalFocusKey);
   }
@@ -149,6 +160,8 @@ class _VimFocusHostState extends State<VimFocusHost> {
     FocusManager.instance.removeListener(_focusChanged);
     HardwareKeyboard.instance.removeHandler(_handleGlobalFocusKey);
     _vimSequenceTimer?.cancel();
+    _vimInputState.removeListener(_inputModeChanged);
+    _focusRingController.dispose();
     _vimInputState.dispose();
     super.dispose();
   }
@@ -191,7 +204,30 @@ class _VimFocusHostState extends State<VimFocusHost> {
   }
 
   void _focusChanged() {
+    if (_vimInputState.mode == VimInputMode.plot && !_focusedPlotContext()) {
+      _vimInputState.setMode(VimInputMode.normal);
+    }
     if (mounted) setState(() {});
+  }
+
+  void _inputModeChanged() {
+    if (_vimInputState.mode == VimInputMode.normal) {
+      _focusRingController.stop();
+      _focusRingController.value = 1;
+    } else if (!_focusRingController.isAnimating) {
+      _focusRingController.repeat(reverse: true);
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _focusRingTick() {
+    if (mounted && _vimInputState.mode != VimInputMode.normal) setState(() {});
+  }
+
+  bool _focusedPlotContext() {
+    return FocusManager.instance.primaryFocus?.context
+            ?.findAncestorWidgetOfExactType<VimPlotFocus>() !=
+        null;
   }
 
   bool _handleGlobalFocusKey(KeyEvent event) {
@@ -206,6 +242,8 @@ class _VimFocusHostState extends State<VimFocusHost> {
     final inputResult = handleVimInputModeKey(focusContext ?? context, event);
     if (inputResult == KeyEventResult.handled) return true;
     if (vimEditingText()) return false;
+    if (handleVimPlotEditingKey(focusContext ?? context, event)) return true;
+    if (enterVimPlotEditing(focusContext ?? context, event)) return true;
     if (_handleVimPageSequence(focusContext ?? context, event)) return true;
     if (event.logicalKey == LogicalKeyboardKey.escape && focusContext != null) {
       final route = ModalRoute.of(focusContext);
@@ -217,11 +255,29 @@ class _VimFocusHostState extends State<VimFocusHost> {
         return true;
       }
     }
-    // The main page gives plot panels their own high-level behavior (panel
-    // selection, pan/zoom, and context menu). Other routes and controls use
-    // the generic geometric traversal here.
-    if (focusContext?.findAncestorWidgetOfExactType<VimPlotFocus>() != null) {
-      return false;
+    // The plot grid has a logical Column/Panel matrix, independent of the
+    // responsive visual reflow. Use it before generic route geometry.
+    if (_isVimPlotContext(focusContext)) {
+      final direction = switch (event.logicalKey) {
+        LogicalKeyboardKey.keyH ||
+        LogicalKeyboardKey.arrowLeft =>
+          TraversalDirection.left,
+        LogicalKeyboardKey.keyJ ||
+        LogicalKeyboardKey.arrowDown =>
+          TraversalDirection.down,
+        LogicalKeyboardKey.keyK ||
+        LogicalKeyboardKey.arrowUp =>
+          TraversalDirection.up,
+        LogicalKeyboardKey.keyL ||
+        LogicalKeyboardKey.arrowRight =>
+          TraversalDirection.right,
+        _ => null,
+      };
+      if (direction != null &&
+          !HardwareKeyboard.instance.isShiftPressed &&
+          moveVimPlotFocus(focusContext!, direction)) {
+        return true;
+      }
     }
     final direction = switch (event.logicalKey) {
       LogicalKeyboardKey.keyH ||
@@ -282,18 +338,22 @@ class _VimFocusHostState extends State<VimFocusHost> {
     );
     final rect = (topLeft & renderObject.size).inflate(3);
     if (rect.width <= 0 || rect.height <= 0) return const SizedBox.shrink();
+    final editing = _vimInputState.mode != VimInputMode.normal;
     return Positioned.fromRect(
       rect: rect,
       child: IgnorePointer(
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: const Color(0xFFE040FB),
-              width: 2,
+        child: Opacity(
+          opacity: editing ? _focusRingController.value : 1,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: const Color(0xFFE040FB),
+                width: 2,
+              ),
+              borderRadius: BorderRadius.circular(12),
             ),
-            borderRadius: BorderRadius.circular(12),
+            child: const SizedBox.expand(),
           ),
-          child: const SizedBox.expand(),
         ),
       ),
     );
@@ -303,7 +363,15 @@ class _VimFocusHostState extends State<VimFocusHost> {
 /// Marker used to keep plot-specific Vim behavior separate from ordinary
 /// control traversal, including when a popup route is open above the plot.
 class VimPlotFocus extends InheritedWidget {
-  const VimPlotFocus({super.key, required super.child});
+  const VimPlotFocus({
+    super.key,
+    required super.child,
+    this.column = -1,
+    this.row = -1,
+  });
+
+  final int column;
+  final int row;
 
   @override
   bool updateShouldNotify(VimPlotFocus oldWidget) => false;
@@ -726,11 +794,12 @@ bool leaveVimTextEditing(BuildContext context) {
 }
 
 class _VimFocusTarget {
-  const _VimFocusTarget(this.node, this.rect, this.depth);
+  const _VimFocusTarget(this.node, this.rect, this.depth, this.plot);
 
   final FocusNode node;
   final Rect rect;
   final int depth;
+  final VimPlotFocus? plot;
 }
 
 /// A virtual Vim page is the set of focusable controls on the active route.
@@ -881,7 +950,12 @@ List<_VimFocusTarget> _vimFocusTargets(FocusScopeNode scope) {
     }
     final rect = _vimNodeRect(node);
     if (rect == null) continue;
-    final target = _VimFocusTarget(node, rect, _vimNodeDepth(node));
+    final target = _VimFocusTarget(
+      node,
+      rect,
+      _vimNodeDepth(node),
+      node.context?.findAncestorWidgetOfExactType<VimPlotFocus>(),
+    );
     final duplicate =
         targets.indexWhere((existing) => _sameVimRect(existing.rect, rect));
     if (duplicate < 0) {
@@ -915,6 +989,137 @@ void _requestVimFocus(_VimFocusTarget target) {
       ),
     );
   });
+}
+
+bool _isVimPlotContext(BuildContext? context) {
+  return context?.findAncestorWidgetOfExactType<VimPlotFocus>() != null;
+}
+
+bool vimPlotEditing(BuildContext context) {
+  if (!VimModeScope.enabled(context)) return false;
+  return VimInputModeScope.mode(context) == VimInputMode.plot;
+}
+
+/// Enter the plot's Vim edit mode.  Point mode is deliberately explicit: in
+/// Normal mode H/L/J/K always move between Panel cells, while in Plot mode
+/// the horizontal keys operate the crosshair instead.
+bool enterVimPlotEditing(BuildContext context, KeyEvent event) {
+  if (!VimModeScope.enabled(context) ||
+      (event is! KeyDownEvent && event is! KeyRepeatEvent) ||
+      event.logicalKey != LogicalKeyboardKey.keyI ||
+      HardwareKeyboard.instance.isShiftPressed ||
+      !_isVimPlotContext(context)) {
+    return false;
+  }
+  final app = context.read<AppState>();
+  if (app.interactionMode != 1) return false;
+  if (app.crosshairX == null) app.activatePointForCurrentPanel();
+  VimInputModeScope.setMode(context, VimInputMode.plot);
+  return true;
+}
+
+/// Handle the crosshair half of Plot edit mode.  The mode consumes all keys
+/// while active so H/L cannot fall through to grid navigation accidentally.
+bool handleVimPlotEditingKey(BuildContext context, KeyEvent event) {
+  if (!vimPlotEditing(context) ||
+      (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
+    return false;
+  }
+  if (event.logicalKey == LogicalKeyboardKey.escape) {
+    VimInputModeScope.setMode(context, VimInputMode.normal);
+    return true;
+  }
+  final app = context.read<AppState>();
+  switch (event.logicalKey) {
+    case LogicalKeyboardKey.keyH:
+    case LogicalKeyboardKey.arrowLeft:
+      app.stepActivePoint(-1);
+      return true;
+    case LogicalKeyboardKey.keyL:
+    case LogicalKeyboardKey.arrowRight:
+      app.stepActivePoint(1);
+      return true;
+    default:
+      // Plot editing is modal.  A vertical motion has no crosshair meaning,
+      // so consume it rather than unexpectedly moving to another control.
+      return true;
+  }
+}
+
+/// Move between PlotPanel cells using the source layout coordinates.  The
+/// visual grid can reflow on phones, but a Column remains a Vim column and a
+/// Panel remains its row within that Column.
+bool moveVimPlotFocus(BuildContext context, TraversalDirection direction) {
+  if (vimPlotEditing(context)) return false;
+  final page = _vimFocusPage(context);
+  final current = FocusManager.instance.primaryFocus;
+  if (page == null || current == null) return false;
+  _VimFocusTarget? currentTarget;
+  for (final target in page.targets) {
+    if (target.node == current && target.plot != null) {
+      currentTarget = target;
+      break;
+    }
+  }
+  if (currentTarget?.plot == null) return false;
+  final currentPlot = currentTarget!.plot!;
+  final plotTargets = page.targets
+      .where((target) => target.plot != null)
+      .toList(growable: false);
+  if (plotTargets.length <= 1) return false;
+
+  final horizontal = direction == TraversalDirection.left ||
+      direction == TraversalDirection.right;
+  final step =
+      direction == TraversalDirection.left || direction == TraversalDirection.up
+          ? -1
+          : 1;
+  final currentAxis = horizontal ? currentPlot.column : currentPlot.row;
+  final sameLine = plotTargets.where((target) {
+    final plot = target.plot!;
+    return horizontal
+        ? plot.row == currentPlot.row
+        : plot.column == currentPlot.column;
+  }).toList();
+  final directional = sameLine.where((target) {
+    final plot = target.plot!;
+    final axis = horizontal ? plot.column : plot.row;
+    return step < 0 ? axis < currentAxis : axis > currentAxis;
+  }).toList();
+  directional.sort((a, b) {
+    final aPlot = a.plot!;
+    final bPlot = b.plot!;
+    final aAxis = horizontal ? aPlot.column : aPlot.row;
+    final bAxis = horizontal ? bPlot.column : bPlot.row;
+    final byAxis = (aAxis - currentAxis).abs().compareTo(
+          (bAxis - currentAxis).abs(),
+        );
+    if (byAxis != 0) return byAxis;
+    return a.rect.center.dx.compareTo(b.rect.center.dx);
+  });
+  var target = directional.firstOrNull;
+  if (target == null) {
+    // At a sparse-layout boundary, move to the nearest non-empty logical
+    // column/row in the requested direction instead of jumping to a toolbar.
+    final allDirectional = plotTargets.where((candidate) {
+      final plot = candidate.plot!;
+      final axis = horizontal ? plot.column : plot.row;
+      return step < 0 ? axis < currentAxis : axis > currentAxis;
+    }).toList();
+    allDirectional.sort((a, b) {
+      final aPlot = a.plot!;
+      final bPlot = b.plot!;
+      final aAxis = horizontal ? aPlot.column : aPlot.row;
+      final bAxis = horizontal ? bPlot.column : bPlot.row;
+      return (aAxis - currentAxis).abs().compareTo(
+            (bAxis - currentAxis).abs(),
+          );
+    });
+    target = allDirectional.firstOrNull;
+  }
+  if (target == null || target.node == current) return false;
+  _requestVimFocus(target);
+  return true;
 }
 
 _VimFocusPage? _vimFocusPage(BuildContext context) {

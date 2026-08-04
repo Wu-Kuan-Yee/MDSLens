@@ -37,6 +37,7 @@ import 'package:mdslens/widgets/polished_dropdown.dart';
 import 'package:mdslens/widgets/polished_popup_menu.dart';
 import 'package:mdslens/widgets/responsive_plot_layout.dart';
 import 'package:mdslens/widgets/toolbar.dart';
+import 'package:mdslens/widgets/vim_focus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -417,6 +418,74 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
     expect(tester.widget<TextField>(field).readOnly, isTrue);
+  });
+
+  testWidgets('Vim plot navigation follows columns and Point edit mode', (
+    tester,
+  ) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    for (final plot in app.plots) {
+      plot.series[0] = SeriesData(
+        points: const [
+          [0, 1],
+          [1, 2],
+          [2, 3],
+        ],
+      );
+    }
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Future<void> expectFocusedPlot(int plotIndex) async {
+      await tester.pump();
+      final focused = FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<PlotPanel>();
+      expect(focused?.plotIdx, plotIndex);
+    }
+
+    await tester.tap(find.byKey(const ValueKey('plot-panel-0')));
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
+    await expectFocusedPlot(3); // Column 2, Panel 1.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await expectFocusedPlot(4); // Column 2, Panel 2.
+
+    // In Point mode Normal H moves to the neighboring Panel and does not
+    // consume the key for crosshair stepping.
+    app.interactionMode = 1;
+    app.activatePointForCurrentPanel();
+    final beforeNormalMove = app.crosshairX;
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyH);
+    await expectFocusedPlot(1); // Column 1, Panel 2.
+    expect(app.crosshairX, beforeNormalMove);
+
+    // i enters plot editing; H/L and the arrow keys now move the crosshair,
+    // and Escape returns to the non-blinking Normal selection state.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pump();
+    final mainContext = tester.element(find.byType(MainPage));
+    expect(VimInputModeScope.mode(mainContext), VimInputMode.plot);
+    final beforeEditMove = app.crosshairX;
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(app.crosshairX, isNot(beforeEditMove));
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<PlotPanel>()
+          ?.plotIdx,
+      1,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(VimInputModeScope.mode(mainContext), VimInputMode.normal);
   });
 
   testWidgets('Vim settings menu focuses its first option', (tester) async {
