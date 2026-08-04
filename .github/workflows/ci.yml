@@ -159,10 +159,53 @@ jobs:
     steps:
       - name: Install baseline build tools
         run: |
-          apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            build-essential ca-certificates clang cmake curl git jq libgtk-3-dev libsecret-1-dev ninja-build \
-            nasm patchelf perl pkg-config python3 unzip xz-utils
+          set -eu
+          # Keep the focal container so the portable Linux build remains
+          # compatible with glibc 2.31. GitHub's default HTTP mirrors are
+          # occasionally unreachable, so use HTTPS and retry both index and
+          # package downloads before failing the job.
+          for source_file in /etc/apt/sources.list /etc/apt/sources.list.d/*.list; do
+            if [ -f "$source_file" ]; then
+              sed -i \
+                -e 's#http://archive\.ubuntu\.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' \
+                -e 's#http://security\.ubuntu\.com/ubuntu#https://security.ubuntu.com/ubuntu#g' \
+                -e 's#http://ports\.ubuntu\.com/ubuntu-ports#https://ports.ubuntu.com/ubuntu-ports#g' \
+                "$source_file"
+            fi
+          done
+          apt-get clean
+          apt_ready=0
+          for attempt in 1 2 3 4 5; do
+            rm -rf /var/lib/apt/lists/*
+            if apt-get \
+                -o Acquire::Retries=5 \
+                -o Acquire::http::Timeout=60 \
+                -o Acquire::https::Timeout=60 \
+                update \
+                && apt-cache show build-essential >/dev/null 2>&1 \
+                && apt-cache show libgtk-3-dev >/dev/null 2>&1; then
+              apt_ready=1
+              break
+            fi
+            if [ "$attempt" -lt 5 ]; then sleep $((attempt * 5)); fi
+          done
+          [ "$apt_ready" -eq 1 ]
+          apt_installed=0
+          for attempt in 1 2 3 4 5; do
+            if DEBIAN_FRONTEND=noninteractive apt-get \
+                -o Acquire::Retries=5 \
+                -o Acquire::http::Timeout=60 \
+                -o Acquire::https::Timeout=60 \
+                install -y --no-install-recommends \
+                build-essential ca-certificates clang cmake curl git jq libgtk-3-dev libsecret-1-dev ninja-build \
+                nasm patchelf perl pkg-config python3 unzip xz-utils; then
+              apt_installed=1
+              break
+            fi
+            apt-get clean
+            if [ "$attempt" -lt 5 ]; then sleep $((attempt * 5)); fi
+          done
+          [ "$apt_installed" -eq 1 ]
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
