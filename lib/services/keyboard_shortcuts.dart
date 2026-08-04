@@ -590,11 +590,21 @@ Map<MdsShortcutCommand, MdsShortcutBinding> defaultMdsShortcutBindings() {
           linux ? LogicalKeyboardKey.keyH : LogicalKeyboardKey.arrowLeft,
         ),
       ),
+      alternative: single(
+        modified(
+          linux ? LogicalKeyboardKey.arrowLeft : LogicalKeyboardKey.keyH,
+        ),
+      ),
     ),
     MdsShortcutCommand.nextShot: MdsShortcutBinding(
       primary: single(
         modified(
           linux ? LogicalKeyboardKey.keyL : LogicalKeyboardKey.arrowRight,
+        ),
+      ),
+      alternative: single(
+        modified(
+          linux ? LogicalKeyboardKey.arrowRight : LogicalKeyboardKey.keyL,
         ),
       ),
     ),
@@ -605,6 +615,12 @@ Map<MdsShortcutCommand, MdsShortcutBinding> defaultMdsShortcutBindings() {
           shift: true,
         ),
       ),
+      alternative: single(
+        modified(
+          linux ? LogicalKeyboardKey.arrowRight : LogicalKeyboardKey.keyL,
+          shift: true,
+        ),
+      ),
     ),
     MdsShortcutCommand.pointPrevious: MdsShortcutBinding(
       primary: single(
@@ -612,11 +628,21 @@ Map<MdsShortcutCommand, MdsShortcutBinding> defaultMdsShortcutBindings() {
           linux ? LogicalKeyboardKey.keyH : LogicalKeyboardKey.arrowLeft,
         ),
       ),
+      alternative: single(
+        MdsShortcutStroke(
+          linux ? LogicalKeyboardKey.arrowLeft : LogicalKeyboardKey.keyH,
+        ),
+      ),
     ),
     MdsShortcutCommand.pointNext: MdsShortcutBinding(
       primary: single(
         MdsShortcutStroke(
           linux ? LogicalKeyboardKey.keyL : LogicalKeyboardKey.arrowRight,
+        ),
+      ),
+      alternative: single(
+        MdsShortcutStroke(
+          linux ? LogicalKeyboardKey.arrowRight : LogicalKeyboardKey.keyL,
         ),
       ),
     ),
@@ -630,7 +656,7 @@ Map<MdsShortcutCommand, MdsShortcutBinding> defaultMdsShortcutBindings() {
           ? MdsShortcutSequence.single(
               MdsShortcutStroke(LogicalKeyboardKey.escape),
             )
-          : null,
+          : chord(LogicalKeyboardKey.keyJ, LogicalKeyboardKey.keyK),
     ),
     MdsShortcutCommand.panelRate: MdsShortcutBinding(
       primary: chord(LogicalKeyboardKey.keyT, LogicalKeyboardKey.keyR),
@@ -650,11 +676,21 @@ Map<MdsShortcutCommand, MdsShortcutBinding> defaultMdsShortcutBindings() {
           linux ? LogicalKeyboardKey.keyH : LogicalKeyboardKey.arrowLeft,
         ),
       ),
+      alternative: single(
+        MdsShortcutStroke(
+          linux ? LogicalKeyboardKey.arrowLeft : LogicalKeyboardKey.keyH,
+        ),
+      ),
     ),
     MdsShortcutCommand.panelDown: MdsShortcutBinding(
       primary: single(
         MdsShortcutStroke(
           linux ? LogicalKeyboardKey.keyJ : LogicalKeyboardKey.arrowDown,
+        ),
+      ),
+      alternative: single(
+        MdsShortcutStroke(
+          linux ? LogicalKeyboardKey.arrowDown : LogicalKeyboardKey.keyJ,
         ),
       ),
     ),
@@ -664,6 +700,11 @@ Map<MdsShortcutCommand, MdsShortcutBinding> defaultMdsShortcutBindings() {
           linux ? LogicalKeyboardKey.keyK : LogicalKeyboardKey.arrowUp,
         ),
       ),
+      alternative: single(
+        MdsShortcutStroke(
+          linux ? LogicalKeyboardKey.arrowUp : LogicalKeyboardKey.keyK,
+        ),
+      ),
     ),
     MdsShortcutCommand.panelRight: MdsShortcutBinding(
       primary: single(
@@ -671,25 +712,42 @@ Map<MdsShortcutCommand, MdsShortcutBinding> defaultMdsShortcutBindings() {
           linux ? LogicalKeyboardKey.keyL : LogicalKeyboardKey.arrowRight,
         ),
       ),
+      alternative: single(
+        MdsShortcutStroke(
+          linux ? LogicalKeyboardKey.arrowRight : LogicalKeyboardKey.keyL,
+        ),
+      ),
     ),
     MdsShortcutCommand.menuLeft: MdsShortcutBinding(
       primary: popupNavigation(
         linux ? LogicalKeyboardKey.keyH : LogicalKeyboardKey.arrowLeft,
+      ),
+      alternative: popupNavigation(
+        linux ? LogicalKeyboardKey.arrowLeft : LogicalKeyboardKey.keyH,
       ),
     ),
     MdsShortcutCommand.menuDown: MdsShortcutBinding(
       primary: popupNavigation(
         linux ? LogicalKeyboardKey.keyJ : LogicalKeyboardKey.arrowDown,
       ),
+      alternative: popupNavigation(
+        linux ? LogicalKeyboardKey.arrowDown : LogicalKeyboardKey.keyJ,
+      ),
     ),
     MdsShortcutCommand.menuUp: MdsShortcutBinding(
       primary: popupNavigation(
         linux ? LogicalKeyboardKey.keyK : LogicalKeyboardKey.arrowUp,
       ),
+      alternative: popupNavigation(
+        linux ? LogicalKeyboardKey.arrowUp : LogicalKeyboardKey.keyK,
+      ),
     ),
     MdsShortcutCommand.menuRight: MdsShortcutBinding(
       primary: popupNavigation(
         linux ? LogicalKeyboardKey.keyL : LogicalKeyboardKey.arrowRight,
+      ),
+      alternative: popupNavigation(
+        linux ? LogicalKeyboardKey.arrowRight : LogicalKeyboardKey.keyL,
       ),
     ),
     MdsShortcutCommand.menuActivate: MdsShortcutBinding(
@@ -759,6 +817,105 @@ Map<MdsShortcutCommand, MdsShortcutBinding> _legacyMdsShortcutBindings() {
   final linux = platform == TargetPlatform.linux;
   MdsShortcutStroke modified(LogicalKeyboardKey key, {bool shift = false}) =>
       MdsShortcutStroke(key, control: !mac, meta: mac, shift: shift);
+  final oldNavigation = <MdsShortcutCommand, MdsShortcutBinding>{
+    MdsShortcutCommand.previousShot: MdsShortcutBinding(
+      primary: MdsShortcutSequence.single(
+        modified(
+            linux ? LogicalKeyboardKey.keyH : LogicalKeyboardKey.arrowLeft),
+      ),
+    ),
+    MdsShortcutCommand.nextShot: MdsShortcutBinding(
+      primary: MdsShortcutSequence.single(
+        modified(
+            linux ? LogicalKeyboardKey.keyL : LogicalKeyboardKey.arrowRight),
+      ),
+    ),
+    MdsShortcutCommand.latestShot: MdsShortcutBinding(
+      primary: MdsShortcutSequence.single(
+        modified(
+          linux ? LogicalKeyboardKey.keyL : LogicalKeyboardKey.arrowRight,
+          shift: true,
+        ),
+      ),
+    ),
+    MdsShortcutCommand.pointPrevious: MdsShortcutBinding(
+      primary: MdsShortcutSequence.single(
+        MdsShortcutStroke(
+          linux ? LogicalKeyboardKey.keyH : LogicalKeyboardKey.arrowLeft,
+        ),
+      ),
+    ),
+    MdsShortcutCommand.pointNext: MdsShortcutBinding(
+      primary: MdsShortcutSequence.single(
+        MdsShortcutStroke(
+          linux ? LogicalKeyboardKey.keyL : LogicalKeyboardKey.arrowRight,
+        ),
+      ),
+    ),
+    MdsShortcutCommand.panelLeft: MdsShortcutBinding(
+      primary: MdsShortcutSequence.single(
+        MdsShortcutStroke(
+          linux ? LogicalKeyboardKey.keyH : LogicalKeyboardKey.arrowLeft,
+        ),
+      ),
+    ),
+    MdsShortcutCommand.panelDown: MdsShortcutBinding(
+      primary: MdsShortcutSequence.single(
+        MdsShortcutStroke(
+          linux ? LogicalKeyboardKey.keyJ : LogicalKeyboardKey.arrowDown,
+        ),
+      ),
+    ),
+    MdsShortcutCommand.panelUp: MdsShortcutBinding(
+      primary: MdsShortcutSequence.single(
+        MdsShortcutStroke(
+          linux ? LogicalKeyboardKey.keyK : LogicalKeyboardKey.arrowUp,
+        ),
+      ),
+    ),
+    MdsShortcutCommand.panelRight: MdsShortcutBinding(
+      primary: MdsShortcutSequence.single(
+        MdsShortcutStroke(
+          linux ? LogicalKeyboardKey.keyL : LogicalKeyboardKey.arrowRight,
+        ),
+      ),
+    ),
+    MdsShortcutCommand.menuLeft: MdsShortcutBinding(
+      primary: MdsShortcutSequence.single(
+        MdsShortcutStroke(
+          linux ? LogicalKeyboardKey.keyH : LogicalKeyboardKey.arrowLeft,
+        ),
+      ),
+    ),
+    MdsShortcutCommand.menuDown: MdsShortcutBinding(
+      primary: MdsShortcutSequence.single(
+        MdsShortcutStroke(
+          linux ? LogicalKeyboardKey.keyJ : LogicalKeyboardKey.arrowDown,
+        ),
+      ),
+    ),
+    MdsShortcutCommand.menuUp: MdsShortcutBinding(
+      primary: MdsShortcutSequence.single(
+        MdsShortcutStroke(
+          linux ? LogicalKeyboardKey.keyK : LogicalKeyboardKey.arrowUp,
+        ),
+      ),
+    ),
+    MdsShortcutCommand.menuRight: MdsShortcutBinding(
+      primary: MdsShortcutSequence.single(
+        MdsShortcutStroke(
+          linux ? LogicalKeyboardKey.keyL : LogicalKeyboardKey.arrowRight,
+        ),
+      ),
+    ),
+  };
+  if (!linux) {
+    oldNavigation[MdsShortcutCommand.exitPoint] = MdsShortcutBinding(
+      primary: MdsShortcutSequence.single(
+        MdsShortcutStroke(LogicalKeyboardKey.escape),
+      ),
+    );
+  }
   final panelKeys = <MdsShortcutCommand, LogicalKeyboardKey>{
     MdsShortcutCommand.panelLeft:
         linux ? LogicalKeyboardKey.keyH : LogicalKeyboardKey.arrowLeft,
@@ -770,6 +927,7 @@ Map<MdsShortcutCommand, MdsShortcutBinding> _legacyMdsShortcutBindings() {
         linux ? LogicalKeyboardKey.keyL : LogicalKeyboardKey.arrowRight,
   };
   return {
+    ...oldNavigation,
     ...{
       MdsShortcutCommand.resetCurrentScale: MdsShortcutBinding(
         primary: MdsShortcutSequence.single(modified(LogicalKeyboardKey.keyR)),
@@ -853,13 +1011,13 @@ String _displayKey(LogicalKeyboardKey key) {
 
 String shortcutPlatformDescription() {
   if (defaultTargetPlatform == TargetPlatform.macOS) {
-    return 'macOS defaults use Command shortcuts and native key symbols. In Point mode, unmodified 1–9 select curves.';
+    return 'macOS defaults use Command shortcuts, arrow keys, and Vim-style H/J/K/L navigation. In Point mode, unmodified 1–9 select curves.';
   }
   if (defaultTargetPlatform == TargetPlatform.windows) {
-    return 'Windows defaults use Ctrl shortcuts and arrow-key navigation. In Point mode, unmodified 1–9 select curves.';
+    return 'Windows defaults use Ctrl shortcuts, arrow keys, and Vim-style H/J/K/L navigation. In Point mode, unmodified 1–9 select curves.';
   }
   if (defaultTargetPlatform == TargetPlatform.linux) {
-    return 'Linux defaults include H/J/K/L navigation alongside Ctrl shortcuts. In Point mode, unmodified 1–9 select curves.';
+    return 'Linux defaults include both H/J/K/L and arrow-key navigation alongside Ctrl shortcuts. In Point mode, unmodified 1–9 select curves.';
   }
   return 'Shortcuts take effect when a hardware keyboard is connected.';
 }

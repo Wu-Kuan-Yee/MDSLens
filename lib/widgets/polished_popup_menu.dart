@@ -47,6 +47,24 @@ class _KeyboardPopupMenuItem<T> extends PopupMenuItem<T> {
 
 class _KeyboardPopupMenuItemState<T>
     extends PopupMenuItemState<T, _KeyboardPopupMenuItem<T>> {
+  FocusNode? _menuFocusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.autofocus) return;
+    _menuFocusNode = FocusNode(debugLabel: 'polished-popup-menu-item');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _menuFocusNode?.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _menuFocusNode?.dispose();
+    super.dispose();
+  }
+
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     final stroke = shortcutStrokeFromEvent(event);
     if (stroke == null) return KeyEventResult.ignored;
@@ -66,11 +84,11 @@ class _KeyboardPopupMenuItemState<T>
     switch (command) {
       case MdsShortcutCommand.menuLeft:
       case MdsShortcutCommand.menuUp:
-        FocusScope.of(context).previousFocus();
+        _moveMenuFocus(context, backward: true);
         break;
       case MdsShortcutCommand.menuDown:
       case MdsShortcutCommand.menuRight:
-        FocusScope.of(context).nextFocus();
+        _moveMenuFocus(context, backward: false);
         break;
       case MdsShortcutCommand.menuActivate:
         handleTap();
@@ -80,8 +98,27 @@ class _KeyboardPopupMenuItemState<T>
     }
   }
 
+  void _moveMenuFocus(BuildContext context, {required bool backward}) {
+    final current = FocusManager.instance.primaryFocus;
+    final policy = FocusTraversalGroup.maybeOf(context);
+    if (current != null && policy != null) {
+      if (backward) {
+        policy.inDirection(current, TraversalDirection.up);
+      } else {
+        policy.inDirection(current, TraversalDirection.down);
+      }
+      return;
+    }
+    if (backward) {
+      FocusScope.of(context).previousFocus();
+    } else {
+      FocusScope.of(context).nextFocus();
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Focus(
+        focusNode: _menuFocusNode,
         autofocus: widget.autofocus,
         onKeyEvent: _handleKeyEvent,
         child: super.build(context),
@@ -238,6 +275,7 @@ Future<T?> showPolishedPopupMenu<T>({
       borderRadius: BorderRadius.circular(15),
       side: BorderSide(color: colors.outlineVariant),
     ),
+    requestFocus: true,
     popUpAnimationStyle: const AnimationStyle(
       duration: Duration(milliseconds: 160),
       reverseDuration: Duration(milliseconds: 110),

@@ -4799,6 +4799,19 @@ void main() {
     await tester.pumpAndSettle();
     expect(app.dataMode, 1);
 
+    final toolbarContext = tester.element(find.byType(ToolbarWidget));
+    unawaited(showRateShortcutMenu(toolbarContext, app));
+    await tester.pumpAndSettle();
+    final rateAnchor = tester.getRect(
+      find.byKey(const ValueKey('toolbar-rate-dropdown')),
+    );
+    final shortcutRateItem = tester.getRect(
+      find.byKey(const ValueKey('shortcut-rate-menu-thin')),
+    );
+    expect(shortcutRateItem.top, greaterThanOrEqualTo(rateAnchor.bottom));
+    await tester.tapAt(const Offset(20, 20));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
     expect(find.byType(PopupMenuDivider), findsNWidgets(5));
@@ -5119,6 +5132,16 @@ void main() {
       ])
         command: const MdsShortcutBinding(),
     };
+    menuShortcuts[MdsShortcutCommand.menuDown] = MdsShortcutBinding(
+      primary: MdsShortcutSequence.single(
+        MdsShortcutStroke(LogicalKeyboardKey.keyJ),
+      ),
+    );
+    menuShortcuts[MdsShortcutCommand.menuUp] = MdsShortcutBinding(
+      primary: MdsShortcutSequence.single(
+        MdsShortcutStroke(LogicalKeyboardKey.keyK),
+      ),
+    );
     menuShortcuts[MdsShortcutCommand.menuActivate] = MdsShortcutBinding(
       primary: MdsShortcutSequence([
         MdsShortcutStroke(LogicalKeyboardKey.keyG),
@@ -5149,6 +5172,12 @@ void main() {
                             label: 'First',
                             icon: Icons.check,
                           ),
+                          PolishedPopupMenuOption(
+                            id: 'second',
+                            value: 'second',
+                            label: 'Second',
+                            icon: Icons.check_circle_outline,
+                          ),
                         ],
                       ),
                     ],
@@ -5174,6 +5203,15 @@ void main() {
 
     expect(selected, 'first');
     expect(find.text('First'), findsNothing);
+
+    selected = null;
+    await tester.tap(find.text('Open menu'));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(selected, 'second');
   });
 
   testWidgets('Empty data source fields expose every available suggestion', (

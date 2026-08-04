@@ -286,17 +286,24 @@ List<(String, String)> _shotMetadata(AppState app) {
   ];
 }
 
+GlobalKey _rateDropdownAnchorKey(AppState app) =>
+    GlobalObjectKey<State<StatefulWidget>>(app);
+
 Future<void> showRateShortcutMenu(
   BuildContext context,
   AppState app, {
   bool selectedPanelOnly = false,
 }) async {
   final overlay = Navigator.of(context).overlay?.context.findRenderObject();
-  final position = overlay is RenderBox
-      ? overlay.localToGlobal(
-          Offset(overlay.size.width / 2, overlay.size.height / 2),
-        )
-      : Offset.zero;
+  final rateAnchor =
+      _rateDropdownAnchorKey(app).currentContext?.findRenderObject();
+  final position = rateAnchor is RenderBox && rateAnchor.hasSize
+      ? rateAnchor.localToGlobal(Offset(0, rateAnchor.size.height + 6))
+      : overlay is RenderBox
+          ? overlay.localToGlobal(
+              Offset(overlay.size.width / 2, overlay.size.height / 2),
+            )
+          : Offset.zero;
   final value = await showPolishedPopupMenu<int>(
     context: context,
     globalPosition: position,
@@ -657,38 +664,41 @@ class ToolbarWidget extends StatelessWidget {
         ),
         const SizedBox(width: 6),
         Expanded(
-          child: PolishedDropdown<int>(
-            key: const ValueKey('toolbar-rate-dropdown'),
-            id: 'toolbar-rate',
-            value: app.dataMode,
-            leadingIcon: Icons.speed_rounded,
-            fontSize: uiSize,
-            minimumMenuWidth: 190,
-            tooltip: _shortcutTooltip(
-              app,
-              'Rate',
-              MdsShortcutCommand.globalRate,
+          child: SizedBox(
+            key: _rateDropdownAnchorKey(app),
+            child: PolishedDropdown<int>(
+              key: const ValueKey('toolbar-rate-dropdown'),
+              id: 'toolbar-rate',
+              value: app.dataMode,
+              leadingIcon: Icons.speed_rounded,
+              fontSize: uiSize,
+              minimumMenuWidth: 190,
+              tooltip: _shortcutTooltip(
+                app,
+                'Rate',
+                MdsShortcutCommand.globalRate,
+              ),
+              options: const [
+                PolishedDropdownOption(
+                  value: 0,
+                  label: 'Thin',
+                  icon: Icons.compress_rounded,
+                ),
+                PolishedDropdownOption(
+                  value: 1,
+                  label: 'Medium',
+                  icon: Icons.format_line_spacing_rounded,
+                ),
+                PolishedDropdownOption(
+                  value: 2,
+                  label: 'Full',
+                  icon: Icons.stacked_line_chart_rounded,
+                ),
+              ],
+              onChanged: (value) {
+                app.changeDataModeAndRefresh(value);
+              },
             ),
-            options: const [
-              PolishedDropdownOption(
-                value: 0,
-                label: 'Thin',
-                icon: Icons.compress_rounded,
-              ),
-              PolishedDropdownOption(
-                value: 1,
-                label: 'Medium',
-                icon: Icons.format_line_spacing_rounded,
-              ),
-              PolishedDropdownOption(
-                value: 2,
-                label: 'Full',
-                icon: Icons.stacked_line_chart_rounded,
-              ),
-            ],
-            onChanged: (value) {
-              app.changeDataModeAndRefresh(value);
-            },
           ),
         ),
       ],
