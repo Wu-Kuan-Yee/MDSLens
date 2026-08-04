@@ -210,7 +210,7 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
           children: [
             Icon(Icons.terminal_rounded),
             SizedBox(width: 10),
-            Flexible(child: Text('Vim command')),
+            Flexible(child: Text('Vim Command')),
           ],
         ),
         content: Column(

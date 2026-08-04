@@ -33,7 +33,7 @@ Future<_UpdateChoice?> _showUpdateChoiceDialog(
   return showDialog<_UpdateChoice>(
     context: context,
     builder: (context) => KeyboardSafeDialog(
-      title: const Text('Update available'),
+      title: const Text('Update Available'),
       content: Text(
         supportsDirectUpdate
             ? 'MDSLens ${result.latestVersion} is available. You can download the correct package for this device or inspect the release first.'
@@ -246,7 +246,7 @@ class _UpdateDownloadDialogState extends State<_UpdateDownloadDialog> {
           children: [
             Icon(Icons.system_update_alt_rounded, color: accent),
             const SizedBox(width: 10),
-            const Expanded(child: Text('MDSLens update')),
+            const Expanded(child: Text('MDSLens Update')),
           ],
         ),
         content: Column(
@@ -543,7 +543,7 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
       final openReleases = await showDialog<bool>(
         context: context,
         builder: (context) => KeyboardSafeDialog(
-          title: const Text('Update check failed'),
+          title: const Text('Update Check Failed'),
           content: const Text(
             'The latest version could not be checked. You can still open the releases page.',
           ),
@@ -835,7 +835,7 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
                           Icons.update_rounded,
                           color: theme.colorScheme.primary,
                         ),
-                        title: const Text('Check for updates automatically'),
+                        title: const Text('Check For Updates Automatically'),
                         subtitle: const Text(
                           'Check quietly when MDSLens starts.',
                         ),

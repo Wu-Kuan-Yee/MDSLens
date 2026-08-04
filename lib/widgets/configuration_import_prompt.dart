@@ -31,7 +31,7 @@ Future<ImportedConfigurationDecision?> showImportedConfigurationDecision(
               children: [
                 Icon(Icons.numbers_rounded),
                 SizedBox(width: 10),
-                Flexible(child: Text('Use the configuration shot?')),
+                Flexible(child: Text('Use The Configuration Shot?')),
               ],
             ),
             content: SingleChildScrollView(
@@ -97,7 +97,7 @@ Future<ImportedConfigurationDecision?> showImportedConfigurationDecision(
                               retainShots = value ?? false;
                             })
                         : null,
-                    title: const Text('Keep all recognized shot numbers'),
+                    title: const Text('Keep All Recognized Shot Numbers'),
                     subtitle: const Text(
                       'Preserve global, panel, and per-signal shots for the initial load.',
                     ),
@@ -114,7 +114,7 @@ Future<ImportedConfigurationDecision?> showImportedConfigurationDecision(
                               retainFixedShots = value ?? false;
                             })
                         : null,
-                    title: const Text('Keep fixed-shot settings'),
+                    title: const Text('Keep Fixed-Shot Settings'),
                     subtitle: Text(
                       summary.hasSignals
                           ? '${summary.signalCount} signals; $fixedLabel.'

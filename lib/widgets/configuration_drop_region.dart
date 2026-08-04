@@ -58,7 +58,7 @@ Future<bool> confirmDroppedConfigurationImport(
             children: [
               Icon(Icons.file_download_outlined),
               SizedBox(width: 10),
-              Flexible(child: Text('Import dropped configuration?')),
+              Flexible(child: Text('Import Dropped Configuration?')),
             ],
           ),
           content: Container(

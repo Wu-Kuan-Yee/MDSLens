@@ -579,6 +579,9 @@ class _PlotPanelState extends State<PlotPanel> {
           if (enterVimPlotEditing(focusContext, event)) {
             return KeyEventResult.handled;
           }
+          if (handleVimPlotNavigationKey(focusContext, event)) {
+            return KeyEventResult.handled;
+          }
           if (HardwareKeyboard.instance.isShiftPressed ||
               HardwareKeyboard.instance.isControlPressed ||
               HardwareKeyboard.instance.isAltPressed ||
@@ -613,7 +616,13 @@ class _PlotPanelState extends State<PlotPanel> {
             GestureDetector(
               onTapDown: (_) {
                 final a = context.read<AppState>();
-                if (a.vimMode) _vimFocusNode.requestFocus();
+                if (a.vimMode) {
+                  _vimFocusNode.requestFocus();
+                  VimInputModeScope.setPlotSelectionLevel(
+                    context,
+                    VimPlotSelectionLevel.column,
+                  );
+                }
                 widget.onTap?.call();
               },
               onTapUp: (details) {
@@ -2717,7 +2726,7 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
               controlAffinity: ListTileControlAffinity.leading,
             ),
             CheckboxListTile(
-              title: const Text('Custom X range'),
+              title: const Text('Custom X Range'),
               value: _customX,
               onChanged: (v) => setState(() => _customX = v ?? false),
               contentPadding: EdgeInsets.zero,
@@ -2754,7 +2763,7 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
               ),
             ],
             CheckboxListTile(
-              title: const Text('Custom Y range'),
+              title: const Text('Custom Y Range'),
               value: _customY,
               onChanged: (v) => setState(() => _customY = v ?? false),
               contentPadding: EdgeInsets.zero,

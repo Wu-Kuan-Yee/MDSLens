@@ -220,6 +220,8 @@ class _MainPageState extends State<MainPage> {
         FocusManager.instance.primaryFocus?.context ?? context;
     if (handleVimPlotEditingKey(focusedContext, event)) return true;
     if (enterVimPlotEditing(focusedContext, event)) return true;
+    if (handleVimLayoutNavigationKey(focusedContext, event)) return true;
+    if (handleVimPlotNavigationKey(focusedContext, event)) return true;
     final key = stroke.key;
     final shift = stroke.shift;
     final focusedPlot = _focusedPlot();

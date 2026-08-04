@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/app_state.dart';
 import 'plot_panel.dart';
 import 'responsive_plot_layout.dart';
+import 'vim_focus.dart';
 
 class PlotGrid extends StatelessWidget {
   const PlotGrid({super.key});
@@ -44,14 +45,17 @@ class PlotGrid extends StatelessWidget {
               children: displayColumns
                   .map(
                     (column) => Expanded(
-                      child: Column(
-                        children: column
-                            .map(
-                              (cell) => Expanded(
-                                child: _panelForCell(app, cell),
-                              ),
-                            )
-                            .toList(),
+                      child: VimPlotColumnFocus(
+                        column: column.first.sourceColumn,
+                        child: Column(
+                          children: column
+                              .map(
+                                (cell) => Expanded(
+                                  child: _panelForCell(app, cell),
+                                ),
+                              )
+                              .toList(),
+                        ),
                       ),
                     ),
                   )

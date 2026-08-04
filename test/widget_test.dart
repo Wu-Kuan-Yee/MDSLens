@@ -82,12 +82,12 @@ void main() {
 
     await tester.tap(find.text('Confirm drop'));
     await tester.pumpAndSettle();
-    expect(find.text('Import dropped configuration?'), findsOneWidget);
+    expect(find.text('Import Dropped Configuration?'), findsOneWidget);
     expect(find.text('experiment.webscp'), findsOneWidget);
     await tester.tapAt(const Offset(2, 2));
     await tester.pump();
     expect(
-      find.text('Import dropped configuration?'),
+      find.text('Import Dropped Configuration?'),
       findsOneWidget,
       reason: 'tapping the modal barrier must not silently abandon the import',
     );
@@ -301,30 +301,24 @@ void main() {
     final plot = find.byType(PlotPanel).first;
     await tester.tap(plot);
     await tester.pump();
-    final plotRect = tester.getRect(plot);
     expect(
       FocusManager.instance.primaryFocus?.context
           ?.findAncestorWidgetOfExactType<PlotPanel>(),
       isNotNull,
     );
 
-    // k must leave the chart and reach a real toolbar control instead of
-    // being consumed by panel-selection logic.
+    // A vertical motion enters the selected source Column and lands on its
+    // last Panel; it no longer falls through to an unrelated toolbar row.
     await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
     await tester.pump();
-    final toolbarFocus = FocusManager.instance.primaryFocus;
-    expect(toolbarFocus, isNotNull);
+    final lastPanel = FocusManager.instance.primaryFocus?.context
+        ?.findAncestorWidgetOfExactType<PlotPanel>();
     expect(
-      toolbarFocus!.rect.bottom,
-      lessThanOrEqualTo(plotRect.top + 1),
-    );
-    expect(
-      toolbarFocus.context?.findAncestorWidgetOfExactType<PlotPanel>(),
-      isNull,
+      lastPanel,
+      isNotNull,
     );
 
-    // j returns to the plot area, proving the route is navigable in both
-    // directions rather than only wrapping at one edge.
+    // Repeating j at the column boundary remains inside the same nested page.
     await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
     await tester.pump();
     expect(
@@ -388,21 +382,24 @@ void main() {
     final plot = find.byType(PlotPanel).first;
     await tester.tap(plot);
     await tester.pump();
-    final plotRect = tester.getRect(plot);
 
-    // A virtual page is ordered like text: gg reaches its first row and G
-    // reaches its last row, regardless of the nested Flutter focus groups.
+    // The plot grid is a nested Vim page: the outer cursor stays on Column 1,
+    // while gg/G select its first/last Panel.
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.pump();
-    expect(FocusManager.instance.primaryFocus!.rect.bottom,
-        lessThan(plotRect.top));
+    final firstPanel = FocusManager.instance.primaryFocus?.context
+        ?.findAncestorWidgetOfExactType<PlotPanel>();
+    expect(firstPanel?.vimColumn, 0);
+    expect(firstPanel?.vimRow, 0);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
     await tester.pump();
-    expect(FocusManager.instance.primaryFocus!.rect.top,
-        greaterThanOrEqualTo(plotRect.top));
+    final lastPanel = FocusManager.instance.primaryFocus?.context
+        ?.findAncestorWidgetOfExactType<PlotPanel>();
+    expect(lastPanel?.vimColumn, 0);
+    expect(lastPanel?.vimRow, greaterThanOrEqualTo(firstPanel?.vimRow ?? 0));
 
     // Reaching a TextField selects it as one virtual character cell.  Normal
     // mode is read-only; i enters Insert mode and toggles the real field.
@@ -500,6 +497,64 @@ void main() {
     expect(VimInputModeScope.mode(mainContext), VimInputMode.normal);
   });
 
+  testWidgets('Vim plot navigation keeps unequal columns nested',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    app.applyLayoutList([10, 11, 10, 8]);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 900);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('plot-panel-0')));
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    var focused = FocusManager.instance.primaryFocus?.context
+        ?.findAncestorWidgetOfExactType<PlotPanel>();
+    expect(focused?.vimColumn, 0);
+    expect(focused?.vimRow, 9);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    focused = FocusManager.instance.primaryFocus?.context
+        ?.findAncestorWidgetOfExactType<PlotPanel>();
+    expect(focused?.vimColumn, 0);
+    expect(focused?.vimRow, 9);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.pump();
+    focused = FocusManager.instance.primaryFocus?.context
+        ?.findAncestorWidgetOfExactType<PlotPanel>();
+    expect(focused?.vimRow, 9);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.pump();
+    focused = FocusManager.instance.primaryFocus?.context
+        ?.findAncestorWidgetOfExactType<PlotPanel>();
+    expect(focused?.vimRow, 0);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<PlotPanel>(),
+      isNull,
+    );
+  });
+
   testWidgets('Vim settings menu focuses its first option', (tester) async {
     final app = AppState();
     await app.preferencesReady;
@@ -518,6 +573,58 @@ void main() {
     expect(
       FocusManager.instance.primaryFocus?.debugLabel,
       'vim-popup-menu-first-item',
+    );
+  });
+
+  testWidgets('Vim Keyboard Mode reaches both action buttons', (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(false);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Keyboard Mode'));
+    await tester.pumpAndSettle();
+
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'keyboard-mode-vim',
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    bool primaryHasKey(Key key) {
+      var found = false;
+      FocusManager.instance.primaryFocus?.context?.visitAncestorElements(
+        (element) {
+          if (element.widget.key == key) {
+            found = true;
+            return false;
+          }
+          return true;
+        },
+      );
+      return found;
+    }
+
+    expect(
+      primaryHasKey(const ValueKey('keyboard-mode-cancel')),
+      isTrue,
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
+    await tester.pump();
+    expect(
+      primaryHasKey(const ValueKey('keyboard-mode-apply')),
+      isTrue,
     );
   });
 
@@ -540,7 +647,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Layout setup'));
+    await tester.tap(find.text('Layout Setup'));
     await tester.pumpAndSettle();
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
@@ -2928,7 +3035,7 @@ void main() {
 
     await tester.tap(tooltipStartingWith('Save configuration'));
     await tester.pumpAndSettle();
-    expect(find.text('Save configuration as'), findsOneWidget);
+    expect(find.text('Save Configuration As'), findsOneWidget);
     expect(find.byKey(const ValueKey('save-format-toml')), findsOneWidget);
     expect(find.byKey(const ValueKey('save-format-webscp')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('save-format-toml')));
@@ -2960,7 +3067,7 @@ void main() {
     await tester.tap(tooltipStartingWith('Open configuration'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Use the configuration shot?'), findsOneWidget);
+    expect(find.text('Use The Configuration Shot?'), findsOneWidget);
     expect(find.textContaining('143850'), findsWidgets);
     final ignoreButton = find.byKey(
       const ValueKey('ignore-imported-configuration-shot'),
@@ -3117,7 +3224,7 @@ void main() {
     await tester.tap(tooltipStartingWith('Restore default configuration'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Restore default configuration?'), findsOneWidget);
+    expect(find.text('Restore Default Configuration?'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('restore-default-cancel')));
     await tester.pumpAndSettle();
     expect(app.columns, hasLength(1));
@@ -5986,7 +6093,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Customize fonts'));
+    await tester.tap(find.text('Customize Fonts'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('font-family-dropdown')), findsOneWidget);
     expect(find.byType(DropdownButtonFormField<String>), findsNothing);
@@ -6075,16 +6182,16 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Restore all settings'));
+    await tester.tap(find.text('Restore All Settings'));
     await tester.pumpAndSettle();
-    expect(find.text('Restore all settings?'), findsOneWidget);
+    expect(find.text('Restore All Settings?'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('restore-all-settings-cancel')));
     await tester.pumpAndSettle();
     expect(app.themeMode, 1);
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Restore all settings'));
+    await tester.tap(find.text('Restore All Settings'));
     await tester.pumpAndSettle();
     await tester
         .tap(find.byKey(const ValueKey('restore-all-settings-confirm')));
@@ -6321,7 +6428,7 @@ void main() {
 
     await tester.tap(find.text('Check automatically'));
     await tester.pumpAndSettle();
-    expect(find.text('Update available'), findsOneWidget);
+    expect(find.text('Update Available'), findsOneWidget);
     expect(find.text('Not Now'), findsOneWidget);
     expect(find.text('View Details'), findsOneWidget);
     expect(
@@ -6330,7 +6437,7 @@ void main() {
     );
     await tester.tap(find.text('Not Now'));
     await tester.pumpAndSettle();
-    expect(find.text('Update available'), findsNothing);
+    expect(find.text('Update Available'), findsNothing);
   });
 
   testWidgets('Internal web pages use separated polished list items', (
@@ -6350,7 +6457,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Internal web pages'));
+    await tester.tap(find.text('Internal Web Pages'));
     await tester.pumpAndSettle();
 
     expect(
@@ -6411,7 +6518,7 @@ void main() {
 
       await tester.tap(find.byTooltip('Settings'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Internal web pages'));
+      await tester.tap(find.text('Internal Web Pages'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Remove...'));
       await tester.pumpAndSettle();
@@ -6726,7 +6833,7 @@ void main() {
 
       await tester.tap(find.byTooltip('Settings'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Layout setup'));
+      await tester.tap(find.text('Layout Setup'));
       await tester.pumpAndSettle();
 
       for (var column = 0; column < expectedColumns; column++) {
@@ -6873,7 +6980,7 @@ void main() {
     );
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Layout setup'));
+    await tester.tap(find.text('Layout Setup'));
     await tester.pumpAndSettle();
     expect(
       tester.widget(find.byKey(const ValueKey('layout-column-drag-1'))),
@@ -6944,7 +7051,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Layout setup'));
+    await tester.tap(find.text('Layout Setup'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(TextButton, 'Add panel'));
     await tester.pumpAndSettle();
@@ -6981,7 +7088,7 @@ void main() {
     );
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Layout setup'));
+    await tester.tap(find.text('Layout Setup'));
     await tester.pumpAndSettle();
 
     final handle = find.byKey(const ValueKey('layout-panel-drag-handle-2'));
@@ -7031,7 +7138,7 @@ void main() {
     );
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Layout setup'));
+    await tester.tap(find.text('Layout Setup'));
     await tester.pumpAndSettle();
 
     final horizontal = tester.widget<Scrollbar>(
@@ -7090,7 +7197,7 @@ void main() {
     );
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Layout setup'));
+    await tester.tap(find.text('Layout Setup'));
     await tester.pumpAndSettle();
 
     expect(find.text('Panel 1'), findsOneWidget);
@@ -7182,7 +7289,7 @@ void main() {
     );
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Layout setup'));
+    await tester.tap(find.text('Layout Setup'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('layout-column-header-2')));
@@ -7463,7 +7570,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('install-update-directly')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('Update available'), findsNothing);
+    expect(find.text('Update Available'), findsNothing);
     expect(
         find.byKey(const ValueKey('update-download-dialog')), findsOneWidget);
     expect(

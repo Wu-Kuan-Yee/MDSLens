@@ -334,7 +334,7 @@ Future<PanelExportRequest?> showMultiPanelExportDialog(
                                   }
                                 }),
                         secondary: const Icon(Icons.select_all_rounded),
-                        title: const Text('Select all panels with data'),
+                        title: const Text('Select All Panels With Data'),
                         subtitle: Text(
                           '${selected.length} of ${selectable.length} selected',
                         ),

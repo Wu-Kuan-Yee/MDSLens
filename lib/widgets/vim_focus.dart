@@ -30,15 +30,21 @@ enum VimInputMode { normal, insert, visual, plot }
 
 enum VimVisualMode { character, line, block }
 
+/// The plot workspace is a two-level Vim document: columns are the outer
+/// characters and panels are the lines inside the selected column.
+enum VimPlotSelectionLevel { column, panel }
+
 class VimInputState extends ChangeNotifier {
   VimInputMode _mode = VimInputMode.normal;
   VimVisualMode _visualMode = VimVisualMode.character;
+  VimPlotSelectionLevel _plotSelectionLevel = VimPlotSelectionLevel.column;
   int? _visualAnchor;
   FocusNode? _editingNode;
   TextEditingValue? _editingSnapshot;
 
   VimInputMode get mode => _mode;
   VimVisualMode get visualMode => _visualMode;
+  VimPlotSelectionLevel get plotSelectionLevel => _plotSelectionLevel;
   int? get visualAnchor => _visualAnchor;
 
   /// Save the value that was present immediately before entering Insert mode.
@@ -86,6 +92,12 @@ class VimInputState extends ChangeNotifier {
     _visualAnchor = anchor;
     notifyListeners();
   }
+
+  void setPlotSelectionLevel(VimPlotSelectionLevel level) {
+    if (_plotSelectionLevel == level) return;
+    _plotSelectionLevel = level;
+    notifyListeners();
+  }
 }
 
 class VimInputModeScope extends InheritedNotifier<VimInputState> {
@@ -112,6 +124,20 @@ class VimInputModeScope extends InheritedNotifier<VimInputState> {
     // application builder. Preserve their historical editable behavior when
     // the transient Vim state provider is absent.
     return scope == null || scope.notifier?.mode == VimInputMode.insert;
+  }
+
+  static VimPlotSelectionLevel plotSelectionLevel(BuildContext context) {
+    return maybeOf(context)?.plotSelectionLevel ?? VimPlotSelectionLevel.column;
+  }
+
+  static void setPlotSelectionLevel(
+    BuildContext context,
+    VimPlotSelectionLevel level,
+  ) {
+    final element =
+        context.getElementForInheritedWidgetOfExactType<VimInputModeScope>();
+    final scope = element?.widget as VimInputModeScope?;
+    scope?.notifier?.setPlotSelectionLevel(level);
   }
 
   static void setMode(
@@ -286,6 +312,12 @@ class _VimFocusHostState extends State<VimFocusHost>
         return true;
       }
     }
+    if (handleVimLayoutNavigationKey(focusContext ?? context, event)) {
+      return true;
+    }
+    if (handleVimPlotNavigationKey(focusContext ?? context, event)) {
+      return true;
+    }
     if (_handleVimPageSequence(focusContext ?? context, event)) return true;
     if (event.logicalKey == LogicalKeyboardKey.escape && focusContext != null) {
       final route = ModalRoute.of(focusContext);
@@ -366,7 +398,14 @@ class _VimFocusHostState extends State<VimFocusHost>
   Widget _buildFocusRing(BuildContext context) {
     final focus = FocusManager.instance.primaryFocus;
     if (focus?.skipTraversal ?? false) return const SizedBox.shrink();
-    final renderObject = focus?.context?.findRenderObject();
+    var renderObject = focus?.context?.findRenderObject();
+    final focusContext = focus?.context;
+    if (focusContext != null &&
+        VimInputModeScope.plotSelectionLevel(focusContext) ==
+            VimPlotSelectionLevel.column &&
+        focusContext.findAncestorWidgetOfExactType<VimPlotFocus>() != null) {
+      renderObject = _ancestorRenderObject<VimPlotColumnFocus>(focusContext);
+    }
     final hostRenderObject = context.findRenderObject();
     if (renderObject is! RenderBox ||
         hostRenderObject is! RenderBox ||
@@ -402,6 +441,18 @@ class _VimFocusHostState extends State<VimFocusHost>
   }
 }
 
+RenderObject? _ancestorRenderObject<T extends Widget>(BuildContext context) {
+  RenderObject? result;
+  context.visitAncestorElements((element) {
+    if (element.widget is T) {
+      result = element.findRenderObject();
+      return false;
+    }
+    return true;
+  });
+  return result;
+}
+
 /// Marker used to keep plot-specific Vim behavior separate from ordinary
 /// control traversal, including when a popup route is open above the plot.
 class VimPlotFocus extends InheritedWidget {
@@ -417,6 +468,42 @@ class VimPlotFocus extends InheritedWidget {
 
   @override
   bool updateShouldNotify(VimPlotFocus oldWidget) => false;
+}
+
+/// Non-focusable marker for the outer Vim column surrounding a group of plot
+/// panels. The focused panel remains the representative focus node, while the
+/// marker gives the Vim focus ring the correct whole-column bounds.
+class VimPlotColumnFocus extends InheritedWidget {
+  const VimPlotColumnFocus({
+    super.key,
+    required super.child,
+    required this.column,
+  });
+
+  final int column;
+
+  @override
+  bool updateShouldNotify(VimPlotColumnFocus oldWidget) => false;
+}
+
+/// Marker used by Layout Setup. Columns and panels are real focusable cells,
+/// but the marker keeps their source coordinates independent of the current
+/// responsive/scrolling geometry.
+class VimLayoutFocus extends InheritedWidget {
+  const VimLayoutFocus({
+    super.key,
+    required super.child,
+    required this.column,
+    this.row = -1,
+    required this.isColumn,
+  });
+
+  final int column;
+  final int row;
+  final bool isColumn;
+
+  @override
+  bool updateShouldNotify(VimLayoutFocus oldWidget) => false;
 }
 
 bool _isEditableContext(BuildContext? context) {
@@ -873,12 +960,19 @@ bool leaveVimTextEditing(BuildContext context) {
 }
 
 class _VimFocusTarget {
-  const _VimFocusTarget(this.node, this.rect, this.depth, this.plot);
+  const _VimFocusTarget(
+    this.node,
+    this.rect,
+    this.depth,
+    this.plot,
+    this.layout,
+  );
 
   final FocusNode node;
   final Rect rect;
   final int depth;
   final VimPlotFocus? plot;
+  final VimLayoutFocus? layout;
 }
 
 /// A virtual Vim page is the set of focusable controls on the active route.
@@ -1039,6 +1133,7 @@ List<_VimFocusTarget> _vimFocusTargets(FocusScopeNode scope) {
       rect,
       _vimNodeDepth(node),
       node.context?.findAncestorWidgetOfExactType<VimPlotFocus>(),
+      node.context?.findAncestorWidgetOfExactType<VimLayoutFocus>(),
     );
     final duplicate =
         targets.indexWhere((existing) => _sameVimRect(existing.rect, rect));
@@ -1203,6 +1298,105 @@ bool handleVimPlotEditingKey(BuildContext context, KeyEvent event) {
   }
 }
 
+bool _isVimPlotNavigationKey(KeyEvent event) {
+  if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
+  final keyboard = HardwareKeyboard.instance;
+  return !keyboard.isShiftPressed &&
+      !keyboard.isControlPressed &&
+      !keyboard.isAltPressed &&
+      !keyboard.isMetaPressed;
+}
+
+TraversalDirection? _vimDirectionForKey(LogicalKeyboardKey key) {
+  return switch (key) {
+    LogicalKeyboardKey.keyH ||
+    LogicalKeyboardKey.arrowLeft =>
+      TraversalDirection.left,
+    LogicalKeyboardKey.keyJ ||
+    LogicalKeyboardKey.arrowDown =>
+      TraversalDirection.down,
+    LogicalKeyboardKey.keyK ||
+    LogicalKeyboardKey.arrowUp =>
+      TraversalDirection.up,
+    LogicalKeyboardKey.keyL ||
+    LogicalKeyboardKey.arrowRight =>
+      TraversalDirection.right,
+    _ => null,
+  };
+}
+
+_VimFocusTarget? _currentVimPlotTarget(
+  _VimFocusPage page,
+  FocusNode? current,
+) {
+  if (current == null) return null;
+  for (final target in page.targets) {
+    if (target.plot == null) continue;
+    if (target.node == current) return target;
+  }
+  final rect = _vimNodeRect(current);
+  if (rect == null) return null;
+  return page.targets
+      .where((target) => target.plot != null && _sameVimRect(target.rect, rect))
+      .firstOrNull;
+}
+
+List<_VimFocusTarget> _plotTargetsByColumn(
+  _VimFocusPage page,
+  int column,
+) {
+  final result = page.targets
+      .where((target) => target.plot?.column == column)
+      .toList()
+    ..sort((a, b) => a.plot!.row.compareTo(b.plot!.row));
+  return result;
+}
+
+List<int> _plotColumns(_VimFocusPage page) {
+  return page.targets
+      .where((target) => target.plot != null)
+      .map((target) => target.plot!.column)
+      .toSet()
+      .toList()
+    ..sort();
+}
+
+_VimFocusTarget? _plotTargetAtRow(
+  List<_VimFocusTarget> candidates,
+  int row,
+) {
+  if (candidates.isEmpty) return null;
+  return candidates.where((target) => target.plot!.row == row).firstOrNull ??
+      candidates.first;
+}
+
+/// Handle the outer-column/inner-panel state machine. A horizontal motion
+/// always selects a whole source Column, even when the responsive layout has
+/// reflowed it visually. A vertical motion enters or moves within that
+/// column, so uneven column lengths never cause a jump into another column.
+bool handleVimPlotNavigationKey(BuildContext context, KeyEvent event) {
+  if (!VimModeScope.enabled(context) || !_isVimPlotNavigationKey(event)) {
+    return false;
+  }
+  if (!_isVimPlotContext(context) || vimPlotEditing(context)) return false;
+  if (event.logicalKey == LogicalKeyboardKey.escape) {
+    final input = VimInputModeScope.maybeOf(context);
+    if (input?.plotSelectionLevel == VimPlotSelectionLevel.panel) {
+      input?.setPlotSelectionLevel(VimPlotSelectionLevel.column);
+      return true;
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    return true;
+  }
+  final direction = _vimDirectionForKey(event.logicalKey);
+  if (direction == null) return false;
+  // A boundary is still a handled Vim motion.  Consuming it prevents the
+  // generic geometric traversal fallback from jumping out of the waveform
+  // document into an unrelated toolbar control.
+  moveVimPlotFocus(context, direction);
+  return true;
+}
+
 /// Move between PlotPanel cells using the source layout coordinates.  The
 /// visual grid can reflow on phones, but a Column remains a Vim column and a
 /// Panel remains its row within that Column.
@@ -1211,70 +1405,191 @@ bool moveVimPlotFocus(BuildContext context, TraversalDirection direction) {
   final page = _vimFocusPage(context);
   final current = FocusManager.instance.primaryFocus;
   if (page == null || current == null) return false;
-  _VimFocusTarget? currentTarget;
-  for (final target in page.targets) {
-    if (target.node == current && target.plot != null) {
-      currentTarget = target;
-      break;
-    }
-  }
+  final currentTarget = _currentVimPlotTarget(page, current);
   if (currentTarget?.plot == null) return false;
   final currentPlot = currentTarget!.plot!;
-  final plotTargets = page.targets
-      .where((target) => target.plot != null)
-      .toList(growable: false);
-  if (plotTargets.length <= 1) return false;
-
   final horizontal = direction == TraversalDirection.left ||
       direction == TraversalDirection.right;
-  final step =
-      direction == TraversalDirection.left || direction == TraversalDirection.up
-          ? -1
-          : 1;
-  final currentAxis = horizontal ? currentPlot.column : currentPlot.row;
-  final sameLine = plotTargets.where((target) {
-    final plot = target.plot!;
-    return horizontal
-        ? plot.row == currentPlot.row
-        : plot.column == currentPlot.column;
-  }).toList();
-  final directional = sameLine.where((target) {
-    final plot = target.plot!;
-    final axis = horizontal ? plot.column : plot.row;
-    return step < 0 ? axis < currentAxis : axis > currentAxis;
-  }).toList();
-  directional.sort((a, b) {
-    final aPlot = a.plot!;
-    final bPlot = b.plot!;
-    final aAxis = horizontal ? aPlot.column : aPlot.row;
-    final bAxis = horizontal ? bPlot.column : bPlot.row;
-    final byAxis = (aAxis - currentAxis).abs().compareTo(
-          (bAxis - currentAxis).abs(),
-        );
-    if (byAxis != 0) return byAxis;
-    return a.rect.center.dx.compareTo(b.rect.center.dx);
-  });
-  var target = directional.firstOrNull;
-  if (target == null) {
-    // At a sparse-layout boundary, move to the nearest non-empty logical
-    // column/row in the requested direction instead of jumping to a toolbar.
-    final allDirectional = plotTargets.where((candidate) {
-      final plot = candidate.plot!;
-      final axis = horizontal ? plot.column : plot.row;
-      return step < 0 ? axis < currentAxis : axis > currentAxis;
-    }).toList();
-    allDirectional.sort((a, b) {
-      final aPlot = a.plot!;
-      final bPlot = b.plot!;
-      final aAxis = horizontal ? aPlot.column : aPlot.row;
-      final bAxis = horizontal ? bPlot.column : bPlot.row;
-      return (aAxis - currentAxis).abs().compareTo(
-            (bAxis - currentAxis).abs(),
-          );
-    });
-    target = allDirectional.firstOrNull;
+  final columns = _plotColumns(page);
+  if (columns.length <= 1 && horizontal) return false;
+  final input = VimInputModeScope.maybeOf(context);
+  final level = input?.plotSelectionLevel ?? VimPlotSelectionLevel.column;
+  _VimFocusTarget? target;
+  if (horizontal) {
+    final currentColumnIndex = columns.indexOf(currentPlot.column);
+    if (currentColumnIndex < 0) return false;
+    final step = direction == TraversalDirection.left ? -1 : 1;
+    final targetIndex =
+        (currentColumnIndex + step).clamp(0, columns.length - 1);
+    final targetColumn = columns[targetIndex];
+    final candidates = _plotTargetsByColumn(page, targetColumn);
+    // Preserve the panel row where possible while selecting the whole target
+    // column. This keeps a move from Panel 2 visually stable, but the next
+    // J/K starts at the column's true first/last panel.
+    target = _plotTargetAtRow(candidates, currentPlot.row);
+    input?.setPlotSelectionLevel(VimPlotSelectionLevel.column);
+  } else {
+    final candidates = _plotTargetsByColumn(page, currentPlot.column);
+    if (candidates.isEmpty) return false;
+    if (level == VimPlotSelectionLevel.column) {
+      target = direction == TraversalDirection.down
+          ? candidates.first
+          : candidates.last;
+      input?.setPlotSelectionLevel(VimPlotSelectionLevel.panel);
+    } else {
+      final currentRow = candidates.indexWhere(
+        (candidate) => candidate.plot!.row == currentPlot.row,
+      );
+      if (currentRow < 0) return false;
+      final step = direction == TraversalDirection.up ? -1 : 1;
+      final targetRow = (currentRow + step).clamp(0, candidates.length - 1);
+      target = candidates[targetRow];
+      input?.setPlotSelectionLevel(VimPlotSelectionLevel.panel);
+    }
   }
   if (target == null || target.node == current) return false;
+  _requestVimFocus(target);
+  return true;
+}
+
+bool _isVimLayoutContext(BuildContext? context) {
+  return context?.findAncestorWidgetOfExactType<VimLayoutFocus>() != null ||
+      FocusManager.instance.primaryFocus?.context
+              ?.findAncestorWidgetOfExactType<VimLayoutFocus>() !=
+          null;
+}
+
+_VimFocusTarget? _currentVimLayoutTarget(
+  _VimFocusPage page,
+  FocusNode? current,
+) {
+  if (current == null) return null;
+  for (final target in page.targets) {
+    if (target.layout == null) continue;
+    if (target.node == current) return target;
+  }
+  final rect = _vimNodeRect(current);
+  if (rect == null) return null;
+  return page.targets
+      .where(
+          (target) => target.layout != null && _sameVimRect(target.rect, rect))
+      .firstOrNull;
+}
+
+List<_VimFocusTarget> _layoutTargets(
+  _VimFocusPage page, {
+  required bool columns,
+}) {
+  final raw = page.targets
+      .where((target) =>
+          target.layout != null && target.layout!.isColumn == columns)
+      .toList();
+  // LongPressDraggable and its InkWell can expose a second focus node for the
+  // same visual cell. Layout navigation is identity-based, so collapse those
+  // duplicates before calculating rows and scroll destinations.
+  final unique = <String, _VimFocusTarget>{};
+  for (final target in raw) {
+    final marker = target.layout!;
+    final key = '${marker.column}:${marker.row}:${marker.isColumn}';
+    final previous = unique[key];
+    if (previous == null || target.depth < previous.depth) {
+      unique[key] = target;
+    }
+  }
+  final result = unique.values.toList();
+  result.sort((a, b) {
+    final byColumn = a.layout!.column.compareTo(b.layout!.column);
+    if (byColumn != 0) return byColumn;
+    return a.layout!.row.compareTo(b.layout!.row);
+  });
+  return result;
+}
+
+bool handleVimLayoutNavigationKey(BuildContext context, KeyEvent event) {
+  if (!VimModeScope.enabled(context) || !_isVimPlotNavigationKey(event)) {
+    return false;
+  }
+  final focusedContext = FocusManager.instance.primaryFocus?.context;
+  final navigationContext =
+      context.findAncestorWidgetOfExactType<VimLayoutFocus>() != null
+          ? context
+          : focusedContext ?? context;
+  if (!_isVimLayoutContext(navigationContext)) return false;
+  if (event.logicalKey == LogicalKeyboardKey.escape) {
+    final current = _currentVimLayoutTarget(
+      _vimFocusPage(navigationContext) ?? _VimFocusPage(const []),
+      FocusManager.instance.primaryFocus,
+    );
+    if (current?.layout?.isColumn == false) {
+      final page = _vimFocusPage(navigationContext);
+      if (page == null) return false;
+      final column = _layoutTargets(page, columns: true)
+          .where((target) => target.layout!.column == current!.layout!.column)
+          .firstOrNull;
+      if (column != null) {
+        _requestVimFocus(column);
+        return true;
+      }
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    return true;
+  }
+  final direction = _vimDirectionForKey(event.logicalKey);
+  if (direction == null) return false;
+  // Keep HJKL inside the Layout Setup document at its edges instead of
+  // falling through to the surrounding page's geometric focus order.
+  moveVimLayoutFocus(navigationContext, direction);
+  return true;
+}
+
+/// Layout Setup uses the same nested text-page model as the chart grid. A
+/// horizontal move selects a column; a vertical move enters or advances its
+/// panels. Every request goes through the common reveal helper so both the
+/// outer horizontal viewport and the column's vertical viewport are corrected.
+bool moveVimLayoutFocus(
+  BuildContext context,
+  TraversalDirection direction,
+) {
+  final page = _vimFocusPage(context);
+  final current = _currentVimLayoutTarget(
+    page ?? _VimFocusPage(const []),
+    FocusManager.instance.primaryFocus,
+  );
+  if (page == null || current?.layout == null) return false;
+  final layout = current!.layout!;
+  final columnTargets = _layoutTargets(page, columns: true);
+  final panelTargets = _layoutTargets(page, columns: false);
+  if (columnTargets.isEmpty) return false;
+  _VimFocusTarget? target;
+  final horizontal = direction == TraversalDirection.left ||
+      direction == TraversalDirection.right;
+  if (horizontal) {
+    final index = columnTargets.indexWhere(
+      (candidate) => candidate.layout!.column == layout.column,
+    );
+    if (index < 0) return false;
+    final step = direction == TraversalDirection.left ? -1 : 1;
+    target = columnTargets[(index + step).clamp(0, columnTargets.length - 1)];
+  } else {
+    final candidates = panelTargets
+        .where((candidate) => candidate.layout!.column == layout.column)
+        .toList();
+    if (candidates.isEmpty) return false;
+    candidates.sort((a, b) => a.layout!.row.compareTo(b.layout!.row));
+    if (layout.isColumn) {
+      target = direction == TraversalDirection.down
+          ? candidates.first
+          : candidates.last;
+    } else {
+      final index = candidates.indexWhere(
+        (candidate) => candidate.layout!.row == layout.row,
+      );
+      if (index < 0) return false;
+      final step = direction == TraversalDirection.up ? -1 : 1;
+      target = candidates[(index + step).clamp(0, candidates.length - 1)];
+    }
+  }
+  if (target.node == current.node) return false;
   _requestVimFocus(target);
   return true;
 }
@@ -1293,10 +1608,78 @@ _VimFocusPage? _vimFocusPage(BuildContext context) {
 bool moveVimPageEdge(BuildContext context, {required bool last}) {
   final page = _vimFocusPage(context);
   if (page == null) return false;
+  final plotResult = _moveVimPlotPageEdge(context, page, last: last);
+  if (plotResult) return true;
+  final layoutResult = _moveVimLayoutPageEdge(context, page, last: last);
+  if (layoutResult) return true;
   final target =
       last ? page.targets.lastOrNull : page.rows.firstOrNull?.firstOrNull;
   if (target == null) return false;
   _requestVimFocus(target);
+  return true;
+}
+
+bool _moveVimPlotPageEdge(
+  BuildContext context,
+  _VimFocusPage page, {
+  required bool last,
+}) {
+  final plotTargets = page.targets.where((target) => target.plot != null);
+  if (plotTargets.isEmpty) return false;
+  final current = _currentVimPlotTarget(
+    page,
+    FocusManager.instance.primaryFocus,
+  );
+  final input = VimInputModeScope.maybeOf(context);
+  if (current == null) {
+    // The outer page treats the waveform grid as one character sequence. Its
+    // first column is the deterministic entry point for both gg and G; once
+    // inside that column, G/gg have their usual nested-panel meaning.
+    final firstColumn = _plotColumns(page).firstOrNull;
+    if (firstColumn == null) return false;
+    final target = _plotTargetsByColumn(page, firstColumn).firstOrNull;
+    if (target == null) return false;
+    input?.setPlotSelectionLevel(VimPlotSelectionLevel.column);
+    _requestVimFocus(target);
+    return true;
+  }
+  final candidates = _plotTargetsByColumn(page, current.plot!.column);
+  if (candidates.isEmpty) return false;
+  final target = last ? candidates.last : candidates.first;
+  input?.setPlotSelectionLevel(VimPlotSelectionLevel.panel);
+  _requestVimFocus(target);
+  return true;
+}
+
+bool _moveVimLayoutPageEdge(
+  BuildContext context,
+  _VimFocusPage page, {
+  required bool last,
+}) {
+  final columns = _layoutTargets(page, columns: true);
+  final panels = _layoutTargets(page, columns: false);
+  if (columns.isEmpty) return false;
+  final current = _currentVimLayoutTarget(
+    page,
+    FocusManager.instance.primaryFocus,
+  );
+  if (current == null) {
+    _requestVimFocus(columns.first);
+    return true;
+  }
+  final column = current.layout!.column;
+  final inColumn = panels
+      .where((target) => target.layout!.column == column)
+      .toList()
+    ..sort((a, b) => a.layout!.row.compareTo(b.layout!.row));
+  if (current.layout!.isColumn) {
+    _requestVimFocus(columns.firstWhere(
+      (target) => target.layout!.column == column,
+      orElse: () => columns.first,
+    ));
+  } else if (inColumn.isNotEmpty) {
+    _requestVimFocus(last ? inColumn.last : inColumn.first);
+  }
   return true;
 }
 
@@ -1445,6 +1828,12 @@ KeyEventResult handleVimDialogKey(
   }
   final inputResult = handleVimInputModeKey(context, event);
   if (inputResult == KeyEventResult.handled) return inputResult;
+  if (handleVimLayoutNavigationKey(context, event)) {
+    return KeyEventResult.handled;
+  }
+  if (handleVimPlotNavigationKey(context, event)) {
+    return KeyEventResult.handled;
+  }
   if (event.logicalKey == LogicalKeyboardKey.escape) {
     if (vimFocusedEditable() && leaveVimTextEditing(context)) {
       return KeyEventResult.handled;
@@ -1490,6 +1879,9 @@ KeyEventResult handleVimDialogKey(
       HardwareKeyboard.instance.isMetaPressed ||
       HardwareKeyboard.instance.isShiftPressed) {
     return KeyEventResult.ignored;
+  }
+  if (_isVimLayoutContext(context) && moveVimLayoutFocus(context, direction)) {
+    return KeyEventResult.handled;
   }
   return moveVimFocus(context, direction)
       ? KeyEventResult.handled
