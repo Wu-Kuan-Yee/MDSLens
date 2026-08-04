@@ -355,6 +355,14 @@ class _PlotPanelState extends State<PlotPanel> {
       return;
     }
     _lastPanelShortcutRequestId = request.id;
+    // Context-menu requests originate from a hardware key event. Handle this
+    // action immediately so Enter has the same response time as a mouse
+    // right-click; waiting for an additional frame made the menu appear only
+    // after the next Vim navigation key on slower frames.
+    if (request.action == 'context') {
+      unawaited(_runPanelShortcutRequest(request.action));
+      return;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(_runPanelShortcutRequest(request.action));

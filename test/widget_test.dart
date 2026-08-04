@@ -269,7 +269,7 @@ void main() {
     await tester.pump();
     expect(app.selectedPlotIndex, isNotNull);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pumpAndSettle();
+    await tester.pump();
     expect(
       find.byKey(const ValueKey('plot-context-menu-maximize')),
       findsOneWidget,
@@ -279,6 +279,57 @@ void main() {
     expect(
       find.byKey(const ValueKey('plot-context-menu-maximize')),
       findsNothing,
+    );
+  });
+
+  testWidgets('Vim focus crosses the plot grid and toolbar geometrically', (
+    tester,
+  ) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final plot = find.byType(PlotPanel).first;
+    await tester.tap(plot);
+    await tester.pump();
+    final plotRect = tester.getRect(plot);
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<PlotPanel>(),
+      isNotNull,
+    );
+
+    // k must leave the chart and reach a real toolbar control instead of
+    // being consumed by panel-selection logic.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+    await tester.pump();
+    final toolbarFocus = FocusManager.instance.primaryFocus;
+    expect(toolbarFocus, isNotNull);
+    expect(
+      toolbarFocus!.rect.bottom,
+      lessThanOrEqualTo(plotRect.top + 1),
+    );
+    expect(
+      toolbarFocus.context?.findAncestorWidgetOfExactType<PlotPanel>(),
+      isNull,
+    );
+
+    // j returns to the plot area, proving the route is navigable in both
+    // directions rather than only wrapping at one edge.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<PlotPanel>(),
+      isNotNull,
     );
   });
 

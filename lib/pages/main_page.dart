@@ -232,7 +232,12 @@ class _MainPageState extends State<MainPage> {
     }
     if (vimEditingText() && key != LogicalKeyboardKey.escape) return false;
 
-    if (!focusedPlot && !shift) {
+    // H/J/K/L are the Vim focus cursor in every part of the workspace,
+    // including the plot grid. The old plot-only branch intercepted these
+    // keys and changed panel selection instead, which made the toolbar
+    // unreachable from a plot and caused controls to be skipped. Shifted
+    // motions remain available for chart panning below.
+    if (!shift) {
       final direction = switch (key) {
         LogicalKeyboardKey.keyH => TraversalDirection.left,
         LogicalKeyboardKey.keyJ => TraversalDirection.down,
