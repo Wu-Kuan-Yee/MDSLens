@@ -40,6 +40,9 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
   int _selectedIndex = 0;
   bool _suppressQueryChanged = false;
   bool _closing = false;
+  VimInputState? _vimInputState;
+  VimInputMode? _previousVimMode;
+  bool _suppressNextGlobalAction = false;
 
   List<MdsShortcutDefinition> get _commands {
     final query = _queryController.text.trim().toLowerCase();
@@ -77,8 +80,34 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final next = VimInputModeScope.maybeOf(context);
+    if (identical(next, _vimInputState)) return;
+    _vimInputState?.removeListener(_onVimInputModeChanged);
+    _vimInputState = next;
+    _previousVimMode = next?.mode;
+    next?.addListener(_onVimInputModeChanged);
+  }
+
+  void _onVimInputModeChanged() {
+    final next = _vimInputState?.mode;
+    final previous = _previousVimMode;
+    if (previous != null &&
+        previous != VimInputMode.normal &&
+        next == VimInputMode.normal) {
+      // HardwareKeyboard dispatches global handlers independently. If the
+      // host handler exits Insert mode first, remember that the same physical
+      // key must not subsequently close or activate the palette here.
+      _suppressNextGlobalAction = true;
+    }
+    _previousVimMode = next;
+  }
+
+  @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handleGlobalKey);
+    _vimInputState?.removeListener(_onVimInputModeChanged);
     _queryController.dispose();
     _queryFocus.dispose();
     _listController.dispose();
@@ -89,6 +118,24 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
     if (!mounted) return false;
     final route = ModalRoute.of(context);
     if (route != null && !route.isCurrent) return false;
+    if (_suppressNextGlobalAction) {
+      _suppressNextGlobalAction = false;
+      return true;
+    }
+    // The command line is a real Vim editor.  Let the shared modal handler
+    // consume Insert/Visual-mode keys (especially the first Escape) before
+    // the palette's own Escape-to-close behavior runs.  Returning false for
+    // ordinary Insert-mode characters leaves them to EditableText.
+    if (vimEditingText()) {
+      final inputResult = handleVimInputModeKey(context, event);
+      if (inputResult == KeyEventResult.handled) {
+        // This handler itself performed the modal transition; do not suppress
+        // the next unrelated key as well.
+        _suppressNextGlobalAction = false;
+        return true;
+      }
+      return false;
+    }
     return _handleKeyEvent(_queryFocus, event) == KeyEventResult.handled;
   }
 
@@ -157,11 +204,9 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
       return KeyEventResult.handled;
     }
     final backwards = event.logicalKey == LogicalKeyboardKey.arrowUp ||
-        (event.logicalKey == LogicalKeyboardKey.keyK &&
-            _queryController.text.isEmpty);
+        event.logicalKey == LogicalKeyboardKey.keyK;
     final forwards = event.logicalKey == LogicalKeyboardKey.arrowDown ||
-        (event.logicalKey == LogicalKeyboardKey.keyJ &&
-            _queryController.text.isEmpty);
+        event.logicalKey == LogicalKeyboardKey.keyJ;
     if (backwards || forwards) {
       if (commands.isNotEmpty) {
         final nextIndex = forwards

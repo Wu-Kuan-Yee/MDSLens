@@ -283,6 +283,28 @@ void main() {
     expect(VimInputModeScope.mode(queryContext), VimInputMode.insert);
     await tester.enterText(queryFinder, 'g');
     expect(query.controller!.text, 'g');
+
+    // Esc now leaves the input cell in Normal mode without closing the
+    // palette.  The filtered command list remains available to j/k.
+    await tester.enterText(queryFinder, 'panel');
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('vim-command-palette')), findsOneWidget);
+    expect(VimInputModeScope.mode(queryContext), VimInputMode.normal);
+    final commandTiles = find.descendant(
+      of: find.byKey(const ValueKey('vim-command-list')),
+      matching: find.byType(ListTile),
+    );
+    int selectedCommandIndex() => tester
+        .widgetList<ListTile>(commandTiles)
+        .toList()
+        .indexWhere((tile) => tile.selected);
+    final beforeJ = selectedCommandIndex();
+    expect(beforeJ, greaterThanOrEqualTo(0));
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    expect(selectedCommandIndex(), isNot(beforeJ));
+    expect(find.byKey(const ValueKey('vim-command-palette')), findsOneWidget);
   });
 
   testWidgets('Vim mode gives dialogs and plots a complete keyboard path', (
