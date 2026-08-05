@@ -186,7 +186,7 @@ class _KeyboardSafeDialogState extends State<KeyboardSafeDialog> {
         currentPage == widget.pageId) {
       return;
     }
-    final first = FocusManager.instance.rootScope.descendants
+    final candidates = FocusManager.instance.rootScope.descendants
         .where(
           (node) {
             final nodeContext = node.context;
@@ -200,7 +200,19 @@ class _KeyboardSafeDialogState extends State<KeyboardSafeDialog> {
           },
         )
         .where((node) => node.canRequestFocus && !node.skipTraversal)
-        .firstOrNull;
+        .toList(growable: false);
+    final first = widget.pageId == 'layout'
+        ? candidates
+                .where(
+                  (node) =>
+                      node.context
+                          ?.findAncestorWidgetOfExactType<VimLayoutFocus>()
+                          ?.isColumn ==
+                      true,
+                )
+                .firstOrNull ??
+            candidates.firstOrNull
+        : candidates.firstOrNull;
     first?.requestFocus();
   }
 

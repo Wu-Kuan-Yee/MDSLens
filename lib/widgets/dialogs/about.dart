@@ -10,6 +10,7 @@ import '../../services/runtime_build_info.dart';
 import '../../services/update_installer.dart';
 import '../../services/update_service.dart';
 import 'keyboard_safe_dialog.dart';
+import '../vim_focus.dart';
 
 typedef ReleaseUpdateChecker = Future<ReleaseUpdate> Function();
 typedef ReleaseUpdateInstaller = Future<UpdateInstallResult> Function(
@@ -478,6 +479,42 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
     super.initState();
     _systemInfo = RuntimeSystemInfo.fallback();
     _loadBuildInformation();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _requestInitialVimFocus();
+      });
+    });
+  }
+
+  void _requestInitialVimFocus() {
+    if (!mounted || !VimModeScope.enabled(context)) return;
+    final route = ModalRoute.of(context);
+    final current = FocusManager.instance.primaryFocus;
+    final currentRoute =
+        current?.context == null ? null : ModalRoute.of(current!.context!);
+    final currentPage =
+        current?.context?.findAncestorWidgetOfExactType<VimPageScope>()?.pageId;
+    if (current != null &&
+        current.canRequestFocus &&
+        route != null &&
+        identical(route, currentRoute) &&
+        currentPage == 'about') {
+      return;
+    }
+    final first = FocusManager.instance.rootScope.descendants
+        .where((node) {
+          final nodeContext = node.context;
+          if (nodeContext == null) return false;
+          final nodeRoute = ModalRoute.of(nodeContext);
+          return (route == null || nodeRoute == null || nodeRoute == route) &&
+              nodeContext
+                      .findAncestorWidgetOfExactType<VimPageScope>()
+                      ?.pageId ==
+                  'about';
+        })
+        .where((node) => node.canRequestFocus && !node.skipTraversal)
+        .firstOrNull;
+    first?.requestFocus();
   }
 
   Future<void> _loadBuildInformation() async {
@@ -576,16 +613,19 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
 
   Widget _buildLink(String label, String url) {
     final style = Theme.of(context).textTheme.bodySmall;
-    return InkWell(
-      onTap: () => _openUrl(url),
-      borderRadius: BorderRadius.circular(3),
-      child: Text(
-        label,
-        softWrap: true,
-        style: style?.copyWith(
-          color: const Color(0xFF2563EB),
-          fontWeight: FontWeight.bold,
-          decoration: TextDecoration.underline,
+    return Focus(
+      debugLabel: 'about-link-$label',
+      child: InkWell(
+        onTap: () => _openUrl(url),
+        borderRadius: BorderRadius.circular(3),
+        child: Text(
+          label,
+          softWrap: true,
+          style: style?.copyWith(
+            color: const Color(0xFF2563EB),
+            fontWeight: FontWeight.bold,
+            decoration: TextDecoration.underline,
+          ),
         ),
       ),
     );
@@ -658,239 +698,283 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
     final theme = Theme.of(context);
     final screenSize = MediaQuery.sizeOf(context);
     final maxHeight = (screenSize.height - 32).clamp(240.0, 720.0);
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: maxHeight),
-        child: SizedBox(
-          width: 540,
-          child: AdaptiveTwoAxisScrollView(
-            keyPrefix: 'about-dialog',
-            enableHorizontal: screenSize.width < 360,
-            enableVertical: true,
-            showHorizontalScrollbar: screenSize.width < 360,
-            showVerticalScrollbar: screenSize.height < 480,
-            minContentWidth: 320,
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest,
-                      border: Border.all(color: theme.dividerColor),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: Image.asset(
-                            'assets/app_icon.png',
-                            width: 52,
-                            height: 52,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
-                              width: 52,
-                              height: 52,
-                              decoration: BoxDecoration(
-                                color: theme.colorScheme.primaryContainer,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Icon(
-                                Icons.show_chart_rounded,
-                                size: 34,
-                                color: theme.colorScheme.primary,
-                              ),
+    return VimPageScope(
+      pageId: 'about',
+      parentPageId: 'root',
+      transient: true,
+      child: PopScope(
+        onPopInvokedWithResult: (_, __) {
+          VimInputModeScope.setMode(context, VimInputMode.normal);
+        },
+        child: FocusTraversalGroup(
+          child: Focus(
+            canRequestFocus: false,
+            skipTraversal: true,
+            onKeyEvent: (node, event) =>
+                handleVimDialogKey(node.context ?? context, event),
+            child: Dialog(
+              insetPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: maxHeight),
+                child: SizedBox(
+                  width: 540,
+                  child: AdaptiveTwoAxisScrollView(
+                    keyPrefix: 'about-dialog',
+                    enableHorizontal: screenSize.width < 360,
+                    enableVertical: true,
+                    showHorizontalScrollbar: screenSize.width < 360,
+                    showVerticalScrollbar: screenSize.height < 480,
+                    minContentWidth: 320,
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surfaceContainerHighest,
+                              border: Border.all(color: theme.dividerColor),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Image.asset(
+                                    'assets/app_icon.png',
+                                    width: 52,
+                                    height: 52,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Container(
+                                      width: 52,
+                                      height: 52,
+                                      decoration: BoxDecoration(
+                                        color:
+                                            theme.colorScheme.primaryContainer,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Icon(
+                                        Icons.show_chart_rounded,
+                                        size: 34,
+                                        color: theme.colorScheme.primary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'MDSLens',
+                                        style: theme.textTheme.titleLarge
+                                            ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Signal data plotting for MDSplus experiments.',
+                                        softWrap: true,
+                                        style:
+                                            theme.textTheme.bodySmall?.copyWith(
+                                          color: theme
+                                              .colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Wrap(
+                                        spacing: 3,
+                                        runSpacing: 3,
+                                        children: [
+                                          Text(
+                                            'Cross-platform rewrite written with Flutter and Rust from the original',
+                                            softWrap: true,
+                                            style: theme.textTheme.bodySmall
+                                                ?.copyWith(
+                                              color: theme
+                                                  .colorScheme.onSurfaceVariant,
+                                            ),
+                                          ),
+                                          _buildLink(
+                                            'MdsScope project',
+                                            originalMdsScopeRepositoryUrl,
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'MDSLens',
-                                style: theme.textTheme.titleLarge?.copyWith(
-                                  fontWeight: FontWeight.bold,
+                          const SizedBox(height: 14),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surfaceContainerHighest
+                                  .withValues(alpha: 0.5),
+                              border: Border.all(color: theme.dividerColor),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Column(
+                              children: [
+                                _buildRow(
+                                  'MDSLens Version',
+                                  Text(_mdsLensVersion,
+                                      style: _valueStyle(context)),
+                                ),
+                                _buildRow(
+                                  'Git Version',
+                                  Text(_gitVersion,
+                                      style: _valueStyle(context)),
+                                ),
+                                _buildRow(
+                                  'Framework & Engine',
+                                  Text(
+                                    'Flutter & Rust FFI (libmds_bridge)',
+                                    style: _valueStyle(context),
+                                    softWrap: true,
+                                  ),
+                                ),
+                                _buildRow(
+                                  'Runtime System',
+                                  Text(
+                                    _systemInfo.displayText,
+                                    style: _valueStyle(context),
+                                    softWrap: true,
+                                  ),
+                                ),
+                                _buildRow(
+                                  'Copyright',
+                                  Wrap(
+                                    spacing: 3,
+                                    runSpacing: 3,
+                                    children: [
+                                      Text(
+                                        'Copyright (C) 2026',
+                                        style: _valueStyle(context),
+                                      ),
+                                      _buildLink(
+                                          'Pingzhong Wu', mdsLensMaintainerUrl),
+                                    ],
+                                  ),
+                                ),
+                                _buildRow(
+                                  'License',
+                                  _buildLink(
+                                    'GPL-3.0-or-later',
+                                    'https://www.gnu.org/licenses/gpl-3.0.html',
+                                  ),
+                                ),
+                                _buildRow(
+                                  'Source',
+                                  _buildLink('GitHub', mdsLensSourceUrl),
+                                  showBorder: false,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          if (app != null) ...[
+                            Focus(
+                              debugLabel: 'about-auto-update',
+                              child: Material(
+                                color: theme.colorScheme.surfaceContainerHighest
+                                    .withValues(alpha: 0.5),
+                                shape: RoundedRectangleBorder(
+                                  side: BorderSide(color: theme.dividerColor),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: CheckboxListTile(
+                                  key:
+                                      const ValueKey('about-auto-update-check'),
+                                  value: app.autoCheckUpdates,
+                                  onChanged: (value) =>
+                                      app.setAutoCheckUpdates(value ?? false),
+                                  secondary: Icon(
+                                    Icons.update_rounded,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                  title: const Text(
+                                      'Check For Updates Automatically'),
+                                  subtitle: const Text(
+                                    'Check quietly when MDSLens starts.',
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 4,
+                                  ),
                                 ),
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Signal data plotting for MDSplus experiments.',
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              final updateButton = Focus(
+                                debugLabel: 'about-update',
+                                child: OutlinedButton(
+                                  onPressed:
+                                      _checkingUpdate ? null : _checkUpdate,
+                                  child: Text(
+                                    _checkingUpdate ? 'Checking...' : 'Update',
+                                  ),
+                                ),
+                              );
+                              final closeButton = Focus(
+                                debugLabel: 'about-close',
+                                child: FilledButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Close'),
+                                ),
+                              );
+                              final status = Text(
+                                _updateStatus,
                                 softWrap: true,
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
-                              ),
-                              const SizedBox(height: 6),
-                              Wrap(
-                                spacing: 3,
-                                runSpacing: 3,
+                              );
+                              if (constraints.maxWidth < 390) {
+                                return Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    updateButton,
+                                    if (_updateStatus.isNotEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      status,
+                                    ],
+                                    const SizedBox(height: 8),
+                                    closeButton,
+                                  ],
+                                );
+                              }
+                              return Row(
                                 children: [
-                                  Text(
-                                    'Cross-platform rewrite written with Flutter and Rust from the original',
-                                    softWrap: true,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                  _buildLink(
-                                    'MdsScope project',
-                                    originalMdsScopeRepositoryUrl,
-                                  ),
+                                  updateButton,
+                                  const SizedBox(width: 8),
+                                  Expanded(child: status),
+                                  closeButton,
                                 ],
-                              ),
-                            ],
+                              );
+                            },
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.5),
-                      border: Border.all(color: theme.dividerColor),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Column(
-                      children: [
-                        _buildRow(
-                          'MDSLens Version',
-                          Text(_mdsLensVersion, style: _valueStyle(context)),
-                        ),
-                        _buildRow(
-                          'Git Version',
-                          Text(_gitVersion, style: _valueStyle(context)),
-                        ),
-                        _buildRow(
-                          'Framework & Engine',
-                          Text(
-                            'Flutter & Rust FFI (libmds_bridge)',
-                            style: _valueStyle(context),
-                            softWrap: true,
-                          ),
-                        ),
-                        _buildRow(
-                          'Runtime System',
-                          Text(
-                            _systemInfo.displayText,
-                            style: _valueStyle(context),
-                            softWrap: true,
-                          ),
-                        ),
-                        _buildRow(
-                          'Copyright',
-                          Wrap(
-                            spacing: 3,
-                            runSpacing: 3,
-                            children: [
-                              Text(
-                                'Copyright (C) 2026',
-                                style: _valueStyle(context),
-                              ),
-                              _buildLink('Pingzhong Wu', mdsLensMaintainerUrl),
-                            ],
-                          ),
-                        ),
-                        _buildRow(
-                          'License',
-                          _buildLink(
-                            'GPL-3.0-or-later',
-                            'https://www.gnu.org/licenses/gpl-3.0.html',
-                          ),
-                        ),
-                        _buildRow(
-                          'Source',
-                          _buildLink('GitHub', mdsLensSourceUrl),
-                          showBorder: false,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  if (app != null) ...[
-                    Material(
-                      color: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.5),
-                      shape: RoundedRectangleBorder(
-                        side: BorderSide(color: theme.dividerColor),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: CheckboxListTile(
-                        key: const ValueKey('about-auto-update-check'),
-                        value: app.autoCheckUpdates,
-                        onChanged: (value) =>
-                            app.setAutoCheckUpdates(value ?? false),
-                        secondary: Icon(
-                          Icons.update_rounded,
-                          color: theme.colorScheme.primary,
-                        ),
-                        title: const Text('Check For Updates Automatically'),
-                        subtitle: const Text(
-                          'Check quietly when MDSLens starts.',
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 4,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final updateButton = OutlinedButton(
-                        onPressed: _checkingUpdate ? null : _checkUpdate,
-                        child: Text(
-                          _checkingUpdate ? 'Checking...' : 'Update',
-                        ),
-                      );
-                      final closeButton = FilledButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Close'),
-                      );
-                      final status = Text(
-                        _updateStatus,
-                        softWrap: true,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      );
-                      if (constraints.maxWidth < 390) {
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            updateButton,
-                            if (_updateStatus.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              status,
-                            ],
-                            const SizedBox(height: 8),
-                            closeButton,
-                          ],
-                        );
-                      }
-                      return Row(
-                        children: [
-                          updateButton,
-                          const SizedBox(width: 8),
-                          Expanded(child: status),
-                          closeButton,
                         ],
-                      );
-                    },
+                      ),
+                    ),
                   ),
-                ],
+                ),
               ),
             ),
           ),

@@ -1875,10 +1875,19 @@ bool moveVimPlotFocus(BuildContext context, TraversalDirection direction) {
 }
 
 bool _isVimLayoutContext(BuildContext? context) {
-  return context?.findAncestorWidgetOfExactType<VimLayoutFocus>() != null ||
-      FocusManager.instance.primaryFocus?.context
-              ?.findAncestorWidgetOfExactType<VimLayoutFocus>() !=
-          null;
+  if (context == null) return false;
+  if (context.findAncestorWidgetOfExactType<VimLayoutFocus>() != null) {
+    return true;
+  }
+  if (context.findAncestorWidgetOfExactType<VimPageScope>()?.pageId ==
+      'layout') {
+    return true;
+  }
+  final focusedContext = FocusManager.instance.primaryFocus?.context;
+  return focusedContext?.findAncestorWidgetOfExactType<VimLayoutFocus>() !=
+          null ||
+      focusedContext?.findAncestorWidgetOfExactType<VimPageScope>()?.pageId ==
+          'layout';
 }
 
 _VimFocusTarget? _currentVimLayoutTarget(
@@ -1958,17 +1967,91 @@ bool handleVimLayoutNavigationKey(BuildContext context, KeyEvent event) {
   }
   final direction = _vimDirectionForKey(event.logicalKey);
   if (direction == null) return false;
-  // Keep HJKL inside the Layout Setup document while a column or panel can
-  // still move. At a document edge, continue with the page's action row so
-  // Add/Reset/Delete/Cancel/Apply remain reachable without a mouse.
-  if (moveVimLayoutFocus(navigationContext, direction)) return true;
-  return moveVimFocus(navigationContext, direction);
+  final current = _currentVimLayoutTarget(
+    _vimFocusPage(navigationContext) ?? _VimFocusPage(const []),
+    FocusManager.instance.primaryFocus,
+  );
+  // A panel belongs to the currently entered Column page.  Horizontal
+  // motion must not leak into sibling Columns; leave the panel with Escape
+  // first, which restores the Column character on the parent page.
+  final horizontal = direction == TraversalDirection.left ||
+      direction == TraversalDirection.right;
+  final page = _vimFocusPage(navigationContext);
+  if (page == null) return true;
+
+  if (current?.layout == null || current!.layout!.isColumn) {
+    // A Column is a character on the Layout Setup page.  Horizontal motion
+    // therefore selects sibling Columns, while vertical motion remains on
+    // the parent page and can reach the action row.  It must not implicitly
+    // enter the Column's panel page; `i` is the explicit page-entry key.
+    if (current?.layout?.isColumn == true && horizontal) {
+      moveVimLayoutFocus(navigationContext, direction);
+      return true;
+    }
+    _moveVimLayoutRootFocus(page, direction);
+    return true;
+  }
+
+  // A Panel is a character inside its entered Column page.  Horizontal
+  // motion is intentionally consumed here so it can never jump into a
+  // sibling Column.  Vertical motion is confined to this Column's panels.
+  if (horizontal) return true;
+  moveVimLayoutFocus(navigationContext, direction);
+  return true;
+}
+
+bool _moveVimLayoutRootFocus(
+  _VimFocusPage page,
+  TraversalDirection direction,
+) {
+  // The parent Layout Setup page contains both its action controls and the
+  // Column characters. Panels are deliberately omitted: they belong to a
+  // Column child page and become reachable only after `i` enters that page.
+  final targets = <_VimFocusTarget>[
+    ..._layoutRootControls(page),
+    ..._layoutTargets(page, columns: true),
+  ];
+  if (targets.isEmpty) return false;
+  final rootPage = _VimFocusPage(targets);
+  final current = FocusManager.instance.primaryFocus;
+  if (current == null) return false;
+  final currentRect = _vimNodeRect(current);
+  final currentTarget = rootPage.targets
+      .where(
+        (target) =>
+            target.node == current ||
+            (currentRect != null && _sameVimRect(target.rect, currentRect)),
+      )
+      .firstOrNull;
+  if (currentTarget == null) return false;
+
+  final semanticTargets = <String, _VimFocusTarget>{};
+  final rows = <List<VimPageCell>>[];
+  for (final row in rootPage.rows) {
+    final semanticRow = <VimPageCell>[];
+    for (final target in row) {
+      final id = _vimFocusTargetId(target);
+      semanticTargets[id] = target;
+      semanticRow.add(VimPageCell(id: id, label: target.node.debugLabel ?? id));
+    }
+    rows.add(semanticRow);
+  }
+  final navigator = VimPageStack(
+    root: VimPage(id: 'layout-root', title: 'Layout Setup', rows: rows),
+  )..setSelection(_vimFocusTargetId(currentTarget));
+  if (!navigator.move(_vimPageMotionForDirection(direction))) return false;
+  final target = semanticTargets[navigator.selectedId];
+  if (target == null) return false;
+  _requestVimFocus(target);
+  return true;
 }
 
 /// Layout Setup uses the same nested text-page model as the chart grid. A
-/// horizontal move selects a column; a vertical move enters or advances its
-/// panels. Every request goes through the common reveal helper so both the
-/// outer horizontal viewport and the column's vertical viewport are corrected.
+/// horizontal move selects a sibling Column only while the Column character
+/// itself is selected; once `i` enters that Column page, vertical motion stays
+/// within its panels and horizontal motion is intentionally isolated. Every
+/// request goes through the common reveal helper so both the outer horizontal
+/// viewport and the column's vertical viewport are corrected.
 bool moveVimLayoutFocus(
   BuildContext context,
   TraversalDirection direction,
@@ -1987,6 +2070,7 @@ bool moveVimLayoutFocus(
   final horizontal = direction == TraversalDirection.left ||
       direction == TraversalDirection.right;
   if (horizontal) {
+    if (!layout.isColumn) return false;
     final index = columnTargets.indexWhere(
       (candidate) => candidate.layout!.column == layout.column,
     );
@@ -1994,23 +2078,18 @@ bool moveVimLayoutFocus(
     final step = direction == TraversalDirection.left ? -1 : 1;
     target = columnTargets[(index + step).clamp(0, columnTargets.length - 1)];
   } else {
+    if (layout.isColumn) return false;
     final candidates = panelTargets
         .where((candidate) => candidate.layout!.column == layout.column)
         .toList();
     if (candidates.isEmpty) return false;
     candidates.sort((a, b) => a.layout!.row.compareTo(b.layout!.row));
-    if (layout.isColumn) {
-      target = direction == TraversalDirection.down
-          ? candidates.first
-          : candidates.last;
-    } else {
-      final index = candidates.indexWhere(
-        (candidate) => candidate.layout!.row == layout.row,
-      );
-      if (index < 0) return false;
-      final step = direction == TraversalDirection.up ? -1 : 1;
-      target = candidates[(index + step).clamp(0, candidates.length - 1)];
-    }
+    final index = candidates.indexWhere(
+      (candidate) => candidate.layout!.row == layout.row,
+    );
+    if (index < 0) return false;
+    final step = direction == TraversalDirection.up ? -1 : 1;
+    target = candidates[(index + step).clamp(0, candidates.length - 1)];
   }
   if (target.node == current.node) return false;
   _requestVimFocus(target);
@@ -2114,6 +2193,13 @@ bool _moveVimLayoutPageEdge(
     );
     return true;
   }
+  if (current.layout == null) {
+    final rootControls = _layoutRootControls(page);
+    final rootTarget =
+        last ? rootControls.lastOrNull : rootControls.firstOrNull;
+    if (rootTarget != null) _requestVimFocus(rootTarget);
+    return rootTarget != null;
+  }
   if (current.layout!.isColumn) {
     // A selected Column is still a character of the Layout Setup page. Do
     // not enter its panel list implicitly when using a page edge command.
@@ -2174,6 +2260,22 @@ bool moveVimLineEdge(BuildContext context, {required bool last}) {
   if (rowIndex < 0 || rowIndex >= page.rows.length) return false;
   final row = page.rows[rowIndex];
   if (row.isEmpty) return false;
+  final layout = currentTarget?.layout;
+  if (layout != null && !layout.isColumn) {
+    final columnTargets = page.targets
+        .where(
+          (target) =>
+              target.layout != null &&
+              !target.layout!.isColumn &&
+              target.layout!.column == layout.column,
+        )
+        .toList()
+      ..sort((a, b) => a.layout!.row.compareTo(b.layout!.row));
+    final target = last ? columnTargets.lastOrNull : columnTargets.firstOrNull;
+    if (target == null) return false;
+    _requestVimFocus(target);
+    return true;
+  }
   _requestVimFocus(last ? row.last : row.first);
   return true;
 }

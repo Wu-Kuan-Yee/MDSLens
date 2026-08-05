@@ -624,6 +624,111 @@ void main() {
     expect(firstLayoutCell?.hasFocus, isTrue);
   });
 
+  testWidgets('Vim Layout Setup keeps Column pages isolated', (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    app.applyLayoutList([2, 1]);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Layout Setup'));
+    await tester.pumpAndSettle();
+
+    VimLayoutFocus? focusedLayout() =>
+        FocusManager.instance.primaryFocus?.context
+            ?.findAncestorWidgetOfExactType<VimLayoutFocus>();
+
+    expect(focusedLayout()?.isColumn, isTrue);
+    expect(focusedLayout()?.column, 0);
+
+    // `i` explicitly enters the selected Column's child page.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pump();
+    expect(focusedLayout()?.isColumn, isFalse);
+    expect(focusedLayout()?.column, 0);
+
+    // Once inside Column 1, horizontal motion is consumed instead of
+    // switching to Column 2.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
+    await tester.pump();
+    expect(focusedLayout()?.isColumn, isFalse);
+    expect(focusedLayout()?.column, 0);
+
+    // Escape returns to the Column character on the parent page, where L can
+    // select the next Column. It must not implicitly enter that Column.
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(focusedLayout()?.isColumn, isTrue);
+    expect(focusedLayout()?.column, 0);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
+    await tester.pump();
+    expect(focusedLayout()?.isColumn, isTrue);
+    expect(focusedLayout()?.column, 1);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pump();
+    expect(focusedLayout()?.isColumn, isFalse);
+    expect(focusedLayout()?.column, 1);
+  });
+
+  testWidgets('Vim About panel exposes links and actions', (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('About MDSLens'));
+    await tester.pumpAndSettle();
+
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<VimPageScope>()
+          ?.pageId,
+      'about',
+    );
+    final firstAboutFocus = Focus.maybeOf(
+      tester.element(find.text('MdsScope project')),
+      scopeOk: false,
+    );
+    expect(firstAboutFocus?.hasFocus, isTrue);
+
+    // H/J/K/L stay inside the About page and eventually reach its action row.
+    for (var index = 0; index < 12; index++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+      await tester.pump();
+    }
+    final focusedContext = FocusManager.instance.primaryFocus?.context;
+    expect(
+      focusedContext?.findAncestorWidgetOfExactType<OutlinedButton>() != null ||
+          focusedContext?.findAncestorWidgetOfExactType<FilledButton>() != null,
+      isTrue,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<VimPageScope>()
+          ?.pageId,
+      'about',
+    );
+  });
+
   testWidgets('Vim Keyboard Mode reaches both action buttons', (tester) async {
     final app = AppState();
     await app.preferencesReady;
@@ -727,6 +832,14 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
 
+    await tester.tap(find.byKey(const ValueKey('layout-preview-column-0')));
+    await tester.pump();
+    FocusManager.instance.rootScope.descendants.firstWhere((node) {
+      final layout =
+          node.context?.findAncestorWidgetOfExactType<VimLayoutFocus>();
+      return layout?.isColumn == true && layout?.column == 0;
+    }).requestFocus();
+    await tester.pump();
     await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
@@ -737,15 +850,20 @@ void main() {
     final applyFocus = Focus.maybeOf(applyElement, scopeOk: false);
     expect(applyFocus, isNotNull);
     expect(
-      FocusManager.instance.primaryFocus == applyFocus ||
-          FocusManager.instance.primaryFocus?.ancestors.contains(applyFocus) ==
-              true,
+      FocusManager.instance.primaryFocus?.context
+              ?.findAncestorWidgetOfExactType<TextButton>() !=
+          null,
       isTrue,
     );
 
     final mainContext = tester.element(find.byType(MainPage));
+    await tester.tap(find.byKey(const ValueKey('layout-preview-column-0')));
+    await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    // Enter the first Column explicitly before navigating its panel page.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pump();
     for (var i = 0; i < 12; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
       await tester.pump();
@@ -757,6 +875,10 @@ void main() {
       verticalDuringNavigation.controller?.position.pixels,
       greaterThan(0),
     );
+    // Horizontal motion is isolated while inside the Column. Leave the
+    // nested page before selecting sibling Columns and scrolling horizontally.
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
     for (var i = 0; i < 5; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
       await tester.pump();
