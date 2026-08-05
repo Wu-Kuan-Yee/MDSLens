@@ -291,6 +291,7 @@ void main() {
     await tester.pump();
     expect(find.byKey(const ValueKey('vim-command-palette')), findsOneWidget);
     expect(VimInputModeScope.mode(queryContext), VimInputMode.normal);
+    expect(query.controller!.text, 'panel');
     final commandTiles = find.descendant(
       of: find.byKey(const ValueKey('vim-command-list')),
       matching: find.byType(ListTile),

@@ -87,6 +87,7 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
     _vimInputState?.removeListener(_onVimInputModeChanged);
     _vimInputState = next;
     _previousVimMode = next?.mode;
+    next?.setCommitTextOnEscape(true);
     next?.addListener(_onVimInputModeChanged);
   }
 
@@ -107,6 +108,7 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handleGlobalKey);
+    _vimInputState?.setCommitTextOnEscape(false);
     _vimInputState?.removeListener(_onVimInputModeChanged);
     _queryController.dispose();
     _queryFocus.dispose();

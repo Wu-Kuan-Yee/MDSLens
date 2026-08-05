@@ -57,6 +57,7 @@ class VimInputState extends ChangeNotifier {
   FocusNode? _editingNode;
   TextEditingValue? _editingSnapshot;
   bool _textEscapeReleased = false;
+  bool _commitTextOnEscape = false;
 
   VimInputMode get mode => _mode;
   VimVisualMode get visualMode => _visualMode;
@@ -70,6 +71,19 @@ class VimInputState extends ChangeNotifier {
   }
 
   void markTextEscapeRelease() => _textEscapeReleased = true;
+
+  /// Some transient Vim editors (the command line in particular) use the
+  /// normal Vim convention that Escape leaves Insert mode while retaining
+  /// the text just entered.  Other application fields deliberately keep the
+  /// existing cancel-on-Escape behavior, so this is an explicit per-editor
+  /// opt-in rather than a global policy change.
+  void setCommitTextOnEscape(bool enabled) => _commitTextOnEscape = enabled;
+
+  bool consumeCommitTextOnEscape() {
+    final enabled = _commitTextOnEscape;
+    _commitTextOnEscape = false;
+    return enabled;
+  }
 
   String? get selectedPageId => pages.selectedId;
 
@@ -1017,9 +1031,13 @@ KeyEventResult handleVimInputModeKey(
   if (input.mode == VimInputMode.insert) {
     if (key == LogicalKeyboardKey.escape) {
       final controller = _editableController(node);
-      final snapshot = input.takeTextEditSnapshot(node);
-      if (controller != null && snapshot != null) {
-        controller.value = snapshot;
+      if (input.consumeCommitTextOnEscape()) {
+        input.commitTextEdit(node);
+      } else {
+        final snapshot = input.takeTextEditSnapshot(node);
+        if (controller != null && snapshot != null) {
+          controller.value = snapshot;
+        }
       }
       input.setMode(VimInputMode.normal);
       SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
