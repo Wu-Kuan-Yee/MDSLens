@@ -375,6 +375,48 @@ void main() {
       tester.getCenter(maximized),
       buttons: kSecondaryMouseButton,
     );
+    await tester.pump();
+    await tester.pump();
+    final menuFocus = tester
+        .widgetList<Focus>(
+          find.descendant(
+            of: find.byKey(
+              const ValueKey('plot-context-menu-show-all'),
+            ),
+            matching: find.byType(Focus),
+          ),
+        )
+        .map((widget) => widget.focusNode)
+        .whereType<FocusNode>()
+        .firstWhere(
+          (node) => node.debugLabel == 'polished-popup-menu-item',
+        );
+    menuFocus.requestFocus();
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus, same(menuFocus));
+    await tester.pump(const Duration(milliseconds: 35));
+    expect(
+      find.byKey(const ValueKey('plot-context-menu-show-all')),
+      findsOneWidget,
+    );
+
+    void expectMenuRingAligned() {
+      final ring = tester.getRect(
+        find.byKey(const ValueKey('vim-popup-focus-ring')),
+      );
+      final focusedItem = tester.getRect(
+        find.byKey(const ValueKey('plot-context-menu-show-all')),
+      );
+      expect(
+        (ring.center - focusedItem.center).distance,
+        lessThan(1),
+        reason: 'the Vim ring must follow the popup route animation',
+      );
+    }
+
+    expectMenuRingAligned();
+    await tester.pump(const Duration(milliseconds: 70));
+    expectMenuRingAligned();
     await tester.pumpAndSettle();
     expect(
       find.byKey(const ValueKey('plot-context-menu-show-all')),

@@ -26,6 +26,39 @@ class PolishedPopupMenuGroup<T> {
   final List<PolishedPopupMenuOption<T>> options;
 }
 
+class _PopupVimFocusFrame extends StatelessWidget {
+  const _PopupVimFocusFrame({
+    required this.visible,
+    required this.child,
+  });
+
+  final bool visible;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+        fit: StackFit.passthrough,
+        children: [
+          child,
+          if (visible)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  key: const ValueKey('vim-popup-focus-ring'),
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: const Color(0xFFE040FB),
+                      width: 2,
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+}
+
 class _KeyboardPopupMenuItem<T> extends PopupMenuItem<T> {
   const _KeyboardPopupMenuItem({
     super.key,
@@ -52,6 +85,7 @@ class _KeyboardPopupMenuItem<T> extends PopupMenuItem<T> {
 class _KeyboardPopupMenuItemState<T>
     extends PopupMenuItemState<T, _KeyboardPopupMenuItem<T>> {
   FocusNode? _menuFocusNode;
+  bool _hasFocus = false;
 
   @override
   void initState() {
@@ -169,18 +203,30 @@ class _KeyboardPopupMenuItemState<T>
     });
   }
 
+  void _handleFocusChange(bool focused) {
+    if (_hasFocus == focused || !mounted) return;
+    setState(() => _hasFocus = focused);
+  }
+
   @override
-  Widget build(BuildContext context) => VimPageScope(
-        pageId: 'popup-menu',
-        parentPageId: 'root',
-        transient: true,
-        child: Focus(
-          focusNode: _menuFocusNode,
-          autofocus: widget.autofocus,
-          onKeyEvent: _handleKeyEvent,
-          child: super.build(context),
+  Widget build(BuildContext context) {
+    final item = super.build(context);
+    return VimPageScope(
+      pageId: 'popup-menu',
+      parentPageId: 'root',
+      transient: true,
+      child: Focus(
+        focusNode: _menuFocusNode,
+        autofocus: widget.autofocus,
+        onFocusChange: _handleFocusChange,
+        onKeyEvent: _handleKeyEvent,
+        child: _PopupVimFocusFrame(
+          visible: widget.vimMode && _hasFocus,
+          child: item,
         ),
-      );
+      ),
+    );
+  }
 }
 
 /// A plain Material popup item with a deterministic focus target. Flutter's
@@ -214,6 +260,7 @@ class VimPopupMenuItem<T> extends PopupMenuItem<T> {
 class _VimPopupMenuItemState<T>
     extends PopupMenuItemState<T, VimPopupMenuItem<T>> {
   FocusNode? _focusNode;
+  bool _hasFocus = false;
 
   @override
   void initState() {
@@ -239,6 +286,11 @@ class _VimPopupMenuItemState<T>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && widget.enabled) _focusNode?.requestFocus();
     });
+  }
+
+  void _handleFocusChange(bool focused) {
+    if (_hasFocus == focused || !mounted) return;
+    setState(() => _hasFocus = focused);
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
@@ -315,8 +367,12 @@ class _VimPopupMenuItemState<T>
         focusNode: _focusNode,
         autofocus: widget.autofocus,
         descendantsAreTraversable: false,
+        onFocusChange: _handleFocusChange,
         onKeyEvent: _handleKeyEvent,
-        child: item,
+        child: _PopupVimFocusFrame(
+          visible: VimModeScope.enabled(context) && _hasFocus,
+          child: item,
+        ),
       ),
     );
   }

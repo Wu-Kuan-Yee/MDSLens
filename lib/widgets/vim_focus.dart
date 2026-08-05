@@ -655,6 +655,13 @@ class _VimFocusHostState extends State<VimFocusHost>
     var renderObject = focus?.context?.findRenderObject();
     final focusContext = focus?.context;
     if (focusContext != null &&
+        VimPageScope.maybeOf(focusContext)?.pageId == 'popup-menu') {
+      // Popup items draw their ring inside the animated route. A ring in this
+      // host would live outside PopupMenuRoute's transform and lag behind
+      // while the menu scales/translates into place.
+      return const SizedBox.shrink();
+    }
+    if (focusContext != null &&
         VimInputModeScope.plotSelectionLevel(focusContext) ==
             VimPlotSelectionLevel.column &&
         focusContext.findAncestorWidgetOfExactType<VimPlotFocus>() != null) {
