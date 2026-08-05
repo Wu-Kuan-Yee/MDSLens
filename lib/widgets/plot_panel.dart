@@ -518,6 +518,12 @@ class _PlotPanelState extends State<PlotPanel> {
 
     final panel = _findPanel(app);
     final theme = Theme.of(context);
+    // The application selection and Vim's keyboard cursor are two different
+    // concepts.  In ordinary mode keep the historical magenta panel frame;
+    // once Vim mode is enabled, the shared VimFocusHost owns the focus ring
+    // so the two indicators never overlap or masquerade as one another.
+    final showLegacySelectionFrame =
+        widget.selected && !VimModeScope.enabled(context);
     final isLoading = app.isPlotFetching(widget.plotIdx);
 
     // Build line bars with MinMax decimation
@@ -689,13 +695,14 @@ class _PlotPanelState extends State<PlotPanel> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(4),
                     child: Container(
+                      key: ValueKey('plot-panel-frame-${widget.plotIdx}'),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.surface,
                         border: Border.all(
-                          color: widget.selected
+                          color: showLegacySelectionFrame
                               ? const Color(0xFFFF00FF)
                               : theme.dividerColor.withValues(alpha: 0.3),
-                          width: widget.selected ? 2 : 1,
+                          width: showLegacySelectionFrame ? 2 : 1,
                         ),
                         borderRadius: BorderRadius.circular(4),
                       ),

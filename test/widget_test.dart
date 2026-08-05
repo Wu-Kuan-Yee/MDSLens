@@ -409,6 +409,50 @@ void main() {
     );
   });
 
+  testWidgets('Panel selection frame stays separate from the Vim focus ring', (
+    tester,
+  ) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(false);
+    app.selectPanel(0, 0);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    BoxDecoration panelDecoration() {
+      final frame = tester.widget<Container>(
+        find.byKey(const ValueKey('plot-panel-frame-0')),
+      );
+      return frame.decoration! as BoxDecoration;
+    }
+
+    expect(
+      panelDecoration().border!.top.color,
+      const Color(0xFFFF00FF),
+    );
+
+    app.setVimMode(true);
+    await tester.pump();
+    expect(
+      panelDecoration().border!.top.color,
+      isNot(const Color(0xFFFF00FF)),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('plot-panel-0')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('vim-focus-ring')), findsOneWidget);
+    expect(
+      panelDecoration().border!.top.color,
+      isNot(const Color(0xFFFF00FF)),
+    );
+  });
+
   testWidgets('Vim Normal-mode inputs release HJKL to nearby controls', (
     tester,
   ) async {
