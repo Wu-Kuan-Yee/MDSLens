@@ -127,11 +127,11 @@ class VimPageStack extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setSelection(String? id) {
+  void setSelection(String? id, {bool updatePreferredColumn = true}) {
     if (id != null && currentPage.cellById(id) == null) return;
     if (_selectionByPage[currentPage.id] == id) return;
     _selectionByPage[currentPage.id] = id;
-    if (id != null) {
+    if (id != null && updatePreferredColumn) {
       final row = currentPage.rowOf(id);
       if (row >= 0) {
         final column = currentPage.rows[row]
@@ -249,7 +249,11 @@ class VimPageStack extends ChangeNotifier {
         break;
     }
     if (target == null || target.id == current.id) return false;
-    setSelection(target.id);
+    setSelection(
+      target.id,
+      updatePreferredColumn:
+          motion != VimPageMotion.up && motion != VimPageMotion.down,
+    );
     return true;
   }
 

@@ -1105,6 +1105,14 @@ bool handleVimPageEntryKey(BuildContext context, KeyEvent event) {
   }
   final current = FocusManager.instance.primaryFocus;
   if (current == null) return false;
+  if (current is FocusScopeNode) return false;
+  // Text fields own Enter for submission/commit.  In Insert mode the modal
+  // handler already consumes it; in Normal mode letting the native field see
+  // it avoids a second global handler invoking ActivateIntent and submitting
+  // the shot twice.
+  if (key != LogicalKeyboardKey.keyI && _isEditableNode(current)) {
+    return false;
+  }
   if (key == LogicalKeyboardKey.keyI) {
     final child = _firstDirectVimChild(current);
     if (child != null) {
