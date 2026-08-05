@@ -139,6 +139,7 @@ class KeyboardSafeDialog extends StatelessWidget {
     required this.content,
     required this.actions,
     this.pageId = 'dialog',
+    this.forceVimNavigation = false,
     this.maxWidth = 440,
     this.maxHeight = 620,
   });
@@ -147,6 +148,7 @@ class KeyboardSafeDialog extends StatelessWidget {
   final Widget content;
   final List<Widget> actions;
   final String pageId;
+  final bool forceVimNavigation;
   final double maxWidth;
   final double maxHeight;
 
@@ -163,6 +165,7 @@ class KeyboardSafeDialog extends StatelessWidget {
         pageId: pageId,
         parentPageId: 'root',
         transient: true,
+        forceNavigation: forceVimNavigation,
         child: PopScope(
           onPopInvokedWithResult: (_, __) {
             VimInputModeScope.setMode(context, VimInputMode.normal);
@@ -171,7 +174,8 @@ class KeyboardSafeDialog extends StatelessWidget {
             child: Focus(
               canRequestFocus: false,
               skipTraversal: true,
-              onKeyEvent: (node, event) => handleVimDialogKey(context, event),
+              onKeyEvent: (node, event) =>
+                  handleVimDialogKey(node.context ?? context, event),
               child: dialog,
             ),
           ),

@@ -15,7 +15,18 @@ class VimModeScope extends InheritedNotifier<AppState> {
 
   static bool enabled(BuildContext context) {
     final scope = context.dependOnInheritedWidgetOfExactType<VimModeScope>();
-    if (scope != null) return scope.notifier?.vimMode ?? false;
+    if (scope?.notifier?.vimMode == true) return true;
+    // A few transient pages (most importantly Keyboard Mode itself) must be
+    // keyboard-navigable while they are choosing whether Vim mode should be
+    // enabled.  The page explicitly opts into the same dispatcher without
+    // changing the persisted application preference until Apply is pressed.
+    if (context
+            .findAncestorWidgetOfExactType<VimPageScope>()
+            ?.forceNavigation ==
+        true) {
+      return true;
+    }
+    if (scope != null) return false;
     try {
       return context.read<AppState>().vimMode;
     } catch (_) {
@@ -45,11 +56,20 @@ class VimInputState extends ChangeNotifier {
   int? _visualAnchor;
   FocusNode? _editingNode;
   TextEditingValue? _editingSnapshot;
+  bool _textEscapeReleased = false;
 
   VimInputMode get mode => _mode;
   VimVisualMode get visualMode => _visualMode;
   VimPlotSelectionLevel get plotSelectionLevel => _plotSelectionLevel;
   int? get visualAnchor => _visualAnchor;
+
+  bool consumeTextEscapeRelease() {
+    final released = _textEscapeReleased;
+    _textEscapeReleased = false;
+    return released;
+  }
+
+  void markTextEscapeRelease() => _textEscapeReleased = true;
 
   String? get selectedPageId => pages.selectedId;
 
@@ -282,6 +302,9 @@ class _VimFocusHostState extends State<VimFocusHost>
   final _vimInputState = VimInputState();
   late final AnimationController _focusRingController;
   Timer? _vimSequenceTimer;
+  final List<ScrollPosition> _ringScrollPositions = <ScrollPosition>[];
+  FocusNode? _ringTrackedFocus;
+  bool _ringTrackingScheduled = false;
   bool _pendingVimG = false;
 
   @override
@@ -307,6 +330,10 @@ class _VimFocusHostState extends State<VimFocusHost>
     _vimSequenceTimer?.cancel();
     _vimInputState.removeListener(_inputModeChanged);
     _focusRingController.dispose();
+    for (final position in _ringScrollPositions) {
+      position.removeListener(_ringScrollChanged);
+    }
+    _ringScrollPositions.clear();
     _vimInputState.dispose();
     super.dispose();
   }
@@ -369,6 +396,47 @@ class _VimFocusHostState extends State<VimFocusHost>
     if (mounted && _vimInputState.mode != VimInputMode.normal) setState(() {});
   }
 
+  void _ringScrollChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _scheduleRingScrollTracking(FocusNode? focus) {
+    _ringTrackedFocus = focus;
+    if (_ringTrackingScheduled) return;
+    _ringTrackingScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _ringTrackingScheduled = false;
+      if (!mounted) return;
+      final target = _ringTrackedFocus?.context;
+      final positions = <ScrollPosition>[];
+      target?.visitAncestorElements((element) {
+        if (element is StatefulElement && element.state is ScrollableState) {
+          final position = (element.state as ScrollableState).position;
+          if (!positions.contains(position)) positions.add(position);
+        }
+        return true;
+      });
+      final unchanged = positions.length == _ringScrollPositions.length &&
+          positions.asMap().entries.every(
+                (entry) => identical(
+                  entry.value,
+                  _ringScrollPositions[entry.key],
+                ),
+              );
+      if (unchanged) return;
+      for (final position in _ringScrollPositions) {
+        position.removeListener(_ringScrollChanged);
+      }
+      _ringScrollPositions
+        ..clear()
+        ..addAll(positions);
+      for (final position in _ringScrollPositions) {
+        position.addListener(_ringScrollChanged);
+      }
+      if (mounted) setState(() {});
+    });
+  }
+
   bool _focusedPlotContext() {
     return FocusManager.instance.primaryFocus?.context
             ?.findAncestorWidgetOfExactType<VimPlotFocus>() !=
@@ -378,6 +446,16 @@ class _VimFocusHostState extends State<VimFocusHost>
   bool _handleGlobalFocusKey(KeyEvent event) {
     final focusContext = FocusManager.instance.primaryFocus?.context;
     if (!VimModeScope.enabled(context)) return false;
+    // Transient routes (dialogs and popup menus) have their own Focus
+    // boundary and page-specific key handler.  The host only keeps the
+    // application-wide `g` prefix alive there; routing navigation or Enter a
+    // second time would move/activate a control twice.
+    if (focusContext != null && ModalRoute.of(focusContext) is PopupRoute) {
+      if (event.logicalKey == LogicalKeyboardKey.keyG) {
+        return _handleVimPageSequence(focusContext, event);
+      }
+      return false;
+    }
     if (handleVimPlotMotionKey(focusContext ?? context, event)) {
       return true;
     }
@@ -492,6 +570,7 @@ class _VimFocusHostState extends State<VimFocusHost>
 
   Widget _buildFocusRing(BuildContext context) {
     final focus = FocusManager.instance.primaryFocus;
+    _scheduleRingScrollTracking(focus);
     if (focus?.skipTraversal ?? false) return const SizedBox.shrink();
     var renderObject = focus?.context?.findRenderObject();
     final focusContext = focus?.context;
@@ -527,6 +606,7 @@ class _VimFocusHostState extends State<VimFocusHost>
         child: Opacity(
           opacity: editing ? _focusRingController.value : 1,
           child: DecoratedBox(
+            key: const ValueKey('vim-focus-ring'),
             decoration: BoxDecoration(
               border: Border.all(
                 color: const Color(0xFFE040FB),
@@ -625,11 +705,13 @@ class VimLayoutFocus extends InheritedWidget {
     required this.column,
     this.row = -1,
     required this.isColumn,
+    this.onActivate,
   });
 
   final int column;
   final int row;
   final bool isColumn;
+  final VoidCallback? onActivate;
 
   String get pageId =>
       isColumn ? 'layout/column/$column' : 'layout/panel/$column/$row';
@@ -651,11 +733,13 @@ class VimPageScope extends InheritedWidget {
     required this.pageId,
     this.parentPageId,
     this.transient = false,
+    this.forceNavigation = false,
   });
 
   final String pageId;
   final String? parentPageId;
   final bool transient;
+  final bool forceNavigation;
 
   static VimPageScope? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<VimPageScope>();
@@ -664,7 +748,8 @@ class VimPageScope extends InheritedWidget {
   bool updateShouldNotify(VimPageScope oldWidget) =>
       pageId != oldWidget.pageId ||
       parentPageId != oldWidget.parentPageId ||
-      transient != oldWidget.transient;
+      transient != oldWidget.transient ||
+      forceNavigation != oldWidget.forceNavigation;
 }
 
 bool _isEditableContext(BuildContext? context) {
@@ -937,8 +1022,23 @@ KeyEventResult handleVimInputModeKey(
   }
 
   if (key == LogicalKeyboardKey.escape) {
+    input.markTextEscapeRelease();
     input.setMode(VimInputMode.normal);
     node.unfocus();
+    // Keep the transient page focused after leaving a field. Otherwise the
+    // next Escape has no Focus.onKeyEvent boundary to reach, so it cannot
+    // close the dialog. Prefer the nearest non-editable control as the new
+    // Vim cell while still making the field itself lose focus.
+    final scope = node.nearestScope;
+    final fallback = scope?.traversalDescendants
+        .where(
+          (candidate) =>
+              candidate.canRequestFocus &&
+              !candidate.skipTraversal &&
+              !_isEditableNode(candidate),
+        )
+        .firstOrNull;
+    fallback?.requestFocus();
     return KeyEventResult.handled;
   }
 
@@ -1112,6 +1212,12 @@ bool handleVimPageEntryKey(BuildContext context, KeyEvent event) {
   // the shot twice.
   if (key != LogicalKeyboardKey.keyI && _isEditableNode(current)) {
     return false;
+  }
+  final layout =
+      current.context?.findAncestorWidgetOfExactType<VimLayoutFocus>();
+  if (key != LogicalKeyboardKey.keyI && layout?.onActivate != null) {
+    layout!.onActivate!();
+    return true;
   }
   if (key == LogicalKeyboardKey.keyI) {
     final child = _firstDirectVimChild(current);
@@ -1555,6 +1661,26 @@ bool enterVimPlotEditing(BuildContext context, KeyEvent event) {
     return false;
   }
   final app = context.read<AppState>();
+  final input = VimInputModeScope.maybeOf(context);
+  if (input?.plotSelectionLevel == VimPlotSelectionLevel.column) {
+    // `i` first enters the selected Column page. The representative panel is
+    // moved to that Column's first Panel, but plot pan/point editing remains
+    // inactive until `i` is pressed once more on the Panel itself.
+    final page = _vimFocusPage(context);
+    final current = _currentVimPlotTarget(
+      page ?? _VimFocusPage(const []),
+      FocusManager.instance.primaryFocus,
+    );
+    final column = current?.plot?.column;
+    if (page != null && column != null) {
+      final first = _plotTargetsByColumn(page, column).firstOrNull;
+      if (first != null) {
+        input?.setPlotSelectionLevel(VimPlotSelectionLevel.panel);
+        _requestVimFocus(first);
+        return true;
+      }
+    }
+  }
   if (app.interactionMode == 1 && app.crosshairX == null) {
     app.activatePointForCurrentPanel();
   }
@@ -1832,10 +1958,11 @@ bool handleVimLayoutNavigationKey(BuildContext context, KeyEvent event) {
   }
   final direction = _vimDirectionForKey(event.logicalKey);
   if (direction == null) return false;
-  // Keep HJKL inside the Layout Setup document at its edges instead of
-  // falling through to the surrounding page's geometric focus order.
-  moveVimLayoutFocus(navigationContext, direction);
-  return true;
+  // Keep HJKL inside the Layout Setup document while a column or panel can
+  // still move. At a document edge, continue with the page's action row so
+  // Add/Reset/Delete/Cancel/Apply remain reachable without a mouse.
+  if (moveVimLayoutFocus(navigationContext, direction)) return true;
+  return moveVimFocus(navigationContext, direction);
 }
 
 /// Layout Setup uses the same nested text-page model as the chart grid. A
@@ -1940,6 +2067,24 @@ bool _moveVimPlotPageEdge(
     _requestVimFocus(target);
     return true;
   }
+  if (input?.plotSelectionLevel == VimPlotSelectionLevel.column) {
+    // The selected Column is still a character of the root application page.
+    // `gg`/`G` therefore operate on the root page; they must not implicitly
+    // enter the Column and select its first/last Panel.
+    final rootControls = page.targets
+        .where((target) => target.plot == null && target.layout == null)
+        .toList()
+      ..sort((a, b) {
+        final byY = a.rect.top.compareTo(b.rect.top);
+        return byY != 0 ? byY : a.rect.left.compareTo(b.rect.left);
+      });
+    final rootTarget =
+        (last ? rootControls.lastOrNull : rootControls.firstOrNull);
+    if (rootTarget != null) {
+      _requestVimFocus(rootTarget);
+      return true;
+    }
+  }
   final candidates = _plotTargetsByColumn(page, current.plot!.column);
   if (candidates.isEmpty) return false;
   final target = last ? candidates.last : candidates.first;
@@ -1961,8 +2106,24 @@ bool _moveVimLayoutPageEdge(
     FocusManager.instance.primaryFocus,
   );
   if (current == null) {
-    _requestVimFocus(columns.first);
+    final rootControls = _layoutRootControls(page);
+    _requestVimFocus(
+      last
+          ? rootControls.lastOrNull ?? columns.last
+          : rootControls.firstOrNull ?? columns.first,
+    );
     return true;
+  }
+  if (current.layout!.isColumn) {
+    // A selected Column is still a character of the Layout Setup page. Do
+    // not enter its panel list implicitly when using a page edge command.
+    final rootControls = _layoutRootControls(page);
+    final rootTarget =
+        last ? rootControls.lastOrNull : rootControls.firstOrNull;
+    if (rootTarget != null) {
+      _requestVimFocus(rootTarget);
+      return true;
+    }
   }
   final column = current.layout!.column;
   final inColumn = panels
@@ -1978,6 +2139,17 @@ bool _moveVimLayoutPageEdge(
     _requestVimFocus(last ? inColumn.last : inColumn.first);
   }
   return true;
+}
+
+List<_VimFocusTarget> _layoutRootControls(_VimFocusPage page) {
+  final controls = page.targets
+      .where((target) => target.layout == null && target.plot == null)
+      .toList()
+    ..sort((a, b) {
+      final byY = a.rect.top.compareTo(b.rect.top);
+      return byY != 0 ? byY : a.rect.left.compareTo(b.rect.left);
+    });
+  return controls;
 }
 
 /// Move to the first or last focusable control in the current virtual Vim
@@ -2078,8 +2250,20 @@ KeyEventResult handleVimDialogKey(
       (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
     return KeyEventResult.ignored;
   }
+  final input = VimInputModeScope.maybeOf(context);
+  if (event.logicalKey == LogicalKeyboardKey.escape &&
+      input?.consumeTextEscapeRelease() == true) {
+    Navigator.maybePop(context);
+    return KeyEventResult.handled;
+  }
   final inputResult = handleVimInputModeKey(context, event);
   if (inputResult == KeyEventResult.handled) return inputResult;
+  if ((event.logicalKey == LogicalKeyboardKey.keyI ||
+          event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.numpadEnter) &&
+      handleVimPageEntryKey(context, event)) {
+    return KeyEventResult.handled;
+  }
   if (handleVimLayoutNavigationKey(context, event)) {
     return KeyEventResult.handled;
   }
@@ -2132,10 +2316,14 @@ KeyEventResult handleVimDialogKey(
       HardwareKeyboard.instance.isShiftPressed) {
     return KeyEventResult.ignored;
   }
-  if (_isVimLayoutContext(context) && moveVimLayoutFocus(context, direction)) {
-    return KeyEventResult.handled;
+  final focusedContext = FocusManager.instance.primaryFocus?.context;
+  final navigationContext = focusedContext ?? context;
+  if (_isVimLayoutContext(navigationContext)) {
+    if (moveVimLayoutFocus(navigationContext, direction)) {
+      return KeyEventResult.handled;
+    }
   }
-  return moveVimFocus(context, direction)
+  return moveVimFocus(navigationContext, direction)
       ? KeyEventResult.handled
       : KeyEventResult.ignored;
 }

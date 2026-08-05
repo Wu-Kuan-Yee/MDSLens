@@ -172,13 +172,21 @@ class _MainPageState extends State<MainPage> {
     if (!mounted) return false;
     final route = ModalRoute.of(context);
     if (route != null && !route.isCurrent) return false;
+    // A dialog or popup owns the keyboard while it is visible.  Let its
+    // dedicated Vim page handler receive Enter and navigation keys; routing
+    // the same activation through both the root page and the transient page
+    // can invoke a button twice (most visibly, Cancel would pop two routes).
+    final focusedContext = FocusManager.instance.primaryFocus?.context;
+    if (focusedContext != null && ModalRoute.of(focusedContext) is PopupRoute) {
+      return false;
+    }
 
     // Plot edit mode owns both key-down and key-up events.  Keeping this
     // before shortcut-stroke parsing prevents a simultaneous H+L/J+K chord
     // from being split into unrelated toolbar shortcuts.
     if (context.read<AppState>().vimMode &&
         handleVimPlotMotionKey(
-          FocusManager.instance.primaryFocus?.context ?? context,
+          focusedContext ?? context,
           event,
         )) {
       return true;
@@ -295,7 +303,12 @@ class _MainPageState extends State<MainPage> {
           TraversalDirection.right,
         _ => null,
       };
-      if (direction != null && moveVimPlotFocus(focusedContext, direction)) {
+      if (direction != null) {
+        // H/L are Column motions in the waveform page. A boundary is a
+        // handled no-op; never fall through to the old panel-offset logic,
+        // which is ambiguous when neighboring Columns have different row
+        // counts.
+        moveVimPlotFocus(focusedContext, direction);
         return true;
       }
     }

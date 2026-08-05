@@ -383,10 +383,23 @@ void main() {
     await tester.tap(plot);
     await tester.pump();
 
-    // The plot grid is a nested Vim page: the outer cursor stays on Column 1,
-    // while gg/G select its first/last Panel.
+    // A Column is a child page of the application page.  While the outer
+    // cursor is still on that Column, gg/G operate on the parent page and do
+    // not implicitly enter one of its Panels.
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<PlotPanel>(),
+      isNull,
+    );
+
+    // Re-select the waveform page and press i to enter Column 1.  Entering
+    // the child page, rather than using gg/G, is what selects its first Panel.
+    await tester.tap(plot);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
     await tester.pump();
     final firstPanel = FocusManager.instance.primaryFocus?.context
         ?.findAncestorWidgetOfExactType<PlotPanel>();
@@ -467,17 +480,21 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
     await expectFocusedPlot(4); // Column 2, Panel 2.
 
-    // In Point mode Normal H moves to the neighboring Panel and does not
+    // In Point mode Normal H moves to the neighboring Column and does not
     // consume the key for crosshair stepping.
     app.interactionMode = 1;
     app.activatePointForCurrentPanel();
     final beforeNormalMove = app.crosshairX;
     await tester.sendKeyEvent(LogicalKeyboardKey.keyH);
-    await expectFocusedPlot(1); // Column 1, Panel 2.
+    await expectFocusedPlot(1); // Column 1, representative Panel 2.
     expect(app.crosshairX, beforeNormalMove);
 
-    // i enters plot editing; H/L and the arrow keys now move the crosshair,
-    // and Escape returns to the non-blinking Normal selection state.
+    // The first i enters the selected Column and chooses its first Panel. A
+    // second i enters plot editing; H/L and the arrow keys then move the
+    // crosshair, and Escape returns to the non-blinking Normal state.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pump();
+    await expectFocusedPlot(0); // Column 1, Panel 1.
     await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
     await tester.pump();
     final mainContext = tester.element(find.byType(MainPage));
@@ -490,7 +507,7 @@ void main() {
       FocusManager.instance.primaryFocus?.context
           ?.findAncestorWidgetOfExactType<PlotPanel>()
           ?.plotIdx,
-      1,
+      0,
     );
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
@@ -517,6 +534,20 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('plot-panel-0')));
     await tester.pump();
+    // A Column is a child page of the application page. gg/G at this level
+    // must stay on the parent page rather than entering a Panel implicitly.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<PlotPanel>(),
+      isNull,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('plot-panel-0')));
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
@@ -649,6 +680,35 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Layout Setup'));
     await tester.pumpAndSettle();
+
+    final layoutPanelFocus = Focus.maybeOf(
+      tester.element(find.byKey(const ValueKey('layout-panel-focus-1'))),
+      scopeOk: false,
+    );
+    layoutPanelFocus!.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('layout-delete-selected')),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('layout-delete-selected')),
+          )
+          .onPressed,
+      isNull,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
@@ -7164,6 +7224,107 @@ void main() {
     await tester.pumpAndSettle();
     expect(horizontal.controller?.position.pixels, greaterThan(0));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Vim selection ring follows Layout Setup scrolling', (
+    tester,
+  ) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    app.applyLayoutList([6]);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 800);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Layout Setup'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('layout-preview-panel-0')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('vim-focus-ring')), findsOneWidget);
+    final before = tester.getRect(find.byKey(const ValueKey('vim-focus-ring')));
+
+    final vertical = tester.widget<Scrollbar>(
+      find.byKey(const ValueKey('layout-column-scrollbar-0')),
+    );
+    vertical.controller!.jumpTo(80);
+    await tester.pump();
+    final after = tester.getRect(find.byKey(const ValueKey('vim-focus-ring')));
+    expect(after.top, lessThan(before.top));
+  });
+
+  testWidgets('Vim Layout Setup activates every action control',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    app.applyLayoutList([1]);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Future<void> openLayout() async {
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Layout Setup'));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> activate(String label) async {
+      final node = Focus.maybeOf(
+        tester.element(find.text(label)),
+        scopeOk: false,
+      );
+      expect(node, isNotNull, reason: 'missing focus target for $label');
+      node!.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+    }
+
+    await openLayout();
+    await activate('Add panel');
+    expect(
+        find.byKey(const ValueKey('layout-preview-panel-1')), findsOneWidget);
+    await activate('Add column');
+    expect(find.byKey(const ValueKey('layout-column-focus-1')), findsOneWidget);
+    await activate('Reset');
+    expect(find.byKey(const ValueKey('layout-preview-panel-1')), findsNothing);
+
+    // Select the only panel, then invoke Delete without touching the mouse.
+    final panelNode = Focus.maybeOf(
+      tester.element(find.byKey(const ValueKey('layout-panel-focus-1'))),
+      scopeOk: false,
+    );
+    panelNode!.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    await activate('Delete 1');
+    expect(find.byKey(const ValueKey('layout-preview-panel-0')), findsNothing);
+
+    await activate('Cancel');
+    expect(find.byKey(const ValueKey('keyboard-safe-dialog')), findsNothing);
+
+    await openLayout();
+    await activate('Apply');
+    expect(find.byKey(const ValueKey('keyboard-safe-dialog')), findsNothing);
   });
 
   testWidgets('Layout Setup shows metadata and supports draft panel actions', (

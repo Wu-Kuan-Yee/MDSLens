@@ -1896,6 +1896,7 @@ class ToolbarWidget extends StatelessWidget {
             behavior: HitTestBehavior.translucent,
             onTap: clearSelection,
             child: KeyboardSafeDialog(
+              pageId: 'layout',
               maxWidth: 760,
               maxHeight: 860,
               title: const Text('Layout Setup'),
@@ -1958,6 +1959,14 @@ class ToolbarWidget extends StatelessWidget {
                                       child: VimLayoutFocus(
                                         column: displayColumn,
                                         isColumn: true,
+                                        onActivate: () {
+                                          setState(() {
+                                            toggleLayoutColumnSelection(
+                                              draftColumns[displayColumn],
+                                              selectedPanels,
+                                            );
+                                          });
+                                        },
                                         child: Focus(
                                           key: ValueKey(
                                             'layout-column-focus-$displayColumn',
@@ -2332,34 +2341,42 @@ class ToolbarWidget extends StatelessWidget {
                       spacing: 8,
                       runSpacing: 4,
                       children: [
-                        TextButton.icon(
-                          onPressed: () {
-                            final targetColumn = draftColumns.indexWhere(
-                              (column) => column.any(selectedPanels.contains),
-                            );
-                            animateLayoutChange(() {
-                              if (draftColumns.isEmpty) {
-                                draftColumns.add([_emptyPanelConfig()]);
-                              } else {
-                                draftColumns[targetColumn < 0
-                                        ? draftColumns.length - 1
-                                        : targetColumn]
-                                    .add(_emptyPanelConfig());
-                              }
-                            });
-                          },
-                          icon: const Icon(Icons.add, size: 16),
-                          label: const Text('Add panel'),
-                        ),
-                        TextButton.icon(
-                          onPressed: () => animateLayoutChange(() {
-                            draftColumns.add([_emptyPanelConfig()]);
-                          }),
-                          icon: const Icon(
-                            Icons.view_column_outlined,
-                            size: 16,
+                        Focus(
+                          debugLabel: 'layout-add-panel',
+                          skipTraversal: true,
+                          child: TextButton.icon(
+                            onPressed: () {
+                              final targetColumn = draftColumns.indexWhere(
+                                (column) => column.any(selectedPanels.contains),
+                              );
+                              animateLayoutChange(() {
+                                if (draftColumns.isEmpty) {
+                                  draftColumns.add([_emptyPanelConfig()]);
+                                } else {
+                                  draftColumns[targetColumn < 0
+                                          ? draftColumns.length - 1
+                                          : targetColumn]
+                                      .add(_emptyPanelConfig());
+                                }
+                              });
+                            },
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('Add panel'),
                           ),
-                          label: const Text('Add column'),
+                        ),
+                        Focus(
+                          debugLabel: 'layout-add-column',
+                          skipTraversal: true,
+                          child: TextButton.icon(
+                            onPressed: () => animateLayoutChange(() {
+                              draftColumns.add([_emptyPanelConfig()]);
+                            }),
+                            icon: const Icon(
+                              Icons.view_column_outlined,
+                              size: 16,
+                            ),
+                            label: const Text('Add column'),
+                          ),
                         ),
                       ],
                     ),
@@ -2367,52 +2384,68 @@ class ToolbarWidget extends StatelessWidget {
                 ),
               ),
               actions: [
-                OutlinedButton.icon(
-                  key: const ValueKey('layout-reset'),
-                  onPressed: () => animateLayoutChange(() {
-                    draftColumns
-                      ..clear()
-                      ..addAll(_cloneLayoutColumns(openingColumns));
-                    selectedPanels.clear();
-                  }),
-                  icon: const Icon(Icons.restart_alt_rounded),
-                  label: const Text('Reset'),
-                ),
-                FilledButton.tonalIcon(
-                  key: const ValueKey('layout-delete-selected'),
-                  onPressed: selectedPanels.isEmpty
-                      ? null
-                      : () => animateLayoutChange(() {
-                            deleteSelectedLayoutPanels(
-                              draftColumns,
-                              selectedPanels,
-                            );
-                          }),
-                  style: FilledButton.styleFrom(
-                    foregroundColor: Theme.of(ctx).colorScheme.error,
-                  ),
-                  icon: const Icon(Icons.delete_sweep_rounded),
-                  label: Text(
-                    selectedPanels.isEmpty
-                        ? 'Delete'
-                        : 'Delete ${selectedPanels.length}',
+                Focus(
+                  debugLabel: 'layout-reset',
+                  skipTraversal: true,
+                  child: OutlinedButton.icon(
+                    key: const ValueKey('layout-reset'),
+                    onPressed: () => animateLayoutChange(() {
+                      draftColumns
+                        ..clear()
+                        ..addAll(_cloneLayoutColumns(openingColumns));
+                      selectedPanels.clear();
+                    }),
+                    icon: const Icon(Icons.restart_alt_rounded),
+                    label: const Text('Reset'),
                   ),
                 ),
-                TextButton(
-                  key: const ValueKey('layout-cancel'),
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancel'),
+                Focus(
+                  debugLabel: 'layout-delete-selected',
+                  skipTraversal: true,
+                  child: FilledButton.tonalIcon(
+                    key: const ValueKey('layout-delete-selected'),
+                    onPressed: selectedPanels.isEmpty
+                        ? null
+                        : () => animateLayoutChange(() {
+                              deleteSelectedLayoutPanels(
+                                draftColumns,
+                                selectedPanels,
+                              );
+                            }),
+                    style: FilledButton.styleFrom(
+                      foregroundColor: Theme.of(ctx).colorScheme.error,
+                    ),
+                    icon: const Icon(Icons.delete_sweep_rounded),
+                    label: Text(
+                      selectedPanels.isEmpty
+                          ? 'Delete'
+                          : 'Delete ${selectedPanels.length}',
+                    ),
+                  ),
                 ),
-                TextButton(
-                  key: const ValueKey('layout-apply'),
-                  onPressed: () {
-                    app.applyLayoutColumns(draftColumns);
-                    if (app.plots.isNotEmpty) {
-                      app.startRefresh();
-                    }
-                    Navigator.pop(ctx);
-                  },
-                  child: const Text('Apply'),
+                Focus(
+                  debugLabel: 'layout-cancel',
+                  skipTraversal: true,
+                  child: TextButton(
+                    key: const ValueKey('layout-cancel'),
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                Focus(
+                  debugLabel: 'layout-apply',
+                  skipTraversal: true,
+                  child: TextButton(
+                    key: const ValueKey('layout-apply'),
+                    onPressed: () {
+                      app.applyLayoutColumns(draftColumns);
+                      if (app.plots.isNotEmpty) {
+                        app.startRefresh();
+                      }
+                      Navigator.pop(ctx);
+                    },
+                    child: const Text('Apply'),
+                  ),
                 ),
               ],
             ),
@@ -2738,6 +2771,7 @@ class ToolbarWidget extends StatelessWidget {
         column: sourceColumn,
         row: sourceRow,
         isColumn: false,
+        onActivate: onSelect,
         child: Focus(
           key: ValueKey('layout-panel-focus-$panelNumber'),
           onKeyEvent: (node, event) {

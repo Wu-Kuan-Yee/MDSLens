@@ -93,6 +93,7 @@ class _KeyboardModePanelState extends State<_KeyboardModePanel> {
     final colors = Theme.of(context).colorScheme;
     return KeyboardSafeDialog(
       key: const ValueKey('keyboard-mode-dialog'),
+      forceVimNavigation: true,
       maxWidth: 620,
       title: Row(
         children: [
@@ -146,16 +147,24 @@ class _KeyboardModePanelState extends State<_KeyboardModePanel> {
         ],
       ),
       actions: [
-        TextButton(
+        Focus(
           key: const ValueKey('keyboard-mode-cancel'),
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancel'),
+          debugLabel: 'keyboard-mode-cancel',
+          skipTraversal: true,
+          child: TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
         ),
-        FilledButton.icon(
+        Focus(
           key: const ValueKey('keyboard-mode-apply'),
-          onPressed: () => widget.onApply(_selectedVim),
-          icon: const Icon(Icons.check_rounded),
-          label: const Text('Apply'),
+          debugLabel: 'keyboard-mode-apply',
+          skipTraversal: true,
+          child: FilledButton.icon(
+            onPressed: () => widget.onApply(_selectedVim),
+            icon: const Icon(Icons.check_rounded),
+            label: const Text('Apply'),
+          ),
         ),
       ],
     );
