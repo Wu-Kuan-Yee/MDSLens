@@ -132,7 +132,7 @@ class _AdaptiveTwoAxisScrollViewState extends State<AdaptiveTwoAxisScrollView> {
   }
 }
 
-class KeyboardSafeDialog extends StatelessWidget {
+class KeyboardSafeDialog extends StatefulWidget {
   const KeyboardSafeDialog({
     super.key,
     required this.title,
@@ -153,6 +153,58 @@ class KeyboardSafeDialog extends StatelessWidget {
   final double maxHeight;
 
   @override
+  State<KeyboardSafeDialog> createState() => _KeyboardSafeDialogState();
+}
+
+class _KeyboardSafeDialogState extends State<KeyboardSafeDialog> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _requestInitialVimFocus();
+      });
+    });
+  }
+
+  void _requestInitialVimFocus() {
+    if (!mounted ||
+        !VimModeScope.enabled(context) ||
+        widget.forceVimNavigation) {
+      return;
+    }
+    final current = FocusManager.instance.primaryFocus;
+    final route = ModalRoute.of(context);
+    final currentRoute =
+        current?.context == null ? null : ModalRoute.of(current!.context!);
+    final currentPage =
+        current?.context?.findAncestorWidgetOfExactType<VimPageScope>()?.pageId;
+    if (current != null &&
+        current.canRequestFocus &&
+        route != null &&
+        identical(route, currentRoute) &&
+        currentPage == widget.pageId) {
+      return;
+    }
+    final first = FocusManager.instance.rootScope.descendants
+        .where(
+          (node) {
+            final nodeContext = node.context;
+            if (nodeContext == null) return false;
+            final nodeRoute = ModalRoute.of(nodeContext);
+            return (route == null || nodeRoute == null || nodeRoute == route) &&
+                nodeContext
+                        .findAncestorWidgetOfExactType<VimPageScope>()
+                        ?.pageId ==
+                    widget.pageId;
+          },
+        )
+        .where((node) => node.canRequestFocus && !node.skipTraversal)
+        .firstOrNull;
+    first?.requestFocus();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final screenSize = MediaQuery.sizeOf(context);
@@ -162,10 +214,10 @@ class KeyboardSafeDialog extends StatelessWidget {
 
     Widget focusShell(Widget dialog) {
       return VimPageScope(
-        pageId: pageId,
+        pageId: widget.pageId,
         parentPageId: 'root',
         transient: true,
-        forceNavigation: forceVimNavigation,
+        forceNavigation: widget.forceVimNavigation,
         child: PopScope(
           onPopInvokedWithResult: (_, __) {
             VimInputModeScope.setMode(context, VimInputMode.normal);
@@ -186,7 +238,7 @@ class KeyboardSafeDialog extends StatelessWidget {
     Widget header() => Padding(
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
           child: DefaultTextStyle(
-              style: theme.textTheme.titleLarge!, child: title),
+              style: theme.textTheme.titleLarge!, child: widget.title),
         );
 
     Widget actionBar() => Padding(
@@ -197,16 +249,16 @@ class KeyboardSafeDialog extends StatelessWidget {
               alignment: WrapAlignment.end,
               spacing: 8,
               runSpacing: 8,
-              children: actions,
+              children: widget.actions,
             ),
           ),
         );
 
     if (tinyScreen) {
       final viewportWidth =
-          (screenSize.width - 24).clamp(80.0, maxWidth).toDouble();
+          (screenSize.width - 24).clamp(80.0, widget.maxWidth).toDouble();
       final viewportHeight =
-          (screenSize.height - 24).clamp(80.0, maxHeight).toDouble();
+          (screenSize.height - 24).clamp(80.0, widget.maxHeight).toDouble();
       final contentWidth = tinyWidth ? 320.0 : viewportWidth;
       return focusShell(
         Dialog(
@@ -233,7 +285,7 @@ class KeyboardSafeDialog extends StatelessWidget {
                     Divider(height: 1, color: theme.dividerColor),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                      child: content,
+                      child: widget.content,
                     ),
                     Divider(height: 1, color: theme.dividerColor),
                     actionBar(),
@@ -252,7 +304,10 @@ class KeyboardSafeDialog extends StatelessWidget {
         insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         clipBehavior: Clip.antiAlias,
         child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: maxWidth, maxHeight: maxHeight),
+          constraints: BoxConstraints(
+            maxWidth: widget.maxWidth,
+            maxHeight: widget.maxHeight,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -266,7 +321,7 @@ class KeyboardSafeDialog extends StatelessWidget {
                     keyboardDismissBehavior:
                         ScrollViewKeyboardDismissBehavior.onDrag,
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                    child: content,
+                    child: widget.content,
                   ),
                 ),
               ),

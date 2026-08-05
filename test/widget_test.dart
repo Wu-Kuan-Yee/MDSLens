@@ -603,8 +603,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       FocusManager.instance.primaryFocus?.debugLabel,
-      'vim-popup-menu-first-item',
+      'settings-web',
     );
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'settings-layout');
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'settings-fonts');
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'settings-layout');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Layout Setup'), findsOneWidget);
+    final firstLayoutCell = Focus.maybeOf(
+      tester.element(find.byKey(const ValueKey('layout-column-focus-0'))),
+      scopeOk: false,
+    );
+    expect(firstLayoutCell?.hasFocus, isTrue);
   });
 
   testWidgets('Vim Keyboard Mode reaches both action buttons', (tester) async {

@@ -1248,6 +1248,7 @@ class ToolbarWidget extends StatelessWidget {
       key: key,
       value: value,
       autofocus: value == 'web',
+      debugLabel: 'settings-$value',
       child: Tooltip(
         message: tooltip,
         child: Row(

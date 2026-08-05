@@ -194,6 +194,7 @@ class VimPopupMenuItem<T> extends PopupMenuItem<T> {
     required super.value,
     required super.child,
     this.autofocus = false,
+    this.debugLabel,
     super.height,
     super.padding,
     super.enabled,
@@ -203,6 +204,7 @@ class VimPopupMenuItem<T> extends PopupMenuItem<T> {
   });
 
   final bool autofocus;
+  final String? debugLabel;
 
   @override
   PopupMenuItemState<T, VimPopupMenuItem<T>> createState() =>
@@ -216,7 +218,9 @@ class _VimPopupMenuItemState<T>
   @override
   void initState() {
     super.initState();
-    _focusNode = FocusNode(debugLabel: 'vim-popup-menu-first-item');
+    _focusNode = FocusNode(
+      debugLabel: widget.debugLabel ?? 'vim-popup-menu-item',
+    );
     if (!widget.autofocus) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _requestInitialFocus();
@@ -241,12 +245,61 @@ class _VimPopupMenuItemState<T>
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
+    if (VimModeScope.enabled(context)) {
+      switch (event.logicalKey) {
+        case LogicalKeyboardKey.keyH:
+        case LogicalKeyboardKey.keyK:
+        case LogicalKeyboardKey.arrowLeft:
+        case LogicalKeyboardKey.arrowUp:
+          _moveMenuFocus(backward: true);
+          return KeyEventResult.handled;
+        case LogicalKeyboardKey.keyJ:
+        case LogicalKeyboardKey.keyL:
+        case LogicalKeyboardKey.arrowDown:
+        case LogicalKeyboardKey.arrowRight:
+          _moveMenuFocus(backward: false);
+          return KeyEventResult.handled;
+        case LogicalKeyboardKey.escape:
+          Navigator.of(context).maybePop();
+          return KeyEventResult.handled;
+        default:
+          break;
+      }
+    }
     if (event.logicalKey == LogicalKeyboardKey.enter ||
         event.logicalKey == LogicalKeyboardKey.space) {
       handleTap();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
+  }
+
+  void _moveMenuFocus({required bool backward}) {
+    final scope = FocusScope.of(context);
+    final current = _focusNode;
+    if (current == null) return;
+    final descendants = scope.traversalDescendants
+        .where(
+          (candidate) =>
+              candidate.canRequestFocus &&
+              !candidate.skipTraversal &&
+              candidate.context
+                      ?.findAncestorWidgetOfExactType<VimPageScope>()
+                      ?.pageId ==
+                  'popup-menu',
+        )
+        .toList(growable: false);
+    if (descendants.isEmpty) return;
+    final index = descendants.indexOf(current);
+    if (index < 0) {
+      (backward ? descendants.last : descendants.first).requestFocus();
+      return;
+    }
+    var nextIndex = index + (backward ? -1 : 1);
+    if (nextIndex < 0) nextIndex = descendants.length - 1;
+    if (nextIndex >= descendants.length) nextIndex = 0;
+    final next = descendants[nextIndex];
+    next.requestFocus();
   }
 
   @override
@@ -259,6 +312,7 @@ class _VimPopupMenuItemState<T>
       child: Focus(
         focusNode: _focusNode,
         autofocus: widget.autofocus,
+        descendantsAreTraversable: false,
         onKeyEvent: _handleKeyEvent,
         child: item,
       ),
