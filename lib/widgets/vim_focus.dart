@@ -298,6 +298,51 @@ void requestVimWorkspaceFocus() {
   _vimWorkspaceFocus?.requestFocus();
 }
 
+FocusNode? _findVimPageFocus(String pageId) {
+  for (final node in FocusManager.instance.rootScope.traversalDescendants) {
+    final nodeContext = node.context;
+    if (!node.canRequestFocus ||
+        node.skipTraversal ||
+        nodeContext == null ||
+        !nodeContext.mounted) {
+      continue;
+    }
+    if (VimPageScope.maybeOf(nodeContext)?.pageId == pageId) return node;
+  }
+  return null;
+}
+
+/// Restore the unique semantic parent page after a child route closes. This
+/// intentionally resolves the parent from the widget's page declaration on
+/// every Escape; it never records or replays a focus history stack.
+void scheduleVimPageParentFocus(String? parentPageId) {
+  if (parentPageId == null) return;
+
+  void request() {
+    if (parentPageId == 'root') {
+      requestVimWorkspaceFocus();
+      return;
+    }
+    _findVimPageFocus(parentPageId)?.requestFocus();
+  }
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    request();
+    WidgetsBinding.instance.addPostFrameCallback((_) => request());
+  });
+}
+
+/// Close the current transient page and select its declared parent page.
+/// Plot and Layout pages have richer two-level handlers below; this helper is
+/// for dialogs, popup menus, and other route-backed child pages.
+bool leaveVimPageToParent(BuildContext context) {
+  final parentPageId = VimPageScope.maybeOf(context)?.parentPageId;
+  if (parentPageId == null) return false;
+  Navigator.of(context).maybePop();
+  scheduleVimPageParentFocus(parentPageId);
+  return true;
+}
+
 /// Draws a non-interactive focus ring around the currently focused control.
 /// The ring is intentionally outside the widgets themselves so existing
 /// button/dropdown styles remain unchanged and every native Flutter control
@@ -430,13 +475,18 @@ class _VimFocusHostState extends State<VimFocusHost>
       if (!mounted) return;
       final target = _ringTrackedFocus?.context;
       final positions = <ScrollPosition>[];
-      target?.visitAncestorElements((element) {
-        if (element is StatefulElement && element.state is ScrollableState) {
-          final position = (element.state as ScrollableState).position;
-          if (!positions.contains(position)) positions.add(position);
-        }
-        return true;
-      });
+      // A maximized plot can replace the focused route between scheduling and
+      // this callback. Do not walk ancestors of a deactivated Element: doing
+      // so throws and leaves the focus ring tracking stale scroll positions.
+      if (target != null && target.mounted) {
+        target.visitAncestorElements((element) {
+          if (element is StatefulElement && element.state is ScrollableState) {
+            final position = (element.state as ScrollableState).position;
+            if (!positions.contains(position)) positions.add(position);
+          }
+          return true;
+        });
+      }
       final unchanged = positions.length == _ringScrollPositions.length &&
           positions.asMap().entries.every(
                 (entry) => identical(
@@ -526,7 +576,9 @@ class _VimFocusHostState extends State<VimFocusHost>
         if (vimFocusedEditable() && leaveVimTextEditing(focusContext)) {
           return true;
         }
-        Navigator.of(focusContext).maybePop();
+        if (!leaveVimPageToParent(focusContext)) {
+          Navigator.of(focusContext).maybePop();
+        }
         return true;
       }
     }
@@ -1728,6 +1780,10 @@ bool handleVimPlotEditingKey(BuildContext context, KeyEvent event) {
     return false;
   }
   if (event.logicalKey == LogicalKeyboardKey.escape) {
+    final input = VimInputModeScope.maybeOf(context);
+    if (input?.plotSelectionLevel == VimPlotSelectionLevel.panel) {
+      input?.setPlotSelectionLevel(VimPlotSelectionLevel.column);
+    }
     VimInputModeScope.setMode(context, VimInputMode.normal);
     return true;
   }
@@ -2387,7 +2443,7 @@ KeyEventResult handleVimDialogKey(
   final input = VimInputModeScope.maybeOf(context);
   if (event.logicalKey == LogicalKeyboardKey.escape &&
       input?.consumeTextEscapeRelease() == true) {
-    Navigator.maybePop(context);
+    if (!leaveVimPageToParent(context)) Navigator.maybePop(context);
     return KeyEventResult.handled;
   }
   final inputResult = handleVimInputModeKey(context, event);
@@ -2408,7 +2464,7 @@ KeyEventResult handleVimDialogKey(
     if (vimFocusedEditable() && leaveVimTextEditing(context)) {
       return KeyEventResult.handled;
     }
-    Navigator.maybePop(context);
+    if (!leaveVimPageToParent(context)) Navigator.maybePop(context);
     return KeyEventResult.handled;
   }
   if (vimEditingText()) return KeyEventResult.ignored;

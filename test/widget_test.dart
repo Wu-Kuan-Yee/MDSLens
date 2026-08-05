@@ -362,6 +362,29 @@ void main() {
       find.byKey(const ValueKey('plot-context-menu-maximize')),
       findsNothing,
     );
+
+    // Maximizing a non-first Panel must preserve its identity. The context
+    // menu then operates on that Panel, not on the state that happened to be
+    // first in the regular grid.
+    app.plots[1].setViewRange(1, 2, 3, 4);
+    app.maximizePlot(1);
+    await tester.pumpAndSettle();
+    final maximized = find.byKey(const ValueKey('plot-panel-1'));
+    expect(maximized, findsOneWidget);
+    await tester.tapAt(
+      tester.getCenter(maximized),
+      buttons: kSecondaryMouseButton,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('plot-context-menu-show-all')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('plot-context-menu-reset-current')),
+    );
+    await tester.pumpAndSettle();
+    expect(app.plots[1].viewMinX, isNull);
   });
 
   testWidgets('Vim focus crosses the plot grid and toolbar geometrically', (
@@ -637,6 +660,10 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
     expect(VimInputModeScope.mode(mainContext), VimInputMode.normal);
+    expect(
+      VimInputModeScope.plotSelectionLevel(mainContext),
+      VimPlotSelectionLevel.column,
+    );
   });
 
   testWidgets('Vim plot navigation keeps unequal columns nested',

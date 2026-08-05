@@ -260,7 +260,9 @@ class _VimPopupMenuItemState<T>
           _moveMenuFocus(backward: false);
           return KeyEventResult.handled;
         case LogicalKeyboardKey.escape:
-          Navigator.of(context).maybePop();
+          if (!leaveVimPageToParent(context)) {
+            Navigator.of(context).maybePop();
+          }
           return KeyEventResult.handled;
         default:
           break;
