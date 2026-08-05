@@ -442,8 +442,13 @@ class _PlotPanelState extends State<PlotPanel> {
     final rangeY = _viewMaxY - _viewMinY;
     if (!rangeX.isFinite || !rangeY.isFinite) return;
     setState(() {
-      final stepX = rangeX * 0.12;
-      final stepY = rangeY * 0.12;
+      // A keyboard pan is a small fraction of the currently visible range,
+      // rather than a fixed data-unit distance.  This keeps H/J/K/L usable
+      // for both a zoomed-in waveform and a wide overview: one tick advances
+      // by about one fiftieth of the viewport instead of jumping by 12%.
+      const panFraction = 0.02;
+      final stepX = rangeX * panFraction;
+      final stepY = rangeY * panFraction;
       _viewMinX += direction.dx * stepX;
       _viewMaxX += direction.dx * stepX;
       _viewMinY += direction.dy * stepY;
