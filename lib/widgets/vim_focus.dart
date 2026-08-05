@@ -58,6 +58,8 @@ class VimInputState extends ChangeNotifier {
   TextEditingValue? _editingSnapshot;
   bool _textEscapeReleased = false;
   bool _commitTextOnEscape = false;
+  final List<FocusNode> _parentFocusHistory = <FocusNode>[];
+  FocusNode? _lastVimFocus;
 
   VimInputMode get mode => _mode;
   VimVisualMode get visualMode => _visualMode;
@@ -83,6 +85,54 @@ class VimInputState extends ChangeNotifier {
     final enabled = _commitTextOnEscape;
     _commitTextOnEscape = false;
     return enabled;
+  }
+
+  /// Record transitions between semantic Vim pages.
+  ///
+  /// Ordinary movement between controls stays within one page and is not
+  /// recorded. When a child page, dialog, menu, or nested layout page gains
+  /// focus, the previous focus node is retained so Escape can return to the
+  /// exact parent selection.
+  void recordVimFocus(FocusNode? next) {
+    // FocusManager briefly reports null while a route is being replaced. Keep
+    // the previous node so the following child focus can still be paired with
+    // its parent.
+    if (next == null || identical(next, _lastVimFocus)) return;
+
+    final parentIndex = _parentFocusHistory.lastIndexWhere(
+      (node) => identical(node, next),
+    );
+    if (parentIndex >= 0) {
+      _parentFocusHistory.removeRange(parentIndex, _parentFocusHistory.length);
+      _lastVimFocus = next;
+      return;
+    }
+
+    final previous = _lastVimFocus;
+    if (previous != null &&
+        previous.context != null &&
+        _isVimPageBoundary(previous, next) &&
+        _parentFocusHistory.every((node) => !identical(node, previous))) {
+      _parentFocusHistory.add(previous);
+    }
+    _lastVimFocus = next;
+  }
+
+  /// Removes and returns the most recent still-live parent focus node.
+  FocusNode? takeVimParentFocus() {
+    while (_parentFocusHistory.isNotEmpty) {
+      final node = _parentFocusHistory.removeLast();
+      // Navigator inserts an internal modal scope between a parent route and
+      // its first real focus target. It is a routing implementation detail,
+      // not a selectable Vim page, so never restore it as the parent.
+      if (node.debugLabel?.contains('_ModalScopeState') == true) continue;
+      if (node.context != null && node.canRequestFocus) return node;
+    }
+    return null;
+  }
+
+  void clearVimParentFocusHistory() {
+    _parentFocusHistory.clear();
   }
 
   String? get selectedPageId => pages.selectedId;
@@ -298,6 +348,70 @@ void requestVimWorkspaceFocus() {
   _vimWorkspaceFocus?.requestFocus();
 }
 
+bool _isVimPageBoundary(FocusNode previous, FocusNode next) {
+  final previousContext = previous.context;
+  final nextContext = next.context;
+  if (previousContext == null || nextContext == null) return false;
+
+  final previousRoute = ModalRoute.of(previousContext);
+  final nextRoute = ModalRoute.of(nextContext);
+  if (!identical(previousRoute, nextRoute)) return true;
+
+  final previousPage =
+      previousContext.findAncestorWidgetOfExactType<VimPageScope>();
+  final nextPage = nextContext.findAncestorWidgetOfExactType<VimPageScope>();
+  if (previousPage?.pageId != nextPage?.pageId) return true;
+
+  // Layout Columns and Panels share the Layout Setup page scope but are
+  // separate Vim pages. Treat that marker transition as a page boundary too.
+  final previousLayout =
+      previousContext.findAncestorWidgetOfExactType<VimLayoutFocus>();
+  final nextLayout =
+      nextContext.findAncestorWidgetOfExactType<VimLayoutFocus>();
+  if (previousLayout != null && nextLayout != null) {
+    return previousLayout.isColumn != nextLayout.isColumn;
+  }
+  return false;
+}
+
+FocusNode? takeVimParentFocus(BuildContext context) {
+  return VimInputModeScope.maybeOf(context)?.takeVimParentFocus();
+}
+
+void scheduleVimParentFocus(FocusNode? node) {
+  if (node == null) return;
+  void request() {
+    if (node.context != null && node.canRequestFocus) node.requestFocus();
+  }
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    request();
+    // A route pop and a menu overlay close can each take one frame. Requesting
+    // once more makes the parent selection deterministic in both cases.
+    WidgetsBinding.instance.addPostFrameCallback((_) => request());
+  });
+}
+
+/// Leaves the currently focused transient child page, if one is known.
+/// Returns true when a parent selection was restored (and therefore the
+/// caller must not perform another Escape action).
+bool leaveVimChildPage(BuildContext context) {
+  final parent = takeVimParentFocus(context);
+  if (parent == null) return false;
+
+  final parentContext = parent.context;
+  final currentRoute = ModalRoute.of(context);
+  final parentRoute =
+      parentContext == null ? null : ModalRoute.of(parentContext);
+  if (currentRoute != null &&
+      parentRoute != null &&
+      !identical(currentRoute, parentRoute)) {
+    Navigator.of(context).maybePop();
+  }
+  scheduleVimParentFocus(parent);
+  return true;
+}
+
 /// Draws a non-interactive focus ring around the currently focused control.
 /// The ring is intentionally outside the widgets themselves so existing
 /// button/dropdown styles remain unchanged and every native Flutter control
@@ -397,6 +511,7 @@ class _VimFocusHostState extends State<VimFocusHost>
   }
 
   void _focusChanged() {
+    _vimInputState.recordVimFocus(FocusManager.instance.primaryFocus);
     if (_vimInputState.mode == VimInputMode.plot && !_focusedPlotContext()) {
       _vimInputState.setMode(VimInputMode.normal);
     }
@@ -526,7 +641,9 @@ class _VimFocusHostState extends State<VimFocusHost>
         if (vimFocusedEditable() && leaveVimTextEditing(focusContext)) {
           return true;
         }
-        Navigator.of(focusContext).maybePop();
+        if (!leaveVimChildPage(focusContext)) {
+          Navigator.of(focusContext).maybePop();
+        }
         return true;
       }
     }
@@ -2387,7 +2504,7 @@ KeyEventResult handleVimDialogKey(
   final input = VimInputModeScope.maybeOf(context);
   if (event.logicalKey == LogicalKeyboardKey.escape &&
       input?.consumeTextEscapeRelease() == true) {
-    Navigator.maybePop(context);
+    if (!leaveVimChildPage(context)) Navigator.maybePop(context);
     return KeyEventResult.handled;
   }
   final inputResult = handleVimInputModeKey(context, event);
@@ -2408,7 +2525,7 @@ KeyEventResult handleVimDialogKey(
     if (vimFocusedEditable() && leaveVimTextEditing(context)) {
       return KeyEventResult.handled;
     }
-    Navigator.maybePop(context);
+    if (!leaveVimChildPage(context)) Navigator.maybePop(context);
     return KeyEventResult.handled;
   }
   if (vimEditingText()) return KeyEventResult.ignored;

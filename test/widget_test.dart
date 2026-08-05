@@ -804,6 +804,59 @@ void main() {
     expect(focusedLayout()?.column, 1);
   });
 
+  testWidgets('Vim Escape returns from a child route to its parent selection',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'settings-web');
+
+    // Enter About from the Settings menu using only Vim navigation.
+    for (var index = 0; index < 6; index++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+      await tester.pump();
+    }
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'settings-about');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .element(find.text('MDSLens'))
+          .findAncestorWidgetOfExactType<VimPageScope>()
+          ?.pageId,
+      'about',
+    );
+
+    // At the top level of the child page, Escape returns to the exact parent
+    // menu item instead of merely unfocusing or closing the whole menu.
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'vim-workspace');
+    expect(
+      find.text('Signal data plotting for MDSplus experiments.'),
+      findsNothing,
+    );
+
+    // A second Escape now leaves the parent menu itself.
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Signal data plotting for MDSplus experiments.'),
+      findsNothing,
+    );
+  });
+
   testWidgets('Vim About panel exposes links and actions', (tester) async {
     final app = AppState();
     await app.preferencesReady;
