@@ -1900,8 +1900,9 @@ bool moveVimPageEdge(BuildContext context, {required bool last}) {
   if (plotResult) return true;
   final layoutResult = _moveVimLayoutPageEdge(context, page, last: last);
   if (layoutResult) return true;
-  final target =
-      last ? page.targets.lastOrNull : page.rows.firstOrNull?.firstOrNull;
+  final target = last
+      ? page.rows.lastOrNull?.lastOrNull
+      : page.rows.firstOrNull?.firstOrNull;
   if (target == null) return false;
   _requestVimFocus(target);
   return true;

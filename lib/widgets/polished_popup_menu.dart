@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/keyboard_shortcuts.dart';
+import 'vim_focus.dart';
 
 class PolishedPopupMenuOption<T> {
   const PolishedPopupMenuOption({
@@ -169,11 +170,16 @@ class _KeyboardPopupMenuItemState<T>
   }
 
   @override
-  Widget build(BuildContext context) => Focus(
-        focusNode: _menuFocusNode,
-        autofocus: widget.autofocus,
-        onKeyEvent: _handleKeyEvent,
-        child: super.build(context),
+  Widget build(BuildContext context) => VimPageScope(
+        pageId: 'popup-menu',
+        parentPageId: 'root',
+        transient: true,
+        child: Focus(
+          focusNode: _menuFocusNode,
+          autofocus: widget.autofocus,
+          onKeyEvent: _handleKeyEvent,
+          child: super.build(context),
+        ),
       );
 }
 
@@ -246,11 +252,16 @@ class _VimPopupMenuItemState<T>
   @override
   Widget build(BuildContext context) {
     final item = super.build(context);
-    return Focus(
-      focusNode: _focusNode,
-      autofocus: widget.autofocus,
-      onKeyEvent: _handleKeyEvent,
-      child: item,
+    return VimPageScope(
+      pageId: 'popup-menu',
+      parentPageId: 'root',
+      transient: true,
+      child: Focus(
+        focusNode: _focusNode,
+        autofocus: widget.autofocus,
+        onKeyEvent: _handleKeyEvent,
+        child: item,
+      ),
     );
   }
 }
