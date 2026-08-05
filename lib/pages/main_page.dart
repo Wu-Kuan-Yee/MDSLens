@@ -162,6 +162,17 @@ class _MainPageState extends State<MainPage> {
     final route = ModalRoute.of(context);
     if (route != null && !route.isCurrent) return false;
 
+    // Plot edit mode owns both key-down and key-up events.  Keeping this
+    // before shortcut-stroke parsing prevents a simultaneous H+L/J+K chord
+    // from being split into unrelated toolbar shortcuts.
+    if (context.read<AppState>().vimMode &&
+        handleVimPlotMotionKey(
+          FocusManager.instance.primaryFocus?.context ?? context,
+          event,
+        )) {
+      return true;
+    }
+
     final stroke = shortcutStrokeFromEvent(event);
     if (stroke == null) return false;
     final app = context.read<AppState>();

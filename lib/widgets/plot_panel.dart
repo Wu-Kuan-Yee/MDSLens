@@ -419,6 +419,18 @@ class _PlotPanelState extends State<PlotPanel> {
       case 'zoom-out':
         _applyKeyboardZoom(1 / 1.22);
         break;
+      case 'zoom-x-in':
+        _applyKeyboardZoomAxes(factorX: 1.018);
+        break;
+      case 'zoom-x-out':
+        _applyKeyboardZoomAxes(factorX: 1 / 1.018);
+        break;
+      case 'zoom-y-in':
+        _applyKeyboardZoomAxes(factorY: 1.018);
+        break;
+      case 'zoom-y-out':
+        _applyKeyboardZoomAxes(factorY: 1 / 1.018);
+        break;
     }
   }
 
@@ -441,6 +453,10 @@ class _PlotPanelState extends State<PlotPanel> {
   }
 
   void _applyKeyboardZoom(double factor) {
+    _applyKeyboardZoomAxes(factorX: factor, factorY: factor);
+  }
+
+  void _applyKeyboardZoomAxes({double? factorX, double? factorY}) {
     final app = context.read<AppState>();
     if (app.interactionMode != 0 || !_ensureViewInitialized(app)) return;
     final plot = app.plots[widget.plotIdx];
@@ -451,10 +467,14 @@ class _PlotPanelState extends State<PlotPanel> {
     final cx = _pxToDataX(center.dx);
     final cy = _pxToDataY(center.dy);
     setState(() {
-      _viewMinX = cx - (cx - _viewMinX) / factor;
-      _viewMaxX = cx + (_viewMaxX - cx) / factor;
-      _viewMinY = cy - (cy - _viewMinY) / factor;
-      _viewMaxY = cy + (_viewMaxY - cy) / factor;
+      if (factorX != null) {
+        _viewMinX = cx - (cx - _viewMinX) / factorX;
+        _viewMaxX = cx + (_viewMaxX - cx) / factorX;
+      }
+      if (factorY != null) {
+        _viewMinY = cy - (cy - _viewMinY) / factorY;
+        _viewMaxY = cy + (_viewMaxY - cy) / factorY;
+      }
       _storeView(plot);
     });
   }

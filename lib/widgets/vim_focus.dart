@@ -37,6 +37,8 @@ enum VimPlotSelectionLevel { column, panel }
 
 class VimInputState extends ChangeNotifier {
   final VimPageStack pages = VimPageStack();
+  final Set<LogicalKeyboardKey> _plotMotionKeys = <LogicalKeyboardKey>{};
+  Timer? _plotMotionTimer;
   VimInputMode _mode = VimInputMode.normal;
   VimVisualMode _visualMode = VimVisualMode.character;
   VimPlotSelectionLevel _plotSelectionLevel = VimPlotSelectionLevel.column;
@@ -98,7 +100,77 @@ class VimInputState extends ChangeNotifier {
     _mode = mode;
     _visualMode = visualMode;
     _visualAnchor = mode == VimInputMode.visual ? visualAnchor : null;
+    if (mode != VimInputMode.plot) _stopPlotMotion();
     notifyListeners();
+  }
+
+  /// Feed a directional key into the plot interaction layer.  Keeping the
+  /// pressed-key set here (rather than in a widget) means a plot remains
+  /// responsive even when its Focus widget is rebuilt by streamed data.
+  void updatePlotMotionKey(
+    AppState app,
+    LogicalKeyboardKey key, {
+    required bool pressed,
+  }) {
+    if (_mode != VimInputMode.plot) return;
+    if (pressed) {
+      _plotMotionKeys.add(key);
+      _plotMotionTimer ??= Timer.periodic(
+        const Duration(milliseconds: 16),
+        (_) => _applyPlotMotion(app),
+      );
+      _applyPlotMotion(app);
+    } else {
+      _plotMotionKeys.remove(key);
+      if (_plotMotionKeys.isEmpty) _stopPlotMotion();
+    }
+  }
+
+  void _stopPlotMotion() {
+    _plotMotionKeys.clear();
+    _plotMotionTimer?.cancel();
+    _plotMotionTimer = null;
+  }
+
+  void _applyPlotMotion(AppState app) {
+    if (_plotMotionKeys.isEmpty || _mode != VimInputMode.plot) return;
+    final h = _plotMotionKeys.contains(LogicalKeyboardKey.keyH);
+    final j = _plotMotionKeys.contains(LogicalKeyboardKey.keyJ);
+    final k = _plotMotionKeys.contains(LogicalKeyboardKey.keyK);
+    final l = _plotMotionKeys.contains(LogicalKeyboardKey.keyL);
+    final horizontal = h || l;
+    final vertical = j || k;
+    if (!horizontal && !vertical) return;
+    if (app.interactionMode == 1) {
+      // Point mode deliberately keeps only H/L: vertical motions have no
+      // crosshair meaning and must not move the page underneath the cursor.
+      if (h && !l) {
+        app.stepActivePoint(-1);
+      } else if (l && !h) {
+        app.stepActivePoint(1);
+      }
+      return;
+    }
+
+    final shrink = HardwareKeyboard.instance.isShiftPressed;
+    if (h && l) {
+      app.requestSelectedPanelShortcut(
+        shrink ? 'zoom-x-out' : 'zoom-x-in',
+      );
+    } else if (h) {
+      app.requestSelectedPanelShortcut('pan-left');
+    } else if (l) {
+      app.requestSelectedPanelShortcut('pan-right');
+    }
+    if (j && k) {
+      app.requestSelectedPanelShortcut(
+        shrink ? 'zoom-y-out' : 'zoom-y-in',
+      );
+    } else if (j) {
+      app.requestSelectedPanelShortcut('pan-down');
+    } else if (k) {
+      app.requestSelectedPanelShortcut('pan-up');
+    }
   }
 
   void updateVisualAnchor(int anchor) {
@@ -115,6 +187,7 @@ class VimInputState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _stopPlotMotion();
     pages.dispose();
     super.dispose();
   }
@@ -303,11 +376,12 @@ class _VimFocusHostState extends State<VimFocusHost>
   }
 
   bool _handleGlobalFocusKey(KeyEvent event) {
-    if (!VimModeScope.enabled(context) ||
-        (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
-      return false;
-    }
     final focusContext = FocusManager.instance.primaryFocus?.context;
+    if (!VimModeScope.enabled(context)) return false;
+    if (handleVimPlotMotionKey(focusContext ?? context, event)) {
+      return true;
+    }
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
     // The host itself is above VimInputModeScope, so use the focused
     // descendant's context when routing editor keys. This is what makes i/a,
     // Escape, and visual-mode keys work in dialogs as well as on the page.
@@ -1314,6 +1388,51 @@ bool vimPlotEditing(BuildContext context) {
   return VimInputModeScope.mode(context) == VimInputMode.plot;
 }
 
+LogicalKeyboardKey? _vimPlotMotionKey(LogicalKeyboardKey key) {
+  return switch (key) {
+    LogicalKeyboardKey.keyH ||
+    LogicalKeyboardKey.arrowLeft =>
+      LogicalKeyboardKey.keyH,
+    LogicalKeyboardKey.keyJ ||
+    LogicalKeyboardKey.arrowDown =>
+      LogicalKeyboardKey.keyJ,
+    LogicalKeyboardKey.keyK ||
+    LogicalKeyboardKey.arrowUp =>
+      LogicalKeyboardKey.keyK,
+    LogicalKeyboardKey.keyL ||
+    LogicalKeyboardKey.arrowRight =>
+      LogicalKeyboardKey.keyL,
+    _ => null,
+  };
+}
+
+/// Route both key-down and key-up events to the shared plot motion controller.
+/// This is intentionally separate from [handleVimPlotEditingKey]: the latter
+/// handles modal entry/exit, while this function preserves simultaneous H/J/K/L
+/// state for pan and axis-specific zoom.
+bool handleVimPlotMotionKey(BuildContext context, KeyEvent event) {
+  if (!vimPlotEditing(context)) return false;
+  if (HardwareKeyboard.instance.isControlPressed ||
+      HardwareKeyboard.instance.isAltPressed ||
+      HardwareKeyboard.instance.isMetaPressed) {
+    return false;
+  }
+  final key = _vimPlotMotionKey(event.logicalKey);
+  if (key == null) return false;
+  final input = VimInputModeScope.maybeOf(context);
+  if (input == null) return false;
+  final app = context.read<AppState>();
+  if (event is KeyUpEvent) {
+    input.updatePlotMotionKey(app, key, pressed: false);
+    return true;
+  }
+  if (event is KeyDownEvent || event is KeyRepeatEvent) {
+    input.updatePlotMotionKey(app, key, pressed: true);
+    return true;
+  }
+  return false;
+}
+
 /// Enter the plot's Vim edit mode.  Point mode is deliberately explicit: in
 /// Normal mode H/L/J/K always move between Panel cells, while in Plot mode
 /// the horizontal keys operate the crosshair instead.
@@ -1326,8 +1445,9 @@ bool enterVimPlotEditing(BuildContext context, KeyEvent event) {
     return false;
   }
   final app = context.read<AppState>();
-  if (app.interactionMode != 1) return false;
-  if (app.crosshairX == null) app.activatePointForCurrentPanel();
+  if (app.interactionMode == 1 && app.crosshairX == null) {
+    app.activatePointForCurrentPanel();
+  }
   VimInputModeScope.setMode(context, VimInputMode.plot);
   return true;
 }
@@ -1344,6 +1464,10 @@ bool handleVimPlotEditingKey(BuildContext context, KeyEvent event) {
     return true;
   }
   final app = context.read<AppState>();
+  if (app.interactionMode == 0) {
+    // Move/Zoom uses the pressed-key controller so H+L/J+K can be combined.
+    return false;
+  }
   switch (event.logicalKey) {
     case LogicalKeyboardKey.keyH:
     case LogicalKeyboardKey.arrowLeft:
