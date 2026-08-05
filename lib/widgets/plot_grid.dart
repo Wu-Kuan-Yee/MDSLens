@@ -24,12 +24,24 @@ class PlotGrid extends StatelessWidget {
         if (app.maximizedPlot != null) {
           final idx = app.maximizedPlot!;
           if (idx >= app.plots.length) return const SizedBox();
-          return PlotPanel(
-            plotIdx: idx,
-            vimColumn: 0,
-            vimRow: 0,
-            selected: true,
-            panelShortcutRequests: app.panelShortcutRequests,
+          final coordinates = _coordinatesForPlot(app, idx);
+          final column = coordinates?.column ?? 0;
+          final row = coordinates?.row ?? 0;
+          return VimPlotColumnFocus(
+            column: column,
+            child: PlotPanel(
+              // The same plot can move between the regular grid and this
+              // branch. Keeping a stable identity prevents Flutter from
+              // reusing another panel's local view/menu state when a
+              // different panel is maximized.
+              key: ValueKey('plot-panel-$idx'),
+              plotIdx: idx,
+              vimColumn: column,
+              vimRow: row,
+              selected: true,
+              panelShortcutRequests: app.panelShortcutRequests,
+              onTap: () => app.selectPanel(column, row),
+            ),
           );
         }
 
@@ -95,6 +107,18 @@ class PlotGrid extends StatelessWidget {
         }
       },
     );
+  }
+
+  ({int column, int row})? _coordinatesForPlot(AppState app, int plotIndex) {
+    var remaining = plotIndex;
+    for (var column = 0; column < app.columns.length; column++) {
+      final rows = app.columns[column].length;
+      if (remaining < rows) {
+        return (column: column, row: remaining);
+      }
+      remaining -= rows;
+    }
+    return null;
   }
 }
 
