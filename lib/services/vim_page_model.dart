@@ -131,6 +131,18 @@ class VimPageStack extends ChangeNotifier {
     if (id != null && currentPage.cellById(id) == null) return;
     if (_selectionByPage[currentPage.id] == id) return;
     _selectionByPage[currentPage.id] = id;
+    if (id != null) {
+      final row = currentPage.rowOf(id);
+      if (row >= 0) {
+        final column = currentPage.rows[row]
+            .where((cell) => cell.enabled)
+            .toList()
+            .indexWhere((cell) => cell.id == id);
+        if (column >= 0) {
+          _preferredColumnByPage[currentPage.id] = column;
+        }
+      }
+    }
     notifyListeners();
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'vim_focus.dart';
 
 class PolishedDropdownOption<T> {
   const PolishedDropdownOption({
@@ -190,75 +191,81 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
           _menuOption(context, widget.options[index], index),
         ],
       ],
-      builder: (context, controller, _) => Focus(
-        focusNode: _focusNode,
-        canRequestFocus: true,
-        skipTraversal: false,
-        // The anchor is one Vim control. Menu items are rendered in the
-        // overlay and have their own focus nodes, so nested anchor nodes must
-        // not create a second, unreachable target in the main toolbar.
-        descendantsAreTraversable: false,
-        onKeyEvent: (node, event) {
-          if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      builder: (context, controller, _) => VimPageScope(
+        pageId: 'dropdown/${widget.id}',
+        parentPageId: 'toolbar',
+        transient: true,
+        child: Focus(
+          focusNode: _focusNode,
+          canRequestFocus: true,
+          skipTraversal: false,
+          // The anchor is one Vim control. Menu items are rendered in the
+          // overlay and have their own focus nodes, so nested anchor nodes must
+          // not create a second, unreachable target in the main toolbar.
+          descendantsAreTraversable: false,
+          onKeyEvent: (node, event) {
+            if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+              return KeyEventResult.ignored;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.escape &&
+                controller.isOpen) {
+              controller.close();
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.space) {
+              controller.isOpen ? controller.close() : controller.open();
+              return KeyEventResult.handled;
+            }
             return KeyEventResult.ignored;
-          }
-          if (event.logicalKey == LogicalKeyboardKey.escape &&
-              controller.isOpen) {
-            controller.close();
-            return KeyEventResult.handled;
-          }
-          if (event.logicalKey == LogicalKeyboardKey.enter ||
-              event.logicalKey == LogicalKeyboardKey.space) {
-            controller.isOpen ? controller.close() : controller.open();
-            return KeyEventResult.handled;
-          }
-          return KeyEventResult.ignored;
-        },
-        child: Tooltip(
-          message: widget.tooltip ?? widget.id,
-          child: Semantics(
-            button: true,
-            expanded: _open,
-            label: widget.iconOnly
-                ? (widget.tooltip ?? widget.id)
-                : '${widget.id}: ${selected.label}',
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () =>
-                    controller.isOpen ? controller.close() : controller.open(),
-                child: AnimatedContainer(
-                  key: ValueKey('${widget.id}-anchor'),
-                  duration: const Duration(milliseconds: 150),
-                  width: widget.iconOnly ? widget.height : null,
-                  height: widget.height,
-                  padding: widget.iconOnly
-                      ? EdgeInsets.zero
-                      : const EdgeInsets.fromLTRB(10, 0, 7, 0),
-                  decoration: BoxDecoration(
-                    color: _open
-                        ? Color.alphaBlend(
-                            colors.primary.withValues(alpha: 0.09),
-                            colors.surfaceContainerLow,
-                          )
-                        : colors.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: _open ? colors.primary : colors.outlineVariant,
-                      width: _open ? 1.5 : 1,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: colors.shadow.withValues(alpha: 0.08),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
+          },
+          child: Tooltip(
+            message: widget.tooltip ?? widget.id,
+            child: Semantics(
+              button: true,
+              expanded: _open,
+              label: widget.iconOnly
+                  ? (widget.tooltip ?? widget.id)
+                  : '${widget.id}: ${selected.label}',
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => controller.isOpen
+                      ? controller.close()
+                      : controller.open(),
+                  child: AnimatedContainer(
+                    key: ValueKey('${widget.id}-anchor'),
+                    duration: const Duration(milliseconds: 150),
+                    width: widget.iconOnly ? widget.height : null,
+                    height: widget.height,
+                    padding: widget.iconOnly
+                        ? EdgeInsets.zero
+                        : const EdgeInsets.fromLTRB(10, 0, 7, 0),
+                    decoration: BoxDecoration(
+                      color: _open
+                          ? Color.alphaBlend(
+                              colors.primary.withValues(alpha: 0.09),
+                              colors.surfaceContainerLow,
+                            )
+                          : colors.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _open ? colors.primary : colors.outlineVariant,
+                        width: _open ? 1.5 : 1,
                       ),
-                    ],
+                      boxShadow: [
+                        BoxShadow(
+                          color: colors.shadow.withValues(alpha: 0.08),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: widget.iconOnly
+                        ? _compactAnchor(colors)
+                        : _regularAnchor(theme, colors, selected),
                   ),
-                  child: widget.iconOnly
-                      ? _compactAnchor(colors)
-                      : _regularAnchor(theme, colors, selected),
                 ),
               ),
             ),

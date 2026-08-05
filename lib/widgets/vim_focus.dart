@@ -639,6 +639,34 @@ class VimLayoutFocus extends InheritedWidget {
   bool updateShouldNotify(VimLayoutFocus oldWidget) => false;
 }
 
+/// Declares a semantic page boundary in the widget tree.  Unlike a Flutter
+/// FocusScope this does not trap focus; it only tells the Vim model which
+/// parent page owns the current character.  That distinction lets a dialog or
+/// dropdown be entered with `i` while preserving the normal Flutter route and
+/// accessibility behavior.
+class VimPageScope extends InheritedWidget {
+  const VimPageScope({
+    super.key,
+    required super.child,
+    required this.pageId,
+    this.parentPageId,
+    this.transient = false,
+  });
+
+  final String pageId;
+  final String? parentPageId;
+  final bool transient;
+
+  static VimPageScope? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<VimPageScope>();
+
+  @override
+  bool updateShouldNotify(VimPageScope oldWidget) =>
+      pageId != oldWidget.pageId ||
+      parentPageId != oldWidget.parentPageId ||
+      transient != oldWidget.transient;
+}
+
 bool _isEditableContext(BuildContext? context) {
   if (context == null) return false;
   return context.widget is EditableText ||
@@ -1380,8 +1408,11 @@ void _syncVimSemanticSelection(
     );
     return;
   }
+  final page = VimPageScope.maybeOf(context);
   final label = target.node.debugLabel;
-  if (label != null && label.isNotEmpty) {
+  if (page != null && label != null && label.isNotEmpty) {
+    input.pages.setExternalSelection(page.pageId, label);
+  } else if (label != null && label.isNotEmpty) {
     input.pages.setExternalSelection('route', label);
   }
 }
@@ -1974,93 +2005,57 @@ bool moveVimLineEdge(BuildContext context, {required bool last}) {
 /// edge so H/J/K/L never strand the user at a dead end.
 bool moveVimFocus(BuildContext context, TraversalDirection direction) {
   if (vimEditingText()) return false;
-  final current = FocusManager.instance.primaryFocus;
   final page = _vimFocusPage(context);
   if (page == null) return false;
-  final targets = page.targets;
+  if (page.rows.isEmpty) return false;
 
+  final semanticTargets = <String, _VimFocusTarget>{};
+  final rows = <List<VimPageCell>>[];
+  for (final row in page.rows) {
+    final semanticRow = <VimPageCell>[];
+    for (final target in row) {
+      final id = _vimFocusTargetId(target);
+      semanticTargets[id] = target;
+      semanticRow.add(VimPageCell(id: id, label: target.node.debugLabel ?? id));
+    }
+    rows.add(semanticRow);
+  }
+  final navigator = VimPageStack(
+    root: VimPage(id: 'focus-route', title: 'Current page', rows: rows),
+  );
+  final current = FocusManager.instance.primaryFocus;
   final currentRect = current == null ? null : _vimNodeRect(current);
-  if (currentRect == null ||
-      current is FocusScopeNode ||
-      (current?.skipTraversal ?? false)) {
-    // A newly opened dialog may have a scope focused but no actionable
-    // descendant yet. Enter it at the first virtual character, regardless of
-    // which direction key opened it; choosing the last item for J/L made
-    // bottom action buttons appear to swallow the first navigation key.
-    final target = page.readingOrder.firstOrNull;
-    if (target == null) return false;
-    _requestVimFocus(target);
-    return true;
+  final currentTarget = current == null || currentRect == null
+      ? null
+      : page.targets
+          .where(
+            (candidate) =>
+                candidate.node == current ||
+                _sameVimRect(candidate.rect, currentRect),
+          )
+          .firstOrNull;
+  if (currentTarget != null) {
+    navigator.setSelection(_vimFocusTargetId(currentTarget));
   }
-
-  // Match the current node by identity first, then by rectangle.  TextField
-  // focus nodes and their EditableText descendants can represent the same
-  // visual control; the rectangle fallback keeps both forms in the same
-  // virtual character cell.
-  _VimFocusTarget? currentTarget;
-  for (final candidate in targets) {
-    if (candidate.node == current ||
-        _sameVimRect(candidate.rect, currentRect)) {
-      currentTarget = candidate;
-      break;
-    }
-  }
-  final rowIndex = currentTarget == null ? -1 : page.rowOf(currentTarget);
-  if (rowIndex < 0 || page.rows.isEmpty) {
-    final target = direction == TraversalDirection.left ||
-            direction == TraversalDirection.up
-        ? page.readingOrder.firstOrNull
-        : page.readingOrder.lastOrNull;
-    if (target == null) return false;
-    _requestVimFocus(target);
-    return true;
-  }
-
-  final currentCenter = currentRect.center;
-  _VimFocusTarget? target;
-  if (direction == TraversalDirection.left ||
-      direction == TraversalDirection.right) {
-    final row = page.rows[rowIndex];
-    final candidates = row.where((candidate) {
-      if (candidate.node == current ||
-          _sameVimRect(candidate.rect, currentRect)) {
-        return false;
-      }
-      return direction == TraversalDirection.left
-          ? candidate.rect.center.dx < currentCenter.dx - 0.5
-          : candidate.rect.center.dx > currentCenter.dx + 0.5;
-    }).toList();
-    candidates.sort((a, b) {
-      final aDistance = (a.rect.center.dx - currentCenter.dx).abs();
-      final bDistance = (b.rect.center.dx - currentCenter.dx).abs();
-      return aDistance.compareTo(bDistance);
-    });
-    // Page-local motion stops at the line boundary.  It must not wrap into a
-    // visually unrelated toolbar row; the user can explicitly use `gg`, `G`,
-    // `^`, or `$` to move to another logical page edge.
-    target = candidates.firstOrNull;
-  } else {
-    final step = direction == TraversalDirection.up ? -1 : 1;
-    final rowIndices = <int>[];
-    for (var index = rowIndex + step;
-        index >= 0 && index < page.rows.length;
-        index += step) {
-      rowIndices.add(index);
-    }
-    final candidateRowIndex = rowIndices.firstOrNull;
-    if (candidateRowIndex != null) {
-      final row = page.rows[candidateRowIndex];
-      final candidates = [...row]..sort((a, b) {
-          final aDistance = (a.rect.center.dx - currentCenter.dx).abs();
-          final bDistance = (b.rect.center.dx - currentCenter.dx).abs();
-          return aDistance.compareTo(bDistance);
-        });
-      target = candidates.firstOrNull;
-    }
-  }
-  if (target == null || target.node == current) return false;
+  final changed = navigator.move(_vimPageMotionForDirection(direction));
+  if (!changed) return false;
+  final selected = navigator.selectedId;
+  final target = selected == null ? null : semanticTargets[selected];
+  if (target == null) return false;
   _requestVimFocus(target);
   return true;
+}
+
+String _vimFocusTargetId(_VimFocusTarget target) =>
+    'focus-${identityHashCode(target.node)}';
+
+VimPageMotion _vimPageMotionForDirection(TraversalDirection direction) {
+  return switch (direction) {
+    TraversalDirection.left => VimPageMotion.left,
+    TraversalDirection.right => VimPageMotion.right,
+    TraversalDirection.up => VimPageMotion.up,
+    TraversalDirection.down => VimPageMotion.down,
+  };
 }
 
 /// Keyboard behavior shared by every KeyboardSafeDialog. Dialog controls keep

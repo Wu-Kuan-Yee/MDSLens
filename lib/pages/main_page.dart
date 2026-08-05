@@ -83,72 +83,83 @@ class _MainPageState extends State<MainPage> {
       fontFamily: app.effectiveFontFamily,
       fontSize: app.fontUiSize.toDouble(),
     );
-    return Focus(
-      focusNode: _vimWorkspaceFocusNode,
-      skipTraversal: true,
-      child: FocusTraversalGroup(
-        policy: OrderedTraversalPolicy(),
-        child: Scaffold(
-          body: SafeArea(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: () {
-                FocusManager.instance.primaryFocus?.unfocus();
-                if (app.vimMode) _vimWorkspaceFocusNode.requestFocus();
-                app.clearSelectedPanel();
-              },
-              child: Column(
-                children: [
-                  const ResponsiveToolbar(),
-                  Expanded(
-                    child: ConfigurationDropRegion(
-                      child: app.columns.isEmpty
-                          ? const Center(
+    return VimPageScope(
+      pageId: 'root',
+      child: Focus(
+        focusNode: _vimWorkspaceFocusNode,
+        skipTraversal: true,
+        child: FocusTraversalGroup(
+          policy: OrderedTraversalPolicy(),
+          child: Scaffold(
+            body: SafeArea(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: () {
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  if (app.vimMode) _vimWorkspaceFocusNode.requestFocus();
+                  app.clearSelectedPanel();
+                },
+                child: Column(
+                  children: [
+                    const VimPageScope(
+                      pageId: 'toolbar',
+                      parentPageId: 'root',
+                      child: ResponsiveToolbar(),
+                    ),
+                    Expanded(
+                      child: ConfigurationDropRegion(
+                        child: app.columns.isEmpty
+                            ? const Center(
+                                child: SelectableText(
+                                  'This configuration contains no panels. '
+                                  'Use Settings > Layout Setup to add one.',
+                                  textAlign: TextAlign.center,
+                                ),
+                              )
+                            : const VimPageScope(
+                                pageId: 'plot/grid',
+                                parentPageId: 'root',
+                                child: PlotGrid(),
+                              ),
+                      ),
+                    ),
+                    Container(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      child: Row(
+                        children: [
+                          if (app.fetching)
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          const SizedBox(width: 8),
+                          if (app.crosshairX != null &&
+                              app.crosshairReadout.isNotEmpty)
+                            Expanded(
                               child: SelectableText(
-                                'This configuration contains no panels. '
-                                'Use Settings > Layout Setup to add one.',
-                                textAlign: TextAlign.center,
+                                'x=${app.crosshairX!.toStringAsFixed(4)}  ${app.crosshairReadout.map((e) => '${e.name}:${e.y.toStringAsFixed(4)}').join('  ')}',
+                                style: statusStyle,
                               ),
                             )
-                          : const PlotGrid(),
-                    ),
-                  ),
-                  Container(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.surfaceContainerHighest,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    child: Row(
-                      children: [
-                        if (app.fetching)
-                          const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        const SizedBox(width: 8),
-                        if (app.crosshairX != null &&
-                            app.crosshairReadout.isNotEmpty)
-                          Expanded(
-                            child: SelectableText(
-                              'x=${app.crosshairX!.toStringAsFixed(4)}  ${app.crosshairReadout.map((e) => '${e.name}:${e.y.toStringAsFixed(4)}').join('  ')}',
-                              style: statusStyle,
+                          else
+                            Expanded(
+                              child: SelectableText(
+                                app.status,
+                                style: statusStyle,
+                              ),
                             ),
-                          )
-                        else
-                          Expanded(
-                            child: SelectableText(
-                              app.status,
-                              style: statusStyle,
-                            ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -231,6 +242,10 @@ class _MainPageState extends State<MainPage> {
         FocusManager.instance.primaryFocus?.context ?? context;
     if (handleVimPlotEditingKey(focusedContext, event)) return true;
     if (enterVimPlotEditing(focusedContext, event)) return true;
+    if (vimPlotEditing(focusedContext) &&
+        handleVimPlotMotionKey(focusedContext, event)) {
+      return true;
+    }
     if (handleVimPageEntryKey(focusedContext, event)) return true;
     if (handleVimLayoutNavigationKey(focusedContext, event)) return true;
     if (handleVimPlotNavigationKey(focusedContext, event)) return true;
