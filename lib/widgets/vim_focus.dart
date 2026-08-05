@@ -390,6 +390,7 @@ class _VimFocusHostState extends State<VimFocusHost>
     if (vimEditingText()) return false;
     if (handleVimPlotEditingKey(focusContext ?? context, event)) return true;
     if (enterVimPlotEditing(focusContext ?? context, event)) return true;
+    if (handleVimPageEntryKey(focusContext ?? context, event)) return true;
     final hasLineEdgeModifier = !HardwareKeyboard.instance.isControlPressed &&
         !HardwareKeyboard.instance.isAltPressed &&
         !HardwareKeyboard.instance.isMetaPressed;
@@ -480,7 +481,7 @@ class _VimFocusHostState extends State<VimFocusHost>
     return VimInputModeScope(
       notifier: _vimInputState,
       child: Stack(
-        clipBehavior: Clip.none,
+        clipBehavior: Clip.hardEdge,
         children: [
           widget.child,
           if (enabled) _buildFocusRing(context),
@@ -511,7 +512,13 @@ class _VimFocusHostState extends State<VimFocusHost>
       Offset.zero,
       ancestor: hostRenderObject,
     );
-    final rect = (topLeft & renderObject.size).inflate(3);
+    final rawRect = (topLeft & renderObject.size).inflate(3);
+    final rect = _clipVimRectToAncestorViewports(
+      focusContext,
+      hostRenderObject,
+      rawRect,
+    );
+    if (rect == null) return const SizedBox.shrink();
     if (rect.width <= 0 || rect.height <= 0) return const SizedBox.shrink();
     final editing = _vimInputState.mode != VimInputMode.normal;
     return Positioned.fromRect(
@@ -545,6 +552,28 @@ RenderObject? _ancestorRenderObject<T extends Widget>(BuildContext context) {
     return true;
   });
   return result;
+}
+
+Rect? _clipVimRectToAncestorViewports(
+  BuildContext? targetContext,
+  RenderBox host,
+  Rect rect,
+) {
+  if (targetContext == null) return rect;
+  var clipped = rect;
+  targetContext.visitAncestorElements((element) {
+    if (element is StatefulElement && element.state is ScrollableState) {
+      final viewport =
+          (element.state as ScrollableState).context.findRenderObject();
+      if (viewport is RenderBox && viewport.attached && viewport.hasSize) {
+        final topLeft = viewport.localToGlobal(Offset.zero, ancestor: host);
+        clipped = clipped.intersect(topLeft & viewport.size);
+        if (clipped.isEmpty) return false;
+      }
+    }
+    return true;
+  });
+  return clipped.isEmpty ? null : clipped;
 }
 
 /// Marker used to keep plot-specific Vim behavior separate from ordinary
@@ -1011,6 +1040,53 @@ KeyEventResult handleVimInputModeKey(
   return KeyEventResult.ignored;
 }
 
+FocusNode? _firstDirectVimChild(FocusNode node) {
+  final scope = node.nearestScope;
+  if (scope == null) return null;
+  for (final candidate in scope.traversalDescendants) {
+    if (!candidate.canRequestFocus || candidate.skipTraversal) continue;
+    if (candidate.ancestors.contains(node)) return candidate;
+  }
+  return null;
+}
+
+bool _activateVimControl(BuildContext context) {
+  try {
+    Actions.invoke(context, const ActivateIntent());
+    return true;
+  } on Object {
+    return false;
+  }
+}
+
+/// Enter a semantic child page without requiring a mouse.  For a composite
+/// Focus widget we enter its first direct child; for a button/dropdown whose
+/// child page is created by activation, `i` activates the control and the
+/// opened route will deterministically focus its first cell.
+bool handleVimPageEntryKey(BuildContext context, KeyEvent event) {
+  if (!VimModeScope.enabled(context) ||
+      (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
+    return false;
+  }
+  if (vimEditingText() || _isVimPlotContext(context)) return false;
+  final key = event.logicalKey;
+  if (key != LogicalKeyboardKey.keyI &&
+      key != LogicalKeyboardKey.enter &&
+      key != LogicalKeyboardKey.numpadEnter) {
+    return false;
+  }
+  final current = FocusManager.instance.primaryFocus;
+  if (current == null) return false;
+  if (key == LogicalKeyboardKey.keyI) {
+    final child = _firstDirectVimChild(current);
+    if (child != null) {
+      child.requestFocus();
+      return true;
+    }
+  }
+  return _activateVimControl(current.context ?? context);
+}
+
 /// Leave a text field's insert state and put the Vim selection on the nearest
 /// actionable non-text control. This preserves direct H/J/K/L navigation while
 /// keeping H/J/K/L available for normal text entry until Escape is pressed.
@@ -1254,37 +1330,28 @@ List<_VimFocusTarget> _vimFocusTargets(FocusScopeNode scope) {
   return targets;
 }
 
+int _vimRevealGeneration = 0;
+
 void _requestVimFocus(_VimFocusTarget target) {
   target.node.requestFocus();
   final targetContext = target.node.context;
   if (targetContext == null) return;
   _syncVimSemanticSelection(targetContext, target);
+  final generation = ++_vimRevealGeneration;
   // Focus can land on a control that is currently outside a compact toolbar,
   // dialog, or menu viewport. Reveal it after the focus change without
   // delaying the key event itself.
   WidgetsBinding.instance.addPostFrameCallback((_) {
-    if (!targetContext.mounted) return;
+    if (!targetContext.mounted || generation != _vimRevealGeneration) return;
     void reveal() {
-      if (!targetContext.mounted) return;
+      if (!targetContext.mounted || generation != _vimRevealGeneration) return;
       _revealVimTargetInAncestorScrollables(targetContext);
-      // Scrollable.ensureVisible walks every ancestor scrollable. Calling it
-      // once after focus and once on the following frame is intentional: in
-      // Layout Setup the outer horizontal viewport and the per-column
-      // vertical viewport can be laid out in separate passes after a focus
-      // change.
-      unawaited(
-        Scrollable.ensureVisible(
-          targetContext,
-          alignment: 0.5,
-          duration: const Duration(milliseconds: 120),
-          curve: Curves.easeOutCubic,
-          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
-        ),
-      );
     }
 
     reveal();
-    WidgetsBinding.instance.addPostFrameCallback((_) => reveal());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (generation == _vimRevealGeneration) reveal();
+    });
   });
 }
 
@@ -1351,6 +1418,10 @@ void _revealVimTargetInAncestorScrollables(BuildContext targetContext) {
     if (viewport is! RenderBox || !viewport.attached || !viewport.hasSize) {
       continue;
     }
+    // Recompute after every inner scroll.  A vertical Layout Setup column can
+    // move the target horizontally/vertically before its outer viewport is
+    // checked; using one stale global rectangle was the source of the old
+    // “selected but hidden behind the scrollbar” behavior.
     final targetTopLeft = renderObject.localToGlobal(Offset.zero);
     final targetRect = targetTopLeft & renderObject.size;
     final viewportTopLeft = viewport.localToGlobal(Offset.zero);
@@ -1964,13 +2035,10 @@ bool moveVimFocus(BuildContext context, TraversalDirection direction) {
       final bDistance = (b.rect.center.dx - currentCenter.dx).abs();
       return aDistance.compareTo(bDistance);
     });
-    // Like moving across a text line, H/L wrap within the current row.  It
-    // prevents the old global-edge fallback from jumping to an unrelated
-    // toolbar row when the user reaches a row boundary.
-    target = candidates.firstOrNull ??
-        (direction == TraversalDirection.left
-            ? page.rows[rowIndex].lastOrNull
-            : page.rows[rowIndex].firstOrNull);
+    // Page-local motion stops at the line boundary.  It must not wrap into a
+    // visually unrelated toolbar row; the user can explicitly use `gg`, `G`,
+    // `^`, or `$` to move to another logical page edge.
+    target = candidates.firstOrNull;
   } else {
     final step = direction == TraversalDirection.up ? -1 : 1;
     final rowIndices = <int>[];
@@ -1988,12 +2056,6 @@ bool moveVimFocus(BuildContext context, TraversalDirection direction) {
           return aDistance.compareTo(bDistance);
         });
       target = candidates.firstOrNull;
-    } else {
-      // Vertical movement wraps to the opposite page edge, preserving Vim's
-      // ability to reach every control without a dead end.
-      target = direction == TraversalDirection.up
-          ? page.rows.lastOrNull?.firstOrNull
-          : page.rows.firstOrNull?.firstOrNull;
     }
   }
   if (target == null || target.node == current) return false;
