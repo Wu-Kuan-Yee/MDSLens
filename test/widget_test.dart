@@ -769,8 +769,35 @@ void main() {
         ?.findAncestorWidgetOfExactType<PlotPanel>();
     expect(focused?.vimRow, 0);
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    // One physical Escape leaves exactly one semantic level: Panel -> its
+    // unique parent Column. Holding the key long enough to generate repeats
+    // must not immediately escape the Column as well.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.escape);
     await tester.pump();
+    expect(
+      VimInputModeScope.plotSelectionLevel(
+        tester.element(find.byType(MainPage)),
+      ),
+      VimPlotSelectionLevel.column,
+    );
+    focused = FocusManager.instance.primaryFocus?.context
+        ?.findAncestorWidgetOfExactType<PlotPanel>();
+    expect(focused?.vimColumn, 0);
+
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    focused = FocusManager.instance.primaryFocus?.context
+        ?.findAncestorWidgetOfExactType<PlotPanel>();
+    expect(focused?.vimColumn, 0);
+    expect(
+      VimInputModeScope.plotSelectionLevel(
+        tester.element(find.byType(MainPage)),
+      ),
+      VimPlotSelectionLevel.column,
+    );
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.escape);
+
+    // A new, deliberate Escape leaves the selected Column for the plot grid.
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
     expect(

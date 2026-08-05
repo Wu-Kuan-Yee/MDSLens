@@ -58,6 +58,7 @@ class VimInputState extends ChangeNotifier {
   TextEditingValue? _editingSnapshot;
   bool _textEscapeReleased = false;
   bool _commitTextOnEscape = false;
+  KeyEvent? _lastHierarchyEscapeEvent;
 
   VimInputMode get mode => _mode;
   VimVisualMode get visualMode => _visualMode;
@@ -71,6 +72,19 @@ class VimInputState extends ChangeNotifier {
   }
 
   void markTextEscapeRelease() => _textEscapeReleased = true;
+
+  /// A physical Escape press may be observed by a focused control, its page,
+  /// and the application-level keyboard handler. It must still leave exactly
+  /// one semantic page. Key-repeat events are consumed without climbing
+  /// again, and the same KeyDownEvent cannot be applied by two dispatchers.
+  bool claimHierarchyEscape(KeyEvent event) {
+    if (event is KeyRepeatEvent ||
+        identical(_lastHierarchyEscapeEvent, event)) {
+      return false;
+    }
+    _lastHierarchyEscapeEvent = event;
+    return true;
+  }
 
   /// Some transient Vim editors (the command line in particular) use the
   /// normal Vim convention that Escape leaves Insert mode while retaining
@@ -282,6 +296,11 @@ class VimInputModeScope extends InheritedNotifier<VimInputState> {
       visualAnchor: visualAnchor,
     );
   }
+}
+
+bool _claimVimHierarchyEscape(BuildContext context, KeyEvent event) {
+  final input = VimInputModeScope.maybeOf(context);
+  return input?.claimHierarchyEscape(event) ?? event is! KeyRepeatEvent;
 }
 
 FocusNode? _vimWorkspaceFocus;
@@ -1086,6 +1105,10 @@ KeyEventResult handleVimInputModeKey(
   final key = event.logicalKey;
   final keyboard = HardwareKeyboard.instance;
   final shift = keyboard.isShiftPressed;
+  if (key == LogicalKeyboardKey.escape &&
+      !_claimVimHierarchyEscape(context, event)) {
+    return KeyEventResult.handled;
+  }
 
   if (input.mode == VimInputMode.insert) {
     if (key == LogicalKeyboardKey.escape) {
@@ -1787,6 +1810,7 @@ bool handleVimPlotEditingKey(BuildContext context, KeyEvent event) {
     return false;
   }
   if (event.logicalKey == LogicalKeyboardKey.escape) {
+    if (!_claimVimHierarchyEscape(context, event)) return true;
     final input = VimInputModeScope.maybeOf(context);
     if (input?.plotSelectionLevel == VimPlotSelectionLevel.panel) {
       input?.setPlotSelectionLevel(VimPlotSelectionLevel.column);
@@ -1897,6 +1921,7 @@ bool handleVimPlotNavigationKey(BuildContext context, KeyEvent event) {
   }
   if (!_isVimPlotContext(context) || vimPlotEditing(context)) return false;
   if (event.logicalKey == LogicalKeyboardKey.escape) {
+    if (!_claimVimHierarchyEscape(context, event)) return true;
     final input = VimInputModeScope.maybeOf(context);
     if (input?.plotSelectionLevel == VimPlotSelectionLevel.panel) {
       input?.setPlotSelectionLevel(VimPlotSelectionLevel.column);
@@ -2042,6 +2067,7 @@ bool handleVimLayoutNavigationKey(BuildContext context, KeyEvent event) {
           : focusedContext ?? context;
   if (!_isVimLayoutContext(navigationContext)) return false;
   if (event.logicalKey == LogicalKeyboardKey.escape) {
+    if (!_claimVimHierarchyEscape(navigationContext, event)) return true;
     final current = _currentVimLayoutTarget(
       _vimFocusPage(navigationContext) ?? _VimFocusPage(const []),
       FocusManager.instance.primaryFocus,
@@ -2450,6 +2476,9 @@ KeyEventResult handleVimDialogKey(
   final input = VimInputModeScope.maybeOf(context);
   if (event.logicalKey == LogicalKeyboardKey.escape &&
       input?.consumeTextEscapeRelease() == true) {
+    if (!_claimVimHierarchyEscape(context, event)) {
+      return KeyEventResult.handled;
+    }
     if (!leaveVimPageToParent(context)) Navigator.maybePop(context);
     return KeyEventResult.handled;
   }
@@ -2468,6 +2497,9 @@ KeyEventResult handleVimDialogKey(
     return KeyEventResult.handled;
   }
   if (event.logicalKey == LogicalKeyboardKey.escape) {
+    if (!_claimVimHierarchyEscape(context, event)) {
+      return KeyEventResult.handled;
+    }
     if (vimFocusedEditable() && leaveVimTextEditing(context)) {
       return KeyEventResult.handled;
     }
