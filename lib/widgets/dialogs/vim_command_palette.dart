@@ -221,7 +221,7 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
               controller: _queryController,
               focusNode: _queryFocus,
               autofocus: true,
-              readOnly: false,
+              readOnly: vimTextFieldReadOnly(context),
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.search_rounded),

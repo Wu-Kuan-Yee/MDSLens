@@ -227,6 +227,64 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('Vim command input accepts g in Insert mode', (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pump();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyDownEvent(
+      LogicalKeyboardKey.semicolon,
+      character: ':',
+      physicalKey: PhysicalKeyboardKey.semicolon,
+    );
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.semicolon);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    // Insert mode keeps the Vim ring animation alive, so settling forever is
+    // neither necessary nor possible here.
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final palette = find.byKey(const ValueKey('vim-command-palette'));
+    final queryFinder = find.byKey(const ValueKey('vim-command-query'));
+    final queryContext = tester.element(queryFinder);
+    final query = tester.widget<TextField>(queryFinder);
+    query.controller!.clear();
+    query.focusNode!.requestFocus();
+    VimInputModeScope.setMode(
+      tester.element(palette),
+      VimInputMode.normal,
+    );
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pump();
+    expect(VimInputModeScope.mode(queryContext), VimInputMode.insert);
+
+    // Two G strokes must remain ordinary text-input events. Before the fix,
+    // the popup route's global handler interpreted them as Vim `gg` and
+    // moved focus away from the command field.
+    for (var index = 0; index < 2; index++) {
+      await tester.sendKeyDownEvent(
+        LogicalKeyboardKey.keyG,
+        character: 'g',
+        physicalKey: PhysicalKeyboardKey.keyG,
+      );
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.keyG);
+    }
+    await tester.pump();
+    expect(query.focusNode!.hasFocus, isTrue);
+    expect(VimInputModeScope.mode(queryContext), VimInputMode.insert);
+    await tester.enterText(queryFinder, 'g');
+    expect(query.controller!.text, 'g');
+  });
+
   testWidgets('Vim mode gives dialogs and plots a complete keyboard path', (
     tester,
   ) async {

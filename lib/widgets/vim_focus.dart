@@ -346,6 +346,13 @@ class _VimFocusHostState extends State<VimFocusHost>
 
   bool _handleVimPageSequence(BuildContext context, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
+    // EditableText owns ordinary characters in Insert mode.  In particular,
+    // `g` must be inserted into a command/search field instead of being
+    // consumed as the first stroke of Vim's `gg`/`G` page navigation.
+    if (vimEditingText()) {
+      _clearVimSequence();
+      return false;
+    }
     final keyboard = HardwareKeyboard.instance;
     if (keyboard.isControlPressed ||
         keyboard.isAltPressed ||
@@ -451,6 +458,13 @@ class _VimFocusHostState extends State<VimFocusHost>
     // application-wide `g` prefix alive there; routing navigation or Enter a
     // second time would move/activate a control twice.
     if (focusContext != null && ModalRoute.of(focusContext) is PopupRoute) {
+      if (event is KeyDownEvent || event is KeyRepeatEvent) {
+        final inputResult = handleVimInputModeKey(focusContext, event);
+        if (inputResult == KeyEventResult.handled) return true;
+      }
+      // Do not let the page-sequence handler steal ordinary characters from
+      // an EditableText that is already in Insert mode.
+      if (vimEditingText()) return false;
       if (event.logicalKey == LogicalKeyboardKey.keyG) {
         return _handleVimPageSequence(focusContext, event);
       }
