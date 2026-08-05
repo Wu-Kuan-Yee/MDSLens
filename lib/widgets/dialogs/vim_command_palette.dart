@@ -231,23 +231,16 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
   void _pop([MdsShortcutCommand? command]) {
     if (_closing) return;
     _closing = true;
-    final parentFocus = takeVimParentFocus(context);
     _queryFocus.unfocus();
     VimInputModeScope.setMode(context, VimInputMode.normal);
     Navigator.pop(context, command);
-    if (parentFocus != null) {
-      scheduleVimParentFocus(parentFocus);
-    } else {
+    requestVimWorkspaceFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       requestVimWorkspaceFocus();
-    }
-    if (parentFocus == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         requestVimWorkspaceFocus();
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          requestVimWorkspaceFocus();
-        });
       });
-    }
+    });
   }
 
   @override
