@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/app_state.dart';
+import '../services/vim_page_model.dart';
 
 /// Exposes the application's Vim-mode state above the Navigator so dialogs and
 /// popup routes can use the same keyboard navigation rules as the main page.
@@ -35,6 +36,7 @@ enum VimVisualMode { character, line, block }
 enum VimPlotSelectionLevel { column, panel }
 
 class VimInputState extends ChangeNotifier {
+  final VimPageStack pages = VimPageStack();
   VimInputMode _mode = VimInputMode.normal;
   VimVisualMode _visualMode = VimVisualMode.character;
   VimPlotSelectionLevel _plotSelectionLevel = VimPlotSelectionLevel.column;
@@ -46,6 +48,18 @@ class VimInputState extends ChangeNotifier {
   VimVisualMode get visualMode => _visualMode;
   VimPlotSelectionLevel get plotSelectionLevel => _plotSelectionLevel;
   int? get visualAnchor => _visualAnchor;
+
+  String? get selectedPageId => pages.selectedId;
+
+  /// Keep the semantic page cursor in sync with a widget-backed focus target.
+  /// The focus node remains the Flutter accessibility anchor; this cursor is
+  /// the stable Vim identity used by nested page navigation.
+  void selectPageCell(String id) => pages.setSelection(id);
+
+  bool enterPage(VimPage page, {bool selectFirst = true}) =>
+      pages.push(page, selectFirst: selectFirst);
+
+  bool leavePage() => pages.pop();
 
   /// Save the value that was present immediately before entering Insert mode.
   /// A single active editor is enough: Vim only has one primary focus at a
@@ -97,6 +111,12 @@ class VimInputState extends ChangeNotifier {
     if (_plotSelectionLevel == level) return;
     _plotSelectionLevel = level;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    pages.dispose();
+    super.dispose();
   }
 }
 
@@ -466,6 +486,9 @@ class VimPlotFocus extends InheritedWidget {
   final int column;
   final int row;
 
+  String get pageId => 'plot/panel/$column/$row';
+  String get parentPageId => 'plot/column/$column';
+
   @override
   bool updateShouldNotify(VimPlotFocus oldWidget) => false;
 }
@@ -481,6 +504,9 @@ class VimPlotColumnFocus extends InheritedWidget {
   });
 
   final int column;
+
+  String get pageId => 'plot/column/$column';
+  String get parentPageId => 'plot/grid';
 
   @override
   bool updateShouldNotify(VimPlotColumnFocus oldWidget) => false;
@@ -501,6 +527,10 @@ class VimLayoutFocus extends InheritedWidget {
   final int column;
   final int row;
   final bool isColumn;
+
+  String get pageId =>
+      isColumn ? 'layout/column/$column' : 'layout/panel/$column/$row';
+  String get parentPageId => isColumn ? 'layout' : 'layout/column/$column';
 
   @override
   bool updateShouldNotify(VimLayoutFocus oldWidget) => false;
@@ -1154,6 +1184,7 @@ void _requestVimFocus(_VimFocusTarget target) {
   target.node.requestFocus();
   final targetContext = target.node.context;
   if (targetContext == null) return;
+  _syncVimSemanticSelection(targetContext, target);
   // Focus can land on a control that is currently outside a compact toolbar,
   // dialog, or menu viewport. Reveal it after the focus change without
   // delaying the key event itself.
@@ -1181,6 +1212,37 @@ void _requestVimFocus(_VimFocusTarget target) {
     reveal();
     WidgetsBinding.instance.addPostFrameCallback((_) => reveal());
   });
+}
+
+void _syncVimSemanticSelection(
+  BuildContext context,
+  _VimFocusTarget target,
+) {
+  final input = VimInputModeScope.maybeOf(context);
+  if (input == null) return;
+  final plot = target.plot;
+  if (plot != null) {
+    final level = input.plotSelectionLevel;
+    final column = context.findAncestorWidgetOfExactType<VimPlotColumnFocus>();
+    if (level == VimPlotSelectionLevel.column && column != null) {
+      input.pages.setExternalSelection('plot/grid', column.pageId);
+    } else {
+      input.pages.setExternalSelection(plot.parentPageId, plot.pageId);
+    }
+    return;
+  }
+  final layout = target.layout;
+  if (layout != null) {
+    input.pages.setExternalSelection(
+      layout.parentPageId,
+      layout.pageId,
+    );
+    return;
+  }
+  final label = target.node.debugLabel;
+  if (label != null && label.isNotEmpty) {
+    input.pages.setExternalSelection('route', label);
+  }
 }
 
 /// Reveal a focused control in every ancestor scroll view. Flutter's
