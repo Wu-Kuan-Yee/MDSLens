@@ -2057,9 +2057,19 @@ class ToolbarWidget extends StatelessWidget {
               }
             });
             if (cut == null || draftColumns.isEmpty) return cut != null;
+            final focusColumn =
+                math.min(source.column, draftColumns.length - 1);
+            final retainPanelLevel =
+                !source.isColumn && draftColumns[focusColumn].isNotEmpty;
             scheduleVimLayoutFocus(
-              column: math.min(source.column, draftColumns.length - 1),
-              isColumn: true,
+              column: focusColumn,
+              row: retainPanelLevel
+                  ? math.min(
+                      source.row!,
+                      draftColumns[focusColumn].length - 1,
+                    )
+                  : null,
+              isColumn: !retainPanelLevel,
             );
             return true;
           }

@@ -854,8 +854,6 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('shot-history-selection-list')),
         findsNothing);
   });
@@ -1333,7 +1331,10 @@ void main() {
     final app = AppState();
     await app.preferencesReady;
     addTearDown(app.dispose);
-    app.setVimMode(false);
+    // The panel must keep its own H/J/K/L route even while the application
+    // is already in Vim mode; this is the path reached from Settings in real
+    // keyboard-only use.
+    app.setVimMode(true);
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
         value: app,
@@ -1349,9 +1350,15 @@ void main() {
 
     expect(
       FocusManager.instance.primaryFocus?.debugLabel,
-      'keyboard-mode-vim',
+      'keyboard-mode-standard',
     );
 
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'keyboard-mode-vim',
+    );
     await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
     await tester.pump();
     bool primaryHasKey(Key key) {
@@ -8455,6 +8462,25 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyX);
     await tester.pumpAndSettle();
     expect(find.textContaining('Cut Panel 1'), findsOneWidget);
+    // Cutting a Panel keeps us at the Panel level whenever the replacement
+    // Column still has a sibling Panel. Its ring must follow that real card.
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'layout-panel-1-0',
+    );
+    final replacementPanelRing =
+        tester.getRect(find.byKey(const ValueKey('vim-focus-ring')));
+    final replacementPanel = tester.getRect(
+      find.byKey(const ValueKey('layout-preview-panel-1')),
+    );
+    expect(
+      replacementPanelRing.center.dx,
+      closeTo(replacementPanel.center.dx, 5),
+    );
+    expect(
+      replacementPanelRing.center.dy,
+      closeTo(replacementPanel.center.dy, 5),
+    );
     await focusLayout(column: 2, isColumn: true); // Column 3.
     await pasteBefore();
     await apply();
