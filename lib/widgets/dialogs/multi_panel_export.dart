@@ -731,7 +731,41 @@ Future<void> exportMultiplePanels(
   );
   if (request == null || request.panels.isEmpty || !context.mounted) return;
 
+  final browser = kIsWeb;
+  final mobile =
+      mobileOverride ?? (!browser && (Platform.isAndroid || Platform.isIOS));
+  _DesktopPanelExportDestination? desktopDestination;
+  // A full waveform export can take noticeable time simply to materialize the
+  // selected points. On a desktop, FilePicker does not need the bytes in order
+  // to ask for a destination, so make that native sheet the next visible
+  // action. This keeps the Export button responsive instead of making the
+  // user wait behind serialization before they can choose a file or folder.
+  if (!mobile && !browser && saveDialog == null) {
+    try {
+      app.setStatus('Choose where to export the selected panel data...');
+      // The export dialog has just been popped. Let its reverse transition
+      // settle before attaching a native sheet to the owning window.
+      await WidgetsBinding.instance.endOfFrame;
+      await Future<void>.delayed(Duration.zero);
+      desktopDestination = await _chooseDesktopPanelExportDestination(
+        app,
+        request,
+        directoryDialog: directoryDialog,
+      );
+      if (desktopDestination == null) {
+        app.setStatus('Export cancelled');
+        return;
+      }
+    } catch (error) {
+      app.setStatus('Export error: $error');
+      return;
+    }
+  }
+
   app.setStatus('Preparing data from ${request.panels.length} panels...');
+  // Render the status update before the snapshot walks potentially large
+  // TypedData series on the UI isolate.
+  await Future<void>.delayed(Duration.zero);
   final snapshot = panelExportSnapshot(app, request);
   final files = await Isolate.run(
     () => buildPanelExportFiles(snapshot, request.format),
@@ -741,10 +775,18 @@ Future<void> exportMultiplePanels(
     return;
   }
 
-  final browser = kIsWeb;
-  final mobile =
-      mobileOverride ?? (!browser && (Platform.isAndroid || Platform.isIOS));
   try {
+    if (desktopDestination != null) {
+      await _writeDesktopPanelExport(desktopDestination, files);
+      app.setStatus(
+        desktopDestination.filePath != null
+            ? 'Exported ${_displayName(desktopDestination.filePath!)}'
+            : 'Exported ${files.length} independent panel files to '
+                '${_displayName(desktopDestination.directoryPath!)}',
+      );
+      return;
+    }
+
     app.setStatus('Choose where to export the selected panel data...');
     if (saveDialog == null && directoryDialog == null) {
       await WidgetsBinding.instance.endOfFrame;
@@ -810,6 +852,97 @@ Future<void> exportMultiplePanels(
     );
   } catch (error) {
     app.setStatus('Export error: $error');
+  }
+}
+
+class _DesktopPanelExportDestination {
+  const _DesktopPanelExportDestination.file(this.filePath)
+      : directoryPath = null;
+
+  const _DesktopPanelExportDestination.directory(this.directoryPath)
+      : filePath = null;
+
+  final String? filePath;
+  final String? directoryPath;
+}
+
+Future<_DesktopPanelExportDestination?> _chooseDesktopPanelExportDestination(
+  AppState app,
+  PanelExportRequest request, {
+  PlatformDirectoryDialog? directoryDialog,
+}) async {
+  // One selected Panel always produces one independent file. With two or more
+  // Panels, asking for a folder before serialization preserves the original
+  // independent-file desktop behavior.
+  if (request.panels.length == 1) {
+    final selectedIndex = request.panels.single;
+    final choices = panelExportChoices(app);
+    final matching = choices.where((choice) => choice.index == selectedIndex);
+    final choice = matching.isEmpty ? null : matching.first;
+    final path = await FilePicker.platform.saveFile(
+      dialogTitle: 'Export panel data',
+      fileName: _anticipatedPanelFileName(choice, request.format),
+      type: FileType.custom,
+      allowedExtensions: [request.format.extension],
+      // Native desktop save panels return a destination before any bytes are
+      // available. The actual write happens after Isolate serialization.
+      bytes: null,
+      lockParentWindow: true,
+    );
+    if (path == null || path.trim().isEmpty) return null;
+    return _DesktopPanelExportDestination.file(
+      _withExportExtension(path, request.format.extension),
+    );
+  }
+
+  final directory = await (directoryDialog ??
+      () => FilePicker.platform.getDirectoryPath(
+            dialogTitle: 'Export each panel to this folder',
+            lockParentWindow: true,
+          ))();
+  if (directory == null || directory.trim().isEmpty) return null;
+  return _DesktopPanelExportDestination.directory(directory);
+}
+
+String _anticipatedPanelFileName(
+  PanelExportChoice? choice,
+  PanelExportFormat format,
+) {
+  if (choice == null) return 'panel-data.${format.extension}';
+  return _panelFileName(
+    {'index': choice.index, 'title': choice.title},
+    format.extension,
+  );
+}
+
+String _withExportExtension(String path, String extension) {
+  if (path.toLowerCase().endsWith('.${extension.toLowerCase()}')) return path;
+  return '$path.$extension';
+}
+
+Future<void> _writeDesktopPanelExport(
+  _DesktopPanelExportDestination destination,
+  List<PanelExportFile> files,
+) async {
+  final filePath = destination.filePath;
+  if (filePath != null) {
+    // A single requested Panel produces one file. Keep this guard defensive in
+    // case a future range mode can split an individual Panel into parts.
+    if (files.length != 1) {
+      throw StateError(
+          'A single-file destination received ${files.length} files');
+    }
+    await File(filePath).writeAsBytes(files.single.bytes, flush: true);
+    return;
+  }
+  final directory = destination.directoryPath;
+  if (directory == null) {
+    throw StateError('No desktop export destination was selected');
+  }
+  for (final file in files) {
+    await File(
+      '$directory${Platform.pathSeparator}${file.name}',
+    ).writeAsBytes(file.bytes, flush: true);
   }
 }
 
