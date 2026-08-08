@@ -214,6 +214,10 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
             }
             if (event.logicalKey == LogicalKeyboardKey.enter ||
                 event.logicalKey == LogicalKeyboardKey.space) {
+              if (VimModeScope.enabled(context) &&
+                  !claimVimActivation(context, event)) {
+                return KeyEventResult.handled;
+              }
               controller.isOpen ? controller.close() : controller.open();
               return KeyEventResult.handled;
             }

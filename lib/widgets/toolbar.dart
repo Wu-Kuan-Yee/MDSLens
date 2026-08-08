@@ -398,6 +398,9 @@ class ResponsiveToolbar extends StatelessWidget {
               }
               if (event.logicalKey == LogicalKeyboardKey.enter ||
                   event.logicalKey == LogicalKeyboardKey.space) {
+                if (!claimVimActivation(context, event)) {
+                  return KeyEventResult.handled;
+                }
                 app.toolbarCollapsed = !collapsed;
                 return KeyEventResult.handled;
               }
@@ -1147,89 +1150,92 @@ class ToolbarWidget extends StatelessWidget {
   }
 
   Widget _settingsMenu(BuildContext ctx, AppState app) {
-    return PopupMenuButton<String>(
-      tooltip: 'Settings',
-      position: PopupMenuPosition.under,
-      child: Container(
-        height: 44,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          border: Border.all(color: Theme.of(ctx).colorScheme.outline),
-          borderRadius: BorderRadius.circular(10),
+    return _vimActivationBoundary(
+      ctx,
+      PopupMenuButton<String>(
+        tooltip: 'Settings',
+        position: PopupMenuPosition.under,
+        child: Container(
+          height: 44,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            border: Border.all(color: Theme.of(ctx).colorScheme.outline),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(
+            Icons.settings,
+            size: app.iconSize.toDouble(),
+            color: Theme.of(ctx).colorScheme.onSurface,
+          ),
         ),
-        child: Icon(
-          Icons.settings,
-          size: app.iconSize.toDouble(),
-          color: Theme.of(ctx).colorScheme.onSurface,
-        ),
+        onSelected: (v) {
+          switch (v) {
+            case 'web':
+              _showWebBookmarks(ctx, app);
+              break;
+            case 'layout':
+              _showLayoutSetup(ctx, app);
+              break;
+            case 'fonts':
+              _showFontDialog(ctx, app);
+              break;
+            case 'shortcuts':
+              KeyboardShortcutsDialog.show(ctx);
+              break;
+            case 'keyboard-mode':
+              KeyboardModeDialog.show(ctx, previewToggle: true);
+              break;
+            case 'restore-all':
+              _confirmRestoreAllSettings(ctx, app);
+              break;
+            case 'about':
+              AboutDialogWidget.show(ctx);
+              break;
+          }
+        },
+        itemBuilder: (_) => separatedPopupMenuItems([
+          _settingsMenuItem(
+            value: 'web',
+            icon: Icons.language_rounded,
+            label: 'Internal Web Pages',
+            shortcut: app.shortcutText(MdsShortcutCommand.openWebMenu),
+          ),
+          _settingsMenuItem(
+            value: 'layout',
+            icon: Icons.dashboard_customize_rounded,
+            label: 'Layout Setup',
+            shortcut: app.shortcutText(MdsShortcutCommand.globalLayout),
+          ),
+          _settingsMenuItem(
+            value: 'fonts',
+            icon: Icons.font_download_outlined,
+            label: 'Customize Fonts',
+          ),
+          _settingsMenuItem(
+            value: 'shortcuts',
+            icon: Icons.keyboard_alt_outlined,
+            label: 'Keyboard shortcuts',
+          ),
+          _settingsMenuItem(
+            key: const ValueKey('settings-vim-mode'),
+            value: 'keyboard-mode',
+            icon: Icons.terminal_rounded,
+            label: 'Keyboard Mode',
+            trailing: app.vimMode ? 'Vim' : 'Standard',
+            caption: 'Vim mode (keyboard-only)',
+          ),
+          _settingsMenuItem(
+            value: 'restore-all',
+            icon: Icons.restore_rounded,
+            label: 'Restore All Settings',
+          ),
+          _settingsMenuItem(
+            value: 'about',
+            icon: Icons.info_outline_rounded,
+            label: 'About MDSLens',
+          ),
+        ]),
       ),
-      onSelected: (v) {
-        switch (v) {
-          case 'web':
-            _showWebBookmarks(ctx, app);
-            break;
-          case 'layout':
-            _showLayoutSetup(ctx, app);
-            break;
-          case 'fonts':
-            _showFontDialog(ctx, app);
-            break;
-          case 'shortcuts':
-            KeyboardShortcutsDialog.show(ctx);
-            break;
-          case 'keyboard-mode':
-            KeyboardModeDialog.show(ctx, previewToggle: true);
-            break;
-          case 'restore-all':
-            _confirmRestoreAllSettings(ctx, app);
-            break;
-          case 'about':
-            AboutDialogWidget.show(ctx);
-            break;
-        }
-      },
-      itemBuilder: (_) => separatedPopupMenuItems([
-        _settingsMenuItem(
-          value: 'web',
-          icon: Icons.language_rounded,
-          label: 'Internal Web Pages',
-          shortcut: app.shortcutText(MdsShortcutCommand.openWebMenu),
-        ),
-        _settingsMenuItem(
-          value: 'layout',
-          icon: Icons.dashboard_customize_rounded,
-          label: 'Layout Setup',
-          shortcut: app.shortcutText(MdsShortcutCommand.globalLayout),
-        ),
-        _settingsMenuItem(
-          value: 'fonts',
-          icon: Icons.font_download_outlined,
-          label: 'Customize Fonts',
-        ),
-        _settingsMenuItem(
-          value: 'shortcuts',
-          icon: Icons.keyboard_alt_outlined,
-          label: 'Keyboard shortcuts',
-        ),
-        _settingsMenuItem(
-          key: const ValueKey('settings-vim-mode'),
-          value: 'keyboard-mode',
-          icon: Icons.terminal_rounded,
-          label: 'Keyboard Mode',
-          trailing: app.vimMode ? 'Vim' : 'Standard',
-          caption: 'Vim mode (keyboard-only)',
-        ),
-        _settingsMenuItem(
-          value: 'restore-all',
-          icon: Icons.restore_rounded,
-          label: 'Restore All Settings',
-        ),
-        _settingsMenuItem(
-          value: 'about',
-          icon: Icons.info_outline_rounded,
-          label: 'About MDSLens',
-        ),
-      ]),
     );
   }
 
@@ -3870,6 +3876,34 @@ class ToolbarWidget extends StatelessWidget {
     }
   }
 
+  Widget _vimActivationBoundary(BuildContext context, Widget child) {
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (node, event) {
+        if (!VimModeScope.enabled(context)) {
+          return KeyEventResult.ignored;
+        }
+        if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+          return KeyEventResult.ignored;
+        }
+        final isActivate = event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.numpadEnter ||
+            event.logicalKey == LogicalKeyboardKey.space;
+        if (!isActivate) return KeyEventResult.ignored;
+        if (!claimVimActivation(context, event)) {
+          return KeyEventResult.handled;
+        }
+        final focusedContext =
+            FocusManager.instance.primaryFocus?.context ?? context;
+        return activateVimControl(focusedContext)
+            ? KeyEventResult.handled
+            : KeyEventResult.ignored;
+      },
+      child: child,
+    );
+  }
+
   Widget _toolbarIconButton(
     BuildContext context, {
     required IconData icon,
@@ -3980,6 +4014,9 @@ class ToolbarWidget extends StatelessWidget {
           }
           if (event.logicalKey == LogicalKeyboardKey.enter ||
               event.logicalKey == LogicalKeyboardKey.space) {
+            if (!claimVimActivation(context, event)) {
+              return KeyEventResult.handled;
+            }
             _showRecentConfigurations(context, app);
             return KeyEventResult.handled;
           }
@@ -4156,6 +4193,9 @@ class ToolbarWidget extends StatelessWidget {
           }
           if (event.logicalKey == LogicalKeyboardKey.enter ||
               event.logicalKey == LogicalKeyboardKey.space) {
+            if (!claimVimActivation(ctx, event)) {
+              return KeyEventResult.handled;
+            }
             onTap();
             return KeyEventResult.handled;
           }
