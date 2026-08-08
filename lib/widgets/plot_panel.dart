@@ -2989,7 +2989,13 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
   // completes.
   List<String> _treeNames = ['pcs_east'];
   final Map<String, List<String>> _signalCache = {};
+  // Several UI paths can ask for the same Tree at once: dialog startup,
+  // the aggregate empty-Signal index, and focusing a Signal field.  Share the
+  // in-flight read as well as the completed cache so opening a completion
+  // menu never competes with duplicate asset reads.
+  final Map<String, Future<List<String>>> _signalLoads = {};
   final Map<String, Set<String>> _treesBySignal = {};
+  bool _sourceIndexStarted = false;
   SourceIndexMemory get _sourceIndexMemory =>
       context.read<AppState>().sourceIndexMemory;
 
@@ -3011,11 +3017,28 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
   @override
   void initState() {
     super.initState();
-    _loadIndex();
     final count = widget.signals.isEmpty ? 1 : widget.signals.length;
     for (var i = 0; i < count; i++) {
       final s = i < widget.signals.length ? widget.signals[i] : null;
       _addRowFromSignal(s, i);
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_sourceIndexStarted) return;
+    _sourceIndexStarted = true;
+    // DefaultAssetBundle is an inherited resource. Start reads only after the
+    // dialog has a fully established inherited context; doing it from
+    // initState could intermittently cache an empty fallback list during
+    // startup or in a busy test isolate.
+    unawaited(_loadIndex());
+    // A default Tree is known before the full cross-Tree index is ready.
+    // Start its Signal list immediately so opening an empty Signal field does
+    // not wait for every bundled Tree file to finish loading.
+    for (final row in _rows) {
+      unawaited(_updateSignalOptions(row));
     }
   }
 
@@ -3038,7 +3061,6 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
       }
     }
     _treeNames.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    _signalCache.remove('__all__');
     if (!mounted) return;
     // Tree names are independently useful and inexpensive to load. Publish
     // them before building the aggregate signal index so an empty Tree field
@@ -3046,37 +3068,56 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
     // held behind reads of every signals/<tree>.txt asset).
     setState(() {});
 
-    // Empty Signal fields promise the complete suggestion list, not a partial
-    // list that depends on a race with background asset reads.  Keep that
-    // original completion guarantee while Tree choices remain immediately
-    // usable through the setState above.
-    await _signalsForTree('');
-    if (!mounted) return;
-    // Load initial signal options for each row.
+    // Load only the Tree currently selected by each row.  Building the all-
+    // Tree signal index here used to start every bundled signal file even
+    // when the user was editing a known Tree such as pcs_east.  Besides doing
+    // needless work, that made a focused Signal editor wait behind unrelated
+    // asset reads.  An empty Tree still requests the aggregate list on
+    // demand through _updateSignalOptions, so the UI continues to promise
+    // every available Signal when no Tree is specified.
     for (final r in _rows) {
-      _updateSignalOptions(r);
+      unawaited(_updateSignalOptions(r));
     }
-    if (mounted) setState(() {});
   }
 
-  Future<List<String>> _signalsForTree(String tree) async {
+  Future<List<String>> _signalsForTree(String tree) {
     final key = tree.trim().toLowerCase().replaceAll(
           RegExp(r'[^a-z0-9_-]+'),
           '_',
         );
+    final cacheKey = key.isEmpty ? '__all__' : key;
+    final cached = _signalCache[cacheKey];
+    if (cached != null) return Future.value(cached);
+    final active = _signalLoads[cacheKey];
+    if (active != null) return active;
+
+    final load = _loadSignalsForTree(tree, key, cacheKey);
+    _signalLoads[cacheKey] = load;
+    unawaited(
+      load.whenComplete(() {
+        if (identical(_signalLoads[cacheKey], load)) {
+          _signalLoads.remove(cacheKey);
+        }
+      }),
+    );
+    return load;
+  }
+
+  Future<List<String>> _loadSignalsForTree(
+    String tree,
+    String key,
+    String cacheKey,
+  ) async {
     if (key.isEmpty) {
-      const allKey = '__all__';
-      if (_signalCache.containsKey(allKey)) return _signalCache[allKey]!;
       final signalLists = await Future.wait(_treeNames.map(_signalsForTree));
       final allSignals = signalLists
           .expand((signals) => signals)
           .toSet()
           .toList()
         ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-      _signalCache[allKey] = allSignals;
+      _signalCache[cacheKey] = allSignals;
       return allSignals;
     }
-    if (_signalCache.containsKey(key)) return _signalCache[key]!;
     try {
       final text = await _loadAsset('assets/source_index/signals/$key.txt');
       final sigs = text
@@ -3086,13 +3127,13 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
           .toSet()
           .toList()
         ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-      _signalCache[key] = sigs;
+      _signalCache[cacheKey] = sigs;
       _indexTreeSignals(tree, sigs);
       return sigs;
     } catch (_) {
       final remembered = _sourceIndexMemory.signalsForTree(tree).toList()
         ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-      _signalCache[key] = remembered;
+      _signalCache[cacheKey] = remembered;
       _indexTreeSignals(tree, remembered);
       return remembered;
     }
@@ -3136,10 +3177,12 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
     );
   }
 
-  Future<String> _loadAsset(String path) async {
-    final bundle = DefaultAssetBundle.of(context);
-    return await bundle.loadString(path);
-  }
+  // Resolve bundled suggestions through the app's inherited asset bundle.
+  // The dialog starts loading only after didChangeDependencies, so this is
+  // available both in the installed app and in embedded/test hosts that
+  // intentionally supply their own asset bundle.
+  Future<String> _loadAsset(String path) =>
+      DefaultAssetBundle.of(context).loadString(path);
 
   void _addRowFromSignal(Map<String, dynamic>? s, int i) {
     final defaultRate = context.read<AppState>().dataMode;
@@ -3193,10 +3236,8 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
 
   @override
   Widget build(BuildContext ctx) {
-    return GestureDetector(
+    return KeyedSubtree(
       key: const ValueKey('data-source-dialog-surface'),
-      behavior: HitTestBehavior.translucent,
-      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
       child: KeyboardSafeDialog(
         maxWidth: 960,
         title: Row(
@@ -3299,6 +3340,8 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                               key: ValueKey('data-shot-$i'),
                               controller: _rows[i].shot,
                               readOnly: vimTextFieldReadOnly(ctx),
+                              onTapOutside: (_) =>
+                                  FocusManager.instance.primaryFocus?.unfocus(),
                               decoration: _dsDeco(),
                               style: const TextStyle(fontSize: 12),
                             ),
@@ -3361,6 +3404,8 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                                 controller: _rows[i].y,
                                 options: _rows[i]._signalOptions,
                                 label: 'Signal',
+                                onFocus: () =>
+                                    unawaited(_updateSignalOptions(_rows[i])),
                                 onChanged: () => setState(() {}),
                                 onSelected: (_) =>
                                     _showReverseTreeSuggestions(_rows[i]),
@@ -3373,6 +3418,8 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                               key: ValueKey('data-legend-$i'),
                               controller: _rows[i].legend,
                               readOnly: vimTextFieldReadOnly(ctx),
+                              onTapOutside: (_) =>
+                                  FocusManager.instance.primaryFocus?.unfocus(),
                               decoration: _dsDeco().copyWith(
                                 hintText: signalLegendLabel({
                                   'y_expr': _rows[i].y.text,
@@ -3387,6 +3434,8 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                               key: ValueKey('data-server-$i'),
                               controller: _rows[i].server,
                               readOnly: vimTextFieldReadOnly(ctx),
+                              onTapOutside: (_) =>
+                                  FocusManager.instance.primaryFocus?.unfocus(),
                               decoration: _dsDeco(),
                               style: const TextStyle(fontSize: 12),
                             ),
@@ -3494,11 +3543,20 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
     );
   }
 
-  void _updateSignalOptions(_DSRow row) async {
+  Future<void> _updateSignalOptions(_DSRow row) async {
     final requestedTree = row.tree.text.trim().toLowerCase();
     final sigs = await _signalsForTree(requestedTree);
     if (!mounted || requestedTree != row.tree.text.trim().toLowerCase()) return;
     setState(() => row._signalOptions = sigs);
+    // An OverlayEntry is outside the dialog subtree, so merely rebuilding the
+    // row is not always enough to refresh a completion popup that was already
+    // focused while the asynchronous index arrived.  Ask that exact editor to
+    // re-evaluate after its new options have been laid out.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        row.signalAutocompleteKey.currentState?.refreshSuggestionsIfFocused();
+      }
+    });
   }
 
   void _showReverseTreeSuggestions(_DSRow row) {
@@ -3548,6 +3606,7 @@ class _AutocompleteField extends StatefulWidget {
   final TextEditingController controller;
   final List<String> options;
   final String label;
+  final VoidCallback? onFocus;
   final VoidCallback? onChanged;
   final ValueChanged<String>? onSelected;
   const _AutocompleteField({
@@ -3555,6 +3614,7 @@ class _AutocompleteField extends StatefulWidget {
     required this.controller,
     required this.options,
     required this.label,
+    this.onFocus,
     this.onChanged,
     this.onSelected,
   });
@@ -3632,6 +3692,7 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
 
   void _handleFocusChange() {
     if (_node.hasFocus) {
+      widget.onFocus?.call();
       _update();
     } else {
       _scheduleHintOverlayDismissal();
@@ -3866,10 +3927,20 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
 
   void requestFocus() => _node.requestFocus();
 
+  void refreshSuggestionsIfFocused() {
+    if (!_node.hasFocus) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _node.hasFocus) _update();
+    });
+  }
+
   void showSuggestions() {
     _node.requestFocus();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _update();
+      if (mounted) {
+        widget.onFocus?.call();
+        _update();
+      }
     });
   }
 
@@ -3885,9 +3956,15 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
             controller: widget.controller,
             focusNode: _node,
             readOnly: vimTextFieldReadOnly(ctx),
+            onTapOutside: (_) {
+              if (_node.hasFocus) _node.unfocus();
+            },
             decoration: _DataSourceDialogState._dsDeco(),
             style: const TextStyle(fontSize: 12),
-            onTap: _update,
+            onTap: () {
+              widget.onFocus?.call();
+              _update();
+            },
             onChanged: (_) => widget.onChanged?.call(),
           ),
         ),
