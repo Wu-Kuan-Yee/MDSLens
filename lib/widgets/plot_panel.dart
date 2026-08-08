@@ -2396,7 +2396,10 @@ class _PlotPanelState extends State<PlotPanel> {
         app.showAllPanels();
         break;
       case 'reset':
-        _resetView(app.plots[widget.plotIdx]);
+        // The range is held by both the panel renderer and its persisted plot
+        // model.  Clearing only the model made the right-click command look
+        // ineffective until an unrelated rebuild happened later.
+        setState(() => _resetView(app.plots[widget.plotIdx]));
         app.clearCrosshair();
         break;
       case 'resetAll':
