@@ -896,6 +896,83 @@ void main() {
     expect(app.dataMode, 1);
   });
 
+  testWidgets('Vim data source dropdown keeps its last option framed',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MaterialApp(
+          builder: (context, child) => VimModeScope(
+            notifier: app,
+            child: VimFocusHost(child: child ?? const SizedBox.shrink()),
+          ),
+          home: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () => showDataSourceSetupEditor(
+                context,
+                signals: const [],
+                defaultShot: '163701',
+              ),
+              child: const Text('Open data source'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open data source'));
+    await tester.pumpAndSettle();
+
+    FocusManager.instance.rootScope.descendants
+        .firstWhere(
+          (node) => node.debugLabel == 'dropdown-data-hide-mode-0',
+        )
+        .requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'dropdown-data-hide-mode-0-option-0',
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'dropdown-data-hide-mode-0-option-2',
+    );
+    final option = tester.getRect(
+      find.byKey(const ValueKey('data-hide-mode-0-option-2')),
+    );
+    final vimFrame = find.byWidgetPredicate((widget) {
+      if (widget is! DecoratedBox || widget.decoration is! BoxDecoration) {
+        return false;
+      }
+      final border = (widget.decoration as BoxDecoration).border;
+      return border is Border && border.top.color == const Color(0xFFD946EF);
+    });
+    expect(vimFrame, findsOneWidget);
+    final frame = tester.getRect(vimFrame);
+    expect(frame.center.dx, closeTo(option.center.dx, 1));
+    expect(frame.center.dy, closeTo(option.center.dy, 1));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<PolishedDropdown<int>>(
+            find.byKey(const ValueKey('data-hide-mode-dropdown-0')),
+          )
+          .value,
+      signalHideModePersistent,
+    );
+  });
+
   testWidgets('Vim plot navigation follows columns and Point edit mode', (
     tester,
   ) async {
@@ -1368,19 +1445,9 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
     await tester.pump();
-    var resetFocused =
-        FocusManager.instance.primaryFocus?.context?.widget.key ==
-            const ValueKey('layout-reset');
-    FocusManager.instance.primaryFocus?.context?.visitAncestorElements(
-      (element) {
-        if (element.widget.key == const ValueKey('layout-reset')) {
-          resetFocused = true;
-          return false;
-        }
-        return true;
-      },
-    );
-    expect(resetFocused, isTrue);
+    // The outer semantic Focus owns the action, so its stable debug label is
+    // the authoritative identity rather than a descendant Button key.
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'layout-reset');
 
     final mainContext = tester.element(find.byType(MainPage));
     await tester.tap(find.byKey(const ValueKey('layout-preview-column-0')));
@@ -1709,6 +1776,74 @@ void main() {
       expect(find.text('Export 9 panel(s)'), findsOneWidget);
     },
   );
+
+  testWidgets('Vim Export panel data reaches every control', (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    app.plots[0].series[0] = SeriesData(
+      points: const [
+        [0, 1],
+      ],
+    );
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MaterialApp(
+          builder: (context, child) => VimModeScope(
+            notifier: app,
+            child: VimFocusHost(child: child ?? const SizedBox.shrink()),
+          ),
+          home: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () => showMultiPanelExportDialog(
+                context,
+                app,
+                initialSelection: const {0},
+                allowPanelSelection: false,
+              ),
+              child: const Text('Export panel data'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Export panel data'));
+    await tester.pumpAndSettle();
+
+    FocusNode controlNode(int row, int column) =>
+        FocusManager.instance.rootScope.descendants
+            .where((node) => node.canRequestFocus && !node.skipTraversal)
+            .firstWhere((node) {
+          final marker = node.context
+              ?.findAncestorWidgetOfExactType<VimPanelExportControl>();
+          return marker?.row == row && marker?.column == column;
+        });
+    VimPanelExportControl? focusedControl() =>
+        FocusManager.instance.primaryFocus?.context
+            ?.findAncestorWidgetOfExactType<VimPanelExportControl>();
+
+    controlNode(0, 0).requestFocus();
+    await tester.pump();
+    expect(focusedControl()?.row, 0);
+    expect(focusedControl()?.column, 0);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    expect(focusedControl()?.row, 3);
+    expect(focusedControl()?.column, 0);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
+    await tester.pump();
+    expect(focusedControl()?.row, 3);
+    expect(focusedControl()?.column, 1);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+    await tester.pump();
+    expect(focusedControl()?.row, 0);
+    expect(focusedControl()?.column, 1);
+  });
 
   test('Multiple panel CSV preserves panel and signal metadata', () {
     final csv = encodeMultiplePanelCsv([
@@ -8272,6 +8407,16 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyX);
     await tester.pumpAndSettle();
     expect(find.textContaining('Cut Column 2'), findsOneWidget);
+    // After a structural edit the focus ring must follow the replacement
+    // Column, not a removed cell or one of its nested drag/edit controls.
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'layout-column-1');
+    final cutRing =
+        tester.getRect(find.byKey(const ValueKey('vim-focus-ring')));
+    final cutColumn = tester.getRect(
+      find.byKey(const ValueKey('layout-preview-column-1')),
+    );
+    expect(cutRing.center.dx, closeTo(cutColumn.center.dx, 5));
+    expect(cutRing.center.dy, closeTo(cutColumn.center.dy, 5));
     await focusLayout(column: 1, isColumn: true); // Original Column 3.
     await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
     await tester.pumpAndSettle();

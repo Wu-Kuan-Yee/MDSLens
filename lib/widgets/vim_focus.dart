@@ -360,6 +360,11 @@ class VimActivatable extends InheritedWidget {
 }
 
 FocusNode? _vimWorkspaceFocus;
+final ValueNotifier<int> _vimFocusVisualRevision = ValueNotifier<int>(0);
+
+void _refreshVimFocusVisuals() {
+  _vimFocusVisualRevision.value++;
+}
 
 void registerVimWorkspaceFocus(FocusNode node) {
   _vimWorkspaceFocus = node;
@@ -385,6 +390,8 @@ void scheduleVimLayoutFocus({
 }) {
   void request() {
     final matches = <FocusNode>[];
+    final expectedLabel =
+        isColumn ? 'layout-column-$column' : 'layout-panel-$column-$row';
     for (final node in FocusManager.instance.rootScope.traversalDescendants) {
       if (!node.canRequestFocus || node.skipTraversal) continue;
       final marker =
@@ -399,7 +406,34 @@ void scheduleVimLayoutFocus({
     matches.sort(
       (a, b) => a.ancestors.length.compareTo(b.ancestors.length),
     );
-    matches.first.requestFocus();
+    // Each cell also contains focusable drag handles and edit controls. The
+    // outer cell boundary is the only node whose ring must represent the
+    // whole semantic Column/Panel after a structural edit.
+    final selected = matches.firstWhere(
+      (node) => node.debugLabel == expectedLabel,
+      orElse: () => matches.first,
+    );
+    final rect = _vimNodeRect(selected);
+    if (rect == null) {
+      selected.requestFocus();
+      return;
+    }
+    _requestVimFocus(
+      _VimFocusTarget(
+        selected,
+        rect,
+        _vimNodeDepth(selected),
+        selected.context?.findAncestorWidgetOfExactType<VimPlotFocus>(),
+        selected.context?.findAncestorWidgetOfExactType<VimLayoutFocus>(),
+      ),
+    );
+    // The selected Focus node may already be primary after Flutter's fallback
+    // focus restoration, so requesting it again does not emit a focus-change
+    // notification. Explicitly refresh the overlay after this frame's layout
+    // to obtain the animated card's final geometry.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshVimFocusVisuals();
+    });
   }
 
   WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -474,6 +508,7 @@ class _VimFocusHostState extends State<VimFocusHost>
   final List<ScrollPosition> _ringScrollPositions = <ScrollPosition>[];
   FocusNode? _ringTrackedFocus;
   bool _ringTrackingScheduled = false;
+  bool _ringRefreshScheduled = false;
   bool _pendingVimG = false;
 
   @override
@@ -556,6 +591,15 @@ class _VimFocusHostState extends State<VimFocusHost>
       _vimInputState.setMode(VimInputMode.normal);
     }
     if (mounted) setState(() {});
+    // A Layout Setup cut/paste can change both the Focus node and its render
+    // position in one frame. Rebuild again after layout settles so the Vim
+    // ring follows the new Column or Panel instead of its former position.
+    if (_ringRefreshScheduled) return;
+    _ringRefreshScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _ringRefreshScheduled = false;
+      if (mounted) setState(() {});
+    });
   }
 
   void _inputModeChanged() {
@@ -627,6 +671,17 @@ class _VimFocusHostState extends State<VimFocusHost>
   bool _handleGlobalFocusKey(KeyEvent event) {
     final focusContext = FocusManager.instance.primaryFocus?.context;
     if (!VimModeScope.enabled(context)) return false;
+    final focusedPageId = focusContext == null
+        ? null
+        : VimPageScope.maybeOf(focusContext)?.pageId;
+    if ((focusedPageId?.startsWith('dropdown-menu/') ?? false) ||
+        (focusedPageId?.startsWith('autocomplete/') ?? false)) {
+      // MenuAnchor overlays do not consistently appear as PopupRoutes on all
+      // Flutter embedders. If the application-wide handler continues below,
+      // it can consume J/K first and move focus back into the underlying
+      // dialog or toolbar. The local list owns all navigation while open.
+      return false;
+    }
     // Transient routes (dialogs and popup menus) have their own Focus
     // boundary and page-specific key handler.  The host only keeps the
     // application-wide `g` prefix alive there; routing navigation or Enter a
@@ -747,15 +802,20 @@ class _VimFocusHostState extends State<VimFocusHost>
   Widget build(BuildContext context) {
     // Depend on the inherited notifier so enabling/disabling Vim mode hides
     // or shows the ring immediately, without requiring a route rebuild.
-    final enabled = VimModeScope.enabled(context);
     return VimInputModeScope(
       notifier: _vimInputState,
-      child: Stack(
-        clipBehavior: Clip.hardEdge,
-        children: [
-          widget.child,
-          if (enabled) _buildFocusRing(context),
-        ],
+      child: ValueListenableBuilder<int>(
+        valueListenable: _vimFocusVisualRevision,
+        builder: (context, revision, child) {
+          final enabled = VimModeScope.enabled(context);
+          return Stack(
+            clipBehavior: Clip.hardEdge,
+            children: [
+              widget.child,
+              if (enabled) _buildFocusRing(context),
+            ],
+          );
+        },
       ),
     );
   }
@@ -783,6 +843,19 @@ class _VimFocusHostState extends State<VimFocusHost>
             VimPlotSelectionLevel.column &&
         focusContext.findAncestorWidgetOfExactType<VimPlotFocus>() != null) {
       renderObject = _ancestorRenderObject<VimPlotColumnFocus>(focusContext);
+    }
+    final layoutFocus =
+        focusContext?.findAncestorWidgetOfExactType<VimLayoutFocus>();
+    final layoutBoundary =
+        layoutFocus?.visualBoundaryKey?.currentContext?.findRenderObject();
+    if (layoutBoundary is RenderBox &&
+        layoutBoundary.attached &&
+        layoutBoundary.hasSize) {
+      // Layout cards animate independently after a cut/paste. The Focus
+      // proxy can retain its pre-animation geometry for one frame; this
+      // keyed visual boundary is inside that transform and is therefore the
+      // exact visible Column/Panel the purple frame must outline.
+      renderObject = layoutBoundary;
     }
     final hostRenderObject = context.findRenderObject();
     if (renderObject is! RenderBox ||
@@ -933,6 +1006,7 @@ class VimLayoutFocus extends InheritedWidget {
     this.onActivate,
     this.onCut,
     this.onPaste,
+    this.visualBoundaryKey,
   });
 
   final int column;
@@ -941,6 +1015,7 @@ class VimLayoutFocus extends InheritedWidget {
   final VoidCallback? onActivate;
   final bool Function()? onCut;
   final bool Function(bool before)? onPaste;
+  final GlobalKey? visualBoundaryKey;
 
   String get pageId =>
       isColumn ? 'layout/column/$column' : 'layout/panel/$column/$row';
@@ -2635,11 +2710,10 @@ bool _moveVimLayoutRootFocus(
     ..._layoutTargets(page, columns: true),
   ];
   if (targets.isEmpty) return false;
-  final rootPage = _VimFocusPage(targets);
   final current = FocusManager.instance.primaryFocus;
   if (current == null) return false;
   final currentRect = _vimNodeRect(current);
-  final currentTarget = rootPage.targets
+  final currentTarget = targets
       .where(
         (target) =>
             target.node == current ||
@@ -2650,7 +2724,7 @@ bool _moveVimLayoutRootFocus(
 
   final semanticTargets = <String, _VimFocusTarget>{};
   final rows = <List<VimPageCell>>[];
-  for (final row in rootPage.rows) {
+  for (final row in _layoutRootRows(page)) {
     final semanticRow = <VimPageCell>[];
     for (final target in row) {
       final id = _vimFocusTargetId(target);
@@ -2842,14 +2916,13 @@ bool _moveVimLayoutPageEdge(
     // Thus `gg` always selects Column 1, while `G` reaches the final root
     // action. A selected Column remains a root-page character, so an edge
     // command must never implicitly enter its Panel child page.
-    final rootControls = _layoutRootControls(page);
+    final rows = _layoutRootRows(page);
     // Layout's final root line starts with Reset, followed by Delete/Cancel/
-    // Apply.  Use the line's first character for G, just as on every other
-    // semantic page.
-    final rootPage = _VimFocusPage(rootControls);
+    // Apply.  These are semantic rows rather than a Wrap's rendered rows,
+    // so G remains Reset even on a narrow screen where the action bar wraps.
     final target = last
-        ? rootPage.rows.lastOrNull?.firstOrNull ?? columns.last
-        : columns.firstOrNull ?? rootControls.firstOrNull;
+        ? rows.lastOrNull?.firstOrNull ?? columns.last
+        : rows.firstOrNull?.firstOrNull ?? columns.firstOrNull;
     if (target != null) _requestVimFocus(target);
     return target != null;
   }
@@ -2878,6 +2951,47 @@ List<_VimFocusTarget> _layoutRootControls(_VimFocusPage page) {
       return byY != 0 ? byY : a.rect.left.compareTo(b.rect.left);
     });
   return controls;
+}
+
+/// Logical rows of the Layout Setup parent page.  The rendered dialog wraps
+/// controls to fit compact screens, but its document does not: source Columns
+/// come first, then the add controls, then the action row. Keeping this table
+/// explicit makes H/J/K/L and `G` follow the same hierarchy on every size.
+List<List<_VimFocusTarget>> _layoutRootRows(_VimFocusPage page) {
+  final controls = _layoutRootControls(page);
+  _VimFocusTarget? named(String label) =>
+      controls.where((target) => target.node.debugLabel == label).firstOrNull;
+
+  final known = <_VimFocusTarget>{};
+  final addRow = <_VimFocusTarget>[];
+  for (final label in const ['layout-add-panel', 'layout-add-column']) {
+    final target = named(label);
+    if (target != null) {
+      addRow.add(target);
+      known.add(target);
+    }
+  }
+  final actionRow = <_VimFocusTarget>[];
+  for (final label in const [
+    'layout-reset',
+    'layout-delete-selected',
+    'layout-cancel',
+    'layout-apply',
+  ]) {
+    final target = named(label);
+    if (target != null) {
+      actionRow.add(target);
+      known.add(target);
+    }
+  }
+  final otherControls = controls.where((target) => !known.contains(target));
+  final columns = _layoutTargets(page, columns: true);
+  return <List<_VimFocusTarget>>[
+    if (columns.isNotEmpty) columns,
+    if (addRow.isNotEmpty) addRow,
+    if (otherControls.isNotEmpty) ..._VimFocusPage(otherControls.toList()).rows,
+    if (actionRow.isNotEmpty) actionRow,
+  ];
 }
 
 /// Move to the first or last focusable control in the current virtual Vim

@@ -1940,6 +1940,11 @@ class ToolbarWidget extends StatelessWidget {
     final draftColumns = _cloneLayoutColumns(openingColumns);
     final horizontalController = ScrollController();
     final verticalControllers = <int, ScrollController>{};
+    final layoutVisualKeys = Map<Object, GlobalKey>.identity();
+    GlobalKey visualKeyFor(Object item) => layoutVisualKeys.putIfAbsent(
+          item,
+          GlobalKey.new,
+        );
     final selectedPanels = Set<Map<String, dynamic>>.identity();
     var panelMotionOffsets = Map<Map<String, dynamic>, Offset>.identity();
     var columnMotionOffsets =
@@ -1984,6 +1989,54 @@ class ToolbarWidget extends StatelessWidget {
           }
 
           void clearSelection() => setState(selectedPanels.clear);
+
+          void addPanel() {
+            final targetColumn = draftColumns.indexWhere(
+              (column) => column.any(selectedPanels.contains),
+            );
+            animateLayoutChange(() {
+              if (draftColumns.isEmpty) {
+                draftColumns.add([_emptyPanelConfig()]);
+              } else {
+                draftColumns[targetColumn < 0
+                        ? draftColumns.length - 1
+                        : targetColumn]
+                    .add(_emptyPanelConfig());
+              }
+            });
+          }
+
+          void addColumn() {
+            animateLayoutChange(() {
+              draftColumns.add([_emptyPanelConfig()]);
+            });
+          }
+
+          void resetLayout() {
+            animateLayoutChange(() {
+              draftColumns
+                ..clear()
+                ..addAll(_cloneLayoutColumns(openingColumns));
+              selectedPanels.clear();
+            });
+          }
+
+          void deleteSelected() {
+            if (selectedPanels.isEmpty) return;
+            animateLayoutChange(() {
+              deleteSelectedLayoutPanels(draftColumns, selectedPanels);
+            });
+          }
+
+          void cancelLayout() => Navigator.pop(ctx);
+
+          void applyLayout() {
+            app.applyLayoutColumns(draftColumns);
+            if (app.plots.isNotEmpty) {
+              app.startRefresh();
+            }
+            Navigator.pop(ctx);
+          }
 
           bool cutLayoutItem(_LayoutDragData source) {
             if (source.column < 0 || source.column >= draftColumns.length) {
@@ -2163,10 +2216,15 @@ class ToolbarWidget extends StatelessWidget {
                                           _LayoutDragData.column(displayColumn),
                                           before: before,
                                         ),
+                                        visualBoundaryKey: visualKeyFor(
+                                          draftColumns[displayColumn],
+                                        ),
                                         child: Focus(
                                           key: ValueKey(
                                             'layout-column-focus-$displayColumn',
                                           ),
+                                          debugLabel:
+                                              'layout-column-$displayColumn',
                                           onKeyEvent: (node, event) {
                                             if (handleVimLayoutNavigationKey(
                                               node.context ?? ctx,
@@ -2178,332 +2236,263 @@ class ToolbarWidget extends StatelessWidget {
                                           },
                                           child: Builder(
                                             builder: (focusContext) =>
-                                                LongPressDraggable<
-                                                    _LayoutDragData>(
-                                              key: ValueKey(
-                                                'layout-column-drag-${displayColumn + 1}',
+                                                RepaintBoundary(
+                                              key: visualKeyFor(
+                                                draftColumns[displayColumn],
                                               ),
-                                              data: _LayoutDragData.column(
-                                                displayColumn,
-                                              ),
-                                              delay: const Duration(
-                                                milliseconds: 320,
-                                              ),
-                                              hapticFeedbackOnStart: true,
-                                              feedback: _layoutDragFeedback(
-                                                ctx,
-                                                icon: Icons.view_column_rounded,
-                                                label:
-                                                    'Column ${displayColumn + 1}',
-                                                subtitle:
-                                                    '${draftColumns[displayColumn].length} panels',
-                                              ),
-                                              childWhenDragging: Opacity(
-                                                opacity: 0.22,
-                                                child: Container(
-                                                  decoration: BoxDecoration(
-                                                    border: Border.all(
-                                                      color: Theme.of(
-                                                        ctx,
-                                                      ).dividerColor,
+                                              child: LongPressDraggable<
+                                                  _LayoutDragData>(
+                                                key: ValueKey(
+                                                  'layout-column-drag-${displayColumn + 1}',
+                                                ),
+                                                data: _LayoutDragData.column(
+                                                  displayColumn,
+                                                ),
+                                                delay: const Duration(
+                                                  milliseconds: 320,
+                                                ),
+                                                hapticFeedbackOnStart: true,
+                                                feedback: _layoutDragFeedback(
+                                                  ctx,
+                                                  icon:
+                                                      Icons.view_column_rounded,
+                                                  label:
+                                                      'Column ${displayColumn + 1}',
+                                                  subtitle:
+                                                      '${draftColumns[displayColumn].length} panels',
+                                                ),
+                                                childWhenDragging: Opacity(
+                                                  opacity: 0.22,
+                                                  child: Container(
+                                                    decoration: BoxDecoration(
+                                                      border: Border.all(
+                                                        color: Theme.of(
+                                                          ctx,
+                                                        ).dividerColor,
+                                                      ),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              8),
                                                     ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            8),
                                                   ),
                                                 ),
-                                              ),
-                                              child: GestureDetector(
-                                                behavior:
-                                                    HitTestBehavior.translucent,
-                                                onTap: () {
-                                                  Focus.of(focusContext)
-                                                      .requestFocus();
-                                                  setState(() {
-                                                    toggleLayoutColumnSelection(
-                                                      draftColumns[
-                                                          displayColumn],
-                                                      selectedPanels,
-                                                    );
-                                                  });
-                                                },
-                                                child: Container(
-                                                  key: ValueKey(
-                                                    'layout-preview-column-$displayColumn',
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    border: Border.all(
-                                                      color:
-                                                          layoutColumnIsSelected(
+                                                child: GestureDetector(
+                                                  behavior: HitTestBehavior
+                                                      .translucent,
+                                                  onTap: () {
+                                                    Focus.of(focusContext)
+                                                        .requestFocus();
+                                                    setState(() {
+                                                      toggleLayoutColumnSelection(
                                                         draftColumns[
                                                             displayColumn],
                                                         selectedPanels,
-                                                      )
-                                                              ? Theme.of(
-                                                                  ctx,
-                                                                )
-                                                                  .colorScheme
-                                                                  .primary
-                                                              : Theme.of(
-                                                                  ctx,
-                                                                ).dividerColor,
-                                                      width:
-                                                          layoutColumnIsSelected(
-                                                        draftColumns[
-                                                            displayColumn],
-                                                        selectedPanels,
-                                                      )
-                                                              ? 2
-                                                              : 1,
+                                                      );
+                                                    });
+                                                  },
+                                                  child: Container(
+                                                    key: ValueKey(
+                                                      'layout-preview-column-$displayColumn',
                                                     ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            8),
-                                                  ),
-                                                  child: Column(
-                                                    children: [
-                                                      GestureDetector(
-                                                        key: ValueKey(
-                                                          'layout-column-header-${displayColumn + 1}',
-                                                        ),
-                                                        behavior:
-                                                            HitTestBehavior
-                                                                .opaque,
-                                                        onTap: () {
-                                                          Focus.of(focusContext)
-                                                              .requestFocus();
-                                                          setState(() {
-                                                            toggleLayoutColumnSelection(
-                                                              draftColumns[
-                                                                  displayColumn],
-                                                              selectedPanels,
-                                                            );
-                                                          });
-                                                        },
-                                                        child: SizedBox(
-                                                          height: 32,
-                                                          child: Row(
-                                                            children: [
-                                                              Padding(
-                                                                padding:
-                                                                    const EdgeInsets
-                                                                        .only(
-                                                                  left: 3,
-                                                                ),
-                                                                child:
-                                                                    _layoutDragHandle(
-                                                                  context: ctx,
-                                                                  key: ValueKey(
-                                                                    'layout-column-drag-handle-${displayColumn + 1}',
-                                                                  ),
-                                                                  data: _LayoutDragData
-                                                                      .column(
-                                                                    displayColumn,
-                                                                  ),
-                                                                  tooltip:
-                                                                      'Drag column ${displayColumn + 1}',
-                                                                  feedback:
-                                                                      _layoutDragFeedback(
+                                                    decoration: BoxDecoration(
+                                                      border: Border.all(
+                                                        color:
+                                                            layoutColumnIsSelected(
+                                                          draftColumns[
+                                                              displayColumn],
+                                                          selectedPanels,
+                                                        )
+                                                                ? Theme.of(
                                                                     ctx,
-                                                                    icon: Icons
-                                                                        .view_column_rounded,
-                                                                    label:
-                                                                        'Column ${displayColumn + 1}',
-                                                                    subtitle:
-                                                                        '${draftColumns[displayColumn].length} panels',
+                                                                  )
+                                                                    .colorScheme
+                                                                    .primary
+                                                                : Theme.of(
+                                                                    ctx,
+                                                                  ).dividerColor,
+                                                        width:
+                                                            layoutColumnIsSelected(
+                                                          draftColumns[
+                                                              displayColumn],
+                                                          selectedPanels,
+                                                        )
+                                                                ? 2
+                                                                : 1,
+                                                      ),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              8),
+                                                    ),
+                                                    child: Column(
+                                                      children: [
+                                                        GestureDetector(
+                                                          key: ValueKey(
+                                                            'layout-column-header-${displayColumn + 1}',
+                                                          ),
+                                                          behavior:
+                                                              HitTestBehavior
+                                                                  .opaque,
+                                                          onTap: () {
+                                                            Focus.of(
+                                                                    focusContext)
+                                                                .requestFocus();
+                                                            setState(() {
+                                                              toggleLayoutColumnSelection(
+                                                                draftColumns[
+                                                                    displayColumn],
+                                                                selectedPanels,
+                                                              );
+                                                            });
+                                                          },
+                                                          child: SizedBox(
+                                                            height: 32,
+                                                            child: Row(
+                                                              children: [
+                                                                Padding(
+                                                                  padding:
+                                                                      const EdgeInsets
+                                                                          .only(
+                                                                    left: 3,
+                                                                  ),
+                                                                  child:
+                                                                      _layoutDragHandle(
+                                                                    context:
+                                                                        ctx,
+                                                                    key:
+                                                                        ValueKey(
+                                                                      'layout-column-drag-handle-${displayColumn + 1}',
+                                                                    ),
+                                                                    data: _LayoutDragData
+                                                                        .column(
+                                                                      displayColumn,
+                                                                    ),
+                                                                    tooltip:
+                                                                        'Drag column ${displayColumn + 1}',
+                                                                    feedback:
+                                                                        _layoutDragFeedback(
+                                                                      ctx,
+                                                                      icon: Icons
+                                                                          .view_column_rounded,
+                                                                      label:
+                                                                          'Column ${displayColumn + 1}',
+                                                                      subtitle:
+                                                                          '${draftColumns[displayColumn].length} panels',
+                                                                    ),
                                                                   ),
                                                                 ),
-                                                              ),
-                                                              Expanded(
-                                                                child: Center(
-                                                                  child:
-                                                                      FittedBox(
-                                                                    fit: BoxFit
-                                                                        .scaleDown,
-                                                                    child: Text(
-                                                                      'Column ${displayColumn + 1}',
-                                                                      style:
-                                                                          const TextStyle(
-                                                                        fontSize:
-                                                                            10,
-                                                                        fontWeight:
-                                                                            FontWeight.bold,
+                                                                Expanded(
+                                                                  child: Center(
+                                                                    child:
+                                                                        FittedBox(
+                                                                      fit: BoxFit
+                                                                          .scaleDown,
+                                                                      child:
+                                                                          Text(
+                                                                        'Column ${displayColumn + 1}',
+                                                                        style:
+                                                                            const TextStyle(
+                                                                          fontSize:
+                                                                              10,
+                                                                          fontWeight:
+                                                                              FontWeight.bold,
+                                                                        ),
                                                                       ),
                                                                     ),
                                                                   ),
                                                                 ),
-                                                              ),
-                                                              Padding(
-                                                                padding:
-                                                                    const EdgeInsets
-                                                                        .only(
-                                                                  right: 5,
-                                                                ),
-                                                                child:
-                                                                    AnimatedSwitcher(
-                                                                  duration:
-                                                                      const Duration(
-                                                                    milliseconds:
-                                                                        140,
+                                                                Padding(
+                                                                  padding:
+                                                                      const EdgeInsets
+                                                                          .only(
+                                                                    right: 5,
                                                                   ),
-                                                                  child: layoutColumnIsSelected(
-                                                                    draftColumns[
-                                                                        displayColumn],
-                                                                    selectedPanels,
-                                                                  )
-                                                                      ? Icon(
-                                                                          Icons
-                                                                              .check_circle_rounded,
-                                                                          key:
-                                                                              ValueKey(
-                                                                            'layout-column-selected-${displayColumn + 1}',
+                                                                  child:
+                                                                      AnimatedSwitcher(
+                                                                    duration:
+                                                                        const Duration(
+                                                                      milliseconds:
+                                                                          140,
+                                                                    ),
+                                                                    child: layoutColumnIsSelected(
+                                                                      draftColumns[
+                                                                          displayColumn],
+                                                                      selectedPanels,
+                                                                    )
+                                                                        ? Icon(
+                                                                            Icons.check_circle_rounded,
+                                                                            key:
+                                                                                ValueKey(
+                                                                              'layout-column-selected-${displayColumn + 1}',
+                                                                            ),
+                                                                            size:
+                                                                                17,
+                                                                            color:
+                                                                                Theme.of(ctx).colorScheme.primary,
+                                                                          )
+                                                                        : const SizedBox(
+                                                                            width:
+                                                                                17,
                                                                           ),
-                                                                          size:
-                                                                              17,
-                                                                          color: Theme.of(ctx)
-                                                                              .colorScheme
-                                                                              .primary,
-                                                                        )
-                                                                      : const SizedBox(
-                                                                          width:
-                                                                              17,
-                                                                        ),
+                                                                  ),
                                                                 ),
-                                                              ),
-                                                            ],
+                                                              ],
+                                                            ),
                                                           ),
                                                         ),
-                                                      ),
-                                                      Expanded(
-                                                        child: LayoutBuilder(
-                                                          builder: (context,
-                                                              constraints) {
-                                                            final panelCount =
-                                                                displayColumns[
-                                                                        displayColumn]
-                                                                    .length;
-                                                            final requiredHeight =
-                                                                panelCount *
-                                                                        112.0 +
-                                                                    (panelCount +
-                                                                            1) *
-                                                                        7.0;
-                                                            final needsVerticalScroll =
-                                                                requiredHeight >
-                                                                    constraints
-                                                                            .maxHeight +
-                                                                        0.5;
-                                                            final controller =
-                                                                verticalControllers
-                                                                    .putIfAbsent(
-                                                              displayColumn,
-                                                              ScrollController
-                                                                  .new,
-                                                            );
-                                                            return Scrollbar(
-                                                              key: ValueKey(
-                                                                'layout-column-scrollbar-$displayColumn',
-                                                              ),
-                                                              controller:
-                                                                  controller,
-                                                              thumbVisibility:
-                                                                  needsVerticalScroll,
-                                                              interactive: true,
-                                                              child:
-                                                                  SingleChildScrollView(
+                                                        Expanded(
+                                                          child: LayoutBuilder(
+                                                            builder: (context,
+                                                                constraints) {
+                                                              final panelCount =
+                                                                  displayColumns[
+                                                                          displayColumn]
+                                                                      .length;
+                                                              final requiredHeight =
+                                                                  panelCount *
+                                                                          112.0 +
+                                                                      (panelCount +
+                                                                              1) *
+                                                                          7.0;
+                                                              final needsVerticalScroll =
+                                                                  requiredHeight >
+                                                                      constraints
+                                                                              .maxHeight +
+                                                                          0.5;
+                                                              final controller =
+                                                                  verticalControllers
+                                                                      .putIfAbsent(
+                                                                displayColumn,
+                                                                ScrollController
+                                                                    .new,
+                                                              );
+                                                              return Scrollbar(
                                                                 key: ValueKey(
-                                                                  'layout-column-scroll-$displayColumn',
+                                                                  'layout-column-scrollbar-$displayColumn',
                                                                 ),
                                                                 controller:
                                                                     controller,
-                                                                child: SizedBox(
-                                                                  height:
-                                                                      math.max(
-                                                                    constraints
-                                                                        .maxHeight,
-                                                                    requiredHeight,
+                                                                thumbVisibility:
+                                                                    needsVerticalScroll,
+                                                                interactive:
+                                                                    true,
+                                                                child:
+                                                                    SingleChildScrollView(
+                                                                  key: ValueKey(
+                                                                    'layout-column-scroll-$displayColumn',
                                                                   ),
-                                                                  child: Column(
-                                                                    children: [
-                                                                      _layoutPanelDropTarget(
-                                                                        context:
-                                                                            ctx,
-                                                                        columns:
-                                                                            draftColumns,
-                                                                        targetColumn:
-                                                                            displayColumn,
-                                                                        insertionRow:
-                                                                            0,
-                                                                        onLayoutChange:
-                                                                            animateLayoutChange,
-                                                                      ),
-                                                                      for (final cell
-                                                                          in displayColumns[
-                                                                              displayColumn]) ...[
-                                                                        _buildDraggableLayoutPanel(
-                                                                          ctx,
-                                                                          panel:
-                                                                              draftColumns[cell.sourceColumn][cell.sourceRow],
-                                                                          sourceColumn:
-                                                                              cell.sourceColumn,
-                                                                          sourceRow:
-                                                                              cell.sourceRow,
-                                                                          panelNumber:
-                                                                              cell.plotIndex + 1,
-                                                                          selected:
-                                                                              selectedPanels.contains(
-                                                                            draftColumns[cell.sourceColumn][cell.sourceRow],
-                                                                          ),
-                                                                          settleOffset:
-                                                                              panelMotionOffsets[draftColumns[cell.sourceColumn][cell.sourceRow]] ?? Offset.zero,
-                                                                          appearing:
-                                                                              appearingPanels.contains(
-                                                                            draftColumns[cell.sourceColumn][cell.sourceRow],
-                                                                          ),
-                                                                          layoutRevision:
-                                                                              layoutRevision,
-                                                                          onSelect: () =>
-                                                                              setState(() {
-                                                                            toggleLayoutPanelSelection(
-                                                                              draftColumns[cell.sourceColumn][cell.sourceRow],
-                                                                              selectedPanels,
-                                                                            );
-                                                                          }),
-                                                                          onEdit:
-                                                                              () async {
-                                                                            final panel =
-                                                                                draftColumns[cell.sourceColumn][cell.sourceRow];
-                                                                            final changed =
-                                                                                await _editLayoutPanel(
-                                                                              ctx,
-                                                                              app,
-                                                                              panel,
-                                                                              cell.plotIndex + 1,
-                                                                            );
-                                                                            if (changed &&
-                                                                                ctx.mounted) {
-                                                                              setState(
-                                                                                () {},
-                                                                              );
-                                                                            }
-                                                                          },
-                                                                          onCut: () =>
-                                                                              cutLayoutItem(
-                                                                            _LayoutDragData.panel(
-                                                                              cell.sourceColumn,
-                                                                              cell.sourceRow,
-                                                                            ),
-                                                                          ),
-                                                                          onPaste: (before) =>
-                                                                              pasteLayoutItem(
-                                                                            _LayoutDragData.panel(
-                                                                              cell.sourceColumn,
-                                                                              cell.sourceRow,
-                                                                            ),
-                                                                            before:
-                                                                                before,
-                                                                          ),
-                                                                        ),
+                                                                  controller:
+                                                                      controller,
+                                                                  child:
+                                                                      SizedBox(
+                                                                    height: math
+                                                                        .max(
+                                                                      constraints
+                                                                          .maxHeight,
+                                                                      requiredHeight,
+                                                                    ),
+                                                                    child:
+                                                                        Column(
+                                                                      children: [
                                                                         _layoutPanelDropTarget(
                                                                           context:
                                                                               ctx,
@@ -2512,20 +2501,95 @@ class ToolbarWidget extends StatelessWidget {
                                                                           targetColumn:
                                                                               displayColumn,
                                                                           insertionRow:
-                                                                              cell.sourceRow + 1,
+                                                                              0,
                                                                           onLayoutChange:
                                                                               animateLayoutChange,
                                                                         ),
+                                                                        for (final cell
+                                                                            in displayColumns[displayColumn]) ...[
+                                                                          _buildDraggableLayoutPanel(
+                                                                            ctx,
+                                                                            panel:
+                                                                                draftColumns[cell.sourceColumn][cell.sourceRow],
+                                                                            sourceColumn:
+                                                                                cell.sourceColumn,
+                                                                            sourceRow:
+                                                                                cell.sourceRow,
+                                                                            panelNumber:
+                                                                                cell.plotIndex + 1,
+                                                                            selected:
+                                                                                selectedPanels.contains(
+                                                                              draftColumns[cell.sourceColumn][cell.sourceRow],
+                                                                            ),
+                                                                            settleOffset:
+                                                                                panelMotionOffsets[draftColumns[cell.sourceColumn][cell.sourceRow]] ?? Offset.zero,
+                                                                            appearing:
+                                                                                appearingPanels.contains(
+                                                                              draftColumns[cell.sourceColumn][cell.sourceRow],
+                                                                            ),
+                                                                            layoutRevision:
+                                                                                layoutRevision,
+                                                                            onSelect: () =>
+                                                                                setState(() {
+                                                                              toggleLayoutPanelSelection(
+                                                                                draftColumns[cell.sourceColumn][cell.sourceRow],
+                                                                                selectedPanels,
+                                                                              );
+                                                                            }),
+                                                                            onEdit:
+                                                                                () async {
+                                                                              final panel = draftColumns[cell.sourceColumn][cell.sourceRow];
+                                                                              final changed = await _editLayoutPanel(
+                                                                                ctx,
+                                                                                app,
+                                                                                panel,
+                                                                                cell.plotIndex + 1,
+                                                                              );
+                                                                              if (changed && ctx.mounted) {
+                                                                                setState(
+                                                                                  () {},
+                                                                                );
+                                                                              }
+                                                                            },
+                                                                            onCut: () =>
+                                                                                cutLayoutItem(
+                                                                              _LayoutDragData.panel(
+                                                                                cell.sourceColumn,
+                                                                                cell.sourceRow,
+                                                                              ),
+                                                                            ),
+                                                                            onPaste: (before) =>
+                                                                                pasteLayoutItem(
+                                                                              _LayoutDragData.panel(
+                                                                                cell.sourceColumn,
+                                                                                cell.sourceRow,
+                                                                              ),
+                                                                              before: before,
+                                                                            ),
+                                                                          ),
+                                                                          _layoutPanelDropTarget(
+                                                                            context:
+                                                                                ctx,
+                                                                            columns:
+                                                                                draftColumns,
+                                                                            targetColumn:
+                                                                                displayColumn,
+                                                                            insertionRow:
+                                                                                cell.sourceRow + 1,
+                                                                            onLayoutChange:
+                                                                                animateLayoutChange,
+                                                                          ),
+                                                                        ],
                                                                       ],
-                                                                    ],
+                                                                    ),
                                                                   ),
                                                                 ),
-                                                              ),
-                                                            );
-                                                          },
+                                                              );
+                                                            },
+                                                          ),
                                                         ),
-                                                      ),
-                                                    ],
+                                                      ],
+                                                    ),
                                                   ),
                                                 ),
                                               ),
@@ -2555,39 +2619,29 @@ class ToolbarWidget extends StatelessWidget {
                       children: [
                         Focus(
                           debugLabel: 'layout-add-panel',
-                          skipTraversal: true,
-                          child: TextButton.icon(
-                            onPressed: () {
-                              final targetColumn = draftColumns.indexWhere(
-                                (column) => column.any(selectedPanels.contains),
-                              );
-                              animateLayoutChange(() {
-                                if (draftColumns.isEmpty) {
-                                  draftColumns.add([_emptyPanelConfig()]);
-                                } else {
-                                  draftColumns[targetColumn < 0
-                                          ? draftColumns.length - 1
-                                          : targetColumn]
-                                      .add(_emptyPanelConfig());
-                                }
-                              });
-                            },
-                            icon: const Icon(Icons.add, size: 16),
-                            label: const Text('Add panel'),
+                          skipTraversal: false,
+                          child: VimActivatable(
+                            onActivate: addPanel,
+                            child: TextButton.icon(
+                              onPressed: addPanel,
+                              icon: const Icon(Icons.add, size: 16),
+                              label: const Text('Add panel'),
+                            ),
                           ),
                         ),
                         Focus(
                           debugLabel: 'layout-add-column',
-                          skipTraversal: true,
-                          child: TextButton.icon(
-                            onPressed: () => animateLayoutChange(() {
-                              draftColumns.add([_emptyPanelConfig()]);
-                            }),
-                            icon: const Icon(
-                              Icons.view_column_outlined,
-                              size: 16,
+                          skipTraversal: false,
+                          child: VimActivatable(
+                            onActivate: addColumn,
+                            child: TextButton.icon(
+                              onPressed: addColumn,
+                              icon: const Icon(
+                                Icons.view_column_outlined,
+                                size: 16,
+                              ),
+                              label: const Text('Add column'),
                             ),
-                            label: const Text('Add column'),
                           ),
                         ),
                       ],
@@ -2598,65 +2652,59 @@ class ToolbarWidget extends StatelessWidget {
               actions: [
                 Focus(
                   debugLabel: 'layout-reset',
-                  skipTraversal: true,
-                  child: OutlinedButton.icon(
-                    key: const ValueKey('layout-reset'),
-                    onPressed: () => animateLayoutChange(() {
-                      draftColumns
-                        ..clear()
-                        ..addAll(_cloneLayoutColumns(openingColumns));
-                      selectedPanels.clear();
-                    }),
-                    icon: const Icon(Icons.restart_alt_rounded),
-                    label: const Text('Reset'),
+                  skipTraversal: false,
+                  child: VimActivatable(
+                    onActivate: resetLayout,
+                    child: OutlinedButton.icon(
+                      key: const ValueKey('layout-reset'),
+                      onPressed: resetLayout,
+                      icon: const Icon(Icons.restart_alt_rounded),
+                      label: const Text('Reset'),
+                    ),
                   ),
                 ),
                 Focus(
                   debugLabel: 'layout-delete-selected',
-                  skipTraversal: true,
-                  child: FilledButton.tonalIcon(
-                    key: const ValueKey('layout-delete-selected'),
-                    onPressed: selectedPanels.isEmpty
-                        ? null
-                        : () => animateLayoutChange(() {
-                              deleteSelectedLayoutPanels(
-                                draftColumns,
-                                selectedPanels,
-                              );
-                            }),
-                    style: FilledButton.styleFrom(
-                      foregroundColor: Theme.of(ctx).colorScheme.error,
-                    ),
-                    icon: const Icon(Icons.delete_sweep_rounded),
-                    label: Text(
-                      selectedPanels.isEmpty
-                          ? 'Delete'
-                          : 'Delete ${selectedPanels.length}',
+                  skipTraversal: false,
+                  child: VimActivatable(
+                    onActivate: deleteSelected,
+                    child: FilledButton.tonalIcon(
+                      key: const ValueKey('layout-delete-selected'),
+                      onPressed: selectedPanels.isEmpty ? null : deleteSelected,
+                      style: FilledButton.styleFrom(
+                        foregroundColor: Theme.of(ctx).colorScheme.error,
+                      ),
+                      icon: const Icon(Icons.delete_sweep_rounded),
+                      label: Text(
+                        selectedPanels.isEmpty
+                            ? 'Delete'
+                            : 'Delete ${selectedPanels.length}',
+                      ),
                     ),
                   ),
                 ),
                 Focus(
                   debugLabel: 'layout-cancel',
-                  skipTraversal: true,
-                  child: TextButton(
-                    key: const ValueKey('layout-cancel'),
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('Cancel'),
+                  skipTraversal: false,
+                  child: VimActivatable(
+                    onActivate: cancelLayout,
+                    child: TextButton(
+                      key: const ValueKey('layout-cancel'),
+                      onPressed: cancelLayout,
+                      child: const Text('Cancel'),
+                    ),
                   ),
                 ),
                 Focus(
                   debugLabel: 'layout-apply',
-                  skipTraversal: true,
-                  child: TextButton(
-                    key: const ValueKey('layout-apply'),
-                    onPressed: () {
-                      app.applyLayoutColumns(draftColumns);
-                      if (app.plots.isNotEmpty) {
-                        app.startRefresh();
-                      }
-                      Navigator.pop(ctx);
-                    },
-                    child: const Text('Apply'),
+                  skipTraversal: false,
+                  child: VimActivatable(
+                    onActivate: applyLayout,
+                    child: TextButton(
+                      key: const ValueKey('layout-apply'),
+                      onPressed: applyLayout,
+                      child: const Text('Apply'),
+                    ),
                   ),
                 ),
               ],
@@ -2989,6 +3037,7 @@ class ToolbarWidget extends StatelessWidget {
   }) {
     final colors = Theme.of(context).colorScheme;
     final title = panel['title']?.toString().trim() ?? '';
+    final visualBoundaryKey = GlobalKey();
     final dragData = _LayoutDragData.panel(sourceColumn, sourceRow);
     final dragFeedback = _layoutDragFeedback(
       context,
@@ -3005,8 +3054,10 @@ class ToolbarWidget extends StatelessWidget {
         onActivate: onSelect,
         onCut: onCut,
         onPaste: onPaste,
+        visualBoundaryKey: visualBoundaryKey,
         child: Focus(
           key: ValueKey('layout-panel-focus-$panelNumber'),
+          debugLabel: 'layout-panel-$sourceColumn-$sourceRow',
           onKeyEvent: (node, event) {
             if (handleVimLayoutNavigationKey(
               node.context ?? context,
@@ -3022,51 +3073,58 @@ class ToolbarWidget extends StatelessWidget {
               revision: layoutRevision,
               offset: settleOffset,
               appearing: appearing,
-              child: LongPressDraggable<_LayoutDragData>(
-                key: ValueKey('layout-panel-drag-$panelNumber'),
-                data: dragData,
-                delay: const Duration(milliseconds: 320),
-                hapticFeedbackOnStart: true,
-                feedback: dragFeedback,
-                childWhenDragging: Opacity(
-                  opacity: 0.22,
-                  child: Container(
-                    margin: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Theme.of(context).dividerColor),
-                      borderRadius: BorderRadius.circular(6),
+              child: RepaintBoundary(
+                key: visualBoundaryKey,
+                child: LongPressDraggable<_LayoutDragData>(
+                  key: ValueKey('layout-panel-drag-$panelNumber'),
+                  data: dragData,
+                  delay: const Duration(milliseconds: 320),
+                  hapticFeedbackOnStart: true,
+                  feedback: dragFeedback,
+                  childWhenDragging: Opacity(
+                    opacity: 0.22,
+                    child: Container(
+                      margin: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        border:
+                            Border.all(color: Theme.of(context).dividerColor),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
                     ),
                   ),
-                ),
-                child: GestureDetector(
-                  onTap: () {
-                    Focus.of(focusContext).requestFocus();
-                    onSelect();
-                  },
-                  child: Container(
-                    key: ValueKey('layout-preview-panel-${panelNumber - 1}'),
-                    width: double.infinity,
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: selected ? colors.primary : Colors.grey.shade400,
-                        width: selected ? 2 : 1,
+                  child: GestureDetector(
+                    onTap: () {
+                      Focus.of(focusContext).requestFocus();
+                      onSelect();
+                    },
+                    child: Container(
+                      key: ValueKey('layout-preview-panel-${panelNumber - 1}'),
+                      width: double.infinity,
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color:
+                              selected ? colors.primary : Colors.grey.shade400,
+                          width: selected ? 2 : 1,
+                        ),
+                        borderRadius: BorderRadius.circular(6),
+                        color: colors.primaryContainer.withValues(alpha: 0.3),
                       ),
-                      borderRadius: BorderRadius.circular(6),
-                      color: colors.primaryContainer.withValues(alpha: 0.3),
-                    ),
-                    child: _buildLayoutPanelPreview(
-                      context,
-                      panel: panel,
-                      panelNumber: panelNumber,
-                      selected: selected,
-                      onEdit: onEdit,
-                      dragHandle: _layoutDragHandle(
-                        context: context,
-                        key: ValueKey('layout-panel-drag-handle-$panelNumber'),
-                        data: dragData,
-                        tooltip: 'Drag panel $panelNumber',
-                        feedback: dragFeedback,
+                      child: _buildLayoutPanelPreview(
+                        context,
+                        panel: panel,
+                        panelNumber: panelNumber,
+                        selected: selected,
+                        onEdit: onEdit,
+                        dragHandle: _layoutDragHandle(
+                          context: context,
+                          key: ValueKey(
+                            'layout-panel-drag-handle-$panelNumber',
+                          ),
+                          data: dragData,
+                          tooltip: 'Drag panel $panelNumber',
+                          feedback: dragFeedback,
+                        ),
                       ),
                     ),
                   ),
