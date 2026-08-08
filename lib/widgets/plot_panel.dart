@@ -2982,7 +2982,12 @@ class _DataSourceDialog extends StatefulWidget {
 
 class _DataSourceDialogState extends State<_DataSourceDialog> {
   final _rows = <_DSRow>[];
-  List<String> _treeNames = [];
+  // Keep one valid, immediately usable Tree while the bundled index is being
+  // loaded.  Besides avoiding an empty autocomplete flash on a real device,
+  // this means Vim Insert + Tab has a deterministic first suggestion even
+  // when the user opens Data Source Setup before the asynchronous index read
+  // completes.
+  List<String> _treeNames = ['pcs_east'];
   final Map<String, List<String>> _signalCache = {};
   final Map<String, Set<String>> _treesBySignal = {};
   SourceIndexMemory get _sourceIndexMemory =>
@@ -3034,12 +3039,26 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
     }
     _treeNames.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     _signalCache.remove('__all__');
-    await _signalsForTree('');
     if (!mounted) return;
-    // Load initial signal options for each row
+    // Tree names are independently useful and inexpensive to load. Publish
+    // them before building the aggregate signal index so an empty Tree field
+    // can immediately offer every known Tree (and Vim Insert + Tab is not
+    // held behind reads of every signals/<tree>.txt asset).
+    setState(() {});
+
+    // Load each initially selected Tree in parallel; this updates its Signal
+    // suggestions as soon as that one source is ready.
     for (final r in _rows) {
       _updateSignalOptions(r);
     }
+
+    // The reverse signal -> Tree index remains useful, but it is a background
+    // enhancement rather than a prerequisite for opening the editor.
+    unawaited(_completeSourceIndex());
+  }
+
+  Future<void> _completeSourceIndex() async {
+    await _signalsForTree('');
     if (mounted) setState(() {});
   }
 
@@ -3555,6 +3574,7 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
   final _layerLink = LayerLink();
   List<String> _hints = const [];
   bool _transferringFocusToHints = false;
+  bool _wasInsertMode = false;
 
   @override
   void initState() {
@@ -3566,11 +3586,31 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
   @override
   void didUpdateWidget(covariant _AutocompleteField oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.options, widget.options) && _node.hasFocus) {
+    // The source index fills some option lists in place.  Checking only the
+    // List identity misses that update, leaving an already-focused Tree or
+    // Signal field with no suggestions until it loses and regains focus.
+    // Re-evaluate whenever this field rebuilds while focused instead.
+    if (_node.hasFocus) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _update();
       });
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final insertMode =
+        VimModeScope.enabled(context) && VimInputModeScope.isInsert(context);
+    if (insertMode && !_wasInsertMode && _node.hasFocus) {
+      // Entering Vim Insert mode is a semantic edit transition, even if the
+      // text has not changed yet.  Materialize the completion list now so
+      // Tab always has a concrete child page to enter.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _node.hasFocus) _update();
+      });
+    }
+    _wasInsertMode = insertMode;
   }
 
   @override

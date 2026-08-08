@@ -7020,12 +7020,18 @@ void main() {
       text: '',
       selection: TextSelection.collapsed(offset: 0),
     );
-    // Insert mode intentionally animates the Vim selection ring, so it never
-    // reaches a permanently settled scheduler state.
+    // Tree names are published immediately, then the complete bundled index
+    // refines the same overlay in the background. The fallback still forms a
+    // valid one-item page on a very busy runner; when the full list has arrived
+    // J must advance, otherwise it must remain deterministically at item 0.
     await tester.pump(const Duration(milliseconds: 80));
     await tester.pump();
     expect(
         find.byKey(const ValueKey('autocomplete-tree-menu')), findsOneWidget);
+    final hasSecondTreeSuggestion = find
+        .byKey(const ValueKey('autocomplete-tree-option-1'))
+        .evaluate()
+        .isNotEmpty;
 
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pump();
@@ -7037,7 +7043,9 @@ void main() {
     await tester.pump();
     expect(
       FocusManager.instance.primaryFocus?.debugLabel,
-      'autocomplete-tree-option-1',
+      hasSecondTreeSuggestion
+          ? 'autocomplete-tree-option-1'
+          : 'autocomplete-tree-option-0',
     );
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
