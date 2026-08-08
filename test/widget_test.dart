@@ -8626,6 +8626,56 @@ void main() {
     expect(after.top, lessThan(before.top));
   });
 
+  testWidgets('Vim selection ring follows the post-cut Layout cell', (
+    tester,
+  ) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app
+      ..setVimMode(true)
+      ..applyLayoutList([3, 1]);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Layout Setup'));
+    await tester.pumpAndSettle();
+
+    final focusedPanel = Focus.maybeOf(
+      tester.element(find.byKey(const ValueKey('layout-panel-focus-2'))),
+      scopeOk: false,
+    );
+    expect(focusedPanel, isNotNull);
+    focusedPanel!.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyX);
+    await tester.pumpAndSettle();
+
+    final focusContext = FocusManager.instance.primaryFocus?.context;
+    final marker =
+        focusContext?.findAncestorWidgetOfExactType<VimLayoutFocus>();
+    expect(marker, isNotNull);
+    final boundary =
+        marker!.visualBoundaryKey?.currentContext?.findRenderObject();
+    expect(boundary, isA<RenderBox>());
+    final box = boundary! as RenderBox;
+    final expected = box.localToGlobal(Offset.zero) & box.size;
+    final ring = tester.getRect(find.byKey(const ValueKey('vim-focus-ring')));
+    // The border itself is painted three physical pixels outside its child,
+    // so allow that stroke/clip tolerance while still detecting a stale card
+    // position after the structural update.
+    expect(ring.left, closeTo(expected.left, 6));
+    expect(ring.top, closeTo(expected.top, 6));
+    expect(ring.width, closeTo(expected.width, 6));
+    expect(ring.height, closeTo(expected.height, 6));
+  });
+
   testWidgets('Vim Layout Setup activates every action control',
       (tester) async {
     final app = AppState();

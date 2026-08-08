@@ -393,6 +393,12 @@ void _refreshVimFocusVisuals() {
   _vimFocusVisualRevision.value++;
 }
 
+/// Ask the shared Vim overlay to recalculate its border from the current
+/// render tree. Layout Setup uses this when a cut/paste settling animation
+/// reaches its final position; otherwise a structurally reused Focus element
+/// can briefly leave the border at the pre-reorder geometry.
+void refreshVimFocusVisuals() => _refreshVimFocusVisuals();
+
 void registerVimWorkspaceFocus(FocusNode node) {
   _vimWorkspaceFocus = node;
 }
@@ -1075,7 +1081,11 @@ class VimLayoutFocus extends InheritedWidget {
   String get parentPageId => isColumn ? 'layout' : 'layout/column/$column';
 
   @override
-  bool updateShouldNotify(VimLayoutFocus oldWidget) => false;
+  bool updateShouldNotify(VimLayoutFocus oldWidget) =>
+      row != oldWidget.row ||
+      column != oldWidget.column ||
+      isColumn != oldWidget.isColumn ||
+      !identical(visualBoundaryKey, oldWidget.visualBoundaryKey);
 }
 
 /// Declares a semantic page boundary in the widget tree.  Unlike a Flutter

@@ -193,6 +193,11 @@ class _LayoutSettlingTransform extends StatelessWidget {
       tween: Tween(begin: 0, end: 1),
       duration: const Duration(milliseconds: 210),
       curve: Curves.easeOutCubic,
+      // The focused Layout cell may have moved to a different Column or row
+      // during this transition. Refresh the shared overlay once the visual
+      // transform is settled so its purple Vim border is measured from the
+      // final card rather than a recycled pre-reorder element.
+      onEnd: refreshVimFocusVisuals,
       child: child,
       builder: (context, value, child) {
         final translation = Offset.lerp(offset, Offset.zero, value)!;
@@ -2210,6 +2215,9 @@ class ToolbarWidget extends StatelessWidget {
                                         draftColumns[displayColumn],
                                       ),
                                       child: VimLayoutFocus(
+                                        key: ObjectKey(
+                                          draftColumns[displayColumn],
+                                        ),
                                         column: displayColumn,
                                         isColumn: true,
                                         onActivate: () {
@@ -2540,6 +2548,10 @@ class ToolbarWidget extends StatelessWidget {
                                                                             ),
                                                                             layoutRevision:
                                                                                 layoutRevision,
+                                                                            visualBoundaryKey:
+                                                                                visualKeyFor(
+                                                                              draftColumns[cell.sourceColumn][cell.sourceRow],
+                                                                            ),
                                                                             onSelect: () =>
                                                                                 setState(() {
                                                                               toggleLayoutPanelSelection(
@@ -3041,6 +3053,7 @@ class ToolbarWidget extends StatelessWidget {
     required Offset settleOffset,
     required bool appearing,
     required int layoutRevision,
+    required GlobalKey visualBoundaryKey,
     required VoidCallback onSelect,
     required VoidCallback onEdit,
     required bool Function() onCut,
@@ -3048,7 +3061,6 @@ class ToolbarWidget extends StatelessWidget {
   }) {
     final colors = Theme.of(context).colorScheme;
     final title = panel['title']?.toString().trim() ?? '';
-    final visualBoundaryKey = GlobalKey();
     final dragData = _LayoutDragData.panel(sourceColumn, sourceRow);
     final dragFeedback = _layoutDragFeedback(
       context,
@@ -3059,6 +3071,7 @@ class ToolbarWidget extends StatelessWidget {
     );
     return Expanded(
       child: VimLayoutFocus(
+        key: ObjectKey(panel),
         column: sourceColumn,
         row: sourceRow,
         isColumn: false,
