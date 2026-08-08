@@ -75,10 +75,53 @@ class MDSLensTheme {
       labelMedium: style(source.labelMedium, uiFontSize - 1),
       labelSmall: style(source.labelSmall, uiFontSize - 2),
     );
+    final buttonShape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(10),
+    );
+    final buttonText = textTheme.labelLarge?.copyWith(
+      fontWeight: FontWeight.w600,
+    );
+    const buttonMinimumSize = Size(44, 44);
+    const buttonPadding = EdgeInsets.symmetric(horizontal: 14, vertical: 10);
     return base.copyWith(
       iconTheme: base.iconTheme.copyWith(size: iconSize.clamp(18, 32)),
       textTheme: textTheme,
       primaryTextTheme: textTheme,
+      // Keep the same semantic button type visually consistent everywhere:
+      // dialogs, compact responsive toolbars, and desktop windows all share
+      // one touch-friendly height, radius, and label weight. Individual
+      // controls may still override color to express destructive actions.
+      textButtonTheme: TextButtonThemeData(
+        style: ButtonStyle(
+          minimumSize: const WidgetStatePropertyAll(buttonMinimumSize),
+          padding: const WidgetStatePropertyAll(buttonPadding),
+          shape: WidgetStatePropertyAll(buttonShape),
+          textStyle: WidgetStatePropertyAll(buttonText),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: ButtonStyle(
+          minimumSize: const WidgetStatePropertyAll(buttonMinimumSize),
+          padding: const WidgetStatePropertyAll(buttonPadding),
+          shape: WidgetStatePropertyAll(buttonShape),
+          textStyle: WidgetStatePropertyAll(buttonText),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: ButtonStyle(
+          minimumSize: const WidgetStatePropertyAll(buttonMinimumSize),
+          padding: const WidgetStatePropertyAll(buttonPadding),
+          shape: WidgetStatePropertyAll(buttonShape),
+          textStyle: WidgetStatePropertyAll(buttonText),
+        ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: ButtonStyle(
+          minimumSize: const WidgetStatePropertyAll(buttonMinimumSize),
+          padding: const WidgetStatePropertyAll(EdgeInsets.all(8)),
+          shape: WidgetStatePropertyAll(buttonShape),
+        ),
+      ),
       inputDecorationTheme: InputDecorationThemeData(
         filled: true,
         fillColor: colors.surfaceContainerLow,

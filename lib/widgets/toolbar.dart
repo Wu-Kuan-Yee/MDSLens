@@ -2723,10 +2723,11 @@ class ToolbarWidget extends StatelessWidget {
                   skipTraversal: false,
                   child: VimActivatable(
                     onActivate: applyLayout,
-                    child: TextButton(
+                    child: FilledButton.icon(
                       key: const ValueKey('layout-apply'),
                       onPressed: applyLayout,
-                      child: const Text('Apply'),
+                      icon: const Icon(Icons.check_rounded),
+                      label: const Text('Apply'),
                     ),
                   ),
                 ),

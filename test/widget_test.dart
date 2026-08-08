@@ -62,6 +62,27 @@ void main() {
     expect(isSupportedConfigurationFileName('layout.json'), isFalse);
   });
 
+  test('MDSLens themes use one touch-friendly action geometry', () {
+    final theme = MDSLensTheme.dark();
+    const states = <WidgetState>{};
+    expect(
+      theme.textButtonTheme.style?.minimumSize?.resolve(states),
+      const Size(44, 44),
+    );
+    expect(
+      theme.outlinedButtonTheme.style?.minimumSize?.resolve(states),
+      const Size(44, 44),
+    );
+    expect(
+      theme.filledButtonTheme.style?.minimumSize?.resolve(states),
+      const Size(44, 44),
+    );
+    expect(
+      theme.iconButtonTheme.style?.minimumSize?.resolve(states),
+      const Size(44, 44),
+    );
+  });
+
   testWidgets('Dropped configuration requires explicit confirmation', (
     tester,
   ) async {
