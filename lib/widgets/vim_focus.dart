@@ -347,6 +347,41 @@ void requestVimWorkspaceFocus() {
   _vimWorkspaceFocus?.requestFocus();
 }
 
+/// Request one semantic Layout Setup cell after the dialog has rebuilt its
+/// draft.  Reordering removes the old focused widget, so relying on Flutter's
+/// fallback focus order would make a subsequent Vim motion unpredictable.
+/// The explicit markers let a cut/paste operation restore a usable selection
+/// without depending on rendered geometry or widget keys.
+void scheduleVimLayoutFocus({
+  required int column,
+  int? row,
+  required bool isColumn,
+}) {
+  void request() {
+    final matches = <FocusNode>[];
+    for (final node in FocusManager.instance.rootScope.traversalDescendants) {
+      if (!node.canRequestFocus || node.skipTraversal) continue;
+      final marker =
+          node.context?.findAncestorWidgetOfExactType<VimLayoutFocus>();
+      if (marker?.isColumn == isColumn &&
+          marker?.column == column &&
+          (isColumn || marker?.row == row)) {
+        matches.add(node);
+      }
+    }
+    if (matches.isEmpty) return;
+    matches.sort(
+      (a, b) => a.ancestors.length.compareTo(b.ancestors.length),
+    );
+    matches.first.requestFocus();
+  }
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    request();
+    WidgetsBinding.instance.addPostFrameCallback((_) => request());
+  });
+}
+
 FocusNode? _findVimPageFocus(String pageId) {
   for (final node in FocusManager.instance.rootScope.traversalDescendants) {
     final nodeContext = node.context;
@@ -865,12 +900,16 @@ class VimLayoutFocus extends InheritedWidget {
     this.row = -1,
     required this.isColumn,
     this.onActivate,
+    this.onCut,
+    this.onPaste,
   });
 
   final int column;
   final int row;
   final bool isColumn;
   final VoidCallback? onActivate;
+  final bool Function()? onCut;
+  final bool Function(bool before)? onPaste;
 
   String get pageId =>
       isColumn ? 'layout/column/$column' : 'layout/panel/$column/$row';
@@ -2431,7 +2470,8 @@ List<_VimFocusTarget> _vimRootControls(_VimFocusPage page) {
 }
 
 bool handleVimLayoutNavigationKey(BuildContext context, KeyEvent event) {
-  if (!VimModeScope.enabled(context) || !_isVimPlotNavigationKey(event)) {
+  if (!VimModeScope.enabled(context) ||
+      (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
     return false;
   }
   final focusedContext = FocusManager.instance.primaryFocus?.context;
@@ -2440,6 +2480,28 @@ bool handleVimLayoutNavigationKey(BuildContext context, KeyEvent event) {
           ? context
           : focusedContext ?? context;
   if (!_isVimLayoutContext(navigationContext)) return false;
+  final current = _currentVimLayoutTarget(
+    _vimFocusPage(navigationContext) ?? _VimFocusPage(const []),
+    FocusManager.instance.primaryFocus,
+  );
+  final noCommandModifier = !HardwareKeyboard.instance.isControlPressed &&
+      !HardwareKeyboard.instance.isAltPressed &&
+      !HardwareKeyboard.instance.isMetaPressed;
+  if (noCommandModifier &&
+      event.logicalKey == LogicalKeyboardKey.keyX &&
+      !HardwareKeyboard.instance.isShiftPressed) {
+    final operation = current?.layout?.onCut;
+    if (operation == null) return false;
+    operation();
+    return true;
+  }
+  if (noCommandModifier && event.logicalKey == LogicalKeyboardKey.keyP) {
+    final operation = current?.layout?.onPaste;
+    if (operation == null) return false;
+    operation(HardwareKeyboard.instance.isShiftPressed);
+    return true;
+  }
+  if (!_isVimPlotNavigationKey(event)) return false;
   if (event.logicalKey == LogicalKeyboardKey.escape) {
     if (!_claimVimHierarchyEscape(navigationContext, event)) return true;
     final current = _currentVimLayoutTarget(
@@ -2462,10 +2524,6 @@ bool handleVimLayoutNavigationKey(BuildContext context, KeyEvent event) {
   }
   final direction = _vimDirectionForKey(event.logicalKey);
   if (direction == null) return false;
-  final current = _currentVimLayoutTarget(
-    _vimFocusPage(navigationContext) ?? _VimFocusPage(const []),
-    FocusManager.instance.primaryFocus,
-  );
   // A panel belongs to the currently entered Column page.  Horizontal
   // motion must not leak into sibling Columns; leave the panel with Escape
   // first, which restores the Column character on the parent page.

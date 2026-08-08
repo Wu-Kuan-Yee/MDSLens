@@ -7920,6 +7920,161 @@ void main() {
     );
   });
 
+  testWidgets('Vim cut and paste moves Layout Columns and Panels', (
+    tester,
+  ) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1000, 900);
+    addTearDown(tester.view.reset);
+
+    Future<void> seed() async {
+      app.applyLayoutList([1, 2, 1, 3]);
+      for (var column = 0; column < app.columns.length; column++) {
+        for (var row = 0; row < app.columns[column].length; row++) {
+          app.columns[column][row]['title'] = 'C${column + 1}-${row + 1}';
+        }
+      }
+      await tester.pump();
+    }
+
+    List<List<String>> titles() => [
+          for (final column in app.columns)
+            [for (final panel in column) panel['title'] as String],
+        ];
+
+    Future<void> openLayout() async {
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Layout Setup'));
+      await tester.pumpAndSettle();
+    }
+
+    FocusNode layoutNode({
+      required int column,
+      int? row,
+      required bool isColumn,
+    }) =>
+        FocusManager.instance.rootScope.descendants
+            .where((node) => node.canRequestFocus && !node.skipTraversal)
+            .firstWhere((node) {
+          final marker =
+              node.context?.findAncestorWidgetOfExactType<VimLayoutFocus>();
+          return marker?.isColumn == isColumn &&
+              marker?.column == column &&
+              (isColumn || marker?.row == row);
+        });
+
+    Future<void> focusLayout({
+      required int column,
+      int? row,
+      required bool isColumn,
+    }) async {
+      layoutNode(column: column, row: row, isColumn: isColumn).requestFocus();
+      await tester.pump();
+    }
+
+    Future<void> pasteBefore() async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> apply() async {
+      await tester.tap(find.byKey(const ValueKey('layout-apply')));
+      await tester.pumpAndSettle();
+    }
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Column -> between sibling Columns: p places it after the target Column.
+    await seed();
+    await openLayout();
+    await focusLayout(column: 1, isColumn: true);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyX);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Cut Column 2'), findsOneWidget);
+    await focusLayout(column: 1, isColumn: true); // Original Column 3.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
+    await tester.pumpAndSettle();
+    await apply();
+    expect(titles(), [
+      ['C1-1'],
+      ['C3-1'],
+      ['C2-1', 'C2-2'],
+      ['C4-1', 'C4-2', 'C4-3'],
+    ]);
+
+    // Column -> inside another Column: P inserts all of its Panels before the
+    // selected target Panel. Entering the target Column is explicit.
+    await seed();
+    await openLayout();
+    await focusLayout(column: 1, isColumn: true);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyX);
+    await tester.pumpAndSettle();
+    await focusLayout(column: 2, isColumn: true); // Original Column 4.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    await pasteBefore();
+    await apply();
+    expect(titles(), [
+      ['C1-1'],
+      ['C3-1'],
+      ['C4-1', 'C2-1', 'C2-2', 'C4-2', 'C4-3'],
+    ]);
+
+    // Panel -> between sibling Columns: P turns the cut Panel into its own
+    // Column immediately before the target Column.
+    await seed();
+    await openLayout();
+    await focusLayout(column: 1, row: 0, isColumn: false);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyX);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Cut Panel 1'), findsOneWidget);
+    await focusLayout(column: 2, isColumn: true); // Column 3.
+    await pasteBefore();
+    await apply();
+    expect(titles(), [
+      ['C1-1'],
+      ['C2-2'],
+      ['C2-1'],
+      ['C3-1'],
+      ['C4-1', 'C4-2', 'C4-3'],
+    ]);
+
+    // Panel -> inside another Column: p places it immediately after the
+    // selected target Panel.
+    await seed();
+    await openLayout();
+    await focusLayout(column: 1, row: 0, isColumn: false);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyX);
+    await tester.pumpAndSettle();
+    await focusLayout(column: 3, isColumn: true);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
+    await tester.pumpAndSettle();
+    await apply();
+    expect(titles(), [
+      ['C1-1'],
+      ['C2-2'],
+      ['C3-1'],
+      ['C4-1', 'C4-2', 'C2-1', 'C4-3'],
+    ]);
+  });
+
   testWidgets('Layout Setup scrolls wide columns and tall panel lists', (
     tester,
   ) async {

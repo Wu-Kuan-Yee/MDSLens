@@ -32,6 +32,75 @@ class _LayoutDragData {
   bool get isColumn => row == null;
 }
 
+/// A transient Vim move register for Layout Setup.  Cutting removes the item
+/// from the draft immediately; a successful `p`/`P` consumes this register so
+/// a move cannot accidentally become a duplicate copy on a second paste.
+class _LayoutClipboard {
+  const _LayoutClipboard.column(this.panels, this.label) : panel = null;
+  const _LayoutClipboard.panel(this.panel, this.label) : panels = null;
+
+  final List<Map<String, dynamic>>? panels;
+  final Map<String, dynamic>? panel;
+  final String label;
+
+  bool get isColumn => panels != null;
+}
+
+_LayoutClipboard? _cutLayoutItem(
+  List<List<Map<String, dynamic>>> columns,
+  _LayoutDragData source,
+) {
+  if (source.column < 0 || source.column >= columns.length) return null;
+  if (source.isColumn) {
+    if (columns[source.column].isEmpty) return null;
+    return _LayoutClipboard.column(
+      columns.removeAt(source.column),
+      'Column ${source.column + 1}',
+    );
+  }
+  final row = source.row;
+  if (row == null || row < 0 || row >= columns[source.column].length) {
+    return null;
+  }
+  final panel = columns[source.column].removeAt(row);
+  if (columns[source.column].isEmpty) columns.removeAt(source.column);
+  return _LayoutClipboard.panel(panel, 'Panel ${row + 1}');
+}
+
+bool _pasteLayoutItem(
+  List<List<Map<String, dynamic>>> columns,
+  _LayoutClipboard clipboard,
+  _LayoutDragData target, {
+  required bool before,
+}) {
+  if (target.column < 0 || target.column >= columns.length) return false;
+  if (target.isColumn) {
+    final insertionIndex = target.column + (before ? 0 : 1);
+    if (clipboard.isColumn) {
+      columns.insert(
+          insertionIndex.clamp(0, columns.length), clipboard.panels!);
+    } else {
+      columns.insert(
+        insertionIndex.clamp(0, columns.length),
+        [clipboard.panel!],
+      );
+    }
+    return true;
+  }
+
+  final row = target.row;
+  if (row == null || row < 0 || row >= columns[target.column].length) {
+    return false;
+  }
+  final insertionRow = row + (before ? 0 : 1);
+  if (clipboard.isColumn) {
+    columns[target.column].insertAll(insertionRow, clipboard.panels!);
+  } else {
+    columns[target.column].insert(insertionRow, clipboard.panel!);
+  }
+  return true;
+}
+
 class _LayoutPanelPosition {
   const _LayoutPanelPosition(this.column, this.row, this.columnIdentity);
 
@@ -1878,6 +1947,7 @@ class ToolbarWidget extends StatelessWidget {
     var appearingPanels = Set<Map<String, dynamic>>.identity();
     var appearingColumns = Set<List<Map<String, dynamic>>>.identity();
     var layoutRevision = 0;
+    _LayoutClipboard? layoutClipboard;
 
     final dialogFuture = showDialog<void>(
       context: ctx,
@@ -1915,6 +1985,87 @@ class ToolbarWidget extends StatelessWidget {
 
           void clearSelection() => setState(selectedPanels.clear);
 
+          bool cutLayoutItem(_LayoutDragData source) {
+            if (source.column < 0 || source.column >= draftColumns.length) {
+              return false;
+            }
+            if (!source.isColumn &&
+                (source.row == null ||
+                    source.row! < 0 ||
+                    source.row! >= draftColumns[source.column].length)) {
+              return false;
+            }
+            _LayoutClipboard? cut;
+            animateLayoutChange(() {
+              cut = _cutLayoutItem(draftColumns, source);
+              if (cut != null) {
+                layoutClipboard = cut;
+                selectedPanels.clear();
+              }
+            });
+            if (cut == null || draftColumns.isEmpty) return cut != null;
+            scheduleVimLayoutFocus(
+              column: math.min(source.column, draftColumns.length - 1),
+              isColumn: true,
+            );
+            return true;
+          }
+
+          bool pasteLayoutItem(
+            _LayoutDragData target, {
+            required bool before,
+          }) {
+            final clipboard = layoutClipboard;
+            if (clipboard == null ||
+                target.column < 0 ||
+                target.column >= draftColumns.length ||
+                (!target.isColumn &&
+                    (target.row == null ||
+                        target.row! < 0 ||
+                        target.row! >= draftColumns[target.column].length))) {
+              return false;
+            }
+            var pasted = false;
+            late final int focusColumn;
+            int? focusRow;
+            late final bool focusIsColumn;
+            animateLayoutChange(() {
+              pasted = _pasteLayoutItem(
+                draftColumns,
+                clipboard,
+                target,
+                before: before,
+              );
+              if (!pasted) return;
+              layoutClipboard = null;
+              selectedPanels.clear();
+              if (clipboard.isColumn && target.isColumn) {
+                focusColumn = target.column + (before ? 0 : 1);
+                focusRow = null;
+                focusIsColumn = true;
+              } else if (clipboard.isColumn) {
+                focusColumn = target.column;
+                focusRow = target.row! + (before ? 0 : 1);
+                focusIsColumn = false;
+              } else if (target.isColumn) {
+                focusColumn = target.column + (before ? 0 : 1);
+                focusRow = null;
+                focusIsColumn = true;
+              } else {
+                focusColumn = target.column;
+                focusRow = target.row! + (before ? 0 : 1);
+                focusIsColumn = false;
+              }
+            });
+            if (!pasted) return false;
+            scheduleVimLayoutFocus(
+              column: focusColumn,
+              row: focusRow,
+              isColumn: focusIsColumn,
+            );
+            return true;
+          }
+
           final screenSize = MediaQuery.sizeOf(ctx);
           final displayColumns = buildResponsivePlotColumns(
             draftColumns.map((column) => column.length).toList(),
@@ -1951,7 +2102,8 @@ class ToolbarWidget extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(vertical: 4),
                         child: Text(
                           'Overview · ${displayColumns.length} columns · '
-                          '${selectedPanels.length} panels selected',
+                          '${selectedPanels.length} panels selected'
+                          '${layoutClipboard == null ? '' : ' · Cut ${layoutClipboard!.label} — press p/P to place'}',
                           style: Theme.of(ctx).textTheme.bodySmall,
                         ),
                       ),
@@ -2004,6 +2156,13 @@ class ToolbarWidget extends StatelessWidget {
                                             );
                                           });
                                         },
+                                        onCut: () => cutLayoutItem(
+                                          _LayoutDragData.column(displayColumn),
+                                        ),
+                                        onPaste: (before) => pasteLayoutItem(
+                                          _LayoutDragData.column(displayColumn),
+                                          before: before,
+                                        ),
                                         child: Focus(
                                           key: ValueKey(
                                             'layout-column-focus-$displayColumn',
@@ -2328,6 +2487,22 @@ class ToolbarWidget extends StatelessWidget {
                                                                               );
                                                                             }
                                                                           },
+                                                                          onCut: () =>
+                                                                              cutLayoutItem(
+                                                                            _LayoutDragData.panel(
+                                                                              cell.sourceColumn,
+                                                                              cell.sourceRow,
+                                                                            ),
+                                                                          ),
+                                                                          onPaste: (before) =>
+                                                                              pasteLayoutItem(
+                                                                            _LayoutDragData.panel(
+                                                                              cell.sourceColumn,
+                                                                              cell.sourceRow,
+                                                                            ),
+                                                                            before:
+                                                                                before,
+                                                                          ),
                                                                         ),
                                                                         _layoutPanelDropTarget(
                                                                           context:
@@ -2809,6 +2984,8 @@ class ToolbarWidget extends StatelessWidget {
     required int layoutRevision,
     required VoidCallback onSelect,
     required VoidCallback onEdit,
+    required bool Function() onCut,
+    required bool Function(bool before) onPaste,
   }) {
     final colors = Theme.of(context).colorScheme;
     final title = panel['title']?.toString().trim() ?? '';
@@ -2826,6 +3003,8 @@ class ToolbarWidget extends StatelessWidget {
         row: sourceRow,
         isColumn: false,
         onActivate: onSelect,
+        onCut: onCut,
+        onPaste: onPaste,
         child: Focus(
           key: ValueKey('layout-panel-focus-$panelNumber'),
           onKeyEvent: (node, event) {
