@@ -1489,6 +1489,49 @@ void main() {
         FocusManager.instance.primaryFocus?.debugLabel, 'keyboard-mode-apply');
   });
 
+  testWidgets('Vim Keyboard Mode activates cards and actions with Enter',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MaterialApp(
+          builder: (context, child) => VimModeScope(
+            notifier: app,
+            child: VimFocusHost(child: child ?? const SizedBox.shrink()),
+          ),
+          home: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () => KeyboardModeDialog.show(context),
+              child: const Text('Open keyboard mode'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open keyboard mode'));
+    await tester.pumpAndSettle();
+
+    // Standard is initially selected. Enter on the Vim card must behave
+    // exactly like a pointer tap, before the application preference itself
+    // has been switched to Vim mode.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(find.byIcon(Icons.radio_button_checked_rounded), findsOneWidget);
+
+    // The action row must use the same activation path.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(app.vimMode, isTrue);
+    expect(find.byKey(const ValueKey('keyboard-mode-dialog')), findsNothing);
+  });
+
   testWidgets('Vim mode can be toggled directly by its configured shortcut',
       (tester) async {
     final app = AppState();

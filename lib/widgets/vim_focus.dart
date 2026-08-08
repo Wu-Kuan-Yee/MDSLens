@@ -359,6 +359,33 @@ class VimActivatable extends InheritedWidget {
       !identical(onActivate, oldWidget.onActivate);
 }
 
+/// Resolve an explicit Vim activation contract for a focused cell.
+///
+/// Most buttons put [VimActivatable] *around* their Focus widget, which makes
+/// the contract an ancestor of the focused node.  A few composite controls
+/// (notably the two mode cards in Keyboard Mode) deliberately put the Focus
+/// shell around their visual card, so the contract is its direct descendant.
+/// Looking in both directions keeps Enter/Space semantic rather than relying
+/// on whether an InkWell happened to install an ActivateIntent action.
+VimActivatable? _vimActivatableForFocus(BuildContext context) {
+  final ancestor = context.findAncestorWidgetOfExactType<VimActivatable>();
+  if (ancestor != null) return ancestor;
+
+  VimActivatable? descendant;
+  void visit(Element element) {
+    if (descendant != null) return;
+    final widget = element.widget;
+    if (widget is VimActivatable) {
+      descendant = widget;
+      return;
+    }
+    element.visitChildElements(visit);
+  }
+
+  context.visitChildElements(visit);
+  return descendant;
+}
+
 FocusNode? _vimWorkspaceFocus;
 final ValueNotifier<int> _vimFocusVisualRevision = ValueNotifier<int>(0);
 
@@ -1558,7 +1585,7 @@ bool handleVimPageEntryKey(BuildContext context, KeyEvent event) {
   }
   final currentContext = current.context ?? context;
   if (key != LogicalKeyboardKey.keyI) {
-    final activatable = VimActivatable.maybeOf(currentContext);
+    final activatable = _vimActivatableForFocus(currentContext);
     if (activatable != null) {
       if (!_claimVimActivation(context, event)) return true;
       activatable.onActivate();
