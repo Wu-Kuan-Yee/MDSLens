@@ -1185,6 +1185,11 @@ class AppState extends ChangeNotifier {
   void setVimMode(bool enabled) {
     if (_vimMode == enabled) return;
     _vimMode = enabled;
+    // The footer is the persistent, unobtrusive place to confirm a keyboard
+    // mode change.  It also makes a direct toggle shortcut reversible without
+    // guessing from the focus-ring appearance alone.
+    _status =
+        enabled ? 'Keyboard mode: Vim' : 'Keyboard mode: Standard shortcuts';
     savePreferences();
     notifyListeners();
   }

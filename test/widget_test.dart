@@ -1391,6 +1391,12 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    expect(
+      find.text(
+        '(${app.shortcutText(MdsShortcutCommand.toggleVimMode)})',
+      ),
+      findsOneWidget,
+    );
     await tester.tap(find.text('Keyboard Mode'));
     await tester.pumpAndSettle();
 
@@ -1411,9 +1417,15 @@ void main() {
 
     expect(
       FocusManager.instance.primaryFocus?.debugLabel,
-      'keyboard-mode-standard',
+      'keyboard-mode-vim',
     );
 
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'keyboard-mode-standard',
+    );
     await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
     await tester.pump();
     expect(
@@ -1540,7 +1552,7 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
         value: app,
-        child: const MaterialApp(home: MainPage()),
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
       ),
     );
     await tester.pump();
@@ -1563,6 +1575,7 @@ void main() {
     }
     await tester.pump();
     expect(app.vimMode, isTrue);
+    expect(app.status, 'Keyboard mode: Vim');
 
     for (final modifier in modifiers) {
       await tester.sendKeyDownEvent(modifier);
@@ -1573,6 +1586,7 @@ void main() {
     }
     await tester.pump();
     expect(app.vimMode, isFalse);
+    expect(app.status, 'Keyboard mode: Standard shortcuts');
   });
 
   testWidgets('Vim Layout Setup exposes its action row and scroll targets',

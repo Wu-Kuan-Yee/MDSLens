@@ -14,15 +14,10 @@ import 'keyboard_safe_dialog.dart';
 class KeyboardModeDialog {
   const KeyboardModeDialog._();
 
-  static Future<void> show(
-    BuildContext context, {
-    bool previewToggle = false,
-  }) async {
+  static Future<void> show(BuildContext context) async {
     final app = context.read<AppState>();
-    final previousVim = app.vimMode;
-    var selectedVim = previewToggle ? !previousVim : previousVim;
-    if (previewToggle) app.setVimMode(selectedVim);
-    final result = await showDialog<bool>(
+    final selectedVim = app.vimMode;
+    await showDialog<bool>(
       context: context,
       builder: (dialogContext) => _KeyboardModePanel(
         initialVim: selectedVim,
@@ -33,7 +28,6 @@ class KeyboardModeDialog {
         },
       ),
     );
-    if (previewToggle && result != true) app.setVimMode(previousVim);
   }
 }
 

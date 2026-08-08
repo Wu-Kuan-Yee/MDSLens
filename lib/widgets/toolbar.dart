@@ -1282,7 +1282,7 @@ class ToolbarWidget extends StatelessWidget {
               KeyboardShortcutsDialog.show(ctx);
               break;
             case 'keyboard-mode':
-              KeyboardModeDialog.show(ctx, previewToggle: true);
+              KeyboardModeDialog.show(ctx);
               break;
             case 'restore-all':
               _confirmRestoreAllSettings(ctx, app);
@@ -1320,6 +1320,7 @@ class ToolbarWidget extends StatelessWidget {
             value: 'keyboard-mode',
             icon: Icons.terminal_rounded,
             label: 'Keyboard Mode',
+            shortcut: app.shortcutText(MdsShortcutCommand.toggleVimMode),
             trailing: app.vimMode ? 'Vim' : 'Standard',
             caption: 'Vim mode (keyboard-only)',
           ),
