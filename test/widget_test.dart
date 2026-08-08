@@ -973,6 +973,12 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
     expect(app.crosshairX, isNot(beforeEditMove));
+    // b/w use a viewport-relative step while Point editing is active. With
+    // this deliberately small fixture the adaptive step is one real sample,
+    // which still proves the key path does not leak back into page navigation.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyB);
+    await tester.pump();
+    expect(app.crosshairX, lessThan(beforeEditMove!));
     expect(
       FocusManager.instance.primaryFocus?.context
           ?.findAncestorWidgetOfExactType<PlotPanel>()
@@ -1362,17 +1368,19 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
     await tester.pump();
-    final applyElement = tester.element(
-      find.byKey(const ValueKey('layout-apply')),
+    var resetFocused =
+        FocusManager.instance.primaryFocus?.context?.widget.key ==
+            const ValueKey('layout-reset');
+    FocusManager.instance.primaryFocus?.context?.visitAncestorElements(
+      (element) {
+        if (element.widget.key == const ValueKey('layout-reset')) {
+          resetFocused = true;
+          return false;
+        }
+        return true;
+      },
     );
-    final applyFocus = Focus.maybeOf(applyElement, scopeOk: false);
-    expect(applyFocus, isNotNull);
-    expect(
-      FocusManager.instance.primaryFocus?.context
-              ?.findAncestorWidgetOfExactType<TextButton>() !=
-          null,
-      isTrue,
-    );
+    expect(resetFocused, isTrue);
 
     final mainContext = tester.element(find.byType(MainPage));
     await tester.tap(find.byKey(const ValueKey('layout-preview-column-0')));
@@ -1914,6 +1922,36 @@ void main() {
     expect(app.crosshairSourceSeries, 1);
     expect(app.stepActivePoint(1), isTrue);
     expect(app.crosshairX, 11);
+  });
+
+  test('Point quick motions adapt to the visible range and reach real edges',
+      () async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.selectPanel(0, 0);
+    app.interactionMode = 1;
+    app.plots[0].series = [
+      SeriesData(
+        points: List<List<double>>.generate(
+          101,
+          (index) => [index.toDouble(), index.toDouble() * 2],
+        ),
+      ),
+    ];
+    app.plots[0].setViewRange(40, 60, 0, 200);
+
+    expect(app.activatePointForCurrentPanel(), isTrue);
+    expect(app.crosshairX, 50);
+    // Eight percent of the 21 visible samples rounds to two points.
+    expect(app.stepActivePointQuickly(1), isTrue);
+    expect(app.crosshairX, 52);
+    expect(app.stepActivePointQuickly(-1), isTrue);
+    expect(app.crosshairX, 50);
+    expect(app.moveActivePointToEdge(last: false), isTrue);
+    expect(app.crosshairX, 0);
+    expect(app.moveActivePointToEdge(last: true), isTrue);
+    expect(app.crosshairX, 100);
   });
 
   test(

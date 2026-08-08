@@ -1724,16 +1724,16 @@ class AppState extends ChangeNotifier {
   /// that owns the marker.  Keeping the source plot and series together is
   /// important when several panels or curves are synchronized: stepping must
   /// not silently switch to the first available curve in the layout.
-  bool stepActivePoint(int delta) {
-    if (delta == 0 || _interactionMode != 1 || crosshairX == null) {
-      return false;
+  ({int plotIndex, int seriesIndex, SeriesData series})? _activePointSeries() {
+    if (_interactionMode != 1 || crosshairX == null) {
+      return null;
     }
     var plotIndex = crosshairSourcePlot;
     if (plotIndex == null || plotIndex < 0 || plotIndex >= _plots.length) {
       plotIndex = selectedPlotIndex;
     }
     if (plotIndex == null || plotIndex < 0 || plotIndex >= _plots.length) {
-      return false;
+      return null;
     }
     final plot = _plots[plotIndex];
     var seriesIndex = crosshairSourceSeries;
@@ -1744,22 +1744,78 @@ class AppState extends ChangeNotifier {
       final fallback = plot.series.indexWhere(
         (candidate) => candidate != null && candidate.pointCount >= 2,
       );
-      if (fallback < 0) return false;
+      if (fallback < 0) return null;
       seriesIndex = fallback;
       series = plot.series[fallback];
     }
-    if (series == null || series.pointCount < 2) return false;
-    final nearest = series.nearestPointIndex(crosshairX!);
-    final target = (nearest + delta).clamp(0, series.pointCount - 1).toInt();
-    if (target == nearest) return false;
-    final x = series.pointXAt(target);
+    if (series == null || series.pointCount < 2) return null;
+    return (
+      plotIndex: plotIndex,
+      seriesIndex: seriesIndex,
+      series: series,
+    );
+  }
+
+  bool _setActivePointAt(
+    ({int plotIndex, int seriesIndex, SeriesData series}) source,
+    int index,
+  ) {
+    final target = index.clamp(0, source.series.pointCount - 1).toInt();
+    final x = source.series.pointXAt(target);
     if (!x.isFinite) return false;
     setCrosshair(
       x,
-      sourcePlot: plotIndex,
-      sourceSeries: seriesIndex,
+      sourcePlot: source.plotIndex,
+      sourceSeries: source.seriesIndex,
     );
     return true;
+  }
+
+  bool stepActivePoint(int delta) {
+    if (delta == 0) return false;
+    final source = _activePointSeries();
+    if (source == null || crosshairX == null) return false;
+    final nearest = source.series.nearestPointIndex(crosshairX!);
+    final target =
+        (nearest + delta).clamp(0, source.series.pointCount - 1).toInt();
+    if (target == nearest) return false;
+    return _setActivePointAt(source, target);
+  }
+
+  /// Move by approximately eight percent of the currently visible samples.
+  /// The step adapts after zooming and remains usable for both sparse and Full
+  /// rate traces, instead of hard-coding a sample count that would feel either
+  /// glacial or uncontrollably large on a different signal.
+  bool stepActivePointQuickly(int direction) {
+    if (direction == 0) return false;
+    final source = _activePointSeries();
+    if (source == null || crosshairX == null) return false;
+    final plot = _plots[source.plotIndex];
+    final nearest = source.series.nearestPointIndex(crosshairX!);
+    final lowerX = plot.viewMinX;
+    final upperX = plot.viewMaxX;
+    final visibleStart =
+        lowerX == null ? 0 : source.series.nearestPointIndex(lowerX);
+    final visibleEnd = upperX == null
+        ? source.series.pointCount - 1
+        : source.series.nearestPointIndex(upperX);
+    final visibleSamples = (visibleEnd - visibleStart).abs() + 1;
+    final delta = math.max(1, (visibleSamples * 0.08).round());
+    final target = (nearest + (direction < 0 ? -delta : delta))
+        .clamp(0, source.series.pointCount - 1)
+        .toInt();
+    if (target == nearest) return false;
+    return _setActivePointAt(source, target);
+  }
+
+  /// Jump to the first or final real sample of the Point source series.
+  bool moveActivePointToEdge({required bool last}) {
+    final source = _activePointSeries();
+    if (source == null) return false;
+    return _setActivePointAt(
+      source,
+      last ? source.series.pointCount - 1 : 0,
+    );
   }
 
   /// Start Point tracking at the middle of the selected panel's first usable

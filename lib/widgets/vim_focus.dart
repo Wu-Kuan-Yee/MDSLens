@@ -2037,6 +2037,33 @@ bool handleVimPlotEditingKey(BuildContext context, KeyEvent event) {
     case LogicalKeyboardKey.arrowRight:
       app.stepActivePoint(1);
       return true;
+    case LogicalKeyboardKey.keyB:
+      // Like Vim's word-backward motion, b skips a meaningful portion of the
+      // current viewport.  The AppState chooses the span from visible samples,
+      // so it remains predictable after zooming and across Thin/Full data.
+      app.stepActivePointQuickly(-1);
+      return true;
+    case LogicalKeyboardKey.keyW:
+      app.stepActivePointQuickly(1);
+      return true;
+    case LogicalKeyboardKey.caret:
+      app.moveActivePointToEdge(last: false);
+      return true;
+    case LogicalKeyboardKey.dollar:
+      app.moveActivePointToEdge(last: true);
+      return true;
+    case LogicalKeyboardKey.digit6:
+      if (HardwareKeyboard.instance.isShiftPressed) {
+        app.moveActivePointToEdge(last: false);
+        return true;
+      }
+      return true;
+    case LogicalKeyboardKey.digit4:
+      if (HardwareKeyboard.instance.isShiftPressed) {
+        app.moveActivePointToEdge(last: true);
+        return true;
+      }
+      return true;
     default:
       // Plot editing is modal.  A vertical motion has no crosshair meaning,
       // so consume it rather than unexpectedly moving to another control.
