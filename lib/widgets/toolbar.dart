@@ -1380,18 +1380,36 @@ class ToolbarWidget extends StatelessWidget {
                 ],
               ),
             ),
-            if (trailing != null && trailing.isNotEmpty) ...[
-              const SizedBox(width: 12),
-              Text(
-                trailing,
-                style: const TextStyle(fontSize: 11),
-              ),
-            ],
-            if (shortcut != null && shortcut.isNotEmpty) ...[
-              const SizedBox(width: 12),
-              Text(
-                '($shortcut)',
-                style: const TextStyle(fontSize: 11),
+            if ((trailing != null && trailing.isNotEmpty) ||
+                (shortcut != null && shortcut.isNotEmpty)) ...[
+              const SizedBox(width: 8),
+              // A settings item can carry both a live keyboard-mode state and
+              // a shortcut. Keep that metadata visible without forcing the
+              // menu wider than a narrow phone viewport.
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 80),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (trailing != null && trailing.isNotEmpty)
+                      Text(
+                        trailing,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.end,
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                    if (shortcut != null && shortcut.isNotEmpty)
+                      Text(
+                        '($shortcut)',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.end,
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                  ],
+                ),
               ),
             ],
           ],

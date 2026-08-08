@@ -7476,7 +7476,8 @@ void main() {
     expect(find.byIcon(Icons.info_outline_rounded), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('settings-vim-mode')));
     await tester.pumpAndSettle();
-    expect(app.vimMode, isTrue);
+    expect(app.vimMode, isFalse);
+    expect(find.text('Keyboard Mode'), findsWidgets);
   });
 
   testWidgets('Settings can restore every preference after confirmation', (
@@ -8403,7 +8404,7 @@ void main() {
     expect(find.byKey(const ValueKey('layout-preview-column-1')), findsNothing);
     expect(tester.widget<FilledButton>(deleteSelected).onPressed, isNull);
 
-    await tester.tap(find.widgetWithText(TextButton, 'Apply'));
+    await tester.tap(find.byKey(const ValueKey('layout-apply')));
     await tester.pumpAndSettle();
     expect(app.columns, isEmpty);
 
@@ -8421,7 +8422,7 @@ void main() {
       find.byKey(const ValueKey('layout-preview-panel-0')),
       findsOneWidget,
     );
-    await tester.tap(find.widgetWithText(TextButton, 'Apply'));
+    await tester.tap(find.byKey(const ValueKey('layout-apply')));
     await tester.pumpAndSettle();
     expect(app.columns, hasLength(1));
     expect(app.columns.single, hasLength(1));
@@ -8472,7 +8473,7 @@ void main() {
       find.byKey(const ValueKey('layout-preview-column-2')),
       findsOneWidget,
     );
-    await tester.tap(find.widgetWithText(TextButton, 'Apply'));
+    await tester.tap(find.byKey(const ValueKey('layout-apply')));
     await tester.pumpAndSettle();
     expect(app.columns.map((column) => column.length), [1, 1, 1]);
   });
@@ -8512,7 +8513,7 @@ void main() {
     await drag.up();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(TextButton, 'Apply'));
+    await tester.tap(find.byKey(const ValueKey('layout-apply')));
     await tester.pumpAndSettle();
     expect(
       app.columns
@@ -9006,7 +9007,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('layout-preview-panel-1')), findsNothing);
 
-    await tester.tap(find.widgetWithText(TextButton, 'Apply'));
+    await tester.tap(find.byKey(const ValueKey('layout-apply')));
     await tester.pumpAndSettle();
     expect(app.columns, hasLength(1));
     expect(app.columns.single, hasLength(1));
