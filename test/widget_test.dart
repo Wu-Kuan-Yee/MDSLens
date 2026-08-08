@@ -632,6 +632,30 @@ void main() {
     expect(app.shotCtrl.text, 'vim-committed');
   });
 
+  testWidgets('Vim gg starts at Open configuration', (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(PlotPanel).first);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.pump();
+    final tooltip = FocusManager.instance.primaryFocus?.context
+        ?.findAncestorWidgetOfExactType<Tooltip>()
+        ?.message;
+    expect(tooltip, startsWith('Open configuration'));
+  });
+
   testWidgets('Vim plot navigation follows columns and Point edit mode', (
     tester,
   ) async {

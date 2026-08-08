@@ -2056,6 +2056,52 @@ List<_VimFocusTarget> _layoutTargets(
   return result;
 }
 
+String _vimTargetLabel(_VimFocusTarget target) {
+  final targetContext = target.node.context;
+  if (targetContext != null) {
+    final tooltip =
+        targetContext.findAncestorWidgetOfExactType<Tooltip>()?.message;
+    if (tooltip != null && tooltip.trim().isNotEmpty) return tooltip;
+  }
+  return target.node.debugLabel ?? '';
+}
+
+int _vimRootControlRank(_VimFocusTarget target) {
+  final label = _vimTargetLabel(target).trim().toLowerCase();
+  if (label.startsWith('open configuration')) return 0;
+  if (label.startsWith('recent configurations')) return 1;
+  if (label.startsWith('save configuration')) return 2;
+  return 100;
+}
+
+/// Return the controls of the root application page in semantic order.
+///
+/// The toolbar is a child page of the root page and its visual rows reflow at
+/// different widths.  Geometry alone therefore makes `gg` unstable: on a
+/// compact window Settings or Recent configurations can appear above Open
+/// configuration.  Keep the file actions' logical order ahead of the other
+/// toolbar controls, then retain visual ordering for the rest.
+List<_VimFocusTarget> _vimRootControls(_VimFocusPage page) {
+  final allControls = page.targets
+      .where((target) => target.plot == null && target.layout == null)
+      .toList();
+  final toolbarControls = allControls.where((target) {
+    final targetContext = target.node.context;
+    return targetContext != null &&
+        VimPageScope.maybeOf(targetContext)?.pageId == 'toolbar';
+  }).toList();
+  final controls = toolbarControls.isEmpty ? allControls : toolbarControls;
+  controls.sort((a, b) {
+    final bySemanticRank = _vimRootControlRank(a).compareTo(
+      _vimRootControlRank(b),
+    );
+    if (bySemanticRank != 0) return bySemanticRank;
+    final byY = a.rect.top.compareTo(b.rect.top);
+    return byY != 0 ? byY : a.rect.left.compareTo(b.rect.left);
+  });
+  return controls;
+}
+
 bool handleVimLayoutNavigationKey(BuildContext context, KeyEvent event) {
   if (!VimModeScope.enabled(context) || !_isVimPlotNavigationKey(event)) {
     return false;
@@ -2235,9 +2281,10 @@ bool moveVimPageEdge(BuildContext context, {required bool last}) {
   if (plotResult) return true;
   final layoutResult = _moveVimLayoutPageEdge(context, page, last: last);
   if (layoutResult) return true;
+  final rootControls = _vimRootControls(page);
   final target = last
-      ? page.rows.lastOrNull?.lastOrNull
-      : page.rows.firstOrNull?.firstOrNull;
+      ? rootControls.lastOrNull ?? page.rows.lastOrNull?.lastOrNull
+      : rootControls.firstOrNull ?? page.rows.firstOrNull?.firstOrNull;
   if (target == null) return false;
   _requestVimFocus(target);
   return true;
@@ -2256,12 +2303,22 @@ bool _moveVimPlotPageEdge(
   );
   final input = VimInputModeScope.maybeOf(context);
   if (current == null) {
-    // The outer page treats the waveform grid as one character sequence. Its
-    // first column is the deterministic entry point for both gg and G; once
-    // inside that column, G/gg have their usual nested-panel meaning.
+    // The root toolbar is the first child page of the application page. Start
+    // at its first semantic control instead of letting the responsive row
+    // geometry choose Settings/Recent configurations ahead of Open.
+    final rootControls = _vimRootControls(page);
+    final rootTarget =
+        last ? rootControls.lastOrNull : rootControls.firstOrNull;
+    if (rootTarget != null) {
+      _requestVimFocus(rootTarget);
+      return true;
+    }
+    // With no toolbar controls, the waveform grid remains the deterministic
+    // entry point; once inside that column, G/gg have their nested meaning.
     final firstColumn = _plotColumns(page).firstOrNull;
     if (firstColumn == null) return false;
-    final target = _plotTargetsByColumn(page, firstColumn).firstOrNull;
+    final candidates = _plotTargetsByColumn(page, firstColumn);
+    final target = last ? candidates.lastOrNull : candidates.firstOrNull;
     if (target == null) return false;
     input?.setPlotSelectionLevel(VimPlotSelectionLevel.column);
     _requestVimFocus(target);
@@ -2271,13 +2328,7 @@ bool _moveVimPlotPageEdge(
     // The selected Column is still a character of the root application page.
     // `gg`/`G` therefore operate on the root page; they must not implicitly
     // enter the Column and select its first/last Panel.
-    final rootControls = page.targets
-        .where((target) => target.plot == null && target.layout == null)
-        .toList()
-      ..sort((a, b) {
-        final byY = a.rect.top.compareTo(b.rect.top);
-        return byY != 0 ? byY : a.rect.left.compareTo(b.rect.left);
-      });
+    final rootControls = _vimRootControls(page);
     final rootTarget =
         (last ? rootControls.lastOrNull : rootControls.firstOrNull);
     if (rootTarget != null) {
