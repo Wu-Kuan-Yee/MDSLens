@@ -3046,19 +3046,16 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
     // held behind reads of every signals/<tree>.txt asset).
     setState(() {});
 
-    // Load each initially selected Tree in parallel; this updates its Signal
-    // suggestions as soon as that one source is ready.
+    // Empty Signal fields promise the complete suggestion list, not a partial
+    // list that depends on a race with background asset reads.  Keep that
+    // original completion guarantee while Tree choices remain immediately
+    // usable through the setState above.
+    await _signalsForTree('');
+    if (!mounted) return;
+    // Load initial signal options for each row.
     for (final r in _rows) {
       _updateSignalOptions(r);
     }
-
-    // The reverse signal -> Tree index remains useful, but it is a background
-    // enhancement rather than a prerequisite for opening the editor.
-    unawaited(_completeSourceIndex());
-  }
-
-  Future<void> _completeSourceIndex() async {
-    await _signalsForTree('');
     if (mounted) setState(() {});
   }
 
