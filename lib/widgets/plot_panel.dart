@@ -3445,6 +3445,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                             child: Center(
                               child: _ColorPicker(
                                 row: _rows[i],
+                                rowIndex: i,
                                 onChanged: () => setState(() {}),
                               ),
                             ),
@@ -4002,8 +4003,13 @@ class _AutocompleteVimFocusFrame extends StatelessWidget {
 
 class _ColorPicker extends StatelessWidget {
   final _DSRow row;
+  final int rowIndex;
   final VoidCallback onChanged;
-  const _ColorPicker({required this.row, required this.onChanged});
+  const _ColorPicker({
+    required this.row,
+    required this.rowIndex,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext ctx) {
@@ -4012,15 +4018,28 @@ class _ColorPicker extends StatelessWidget {
           _DataSourceDialogState._presetColors[
               row.colorIdx % _DataSourceDialogState._presetColors.length],
         );
-    return GestureDetector(
-      onTap: () => _showColorDialog(ctx, current),
-      child: Container(
-        width: 22,
-        height: 22,
-        decoration: BoxDecoration(
-          color: current,
-          border: Border.all(color: Colors.grey),
-          borderRadius: BorderRadius.circular(3),
+    void openPicker() => _showColorDialog(ctx, current);
+    return VimActivatable(
+      onActivate: openPicker,
+      child: Focus(
+        key: ValueKey('data-color-$rowIndex'),
+        focusNode: row.colorFocusNode,
+        descendantsAreTraversable: false,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            row.colorFocusNode.requestFocus();
+            openPicker();
+          },
+          child: Container(
+            width: 22,
+            height: 22,
+            decoration: BoxDecoration(
+              color: current,
+              border: Border.all(color: Colors.grey),
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
         ),
       ),
     );
@@ -4058,29 +4077,42 @@ class _ColorPicker extends StatelessWidget {
                     Wrap(
                       spacing: 2,
                       runSpacing: 2,
-                      children: topColors
-                          .map(
-                            (c) => GestureDetector(
-                              onTap: () {
-                                selected = Color(c);
-                                setSt(() {});
-                              },
-                              child: Container(
-                                width: 22,
-                                height: 22,
-                                decoration: BoxDecoration(
-                                  color: Color(c),
-                                  border: Border.all(
-                                    color: selected == Color(c)
-                                        ? Colors.black
-                                        : Colors.grey,
-                                    width: selected == Color(c) ? 2 : 1,
+                      children: [
+                        for (var index = 0; index < topColors.length; index++)
+                          VimActivatable(
+                            onActivate: () {
+                              selected = Color(topColors[index]);
+                              setSt(() {});
+                            },
+                            child: Focus(
+                              key: ValueKey('curve-color-preset-$index'),
+                              debugLabel: 'curve-color-preset-$index',
+                              descendantsAreTraversable: false,
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () {
+                                  selected = Color(topColors[index]);
+                                  setSt(() {});
+                                },
+                                child: Container(
+                                  width: 22,
+                                  height: 22,
+                                  decoration: BoxDecoration(
+                                    color: Color(topColors[index]),
+                                    border: Border.all(
+                                      color: selected == Color(topColors[index])
+                                          ? Colors.black
+                                          : Colors.grey,
+                                      width: selected == Color(topColors[index])
+                                          ? 2
+                                          : 1,
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          )
-                          .toList(),
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     // Continuous HSV picker: X = hue, Y = value (brightness)
@@ -4189,6 +4221,7 @@ class _DSRow {
   final TextEditingController shot, y, legend, tree, server;
   final treeAutocompleteKey = GlobalKey<_AutocompleteFieldState>();
   final signalAutocompleteKey = GlobalKey<_AutocompleteFieldState>();
+  final colorFocusNode = FocusNode(debugLabel: 'data-color');
   final String xExpr;
   int hideMode = signalHideModeVisible;
   bool fixedShot = false;
@@ -4210,5 +4243,6 @@ class _DSRow {
     legend.dispose();
     tree.dispose();
     server.dispose();
+    colorFocusNode.dispose();
   }
 }

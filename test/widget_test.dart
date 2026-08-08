@@ -971,6 +971,51 @@ void main() {
     );
   });
 
+  testWidgets('Vim data source can enter Curve Color settings', (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MaterialApp(
+          builder: (context, child) => VimModeScope(
+            notifier: app,
+            child: VimFocusHost(child: child ?? const SizedBox.shrink()),
+          ),
+          home: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () => showDataSourceSetupEditor(
+                context,
+                signals: const [],
+                defaultShot: '163701',
+              ),
+              child: const Text('Open data source'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open data source'));
+    await tester.pumpAndSettle();
+
+    final colorFocus = tester.widget<Focus>(
+      find.byKey(const ValueKey('data-color-0')),
+    );
+    colorFocus.focusNode!.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Curve Color'), findsOneWidget);
+    expect(find.byKey(const ValueKey('curve-color-preset-0')), findsOneWidget);
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'curve-color-preset-0',
+    );
+  });
+
   testWidgets('Vim plot navigation follows columns and Point edit mode', (
     tester,
   ) async {
