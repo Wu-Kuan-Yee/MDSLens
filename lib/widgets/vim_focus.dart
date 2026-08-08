@@ -832,6 +832,27 @@ class VimPlotColumnFocus extends InheritedWidget {
   bool updateShouldNotify(VimPlotColumnFocus oldWidget) => false;
 }
 
+/// Declares a non-plot cell of the Export Multiple Panels dialog.  The dialog
+/// has a deliberately semantic top-level document: format/range, optional X
+/// range fields, Select All, the row of source Columns, then its actions.
+/// Keeping those row/column coordinates separate from render geometry avoids
+/// uneven panel stacks being mistaken for a sequence of logical rows.
+class VimPanelExportControl extends InheritedWidget {
+  const VimPanelExportControl({
+    super.key,
+    required super.child,
+    required this.row,
+    required this.column,
+  });
+
+  final int row;
+  final int column;
+
+  @override
+  bool updateShouldNotify(VimPanelExportControl oldWidget) =>
+      row != oldWidget.row || column != oldWidget.column;
+}
+
 /// Marker used by Layout Setup. Columns and panels are real focusable cells,
 /// but the marker keeps their source coordinates independent of the current
 /// responsive/scrolling geometry.
@@ -1971,6 +1992,45 @@ List<_VimFocusTarget> _plotColumnTargets(_VimFocusPage page) {
   ];
 }
 
+VimPanelExportControl? _panelExportControlFor(_VimFocusTarget target) =>
+    target.node.context?.findAncestorWidgetOfExactType<VimPanelExportControl>();
+
+List<_VimFocusTarget> _panelExportControlTargets(_VimFocusPage page) {
+  final unique = <String, _VimFocusTarget>{};
+  for (final target in page.targets) {
+    final marker = _panelExportControlFor(target);
+    if (marker == null) continue;
+    final key = '${marker.row}:${marker.column}';
+    final previous = unique[key];
+    if (previous == null || target.depth < previous.depth) {
+      unique[key] = target;
+    }
+  }
+  final result = unique.values.toList()
+    ..sort((a, b) {
+      final aMarker = _panelExportControlFor(a)!;
+      final bMarker = _panelExportControlFor(b)!;
+      final byRow = aMarker.row.compareTo(bMarker.row);
+      return byRow != 0 ? byRow : aMarker.column.compareTo(bMarker.column);
+    });
+  return result;
+}
+
+bool _isPanelExportContext(BuildContext? context) {
+  if (context == null || !context.mounted) return false;
+  if (VimPageScope.maybeOf(context)?.pageId == 'panel-export') return true;
+  var found = false;
+  context.visitAncestorElements((element) {
+    final scope = element.widget;
+    if (scope is VimPageScope && scope.pageId == 'panel-export') {
+      found = true;
+      return false;
+    }
+    return true;
+  });
+  return found;
+}
+
 /// Handle the outer-column/inner-panel state machine. A horizontal motion
 /// always selects a whole source Column, even when the responsive layout has
 /// reflowed it visually. A vertical motion enters or moves within that
@@ -2017,6 +2077,9 @@ bool moveVimPlotFocus(BuildContext context, TraversalDirection direction) {
   final level = input?.plotSelectionLevel ?? VimPlotSelectionLevel.column;
   _VimFocusTarget? target;
   if (level == VimPlotSelectionLevel.column && !horizontal) {
+    if (_isPanelExportContext(context)) {
+      return _moveVimPanelExportRootFocus(page, direction);
+    }
     return _moveVimPlotRootFocus(page, direction);
   }
   if (horizontal) {
@@ -2048,6 +2111,118 @@ bool moveVimPlotFocus(BuildContext context, TraversalDirection direction) {
     input?.setPlotSelectionLevel(VimPlotSelectionLevel.panel);
   }
   if (target == null || target.node == current) return false;
+  _requestVimFocus(target);
+  return true;
+}
+
+/// Handle the parent page of Export Multiple Panels.  This runs for both
+/// ordinary dialog controls and the outer Column characters, so J/K follow a
+/// fixed semantic order instead of the changing pixel heights of its panels.
+bool handleVimPanelExportNavigationKey(
+  BuildContext context,
+  KeyEvent event,
+) {
+  if (!VimModeScope.enabled(context) || !_isVimPlotNavigationKey(event)) {
+    return false;
+  }
+  final current = FocusManager.instance.primaryFocus;
+  final currentContext = current?.context;
+  final isControl =
+      currentContext?.findAncestorWidgetOfExactType<VimPanelExportControl>() !=
+          null;
+  final isPlot = _isPanelExportContext(currentContext) &&
+      currentContext?.findAncestorWidgetOfExactType<VimPlotFocus>() != null;
+  if (!isControl && !isPlot) return false;
+  final direction = _vimDirectionForKey(event.logicalKey);
+  if (direction == null) return false;
+  final input = VimInputModeScope.maybeOf(context);
+  if (isPlot && input?.plotSelectionLevel == VimPlotSelectionLevel.panel) {
+    // The selected Panel belongs to its entered one-column child page. Its
+    // own handler below owns J/K and consumes H/L at the child-page boundary.
+    return false;
+  }
+  final page = _vimFocusPage(context);
+  if (page != null) _moveVimPanelExportRootFocus(page, direction);
+  // A boundary is still a handled motion: never fall back to pixel geometry.
+  return true;
+}
+
+bool _moveVimPanelExportRootFocus(
+  _VimFocusPage page,
+  TraversalDirection direction,
+) {
+  final controls = _panelExportControlTargets(page);
+  final columnTargets = _plotColumnTargets(page);
+  if (controls.isEmpty || columnTargets.isEmpty) return false;
+  final actionRow = controls
+      .map((target) => _panelExportControlFor(target)!.row)
+      .reduce((a, b) => a > b ? a : b);
+  final gridRow = actionRow - 1;
+  final rowsByNumber = <int, List<_VimFocusTarget>>{};
+  for (final control in controls) {
+    final marker = _panelExportControlFor(control)!;
+    rowsByNumber.putIfAbsent(marker.row, () => []).add(control);
+  }
+  rowsByNumber[gridRow] = columnTargets;
+  final rowNumbers = rowsByNumber.keys.toList()..sort();
+  final rows = <List<_VimFocusTarget>>[
+    for (final rowNumber in rowNumbers)
+      rowsByNumber[rowNumber]!
+        ..sort((a, b) {
+          final aControl = _panelExportControlFor(a);
+          final bControl = _panelExportControlFor(b);
+          if (aControl != null && bControl != null) {
+            return aControl.column.compareTo(bControl.column);
+          }
+          return a.plot!.column.compareTo(b.plot!.column);
+        }),
+  ];
+  final currentNode = FocusManager.instance.primaryFocus;
+  if (currentNode == null) return false;
+  final currentPlot = _currentVimPlotTarget(page, currentNode)?.plot;
+  final currentControl = currentNode.context
+      ?.findAncestorWidgetOfExactType<VimPanelExportControl>();
+  final currentTarget = currentPlot != null
+      ? columnTargets
+          .where((target) => target.plot!.column == currentPlot.column)
+          .firstOrNull
+      : currentControl == null
+          ? null
+          : controls.where((target) {
+              final marker = _panelExportControlFor(target)!;
+              return marker.row == currentControl.row &&
+                  marker.column == currentControl.column;
+            }).firstOrNull;
+  if (currentTarget == null) return false;
+
+  final semanticTargets = <String, _VimFocusTarget>{};
+  final semanticRows = <List<VimPageCell>>[];
+  for (final row in rows) {
+    final semanticRow = <VimPageCell>[];
+    for (final target in row) {
+      final id = _vimFocusTargetId(target);
+      semanticTargets[id] = target;
+      semanticRow.add(VimPageCell(id: id, label: target.node.debugLabel ?? id));
+    }
+    semanticRows.add(semanticRow);
+  }
+  final navigator = VimPageStack(
+    root: VimPage(
+      id: 'panel-export-root',
+      title: 'Export Multiple Panels',
+      rows: semanticRows,
+    ),
+  )..setSelection(_vimFocusTargetId(currentTarget));
+  if (!navigator.move(_vimPageMotionForDirection(direction))) return false;
+  final target = semanticTargets[navigator.selectedId];
+  if (target == null) return false;
+  if (target.plot != null) {
+    final targetContext = target.node.context ?? currentNode.context;
+    if (targetContext != null) {
+      VimInputModeScope.maybeOf(targetContext)
+          ?.setPlotSelectionLevel(VimPlotSelectionLevel.column);
+    }
+  }
   _requestVimFocus(target);
   return true;
 }
@@ -2680,6 +2855,9 @@ KeyEventResult handleVimDialogKey(
           event.logicalKey == LogicalKeyboardKey.enter ||
           event.logicalKey == LogicalKeyboardKey.numpadEnter) &&
       handleVimPageEntryKey(navigationContext, event)) {
+    return KeyEventResult.handled;
+  }
+  if (handleVimPanelExportNavigationKey(navigationContext, event)) {
     return KeyEventResult.handled;
   }
   if (handleVimLayoutNavigationKey(navigationContext, event)) {

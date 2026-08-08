@@ -180,6 +180,14 @@ Future<PanelExportRequest?> showMultiPanelExportDialog(
               selectable.every((choice) => selected.contains(choice.index));
           final someSelected = selected.isNotEmpty && !allSelected;
           final colors = Theme.of(context).colorScheme;
+          // The Export Multiple Panels dialog is a semantic document in Vim
+          // mode.  Its rows are intentionally independent of the rendered
+          // card heights: format/range, optional X bounds, Select All, source
+          // Columns, then the action row.  This makes J/K deterministic even
+          // when the source Columns have very different numbers of Panels.
+          final hasCustomXRange = range == PanelExportRange.customXRange;
+          final selectAllRow = hasCustomXRange ? 2 : 1;
+          final actionRow = selectAllRow + 2;
 
           void submit() {
             double? xMin;
@@ -236,41 +244,50 @@ Future<PanelExportRequest?> showMultiPanelExportDialog(
                   Row(
                     children: [
                       Expanded(
-                        child: PolishedDropdown<PanelExportFormat>(
-                          key: const ValueKey('panel-export-format'),
-                          id: 'panel-export-format',
-                          value: format,
-                          leadingIcon: format.icon,
-                          options: [
-                            for (final option in PanelExportFormat.values)
-                              PolishedDropdownOption(
-                                value: option,
-                                label: option.label,
-                                icon: option.icon,
-                              ),
-                          ],
-                          onChanged: (value) => setState(() => format = value),
+                        child: VimPanelExportControl(
+                          row: 0,
+                          column: 0,
+                          child: PolishedDropdown<PanelExportFormat>(
+                            key: const ValueKey('panel-export-format'),
+                            id: 'panel-export-format',
+                            value: format,
+                            leadingIcon: format.icon,
+                            options: [
+                              for (final option in PanelExportFormat.values)
+                                PolishedDropdownOption(
+                                  value: option,
+                                  label: option.label,
+                                  icon: option.icon,
+                                ),
+                            ],
+                            onChanged: (value) =>
+                                setState(() => format = value),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: PolishedDropdown<PanelExportRange>(
-                          key: const ValueKey('panel-export-range'),
-                          id: 'panel-export-range',
-                          value: range,
-                          leadingIcon: range.icon,
-                          options: [
-                            for (final option in PanelExportRange.values)
-                              PolishedDropdownOption(
-                                value: option,
-                                label: option.label,
-                                icon: option.icon,
-                              ),
-                          ],
-                          onChanged: (value) => setState(() {
-                            range = value;
-                            rangeError = null;
-                          }),
+                        child: VimPanelExportControl(
+                          row: 0,
+                          column: 1,
+                          child: PolishedDropdown<PanelExportRange>(
+                            key: const ValueKey('panel-export-range'),
+                            id: 'panel-export-range',
+                            value: range,
+                            leadingIcon: range.icon,
+                            options: [
+                              for (final option in PanelExportRange.values)
+                                PolishedDropdownOption(
+                                  value: option,
+                                  label: option.label,
+                                  icon: option.icon,
+                                ),
+                            ],
+                            onChanged: (value) => setState(() {
+                              range = value;
+                              rangeError = null;
+                            }),
+                          ),
                         ),
                       ),
                     ],
@@ -280,30 +297,42 @@ Future<PanelExportRequest?> showMultiPanelExportDialog(
                     Row(
                       children: [
                         Expanded(
-                          child: TextField(
-                            key: const ValueKey('panel-export-x-min'),
-                            controller: xMinController,
-                            readOnly: vimTextFieldReadOnly(context),
-                            keyboardType: const TextInputType.numberWithOptions(
-                              signed: true,
-                              decimal: true,
+                          child: VimPanelExportControl(
+                            row: 1,
+                            column: 0,
+                            child: TextField(
+                              key: const ValueKey('panel-export-x-min'),
+                              controller: xMinController,
+                              readOnly: vimTextFieldReadOnly(context),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                signed: true,
+                                decimal: true,
+                              ),
+                              decoration: const InputDecoration(
+                                labelText: 'X minimum',
+                              ),
                             ),
-                            decoration:
-                                const InputDecoration(labelText: 'X minimum'),
                           ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
-                          child: TextField(
-                            key: const ValueKey('panel-export-x-max'),
-                            controller: xMaxController,
-                            readOnly: vimTextFieldReadOnly(context),
-                            keyboardType: const TextInputType.numberWithOptions(
-                              signed: true,
-                              decimal: true,
+                          child: VimPanelExportControl(
+                            row: 1,
+                            column: 1,
+                            child: TextField(
+                              key: const ValueKey('panel-export-x-max'),
+                              controller: xMaxController,
+                              readOnly: vimTextFieldReadOnly(context),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                signed: true,
+                                decimal: true,
+                              ),
+                              decoration: const InputDecoration(
+                                labelText: 'X maximum',
+                              ),
                             ),
-                            decoration:
-                                const InputDecoration(labelText: 'X maximum'),
                           ),
                         ),
                       ],
@@ -319,32 +348,38 @@ Future<PanelExportRequest?> showMultiPanelExportDialog(
                   ],
                   if (allowPanelSelection) ...[
                     const SizedBox(height: 12),
-                    Material(
-                      color: colors.surfaceContainerLow,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        side: BorderSide(color: colors.outlineVariant),
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: CheckboxListTile(
-                        key: const ValueKey('multi-panel-export-select-all'),
-                        tristate: true,
-                        value: someSelected ? null : allSelected,
-                        onChanged: selectable.isEmpty
-                            ? null
-                            : (_) => setState(() {
-                                  if (allSelected) {
-                                    selected.clear();
-                                  } else {
-                                    selected.addAll(
-                                      selectable.map((choice) => choice.index),
-                                    );
-                                  }
-                                }),
-                        secondary: const Icon(Icons.select_all_rounded),
-                        title: const Text('Select All Panels With Data'),
-                        subtitle: Text(
-                          '${selected.length} of ${selectable.length} selected',
+                    VimPanelExportControl(
+                      row: selectAllRow,
+                      column: 0,
+                      child: Material(
+                        color: colors.surfaceContainerLow,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          side: BorderSide(color: colors.outlineVariant),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: CheckboxListTile(
+                          key: const ValueKey('multi-panel-export-select-all'),
+                          tristate: true,
+                          value: someSelected ? null : allSelected,
+                          onChanged: selectable.isEmpty
+                              ? null
+                              : (_) => setState(() {
+                                    if (allSelected) {
+                                      selected.clear();
+                                    } else {
+                                      selected.addAll(
+                                        selectable.map(
+                                          (choice) => choice.index,
+                                        ),
+                                      );
+                                    }
+                                  }),
+                          secondary: const Icon(Icons.select_all_rounded),
+                          title: const Text('Select All Panels With Data'),
+                          subtitle: Text(
+                            '${selected.length} of ${selectable.length} selected',
+                          ),
                         ),
                       ),
                     ),
@@ -367,16 +402,24 @@ Future<PanelExportRequest?> showMultiPanelExportDialog(
               ),
             ),
             actions: [
-              TextButton.icon(
-                onPressed: () => Navigator.pop(dialogContext),
-                icon: const Icon(Icons.close_rounded),
-                label: const Text('Cancel'),
+              VimPanelExportControl(
+                row: actionRow,
+                column: 0,
+                child: TextButton.icon(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  icon: const Icon(Icons.close_rounded),
+                  label: const Text('Cancel'),
+                ),
               ),
-              FilledButton.icon(
-                key: const ValueKey('multi-panel-export-confirm'),
-                onPressed: selected.isEmpty ? null : submit,
-                icon: const Icon(Icons.file_download_outlined),
-                label: Text('Export ${selected.length} panel(s)'),
+              VimPanelExportControl(
+                row: actionRow,
+                column: 1,
+                child: FilledButton.icon(
+                  key: const ValueKey('multi-panel-export-confirm'),
+                  onPressed: selected.isEmpty ? null : submit,
+                  icon: const Icon(Icons.file_download_outlined),
+                  label: Text('Export ${selected.length} panel(s)'),
+                ),
               ),
             ],
           );

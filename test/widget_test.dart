@@ -1383,13 +1383,16 @@ void main() {
   );
 
   testWidgets(
-    'Vim multi-panel export navigates explicit Column child pages',
+    'Vim multi-panel export uses semantic rows before entering Columns',
     (tester) async {
       final app = AppState();
       await app.preferencesReady;
       addTearDown(app.dispose);
       app.setVimMode(true);
-      app.applyLayoutList([2, 2]);
+      // Deliberately uneven source Columns: a geometry-derived traversal used
+      // to treat their cards as several unrelated rows.  The export dialog
+      // must instead expose all four Columns as one semantic Vim line.
+      app.applyLayoutList([2, 3, 1, 4]);
       for (var index = 0; index < app.plots.length; index++) {
         app.plots[index].series[0] = SeriesData(
           points: [
@@ -1430,9 +1433,67 @@ void main() {
           FocusManager.instance.primaryFocus?.context
               ?.findAncestorWidgetOfExactType<VimPlotFocus>();
 
+      FocusNode controlNode(int row, int column) =>
+          FocusManager.instance.rootScope.descendants
+              .where((node) => node.canRequestFocus && !node.skipTraversal)
+              .firstWhere((node) {
+            final marker = node.context
+                ?.findAncestorWidgetOfExactType<VimPanelExportControl>();
+            return marker?.row == row && marker?.column == column;
+          });
+
+      VimPanelExportControl? focusedControl() =>
+          FocusManager.instance.primaryFocus?.context
+              ?.findAncestorWidgetOfExactType<VimPanelExportControl>();
+
+      final dialogContext = tester.element(find.text('Export multiple panels'));
+
+      // J/K move between the dialog's fixed semantic rows.  They must never
+      // be affected by how tall any source Column happens to be.
+      controlNode(0, 0).requestFocus();
+      await tester.pump();
+      expect(focusedControl()?.row, 0);
+      expect(focusedControl()?.column, 0);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+      await tester.pump();
+      expect(focusedControl()?.row, 1);
+      expect(focusedControl()?.column, 0);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+      await tester.pump();
+      expect(focusedPanel()?.column, 0);
+      expect(focusedPanel()?.row, 0);
+      expect(
+        VimInputModeScope.plotSelectionLevel(dialogContext),
+        VimPlotSelectionLevel.column,
+      );
+
+      // H/L traverse the one row of source Column characters.
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
+      await tester.pump();
+      expect(focusedPanel()?.column, 1);
+      expect(focusedPanel()?.row, 0);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
+      await tester.pump();
+      expect(focusedPanel()?.column, 2);
+      expect(focusedPanel()?.row, 0);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
+      await tester.pump();
+      expect(focusedPanel()?.column, 3);
+      expect(focusedPanel()?.row, 0);
+
+      // Moving down from Column 3 reaches the action row (with the preferred
+      // column clamped to its second action), rather than another tall card.
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+      await tester.pump();
+      expect(focusedControl()?.row, 3);
+      expect(focusedControl()?.column, 1);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+      await tester.pump();
+      expect(focusedPanel()?.column, 1);
+      expect(focusedPanel()?.row, 0);
+
       panelNode(0, 0).requestFocus();
       await tester.pump();
-      final dialogContext = tester.element(find.text('Export multiple panels'));
       expect(
         VimInputModeScope.plotSelectionLevel(dialogContext),
         VimPlotSelectionLevel.column,
@@ -1469,7 +1530,7 @@ void main() {
       // clicking it and toggles only that Panel's export selection.
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pump();
-      expect(find.text('Export 3 panel(s)'), findsOneWidget);
+      expect(find.text('Export 9 panel(s)'), findsOneWidget);
     },
   );
 
