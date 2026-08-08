@@ -996,6 +996,21 @@ void main() {
         FocusManager.instance.primaryFocus?.context
             ?.findAncestorWidgetOfExactType<VimLayoutFocus>();
 
+    // The root Layout Setup page starts with the semantic row of Columns,
+    // regardless of which action bar control happened to have focus before
+    // `gg` was pressed.
+    final addPanel = Focus.maybeOf(
+      tester.element(find.text('Add panel')),
+      scopeOk: false,
+    );
+    addPanel!.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.pump();
+    expect(focusedLayout()?.isColumn, isTrue);
+    expect(focusedLayout()?.column, 0);
+
     expect(focusedLayout()?.isColumn, isTrue);
     expect(focusedLayout()?.column, 0);
 
@@ -1004,6 +1019,7 @@ void main() {
     await tester.pump();
     expect(focusedLayout()?.isColumn, isFalse);
     expect(focusedLayout()?.column, 0);
+    expect(focusedLayout()?.row, 0);
 
     // Once inside Column 1, horizontal motion is consumed instead of
     // switching to Column 2.

@@ -595,6 +595,7 @@ class _VimFocusHostState extends State<VimFocusHost>
     if (vimEditingText()) return false;
     if (handleVimPlotEditingKey(focusContext ?? context, event)) return true;
     if (enterVimPlotColumnPage(focusContext ?? context, event)) return true;
+    if (enterVimLayoutColumnPage(focusContext ?? context, event)) return true;
     if (enterVimPlotEditing(focusContext ?? context, event)) return true;
     if (handleVimPageEntryKey(focusContext ?? context, event)) return true;
     final hasLineEdgeModifier = !HardwareKeyboard.instance.isControlPressed &&
@@ -1821,6 +1822,47 @@ bool handleVimPlotMotionKey(BuildContext context, KeyEvent event) {
   return false;
 }
 
+/// Enter a Layout Setup Column page at its first direct Panel character.
+///
+/// The outer Column focus node also owns drag handles and each Panel's Edit
+/// button.  Flutter traversal therefore cannot express the nested-page model
+/// on its own: its first descendant may be an Edit icon instead of the first
+/// Panel.  Resolve the child page from the explicit [VimLayoutFocus] markers
+/// so `i` never skips a hierarchy level.
+bool enterVimLayoutColumnPage(BuildContext context, KeyEvent event) {
+  if (!VimModeScope.enabled(context) ||
+      (event is! KeyDownEvent && event is! KeyRepeatEvent) ||
+      event.logicalKey != LogicalKeyboardKey.keyI ||
+      !_isVimLayoutContext(context)) {
+    return false;
+  }
+  final keyboard = HardwareKeyboard.instance;
+  if (keyboard.isShiftPressed ||
+      keyboard.isControlPressed ||
+      keyboard.isAltPressed ||
+      keyboard.isMetaPressed) {
+    return false;
+  }
+  final page = _vimFocusPage(context);
+  final current = _currentVimLayoutTarget(
+    page ?? _VimFocusPage(const []),
+    FocusManager.instance.primaryFocus,
+  );
+  if (current?.layout?.isColumn != true) {
+    // The focused Column can observe the same physical key after its first
+    // observer has already moved focus into a Panel. Consume that duplicate
+    // instead of letting generic child traversal jump straight to Edit.
+    return _wasVimActivationClaimed(context, event);
+  }
+  if (!_claimVimActivation(context, event)) return true;
+  final column = current!.layout!.column;
+  final firstPanel = _layoutTargets(page!, columns: false)
+      .where((target) => target.layout!.column == column)
+      .firstOrNull;
+  if (firstPanel != null) _requestVimFocus(firstPanel);
+  return true;
+}
+
 /// Enter the plot's Vim edit mode.  Point mode is deliberately explicit: in
 /// Normal mode H/L/J/K always move between Panel cells, while in Plot mode
 /// the horizontal keys operate the crosshair instead.
@@ -2662,32 +2704,18 @@ bool _moveVimLayoutPageEdge(
     page,
     FocusManager.instance.primaryFocus,
   );
-  if (current == null) {
+  if (current == null || current.layout == null || current.layout!.isColumn) {
+    // The root Layout Setup page starts with its one semantic row of Column
+    // characters; Add panel/Add column and the action bar come after it.
+    // Thus `gg` always selects Column 1, while `G` reaches the final root
+    // action. A selected Column remains a root-page character, so an edge
+    // command must never implicitly enter its Panel child page.
     final rootControls = _layoutRootControls(page);
-    _requestVimFocus(
-      last
-          ? rootControls.lastOrNull ?? columns.last
-          : rootControls.firstOrNull ?? columns.first,
-    );
-    return true;
-  }
-  if (current.layout == null) {
-    final rootControls = _layoutRootControls(page);
-    final rootTarget =
-        last ? rootControls.lastOrNull : rootControls.firstOrNull;
-    if (rootTarget != null) _requestVimFocus(rootTarget);
-    return rootTarget != null;
-  }
-  if (current.layout!.isColumn) {
-    // A selected Column is still a character of the Layout Setup page. Do
-    // not enter its panel list implicitly when using a page edge command.
-    final rootControls = _layoutRootControls(page);
-    final rootTarget =
-        last ? rootControls.lastOrNull : rootControls.firstOrNull;
-    if (rootTarget != null) {
-      _requestVimFocus(rootTarget);
-      return true;
-    }
+    final target = last
+        ? rootControls.lastOrNull ?? columns.last
+        : columns.firstOrNull ?? rootControls.firstOrNull;
+    if (target != null) _requestVimFocus(target);
+    return target != null;
   }
   final column = current.layout!.column;
   final inColumn = panels
@@ -2849,6 +2877,10 @@ KeyEventResult handleVimDialogKey(
           event.logicalKey == LogicalKeyboardKey.enter ||
           event.logicalKey == LogicalKeyboardKey.numpadEnter) &&
       enterVimPlotColumnPage(navigationContext, event)) {
+    return KeyEventResult.handled;
+  }
+  if (event.logicalKey == LogicalKeyboardKey.keyI &&
+      enterVimLayoutColumnPage(navigationContext, event)) {
     return KeyEventResult.handled;
   }
   if ((event.logicalKey == LogicalKeyboardKey.keyI ||
