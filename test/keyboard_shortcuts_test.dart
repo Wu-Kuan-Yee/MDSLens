@@ -10,6 +10,7 @@ void main() {
     expect(bindings, contains(MdsShortcutCommand.openFile));
     expect(bindings, contains(MdsShortcutCommand.openRecentFiles));
     expect(bindings, contains(MdsShortcutCommand.refreshData));
+    expect(bindings, contains(MdsShortcutCommand.toggleVimMode));
     expect(bindings, contains(MdsShortcutCommand.panelSetup));
     expect(bindings, contains(MdsShortcutCommand.menuActivate));
     expect(
@@ -39,6 +40,18 @@ void main() {
     final recent = bindings[MdsShortcutCommand.openRecentFiles]!.primary!;
     expect(recent.strokes.single.key, LogicalKeyboardKey.keyO);
     expect(recent.strokes.single.shift, isTrue);
+    final toggleVim = bindings[MdsShortcutCommand.toggleVimMode]!.primary!;
+    expect(toggleVim.strokes, hasLength(1));
+    expect(toggleVim.strokes.single.key, LogicalKeyboardKey.keyV);
+    expect(toggleVim.strokes.single.alt, isTrue);
+    expect(
+      toggleVim.strokes.single.meta,
+      defaultTargetPlatform == TargetPlatform.macOS,
+    );
+    expect(
+      toggleVim.strokes.single.control,
+      defaultTargetPlatform != TargetPlatform.macOS,
+    );
     expect(
       fixedPointSeriesOrdinal(
         const MdsShortcutStroke(LogicalKeyboardKey.digit3),

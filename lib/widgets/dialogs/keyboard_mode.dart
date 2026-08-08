@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/app_state.dart';
+import '../../services/keyboard_shortcuts.dart';
 import '../vim_focus.dart';
+import 'keyboard_shortcuts.dart';
 import 'keyboard_safe_dialog.dart';
 
 /// Lets the user choose the navigation model without putting a check mark in
@@ -56,6 +58,9 @@ class _KeyboardModePanelState extends State<_KeyboardModePanel> {
     debugLabel: 'keyboard-mode-standard',
   );
   late final FocusNode _vimNode = FocusNode(debugLabel: 'keyboard-mode-vim');
+  late final FocusNode _toggleShortcutNode = FocusNode(
+    debugLabel: 'keyboard-mode-toggle-shortcut',
+  );
   late final FocusNode _cancelNode = FocusNode(
     debugLabel: 'keyboard-mode-cancel',
   );
@@ -75,6 +80,7 @@ class _KeyboardModePanelState extends State<_KeyboardModePanel> {
   void dispose() {
     _standardNode.dispose();
     _vimNode.dispose();
+    _toggleShortcutNode.dispose();
     _cancelNode.dispose();
     _applyNode.dispose();
     super.dispose();
@@ -89,6 +95,12 @@ class _KeyboardModePanelState extends State<_KeyboardModePanel> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final toggleShortcut = widget
+            .app
+            .keyboardShortcuts[MdsShortcutCommand.toggleVimMode]
+            ?.primary
+            ?.displayText ??
+        'Not set';
     return KeyboardSafeDialog(
       key: const ValueKey('keyboard-mode-dialog'),
       pageId: 'keyboard-mode',
@@ -152,18 +164,43 @@ class _KeyboardModePanelState extends State<_KeyboardModePanel> {
             ),
           ),
           const SizedBox(height: 14),
+          VimKeyboardModeControl(
+            row: 2,
+            column: 0,
+            child: Focus(
+              key: const ValueKey('keyboard-mode-toggle-shortcut'),
+              focusNode: _toggleShortcutNode,
+              descendantsAreTraversable: false,
+              onKeyEvent: _handleNavigationKey,
+              child: VimActivatable(
+                onActivate: () async {
+                  await KeyboardShortcutsDialog.show(context);
+                  if (mounted) setState(() {});
+                },
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    await KeyboardShortcutsDialog.show(context);
+                    if (mounted) setState(() {});
+                  },
+                  icon: const Icon(Icons.tune_rounded),
+                  label: Text('Configure mode toggle ($toggleShortcut)'),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
           Text(
             'The mode is saved and restored when MDSLens starts again. '
-            'Use J/K or the arrow keys to select a mode, then move to Apply '
-            'and press Enter. A hardware keyboard is required on '
-            'mobile devices.',
+            'Use J/K or the arrow keys to select a mode or configure its '
+            'direct toggle shortcut, then move to Apply and press Enter. A '
+            'hardware keyboard is required on mobile devices.',
             style: TextStyle(color: colors.onSurfaceVariant),
           ),
         ],
       ),
       actions: [
         VimKeyboardModeControl(
-          row: 2,
+          row: 3,
           column: 0,
           child: VimActivatable(
             onActivate: () => Navigator.pop(context, false),
@@ -181,7 +218,7 @@ class _KeyboardModePanelState extends State<_KeyboardModePanel> {
           ),
         ),
         VimKeyboardModeControl(
-          row: 2,
+          row: 3,
           column: 1,
           child: VimActivatable(
             onActivate: () => widget.onApply(_selectedVim),

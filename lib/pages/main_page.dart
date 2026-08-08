@@ -24,6 +24,7 @@ bool allowShortcutWhileEditing(
       command == MdsShortcutCommand.openRecentFiles ||
       command == MdsShortcutCommand.openWebMenu ||
       command == MdsShortcutCommand.saveConfiguration ||
+      command == MdsShortcutCommand.toggleVimMode ||
       command == MdsShortcutCommand.globalRate ||
       command == MdsShortcutCommand.globalLayout ||
       command == MdsShortcutCommand.globalExport ||
@@ -514,6 +515,14 @@ class _MainPageState extends State<MainPage> {
         break;
       case MdsShortcutCommand.openKeyboardMode:
         unawaited(KeyboardModeDialog.show(context));
+        break;
+      case MdsShortcutCommand.toggleVimMode:
+        app.setVimMode(!app.vimMode);
+        VimInputModeScope.setMode(context, VimInputMode.normal);
+        if (app.vimMode) {
+          requestVimWorkspaceFocus();
+          _focusFirstVimControl();
+        }
         break;
       case MdsShortcutCommand.openAbout:
         const ToolbarWidget().openAboutShortcut(context);

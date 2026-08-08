@@ -1394,19 +1394,6 @@ void main() {
     await tester.tap(find.text('Keyboard Mode'));
     await tester.pumpAndSettle();
 
-    expect(
-      FocusManager.instance.primaryFocus?.debugLabel,
-      'keyboard-mode-standard',
-    );
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
-    await tester.pump();
-    expect(
-      FocusManager.instance.primaryFocus?.debugLabel,
-      'keyboard-mode-vim',
-    );
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
-    await tester.pump();
     bool primaryHasKey(Key key) {
       final primaryContext = FocusManager.instance.primaryFocus?.context;
       var found = primaryContext?.widget.key == key;
@@ -1422,6 +1409,25 @@ void main() {
       return found;
     }
 
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'keyboard-mode-standard',
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'keyboard-mode-vim',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    expect(
+      primaryHasKey(const ValueKey('keyboard-mode-toggle-shortcut')),
+      isTrue,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
     expect(
       primaryHasKey(const ValueKey('keyboard-mode-cancel')),
       isTrue,
@@ -1470,11 +1476,60 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
     await tester.pump();
     expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'keyboard-mode-toggle-shortcut',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    expect(
         FocusManager.instance.primaryFocus?.debugLabel, 'keyboard-mode-cancel');
     await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
     await tester.pump();
     expect(
         FocusManager.instance.primaryFocus?.debugLabel, 'keyboard-mode-apply');
+  });
+
+  testWidgets('Vim mode can be toggled directly by its configured shortcut',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: MainPage()),
+      ),
+    );
+    await tester.pump();
+
+    final shortcut = app.keyboardShortcuts[MdsShortcutCommand.toggleVimMode]!
+        .primary!.strokes.single;
+    final modifiers = <LogicalKeyboardKey>[
+      if (shortcut.control) LogicalKeyboardKey.controlLeft,
+      if (shortcut.alt) LogicalKeyboardKey.altLeft,
+      if (shortcut.meta) LogicalKeyboardKey.metaLeft,
+      if (shortcut.shift) LogicalKeyboardKey.shiftLeft,
+    ];
+
+    for (final modifier in modifiers) {
+      await tester.sendKeyDownEvent(modifier);
+    }
+    await tester.sendKeyEvent(shortcut.key);
+    for (final modifier in modifiers.reversed) {
+      await tester.sendKeyUpEvent(modifier);
+    }
+    await tester.pump();
+    expect(app.vimMode, isTrue);
+
+    for (final modifier in modifiers) {
+      await tester.sendKeyDownEvent(modifier);
+    }
+    await tester.sendKeyEvent(shortcut.key);
+    for (final modifier in modifiers.reversed) {
+      await tester.sendKeyUpEvent(modifier);
+    }
+    await tester.pump();
+    expect(app.vimMode, isFalse);
   });
 
   testWidgets('Vim Layout Setup exposes its action row and scroll targets',

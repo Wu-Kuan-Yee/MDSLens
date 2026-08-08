@@ -55,6 +55,7 @@ enum MdsShortcutCommand {
   menuActivate,
   openSettings,
   openKeyboardMode,
+  toggleVimMode,
 }
 
 class MdsShortcutDefinition {
@@ -367,6 +368,12 @@ const mdsShortcutDefinitions = <MdsShortcutDefinition>[
     'Settings',
     'Choose keyboard mode',
   ),
+  MdsShortcutDefinition(
+    MdsShortcutCommand.toggleVimMode,
+    'toggle_vim_mode',
+    'Settings',
+    'Toggle Vim Keyboard-Only mode',
+  ),
 ];
 
 MdsShortcutDefinition shortcutDefinition(MdsShortcutCommand command) =>
@@ -621,6 +628,16 @@ Map<MdsShortcutCommand, MdsShortcutBinding> defaultMdsShortcutBindings() {
     ),
     MdsShortcutCommand.saveConfiguration: MdsShortcutBinding(
       primary: modifiedSequence(LogicalKeyboardKey.keyS),
+    ),
+    MdsShortcutCommand.toggleVimMode: MdsShortcutBinding(
+      primary: single(
+        MdsShortcutStroke(
+          LogicalKeyboardKey.keyV,
+          control: !mac,
+          meta: mac,
+          alt: true,
+        ),
+      ),
     ),
     MdsShortcutCommand.globalRate: MdsShortcutBinding(
       primary: chord(LogicalKeyboardKey.keyG, LogicalKeyboardKey.keyR),
