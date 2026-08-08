@@ -95,6 +95,11 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<EditableText>(),
+      isNull,
+    );
     expect(result, isFalse);
 
     await tester.tap(find.text('Confirm drop'));
@@ -809,6 +814,86 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
     expect(find.text('Recent Configurations'), findsOneWidget);
+  });
+
+  testWidgets('Vim can leave Manage Shot History with Escape', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'shotHistory': '["163702","163701"]',
+      'shot': '163703',
+    });
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    FocusManager.instance.rootScope.descendants
+        .firstWhere(
+          (node) => node.debugLabel == 'dropdown-toolbar-shot-history',
+        )
+        .requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('shot-history-selection-list')),
+        findsOneWidget);
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<VimPageScope>()
+          ?.pageId,
+      'dialog',
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('shot-history-selection-list')),
+        findsNothing);
+  });
+
+  testWidgets('Vim dropdown menus navigate options with j and k',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    FocusManager.instance.rootScope.descendants
+        .firstWhere((node) => node.debugLabel == 'dropdown-toolbar-rate')
+        .requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'dropdown-toolbar-rate-option-0',
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'dropdown-toolbar-rate-option-1',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(app.dataMode, 1);
   });
 
   testWidgets('Vim plot navigation follows columns and Point edit mode', (
