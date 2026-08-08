@@ -3880,49 +3880,76 @@ class ToolbarWidget extends StatelessWidget {
   }) {
     final colors = Theme.of(context).colorScheme;
     final highlight = activeColor ?? colors.primary;
-    return Semantics(
-      button: true,
-      selected: active,
-      label: tooltip,
-      child: Tooltip(
-        message: tooltip,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: active
-                ? [
-                    BoxShadow(
-                      color: highlight.withValues(alpha: 0.28),
-                      blurRadius: 9,
-                      spreadRadius: 1,
-                    ),
-                  ]
-                : null,
-          ),
-          child: OutlinedButton(
-            onPressed: onPressed,
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(44, 44),
-              padding: EdgeInsets.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              side: BorderSide(
-                color: active ? highlight : colors.outlineVariant,
-                width: active ? 1.5 : 1,
-              ),
-              backgroundColor: active
-                  ? Color.alphaBlend(
-                      highlight.withValues(alpha: 0.18),
-                      colors.surface,
-                    )
+    return Focus(
+      // ButtonStyleButton owns the actual focus node. This non-focusable
+      // ancestor only consumes a second framework dispatch of the same Enter
+      // event after the application-level Vim handler has activated it.
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (node, event) {
+        if (!VimModeScope.enabled(context)) {
+          return KeyEventResult.ignored;
+        }
+        if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+          return KeyEventResult.ignored;
+        }
+        final isActivate = event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.numpadEnter ||
+            event.logicalKey == LogicalKeyboardKey.space;
+        if (!isActivate) return KeyEventResult.ignored;
+        if (!claimVimActivation(context, event)) {
+          return KeyEventResult.handled;
+        }
+        final focusedContext =
+            FocusManager.instance.primaryFocus?.context ?? context;
+        return activateVimControl(focusedContext)
+            ? KeyEventResult.handled
+            : KeyEventResult.ignored;
+      },
+      child: Semantics(
+        button: true,
+        selected: active,
+        label: tooltip,
+        child: Tooltip(
+          message: tooltip,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: active
+                  ? [
+                      BoxShadow(
+                        color: highlight.withValues(alpha: 0.28),
+                        blurRadius: 9,
+                        spreadRadius: 1,
+                      ),
+                    ]
                   : null,
-              foregroundColor: active ? highlight : colors.onSurface,
             ),
-            child: Icon(
-              icon,
-              size: context.read<AppState>().iconSize.toDouble(),
+            child: OutlinedButton(
+              onPressed: onPressed,
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(44, 44),
+                padding: EdgeInsets.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                side: BorderSide(
+                  color: active ? highlight : colors.outlineVariant,
+                  width: active ? 1.5 : 1,
+                ),
+                backgroundColor: active
+                    ? Color.alphaBlend(
+                        highlight.withValues(alpha: 0.18),
+                        colors.surface,
+                      )
+                    : null,
+                foregroundColor: active ? highlight : colors.onSurface,
+              ),
+              child: Icon(
+                icon,
+                size: context.read<AppState>().iconSize.toDouble(),
+              ),
             ),
           ),
         ),

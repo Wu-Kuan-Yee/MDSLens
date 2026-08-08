@@ -656,6 +656,43 @@ void main() {
     expect(tooltip, startsWith('Open configuration'));
   });
 
+  testWidgets('Vim Enter activates a toolbar control only once',
+      (tester) async {
+    var openCalls = 0;
+    final app = AppState(
+      configOpenPicker: () async {
+        openCalls++;
+        return null;
+      },
+    );
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(PlotPanel).first);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<Tooltip>()
+          ?.message,
+      startsWith('Open configuration'),
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(openCalls, 1);
+  });
+
   testWidgets('Vim plot navigation follows columns and Point edit mode', (
     tester,
   ) async {

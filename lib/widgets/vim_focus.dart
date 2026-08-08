@@ -59,6 +59,7 @@ class VimInputState extends ChangeNotifier {
   bool _textEscapeReleased = false;
   bool _commitTextOnEscape = false;
   KeyEvent? _lastHierarchyEscapeEvent;
+  KeyEvent? _lastActivationEvent;
 
   VimInputMode get mode => _mode;
   VimVisualMode get visualMode => _visualMode;
@@ -83,6 +84,17 @@ class VimInputState extends ChangeNotifier {
       return false;
     }
     _lastHierarchyEscapeEvent = event;
+    return true;
+  }
+
+  /// A key event can pass through the application hardware handler and the
+  /// focused control's handler. Only the first observer may activate a Vim
+  /// control; repeated observations of the same physical event are consumed.
+  bool claimVimActivation(KeyEvent event) {
+    if (event is KeyRepeatEvent || identical(_lastActivationEvent, event)) {
+      return false;
+    }
+    _lastActivationEvent = event;
     return true;
   }
 
@@ -302,6 +314,16 @@ bool _claimVimHierarchyEscape(BuildContext context, KeyEvent event) {
   final input = VimInputModeScope.maybeOf(context);
   return input?.claimHierarchyEscape(event) ?? event is! KeyRepeatEvent;
 }
+
+bool _claimVimActivation(BuildContext context, KeyEvent event) {
+  final input = VimInputModeScope.maybeOf(context);
+  return input?.claimVimActivation(event) ?? event is! KeyRepeatEvent;
+}
+
+/// Public bridge used by controls outside this library to consume one Vim
+/// activation event exactly once.
+bool claimVimActivation(BuildContext context, KeyEvent event) =>
+    _claimVimActivation(context, event);
 
 FocusNode? _vimWorkspaceFocus;
 
@@ -1301,6 +1323,10 @@ bool _activateVimControl(BuildContext context) {
   }
 }
 
+/// Public bridge for controls that provide their own ancestor
+/// [Focus.onKeyEvent] boundary, such as toolbar icon buttons.
+bool activateVimControl(BuildContext context) => _activateVimControl(context);
+
 /// Enter a semantic child page without requiring a mouse.  For a composite
 /// Focus widget we enter its first direct child; for a button/dropdown whose
 /// child page is created by activation, `i` activates the control and the
@@ -1314,7 +1340,8 @@ bool handleVimPageEntryKey(BuildContext context, KeyEvent event) {
   final key = event.logicalKey;
   if (key != LogicalKeyboardKey.keyI &&
       key != LogicalKeyboardKey.enter &&
-      key != LogicalKeyboardKey.numpadEnter) {
+      key != LogicalKeyboardKey.numpadEnter &&
+      key != LogicalKeyboardKey.space) {
     return false;
   }
   final current = FocusManager.instance.primaryFocus;
@@ -1327,6 +1354,7 @@ bool handleVimPageEntryKey(BuildContext context, KeyEvent event) {
   if (key != LogicalKeyboardKey.keyI && _isEditableNode(current)) {
     return false;
   }
+  if (!_claimVimActivation(context, event)) return true;
   final layout =
       current.context?.findAncestorWidgetOfExactType<VimLayoutFocus>();
   if (key != LogicalKeyboardKey.keyI && layout?.onActivate != null) {
