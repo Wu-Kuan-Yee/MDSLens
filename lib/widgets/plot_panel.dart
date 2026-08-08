@@ -3550,9 +3550,11 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
   final _node = FocusNode();
   final _scrollController = ScrollController();
   final _tapRegionGroup = Object();
+  final List<FocusNode> _hintFocusNodes = <FocusNode>[];
   OverlayEntry? _overlay;
   final _layerLink = LayerLink();
   List<String> _hints = const [];
+  bool _transferringFocusToHints = false;
 
   @override
   void initState() {
@@ -3577,6 +3579,11 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
     widget.controller.removeListener(_update);
     _node.removeListener(_handleFocusChange);
     _node.dispose();
+    for (final node in _hintFocusNodes) {
+      node
+        ..removeListener(_handleHintFocusChange)
+        ..dispose();
+    }
     _scrollController.dispose();
     super.dispose();
   }
@@ -3590,8 +3597,108 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
     if (_node.hasFocus) {
       _update();
     } else {
-      _removeOverlay();
+      _scheduleHintOverlayDismissal();
     }
+  }
+
+  bool get _hasFocusedHint => _hintFocusNodes.any((node) => node.hasFocus);
+
+  void _handleHintFocusChange() {
+    if (_hasFocusedHint) return;
+    _scheduleHintOverlayDismissal();
+  }
+
+  void _scheduleHintOverlayDismissal() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          _node.hasFocus ||
+          _hasFocusedHint ||
+          _transferringFocusToHints) {
+        return;
+      }
+      _hints = const [];
+      _removeOverlay();
+    });
+  }
+
+  void _ensureHintFocusNodes(int count) {
+    while (_hintFocusNodes.length < count) {
+      final index = _hintFocusNodes.length;
+      final node = FocusNode(
+        debugLabel: 'autocomplete-${widget.label.toLowerCase()}-option-$index',
+      )..addListener(_handleHintFocusChange);
+      _hintFocusNodes.add(node);
+    }
+  }
+
+  void _focusHint(int index) {
+    if (_hints.isEmpty) return;
+    _ensureHintFocusNodes(_hints.length);
+    final target = index.clamp(0, _hints.length - 1).toInt();
+    _transferringFocusToHints = true;
+    _hintFocusNodes[target].requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _transferringFocusToHints = false;
+      _revealHint(target);
+    });
+  }
+
+  void _revealHint(int index) {
+    if (!_scrollController.hasClients) return;
+    // Each suggestion occupies a dense ListTile plus a one-pixel divider. The
+    // exact row height is intentionally not needed for navigation; this is a
+    // conservative reveal target that keeps the ring inside the viewport.
+    final target = (index * 43.0)
+        .clamp(0.0, _scrollController.position.maxScrollExtent)
+        .toDouble();
+    if ((_scrollController.position.pixels - target).abs() > 0.5) {
+      _scrollController.jumpTo(target);
+    }
+  }
+
+  KeyEventResult _handleInputVimKey(BuildContext context, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    // Tab is deliberately an autocomplete-page entry key only from Insert
+    // mode. In Normal mode it retains its regular focus-traversal meaning.
+    if (event.logicalKey != LogicalKeyboardKey.tab ||
+        !VimModeScope.enabled(context) ||
+        VimInputModeScope.mode(context) != VimInputMode.insert ||
+        _hints.isEmpty) {
+      return KeyEventResult.ignored;
+    }
+    _focusHint(0);
+    VimInputModeScope.setMode(context, VimInputMode.normal);
+    return KeyEventResult.handled;
+  }
+
+  KeyEventResult _handleHintVimKey(int index, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.keyJ || key == LogicalKeyboardKey.arrowDown) {
+      _focusHint(index + 1);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.keyK || key == LogicalKeyboardKey.arrowUp) {
+      _focusHint(index - 1);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.space) {
+      if (index >= 0 && index < _hints.length) _selectHint(_hints[index]);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.escape) {
+      _hints = const [];
+      _removeOverlay();
+      _node.requestFocus();
+      VimInputModeScope.setMode(context, VimInputMode.normal);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   void _selectHint(String hint) {
@@ -3599,6 +3706,7 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
       text: hint,
       selection: TextSelection.collapsed(offset: hint.length),
     );
+    _hints = const [];
     _removeOverlay();
     widget.onChanged?.call();
     widget.onSelected?.call(hint);
@@ -3619,6 +3727,7 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
       return;
     }
     _hints = hints;
+    _ensureHintFocusNodes(_hints.length);
     if (_overlay == null) {
       _overlay = OverlayEntry(
         builder: (overlayContext) {
@@ -3659,33 +3768,48 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
                           height: 1,
                           color: theme.dividerColor.withValues(alpha: 0.55),
                         ),
-                        itemBuilder: (_, i) => Listener(
-                          key: ValueKey(
-                            'autocomplete-${widget.label.toLowerCase()}-option-$i',
-                          ),
-                          behavior: HitTestBehavior.opaque,
-                          onPointerDown: (event) {
-                            if (event.kind == PointerDeviceKind.mouse ||
-                                event.kind == PointerDeviceKind.trackpad ||
-                                event.kind == PointerDeviceKind.stylus ||
-                                event.kind ==
-                                    PointerDeviceKind.invertedStylus) {
-                              _selectHint(visibleHints[i]);
-                            }
-                          },
-                          child: ListTile(
-                            dense: true,
-                            minTileHeight: 42,
-                            leading: Icon(
-                              Icons.search_rounded,
-                              size: 18,
-                              color: theme.colorScheme.primary,
+                        itemBuilder: (_, i) => VimPageScope(
+                          pageId: 'autocomplete/${widget.label.toLowerCase()}',
+                          parentPageId: 'dialog',
+                          transient: true,
+                          child: _AutocompleteVimFocusFrame(
+                            focusNode: _hintFocusNodes[i],
+                            child: Focus(
+                              focusNode: _hintFocusNodes[i],
+                              descendantsAreTraversable: false,
+                              onKeyEvent: (_, event) =>
+                                  _handleHintVimKey(i, event),
+                              child: Listener(
+                                key: ValueKey(
+                                  'autocomplete-${widget.label.toLowerCase()}-option-$i',
+                                ),
+                                behavior: HitTestBehavior.opaque,
+                                onPointerDown: (event) {
+                                  if (event.kind == PointerDeviceKind.mouse ||
+                                      event.kind ==
+                                          PointerDeviceKind.trackpad ||
+                                      event.kind == PointerDeviceKind.stylus ||
+                                      event.kind ==
+                                          PointerDeviceKind.invertedStylus) {
+                                    _selectHint(visibleHints[i]);
+                                  }
+                                },
+                                child: ListTile(
+                                  dense: true,
+                                  minTileHeight: 42,
+                                  leading: Icon(
+                                    Icons.search_rounded,
+                                    size: 18,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                  title: Text(
+                                    visibleHints[i],
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  onTap: () => _selectHint(visibleHints[i]),
+                                ),
+                              ),
                             ),
-                            title: Text(
-                              visibleHints[i],
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                            onTap: () => _selectHint(visibleHints[i]),
                           ),
                         ),
                       ),
@@ -3715,17 +3839,51 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
   @override
   Widget build(BuildContext ctx) => CompositedTransformTarget(
         link: _layerLink,
-        child: TextField(
-          groupId: _tapRegionGroup,
-          controller: widget.controller,
-          focusNode: _node,
-          readOnly: vimTextFieldReadOnly(ctx),
-          decoration: _DataSourceDialogState._dsDeco(),
-          style: const TextStyle(fontSize: 12),
-          onTap: _update,
-          onChanged: (_) => widget.onChanged?.call(),
+        child: Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          onKeyEvent: (_, event) => _handleInputVimKey(ctx, event),
+          child: TextField(
+            groupId: _tapRegionGroup,
+            controller: widget.controller,
+            focusNode: _node,
+            readOnly: vimTextFieldReadOnly(ctx),
+            decoration: _DataSourceDialogState._dsDeco(),
+            style: const TextStyle(fontSize: 12),
+            onTap: _update,
+            onChanged: (_) => widget.onChanged?.call(),
+          ),
         ),
       );
+}
+
+class _AutocompleteVimFocusFrame extends StatelessWidget {
+  const _AutocompleteVimFocusFrame({
+    required this.focusNode,
+    required this.child,
+  });
+
+  final FocusNode focusNode;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: focusNode,
+      builder: (context, _) {
+        final showRing = VimModeScope.enabled(context) && focusNode.hasFocus;
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(9),
+            border: showRing
+                ? Border.all(color: const Color(0xFFD946EF), width: 2)
+                : null,
+          ),
+          child: child,
+        );
+      },
+    );
+  }
 }
 
 class _ColorPicker extends StatelessWidget {

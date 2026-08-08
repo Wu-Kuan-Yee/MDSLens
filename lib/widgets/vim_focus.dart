@@ -771,7 +771,8 @@ class _VimFocusHostState extends State<VimFocusHost>
         : VimPageScope.maybeOf(focusContext)?.pageId;
     if (focusContext != null &&
         (focusedPageId == 'popup-menu' ||
-            (focusedPageId?.startsWith('dropdown-menu/') ?? false))) {
+            (focusedPageId?.startsWith('dropdown-menu/') ?? false) ||
+            (focusedPageId?.startsWith('autocomplete/') ?? false))) {
       // Popup items draw their ring inside the animated route. A ring in this
       // host would live outside PopupMenuRoute's transform and lag behind
       // while the menu scales/translates into place.

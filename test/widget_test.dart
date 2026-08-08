@@ -6824,6 +6824,84 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Vim Tab enters Tree suggestions only from Insert mode', (
+    tester,
+  ) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tapAt(
+      tester.getCenter(find.byType(PlotPanel).first),
+      buttons: kSecondaryMouseButton,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('plot-context-menu-data-source')),
+    );
+    await tester.pumpAndSettle();
+
+    final treeField = tester.widget<TextField>(
+      find.descendant(
+        of: find.byKey(const ValueKey('data-tree-0')),
+        matching: find.byType(TextField),
+      ),
+    );
+    treeField.focusNode!.requestFocus();
+    await tester.pump();
+    // Tab in Normal mode retains its ordinary traversal behavior.
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      isNot('autocomplete-tree-option-0'),
+    );
+
+    treeField.focusNode!.requestFocus();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pump();
+    expect(
+      VimInputModeScope.mode(
+        tester.element(find.byKey(const ValueKey('data-tree-0'))),
+      ),
+      VimInputMode.insert,
+    );
+    treeField.controller!.value = const TextEditingValue(
+      text: '',
+      selection: TextSelection.collapsed(offset: 0),
+    );
+    // Insert mode intentionally animates the Vim selection ring, so it never
+    // reaches a permanently settled scheduler state.
+    await tester.pump(const Duration(milliseconds: 80));
+    await tester.pump();
+    expect(
+        find.byKey(const ValueKey('autocomplete-tree-menu')), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'autocomplete-tree-option-0',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'autocomplete-tree-option-1',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(treeField.controller!.text, isNotEmpty);
+  });
+
   testWidgets(
     'Data source Shot inherits the loaded shot when config is empty',
     (tester) async {
