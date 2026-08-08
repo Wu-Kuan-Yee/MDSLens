@@ -249,6 +249,7 @@ class _MainPageState extends State<MainPage> {
     final focusedContext =
         FocusManager.instance.primaryFocus?.context ?? context;
     if (handleVimPlotEditingKey(focusedContext, event)) return true;
+    if (enterVimPlotColumnPage(focusedContext, event)) return true;
     if (enterVimPlotEditing(focusedContext, event)) return true;
     if (vimPlotEditing(focusedContext) &&
         handleVimPlotMotionKey(focusedContext, event)) {

@@ -607,6 +607,9 @@ class _PlotPanelState extends State<PlotPanel> {
           if (handleVimPlotEditingKey(focusContext, event)) {
             return KeyEventResult.handled;
           }
+          if (enterVimPlotColumnPage(focusContext, event)) {
+            return KeyEventResult.handled;
+          }
           if (enterVimPlotEditing(focusContext, event)) {
             return KeyEventResult.handled;
           }

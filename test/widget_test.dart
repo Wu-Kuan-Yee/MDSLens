@@ -573,9 +573,10 @@ void main() {
     await tester.tap(plot);
     await tester.pump();
 
-    // A Column is a child page of the application page.  While the outer
-    // cursor is still on that Column, gg/G operate on the parent page and do
-    // not implicitly enter one of its Panels.
+    // A Column is a child page of the application page. While the outer
+    // cursor is still on that Column, gg/G operate on the parent page: gg is
+    // the first root character (Open configuration) and G is the first
+    // character in its last row (Column 1).
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.pump();
@@ -584,17 +585,43 @@ void main() {
           ?.findAncestorWidgetOfExactType<PlotPanel>(),
       isNull,
     );
-
-    // Re-select the waveform page and press i to enter Column 1.  Entering
-    // the child page, rather than using gg/G, is what selects its first Panel.
-    await tester.tap(plot);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
     await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
-    await tester.pump();
-    final firstPanel = FocusManager.instance.primaryFocus?.context
+    var firstPanel = FocusManager.instance.primaryFocus?.context
         ?.findAncestorWidgetOfExactType<PlotPanel>();
     expect(firstPanel?.vimColumn, 0);
     expect(firstPanel?.vimRow, 0);
+    expect(
+      VimInputModeScope.plotSelectionLevel(
+        tester.element(find.byType(MainPage)),
+      ),
+      VimPlotSelectionLevel.column,
+    );
+
+    // J/K move only within the current parent page and may not enter a Column
+    // implicitly. Enter (or i) is the explicit child-page transition.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    firstPanel = FocusManager.instance.primaryFocus?.context
+        ?.findAncestorWidgetOfExactType<PlotPanel>();
+    expect(firstPanel?.vimColumn, 0);
+    expect(firstPanel?.vimRow, 0);
+    expect(
+      VimInputModeScope.plotSelectionLevel(
+        tester.element(find.byType(MainPage)),
+      ),
+      VimPlotSelectionLevel.column,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(
+      VimInputModeScope.plotSelectionLevel(
+        tester.element(find.byType(MainPage)),
+      ),
+      VimPlotSelectionLevel.panel,
+    );
     await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
@@ -729,21 +756,37 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
     await expectFocusedPlot(3); // Column 2, Panel 1.
     await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
-    await expectFocusedPlot(4); // Column 2, Panel 2.
+    await expectFocusedPlot(3); // Still on the Column character.
+    expect(
+      VimInputModeScope.plotSelectionLevel(
+        tester.element(find.byType(MainPage)),
+      ),
+      VimPlotSelectionLevel.column,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await expectFocusedPlot(4); // Column 2, Panel 2 after explicit entry.
 
-    // In Point mode Normal H moves to the neighboring Column and does not
-    // consume the key for crosshair stepping.
+    // An entered Column is isolated: H cannot leak into a sibling Column. Esc
+    // returns to the parent plot-grid page, where H selects Column 1 without
+    // consuming the key for Point-mode crosshair stepping.
     app.interactionMode = 1;
     app.activatePointForCurrentPanel();
     final beforeNormalMove = app.crosshairX;
     await tester.sendKeyEvent(LogicalKeyboardKey.keyH);
-    await expectFocusedPlot(1); // Column 1, representative Panel 2.
+    await expectFocusedPlot(4);
+    expect(app.crosshairX, beforeNormalMove);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyH);
+    await expectFocusedPlot(0); // Column 1 representative.
     expect(app.crosshairX, beforeNormalMove);
 
-    // The first i enters the selected Column and chooses its first Panel. A
-    // second i enters plot editing; H/L and the arrow keys then move the
-    // crosshair, and Escape returns to the non-blinking Normal state.
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    // Enter enters the selected Column and chooses its first Panel. i then
+    // enters plot editing; H/L and the arrow keys move the crosshair, and
+    // Escape returns to the non-blinking Normal state.
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
     await expectFocusedPlot(0); // Column 1, Panel 1.
     await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
