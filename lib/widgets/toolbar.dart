@@ -4230,43 +4230,47 @@ class ToolbarWidget extends StatelessWidget {
     return Semantics(
       button: true,
       label: tooltip,
-      child: Focus(
-        canRequestFocus: true,
-        skipTraversal: false,
-        descendantsAreTraversable: false,
-        onKeyEvent: (node, event) {
-          if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-            return KeyEventResult.ignored;
-          }
-          if (event.logicalKey == LogicalKeyboardKey.enter ||
-              event.logicalKey == LogicalKeyboardKey.space) {
-            if (!claimVimActivation(context, event)) {
+      child: VimActivatable(
+        onActivate: () => _showRecentConfigurations(context, app),
+        child: Focus(
+          debugLabel: 'toolbar-recent-configurations',
+          canRequestFocus: true,
+          skipTraversal: false,
+          descendantsAreTraversable: false,
+          onKeyEvent: (node, event) {
+            if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+              return KeyEventResult.ignored;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.space) {
+              if (!claimVimActivation(context, event)) {
+                return KeyEventResult.handled;
+              }
+              _showRecentConfigurations(context, app);
               return KeyEventResult.handled;
             }
-            _showRecentConfigurations(context, app);
-            return KeyEventResult.handled;
-          }
-          return KeyEventResult.ignored;
-        },
-        child: Tooltip(
-          message: tooltip,
-          child: Material(
-            color: Colors.transparent,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 44),
-              child: Ink(
-                decoration: BoxDecoration(
-                  border: Border.all(color: colors.outlineVariant),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(10),
-                  onTap: () => _showRecentConfigurations(context, app),
-                  child: Center(
-                    child: Icon(
-                      Icons.history_rounded,
-                      size: app.iconSize.toDouble(),
-                      color: colors.onSurface,
+            return KeyEventResult.ignored;
+          },
+          child: Tooltip(
+            message: tooltip,
+            child: Material(
+              color: Colors.transparent,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 44),
+                child: Ink(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: colors.outlineVariant),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => _showRecentConfigurations(context, app),
+                    child: Center(
+                      child: Icon(
+                        Icons.history_rounded,
+                        size: app.iconSize.toDouble(),
+                        color: colors.onSurface,
+                      ),
                     ),
                   ),
                 ),
@@ -4366,6 +4370,7 @@ class ToolbarWidget extends StatelessWidget {
                   _themeSegment(
                     ctx,
                     key: const ValueKey('theme-mode-light'),
+                    debugLabel: 'theme-mode-light',
                     label: 'Light theme',
                     glyph: _ThemeGlyph.light,
                     active: app.themeMode == 0,
@@ -4375,6 +4380,7 @@ class ToolbarWidget extends StatelessWidget {
                   _themeSegment(
                     ctx,
                     key: const ValueKey('theme-mode-auto'),
+                    debugLabel: 'theme-mode-auto',
                     label: 'Automatic system theme',
                     glyph: _ThemeGlyph.auto,
                     active: app.themeMode == 2,
@@ -4384,6 +4390,7 @@ class ToolbarWidget extends StatelessWidget {
                   _themeSegment(
                     ctx,
                     key: const ValueKey('theme-mode-dark'),
+                    debugLabel: 'theme-mode-dark',
                     label: 'Dark theme',
                     glyph: _ThemeGlyph.dark,
                     active: app.themeMode == 1,
@@ -4402,6 +4409,7 @@ class ToolbarWidget extends StatelessWidget {
   Widget _themeSegment(
     BuildContext ctx, {
     required Key key,
+    required String debugLabel,
     required String label,
     required _ThemeGlyph glyph,
     required bool active,
@@ -4409,45 +4417,49 @@ class ToolbarWidget extends StatelessWidget {
     required VoidCallback onTap,
   }) {
     return Expanded(
-      child: Focus(
-        canRequestFocus: true,
-        skipTraversal: false,
-        descendantsAreTraversable: false,
-        onKeyEvent: (node, event) {
-          if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-            return KeyEventResult.ignored;
-          }
-          if (event.logicalKey == LogicalKeyboardKey.enter ||
-              event.logicalKey == LogicalKeyboardKey.space) {
-            if (!claimVimActivation(ctx, event)) {
+      child: VimActivatable(
+        onActivate: onTap,
+        child: Focus(
+          debugLabel: debugLabel,
+          canRequestFocus: true,
+          skipTraversal: false,
+          descendantsAreTraversable: false,
+          onKeyEvent: (node, event) {
+            if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+              return KeyEventResult.ignored;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.space) {
+              if (!claimVimActivation(ctx, event)) {
+                return KeyEventResult.handled;
+              }
+              onTap();
               return KeyEventResult.handled;
             }
-            onTap();
-            return KeyEventResult.handled;
-          }
-          return KeyEventResult.ignored;
-        },
-        child: Semantics(
-          key: key,
-          button: true,
-          selected: active,
-          label: label,
-          child: Tooltip(
-            message: label,
-            child: InkResponse(
-              onTap: onTap,
-              radius: 18,
-              containedInkWell: true,
-              customBorder: const CircleBorder(),
-              child: Center(
-                child: CustomPaint(
-                  size: const Size.square(22),
-                  painter: _ThemeGlyphPainter(
-                    glyph,
-                    active
-                        ? activeColor
-                        : Theme.of(ctx).colorScheme.onSurfaceVariant,
-                    filled: active,
+            return KeyEventResult.ignored;
+          },
+          child: Semantics(
+            key: key,
+            button: true,
+            selected: active,
+            label: label,
+            child: Tooltip(
+              message: label,
+              child: InkResponse(
+                onTap: onTap,
+                radius: 18,
+                containedInkWell: true,
+                customBorder: const CircleBorder(),
+                child: Center(
+                  child: CustomPaint(
+                    size: const Size.square(22),
+                    painter: _ThemeGlyphPainter(
+                      glyph,
+                      active
+                          ? activeColor
+                          : Theme.of(ctx).colorScheme.onSurfaceVariant,
+                      filled: active,
+                    ),
                   ),
                 ),
               ),

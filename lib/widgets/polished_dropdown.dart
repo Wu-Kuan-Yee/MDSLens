@@ -120,6 +120,42 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
     });
   }
 
+  List<FocusNode> get _menuFocusNodes => <FocusNode>[
+        if (_actionFocusNode != null) _actionFocusNode!,
+        ..._optionFocusNodes,
+      ];
+
+  void _moveMenuFocus(int delta) {
+    final nodes = _menuFocusNodes;
+    if (nodes.isEmpty) return;
+    var current = nodes.indexWhere((node) => node.hasFocus);
+    if (current < 0) current = delta >= 0 ? -1 : 0;
+    final next = (current + delta).clamp(0, nodes.length - 1).toInt();
+    nodes[next].requestFocus();
+  }
+
+  KeyEventResult _handleMenuKey(KeyEvent event) {
+    if (!_open || (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.keyJ ||
+        event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      _moveMenuFocus(1);
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.keyK ||
+        event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      _moveMenuFocus(-1);
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      MenuController.maybeOf(context)?.close();
+      _focusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   @override
   void dispose() {
     _focusNode.dispose();
@@ -170,7 +206,7 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
       ),
       menuChildren: [
         if (widget.menuAction != null) ...[
-          _menuAction(context, widget.menuAction!),
+          _withMenuVimNavigation(_menuAction(context, widget.menuAction!)),
           Divider(
             key: ValueKey('${widget.id}-action-divider'),
             height: 7,
@@ -188,93 +224,116 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
               endIndent: 10,
               color: theme.dividerColor.withValues(alpha: 0.55),
             ),
-          _menuOption(context, widget.options[index], index),
+          _withMenuVimNavigation(
+            _menuOption(context, widget.options[index], index),
+          ),
         ],
       ],
-      builder: (context, controller, _) => VimPageScope(
-        pageId: 'dropdown/${widget.id}',
-        parentPageId: 'toolbar',
-        transient: true,
-        child: Focus(
-          focusNode: _focusNode,
-          canRequestFocus: true,
-          skipTraversal: false,
-          // The anchor is one Vim control. Menu items are rendered in the
-          // overlay and have their own focus nodes, so nested anchor nodes must
-          // not create a second, unreachable target in the main toolbar.
-          descendantsAreTraversable: false,
-          onKeyEvent: (node, event) {
-            if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-              return KeyEventResult.ignored;
-            }
-            if (event.logicalKey == LogicalKeyboardKey.escape &&
-                controller.isOpen) {
-              controller.close();
-              return KeyEventResult.handled;
-            }
-            if (event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.space) {
-              if (VimModeScope.enabled(context) &&
-                  !claimVimActivation(context, event)) {
+      builder: (context, controller, _) => VimActivatable(
+        onActivate: () =>
+            controller.isOpen ? controller.close() : controller.open(),
+        child: VimPageScope(
+          pageId: 'dropdown/${widget.id}',
+          parentPageId: 'toolbar',
+          transient: true,
+          child: Focus(
+            focusNode: _focusNode,
+            canRequestFocus: true,
+            skipTraversal: false,
+            // The anchor is one Vim control. Menu items are rendered in the
+            // overlay and have their own focus nodes, so nested anchor nodes must
+            // not create a second, unreachable target in the main toolbar.
+            descendantsAreTraversable: false,
+            onKeyEvent: (node, event) {
+              if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+                return KeyEventResult.ignored;
+              }
+              if (event.logicalKey == LogicalKeyboardKey.escape &&
+                  controller.isOpen) {
+                controller.close();
                 return KeyEventResult.handled;
               }
-              controller.isOpen ? controller.close() : controller.open();
-              return KeyEventResult.handled;
-            }
-            return KeyEventResult.ignored;
-          },
-          child: Tooltip(
-            message: widget.tooltip ?? widget.id,
-            child: Semantics(
-              button: true,
-              expanded: _open,
-              label: widget.iconOnly
-                  ? (widget.tooltip ?? widget.id)
-                  : '${widget.id}: ${selected.label}',
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () => controller.isOpen
-                      ? controller.close()
-                      : controller.open(),
-                  child: AnimatedContainer(
-                    key: ValueKey('${widget.id}-anchor'),
-                    duration: const Duration(milliseconds: 150),
-                    width: widget.iconOnly ? widget.height : null,
-                    height: widget.height,
-                    padding: widget.iconOnly
-                        ? EdgeInsets.zero
-                        : const EdgeInsets.fromLTRB(10, 0, 7, 0),
-                    decoration: BoxDecoration(
-                      color: _open
-                          ? Color.alphaBlend(
-                              colors.primary.withValues(alpha: 0.09),
-                              colors.surfaceContainerLow,
-                            )
-                          : colors.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: _open ? colors.primary : colors.outlineVariant,
-                        width: _open ? 1.5 : 1,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: colors.shadow.withValues(alpha: 0.08),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
+              if (event.logicalKey == LogicalKeyboardKey.enter ||
+                  event.logicalKey == LogicalKeyboardKey.space) {
+                if (VimModeScope.enabled(context) &&
+                    !claimVimActivation(context, event)) {
+                  return KeyEventResult.handled;
+                }
+                controller.isOpen ? controller.close() : controller.open();
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: Tooltip(
+              message: widget.tooltip ?? widget.id,
+              child: Semantics(
+                button: true,
+                expanded: _open,
+                label: widget.iconOnly
+                    ? (widget.tooltip ?? widget.id)
+                    : '${widget.id}: ${selected.label}',
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => controller.isOpen
+                        ? controller.close()
+                        : controller.open(),
+                    child: AnimatedContainer(
+                      key: ValueKey('${widget.id}-anchor'),
+                      duration: const Duration(milliseconds: 150),
+                      width: widget.iconOnly ? widget.height : null,
+                      height: widget.height,
+                      padding: widget.iconOnly
+                          ? EdgeInsets.zero
+                          : const EdgeInsets.fromLTRB(10, 0, 7, 0),
+                      decoration: BoxDecoration(
+                        color: _open
+                            ? Color.alphaBlend(
+                                colors.primary.withValues(alpha: 0.09),
+                                colors.surfaceContainerLow,
+                              )
+                            : colors.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _open ? colors.primary : colors.outlineVariant,
+                          width: _open ? 1.5 : 1,
                         ),
-                      ],
+                        boxShadow: [
+                          BoxShadow(
+                            color: colors.shadow.withValues(alpha: 0.08),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: widget.iconOnly
+                          ? _compactAnchor(colors)
+                          : _regularAnchor(theme, colors, selected),
                     ),
-                    child: widget.iconOnly
-                        ? _compactAnchor(colors)
-                        : _regularAnchor(theme, colors, selected),
                   ),
                 ),
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _withMenuVimNavigation(Widget child) {
+    // MenuItemButton owns focus and activation.  This non-focusable ancestor
+    // only receives bubbled H/J/K/L events, so keyboard and pointer behavior
+    // remain identical while Vim gets deterministic list navigation.
+    return VimPageScope(
+      pageId: 'dropdown-menu/${widget.id}',
+      parentPageId: 'dropdown/${widget.id}',
+      transient: true,
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onKeyEvent: (_, event) => _handleMenuKey(event),
+        child: child,
       ),
     );
   }
@@ -414,50 +473,82 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
   ) {
     final colors = Theme.of(context).colorScheme;
     final isSelected = option.value == widget.value;
-    return MenuItemButton(
-      key: ValueKey('${widget.id}-option-$index'),
+    return _DropdownVimFocusFrame(
       focusNode: _optionFocusNodes[index],
-      onPressed: () => widget.onChanged(option.value),
-      leadingIcon: option.icon == null
-          ? null
-          : Icon(
-              option.icon,
-              size: 19,
-              color: isSelected ? colors.primary : colors.onSurfaceVariant,
-            ),
-      trailingIcon: isSelected
-          ? Icon(Icons.check_rounded, size: 19, color: colors.primary)
-          : const SizedBox(width: 19),
-      style: ButtonStyle(
-        minimumSize: const WidgetStatePropertyAll(Size(0, 46)),
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        ),
-        shape: WidgetStatePropertyAll(
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
-        ),
-        backgroundColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.hovered) ||
-              states.contains(WidgetState.focused)) {
-            return colors.primary.withValues(alpha: 0.11);
-          }
-          return isSelected
-              ? colors.primary.withValues(alpha: 0.08)
-              : Colors.transparent;
-        }),
-        foregroundColor: WidgetStatePropertyAll(colors.onSurface),
-        textStyle: WidgetStatePropertyAll(
-          Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontSize: widget.fontSize,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+      child: MenuItemButton(
+        key: ValueKey('${widget.id}-option-$index'),
+        focusNode: _optionFocusNodes[index],
+        onPressed: () => widget.onChanged(option.value),
+        leadingIcon: option.icon == null
+            ? null
+            : Icon(
+                option.icon,
+                size: 19,
+                color: isSelected ? colors.primary : colors.onSurfaceVariant,
               ),
+        trailingIcon: isSelected
+            ? Icon(Icons.check_rounded, size: 19, color: colors.primary)
+            : const SizedBox(width: 19),
+        style: ButtonStyle(
+          minimumSize: const WidgetStatePropertyAll(Size(0, 46)),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+          ),
+          backgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.hovered) ||
+                states.contains(WidgetState.focused)) {
+              return colors.primary.withValues(alpha: 0.11);
+            }
+            return isSelected
+                ? colors.primary.withValues(alpha: 0.08)
+                : Colors.transparent;
+          }),
+          foregroundColor: WidgetStatePropertyAll(colors.onSurface),
+          textStyle: WidgetStatePropertyAll(
+            Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontSize: widget.fontSize,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                ),
+          ),
+        ),
+        child: Text(
+          option.label,
+          maxLines: 1,
+          style: TextStyle(fontFamily: option.fontFamily),
         ),
       ),
-      child: Text(
-        option.label,
-        maxLines: 1,
-        style: TextStyle(fontFamily: option.fontFamily),
-      ),
+    );
+  }
+}
+
+class _DropdownVimFocusFrame extends StatelessWidget {
+  const _DropdownVimFocusFrame({
+    required this.focusNode,
+    required this.child,
+  });
+
+  final FocusNode focusNode;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: focusNode,
+      builder: (context, _) {
+        final showRing = VimModeScope.enabled(context) && focusNode.hasFocus;
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: showRing
+                ? Border.all(color: const Color(0xFFD946EF), width: 2)
+                : null,
+          ),
+          child: child,
+        );
+      },
     );
   }
 }

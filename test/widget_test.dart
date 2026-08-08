@@ -745,6 +745,72 @@ void main() {
     expect(openCalls, 1);
   });
 
+  testWidgets('Vim Enter activates custom toolbar controls and dropdowns',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'shotHistory': '["163702"]',
+      'shot': '163703',
+    });
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    FocusManager.instance.rootScope.descendants
+        .firstWhere((node) => node.debugLabel == 'dropdown-toolbar-rate')
+        .requestFocus();
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'dropdown-toolbar-rate',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('toolbar-rate-option-0')), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    FocusManager.instance.rootScope.descendants
+        .firstWhere((node) => node.debugLabel == 'theme-mode-dark')
+        .requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(app.themeMode, 1);
+
+    FocusManager.instance.rootScope.descendants
+        .firstWhere(
+          (node) => node.debugLabel == 'dropdown-toolbar-shot-history',
+        )
+        .requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('toolbar-shot-history-menu-action')),
+      findsOneWidget,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    FocusManager.instance.rootScope.descendants
+        .firstWhere(
+          (node) => node.debugLabel == 'toolbar-recent-configurations',
+        )
+        .requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Recent Configurations'), findsOneWidget);
+  });
+
   testWidgets('Vim plot navigation follows columns and Point edit mode', (
     tester,
   ) async {
@@ -1121,8 +1187,9 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
     await tester.pump();
     bool primaryHasKey(Key key) {
-      var found = false;
-      FocusManager.instance.primaryFocus?.context?.visitAncestorElements(
+      final primaryContext = FocusManager.instance.primaryFocus?.context;
+      var found = primaryContext?.widget.key == key;
+      primaryContext?.visitAncestorElements(
         (element) {
           if (element.widget.key == key) {
             found = true;

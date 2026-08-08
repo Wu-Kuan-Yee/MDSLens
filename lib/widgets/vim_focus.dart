@@ -333,6 +333,32 @@ bool _wasVimActivationClaimed(BuildContext context, KeyEvent event) {
 bool claimVimActivation(BuildContext context, KeyEvent event) =>
     _claimVimActivation(context, event);
 
+/// Explicit activation contract for controls whose visual implementation is
+/// not backed by Flutter's default [ActivateIntent].  A toolbar segment, a
+/// custom dropdown anchor, or a composite card can expose the same semantic
+/// Enter/Space behavior without relying on an incidental InkWell descendant.
+///
+/// Keeping this contract at the Vim page boundary is important: the global
+/// dispatcher observes a key before some custom Focus widgets do.  Without an
+/// explicit callback it can accidentally consume Enter while invoking no
+/// useful action at all.
+class VimActivatable extends InheritedWidget {
+  const VimActivatable({
+    super.key,
+    required this.onActivate,
+    required super.child,
+  });
+
+  final VoidCallback onActivate;
+
+  static VimActivatable? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<VimActivatable>();
+
+  @override
+  bool updateShouldNotify(VimActivatable oldWidget) =>
+      !identical(onActivate, oldWidget.onActivate);
+}
+
 FocusNode? _vimWorkspaceFocus;
 
 void registerVimWorkspaceFocus(FocusNode node) {
@@ -740,8 +766,12 @@ class _VimFocusHostState extends State<VimFocusHost>
     if (focus?.skipTraversal ?? false) return const SizedBox.shrink();
     var renderObject = focus?.context?.findRenderObject();
     final focusContext = focus?.context;
+    final focusedPageId = focusContext == null
+        ? null
+        : VimPageScope.maybeOf(focusContext)?.pageId;
     if (focusContext != null &&
-        VimPageScope.maybeOf(focusContext)?.pageId == 'popup-menu') {
+        (focusedPageId == 'popup-menu' ||
+            (focusedPageId?.startsWith('dropdown-menu/') ?? false))) {
       // Popup items draw their ring inside the animated route. A ring in this
       // host would live outside PopupMenuRoute's transform and lag behind
       // while the menu scales/translates into place.
@@ -1424,13 +1454,25 @@ bool handleVimPageEntryKey(BuildContext context, KeyEvent event) {
   if (key != LogicalKeyboardKey.keyI && _isEditableNode(current)) {
     return false;
   }
-  if (!_claimVimActivation(context, event)) return true;
-  final layout =
-      current.context?.findAncestorWidgetOfExactType<VimLayoutFocus>();
-  if (key != LogicalKeyboardKey.keyI && layout?.onActivate != null) {
-    layout!.onActivate!();
-    return true;
+  final currentContext = current.context ?? context;
+  if (key != LogicalKeyboardKey.keyI) {
+    final activatable = VimActivatable.maybeOf(currentContext);
+    if (activatable != null) {
+      if (!_claimVimActivation(context, event)) return true;
+      activatable.onActivate();
+      return true;
+    }
+    final layout =
+        current.context?.findAncestorWidgetOfExactType<VimLayoutFocus>();
+    if (layout?.onActivate != null) {
+      if (!_claimVimActivation(context, event)) return true;
+      layout!.onActivate!();
+      return true;
+    }
+    if (!_claimVimActivation(context, event)) return true;
+    return _activateVimControl(currentContext);
   }
+  if (!_claimVimActivation(context, event)) return true;
   if (key == LogicalKeyboardKey.keyI) {
     final child = _firstDirectVimChild(current);
     if (child != null) {
@@ -1438,7 +1480,7 @@ bool handleVimPageEntryKey(BuildContext context, KeyEvent event) {
       return true;
     }
   }
-  return _activateVimControl(current.context ?? context);
+  return _activateVimControl(currentContext);
 }
 
 /// Leave a text field's insert state and put the Vim selection on the nearest
@@ -2234,7 +2276,7 @@ bool _moveVimPanelExportRootFocus(
 ) {
   final controls = _panelExportControlTargets(page);
   final columnTargets = _plotColumnTargets(page);
-  if (controls.isEmpty || columnTargets.isEmpty) return false;
+  if (controls.isEmpty) return false;
   final actionRow = controls
       .map((target) => _panelExportControlFor(target)!.row)
       .reduce((a, b) => a > b ? a : b);
@@ -2244,7 +2286,7 @@ bool _moveVimPanelExportRootFocus(
     final marker = _panelExportControlFor(control)!;
     rowsByNumber.putIfAbsent(marker.row, () => []).add(control);
   }
-  rowsByNumber[gridRow] = columnTargets;
+  if (columnTargets.isNotEmpty) rowsByNumber[gridRow] = columnTargets;
   final rowNumbers = rowsByNumber.keys.toList()..sort();
   final rows = <List<_VimFocusTarget>>[
     for (final rowNumber in rowNumbers)
@@ -2668,8 +2710,12 @@ bool moveVimPageEdge(BuildContext context, {required bool last}) {
   final layoutResult = _moveVimLayoutPageEdge(context, page, last: last);
   if (layoutResult) return true;
   final rootControls = _vimRootControls(page);
+  // `G` means the first character on the final logical line, not the final
+  // control in the route.  This is the same distinction as Vim's `G` versus
+  // `$`, and avoids jumping to an Apply button merely because it sits at the
+  // far right of a dialog action bar.
   final target = last
-      ? rootControls.lastOrNull ?? page.rows.lastOrNull?.lastOrNull
+      ? page.rows.lastOrNull?.firstOrNull ?? rootControls.lastOrNull
       : rootControls.firstOrNull ?? page.rows.firstOrNull?.firstOrNull;
   if (target == null) return false;
   _requestVimFocus(target);
@@ -2769,8 +2815,12 @@ bool _moveVimLayoutPageEdge(
     // action. A selected Column remains a root-page character, so an edge
     // command must never implicitly enter its Panel child page.
     final rootControls = _layoutRootControls(page);
+    // Layout's final root line starts with Reset, followed by Delete/Cancel/
+    // Apply.  Use the line's first character for G, just as on every other
+    // semantic page.
+    final rootPage = _VimFocusPage(rootControls);
     final target = last
-        ? rootControls.lastOrNull ?? columns.last
+        ? rootPage.rows.lastOrNull?.firstOrNull ?? columns.last
         : columns.firstOrNull ?? rootControls.firstOrNull;
     if (target != null) _requestVimFocus(target);
     return target != null;
