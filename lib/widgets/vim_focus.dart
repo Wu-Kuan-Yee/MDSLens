@@ -742,6 +742,7 @@ class _VimFocusHostState extends State<VimFocusHost>
     final inputResult = handleVimInputModeKey(focusContext ?? context, event);
     if (inputResult == KeyEventResult.handled) return true;
     if (vimEditingText()) return false;
+    if (handleVimPageScrollKey(focusContext ?? context, event)) return true;
     if (handleVimPlotEditingKey(focusContext ?? context, event)) return true;
     if (enterVimPlotColumnPage(focusContext ?? context, event)) return true;
     if (enterVimLayoutColumnPage(focusContext ?? context, event)) return true;
@@ -2963,6 +2964,175 @@ _VimFocusPage? _vimFocusPage(BuildContext context) {
   return _VimFocusPage(targets);
 }
 
+/// Handle Vim's viewport-relative page motions.  Ctrl+B and Ctrl+F move by
+/// the number of semantic rows that are actually visible in the nearest
+/// vertical viewport, rather than by a hard-coded item count.  This keeps a
+/// short dialog predictable while letting long lists such as history, recent
+/// configurations, Layout Setup columns and signal editors move a useful
+/// amount on every device size.
+bool handleVimPageScrollKey(BuildContext context, KeyEvent event) {
+  if (!VimModeScope.enabled(context) ||
+      (event is! KeyDownEvent && event is! KeyRepeatEvent) ||
+      !HardwareKeyboard.instance.isControlPressed ||
+      HardwareKeyboard.instance.isAltPressed ||
+      HardwareKeyboard.instance.isMetaPressed ||
+      HardwareKeyboard.instance.isShiftPressed) {
+    return false;
+  }
+  final forward = switch (event.logicalKey) {
+    LogicalKeyboardKey.keyF => true,
+    LogicalKeyboardKey.keyB => false,
+    _ => null,
+  };
+  if (forward == null || vimEditingText()) return false;
+  return moveVimPageByViewport(context, forward: forward);
+}
+
+/// Move one Vim page in the current semantic page.  The helper deliberately
+/// uses the hierarchical Plot/Layout rows when present, so Ctrl+B/F never
+/// leaks an entered Column page into sibling Columns.
+bool moveVimPageByViewport(
+  BuildContext context, {
+  required bool forward,
+}) {
+  final page = _vimFocusPage(context);
+  final currentNode = FocusManager.instance.primaryFocus;
+  if (page == null || currentNode == null) return false;
+  final rows = _vimViewportRows(context, page);
+  if (rows.isEmpty) return false;
+  final current = _vimTargetInRows(rows, currentNode);
+  if (current == null) return false;
+  final currentRow = rows.indexWhere((row) => row.contains(current));
+  if (currentRow < 0) return false;
+  final currentColumn = rows[currentRow].indexOf(current);
+  final visibleRows = _vimVisibleRowCount(rows, current);
+  // Vim intentionally overlaps one row between pages when practical. This
+  // preserves orientation in variable-height dialog content while ensuring a
+  // one-row viewport still progresses.
+  final step = visibleRows > 1 ? visibleRows - 1 : 1;
+  final destination =
+      (currentRow + (forward ? step : -step)).clamp(0, rows.length - 1).toInt();
+  if (destination == currentRow) return true;
+  final targetRow = rows[destination];
+  if (targetRow.isEmpty) return true;
+  final target =
+      targetRow[currentColumn.clamp(0, targetRow.length - 1).toInt()];
+  _requestVimFocus(target);
+  return true;
+}
+
+List<List<_VimFocusTarget>> _vimViewportRows(
+  BuildContext context,
+  _VimFocusPage page,
+) {
+  final current = FocusManager.instance.primaryFocus;
+  final layout = _currentVimLayoutTarget(page, current)?.layout;
+  if (layout != null) {
+    if (layout.isColumn) return _layoutRootRows(page);
+    final panels = _layoutTargets(page, columns: false)
+        .where((target) => target.layout!.column == layout.column)
+        .toList()
+      ..sort((a, b) => a.layout!.row.compareTo(b.layout!.row));
+    return [
+      for (final panel in panels) [panel]
+    ];
+  }
+
+  final plot = _currentVimPlotTarget(page, current)?.plot;
+  if (plot != null) {
+    final input = VimInputModeScope.maybeOf(context);
+    if (input?.plotSelectionLevel == VimPlotSelectionLevel.panel) {
+      return [
+        for (final panel in _plotTargetsByColumn(page, plot.column)) [panel],
+      ];
+    }
+    final rootControls = _vimRootControls(page);
+    return <List<_VimFocusTarget>>[
+      ..._VimFocusPage(rootControls).rows,
+      _plotColumnTargets(page),
+    ].where((row) => row.isNotEmpty).toList(growable: false);
+  }
+
+  return page.rows;
+}
+
+_VimFocusTarget? _vimTargetInRows(
+  List<List<_VimFocusTarget>> rows,
+  FocusNode current,
+) {
+  final currentRect = _vimNodeRect(current);
+  for (final row in rows) {
+    for (final target in row) {
+      if (identical(target.node, current) ||
+          (currentRect != null && _sameVimRect(target.rect, currentRect))) {
+        return target;
+      }
+    }
+  }
+  return null;
+}
+
+ScrollableState? _nearestVerticalVimScrollable(BuildContext context) {
+  ScrollableState? result;
+  context.visitAncestorElements((element) {
+    if (element is StatefulElement && element.state is ScrollableState) {
+      final scrollable = element.state as ScrollableState;
+      if (scrollable.position.axis == Axis.vertical) {
+        result = scrollable;
+        return false;
+      }
+    }
+    return true;
+  });
+  return result;
+}
+
+int _vimVisibleRowCount(
+  List<List<_VimFocusTarget>> rows,
+  _VimFocusTarget current,
+) {
+  final currentContext = current.node.context;
+  final scrollable = currentContext == null
+      ? null
+      : _nearestVerticalVimScrollable(currentContext);
+  if (scrollable == null ||
+      !scrollable.mounted ||
+      !scrollable.position.hasContentDimensions) {
+    return rows.length < 6 ? rows.length : 6;
+  }
+  final viewport = scrollable.context.findRenderObject();
+  if (viewport is! RenderBox || !viewport.attached || !viewport.hasSize) {
+    return rows.length < 6 ? rows.length : 6;
+  }
+  final origin = viewport.localToGlobal(Offset.zero);
+  final viewportRect = origin & viewport.size;
+  var visible = 0;
+  for (final row in rows) {
+    if (row.isEmpty) continue;
+    final top = row.map((target) => target.rect.top).reduce(
+          (a, b) => a < b ? a : b,
+        );
+    final bottom = row.map((target) => target.rect.bottom).reduce(
+          (a, b) => a > b ? a : b,
+        );
+    if (bottom > viewportRect.top + 0.5 && top < viewportRect.bottom - 0.5) {
+      visible++;
+    }
+  }
+  if (visible > 0) return visible;
+
+  final heights = <double>[
+    for (final row in rows)
+      if (row.isNotEmpty)
+        row.map((target) => target.rect.height).reduce(
+              (a, b) => a > b ? a : b,
+            ),
+  ]..sort();
+  final typical = heights.isEmpty ? 48.0 : heights[heights.length ~/ 2] + 8;
+  final estimated = (scrollable.position.viewportDimension / typical).floor();
+  return estimated.clamp(1, rows.length).toInt();
+}
+
 /// Put Vim on the first or last control of the active virtual page.  `gg`
 /// and `G` use this reading order, so they remain meaningful when a route is
 /// responsive and its controls reflow into a different number of rows.
@@ -3326,6 +3496,9 @@ KeyEventResult handleVimDialogKey(
     return KeyEventResult.handled;
   }
   if (vimEditingText()) return KeyEventResult.ignored;
+  if (handleVimPageScrollKey(navigationContext, event)) {
+    return KeyEventResult.handled;
+  }
   final noModifier = !HardwareKeyboard.instance.isControlPressed &&
       !HardwareKeyboard.instance.isAltPressed &&
       !HardwareKeyboard.instance.isMetaPressed;

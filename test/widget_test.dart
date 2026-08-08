@@ -29,6 +29,7 @@ import 'package:mdslens/theme/mdslens_theme.dart';
 import 'package:mdslens/widgets/dialogs/about.dart';
 import 'package:mdslens/widgets/dialogs/login.dart';
 import 'package:mdslens/widgets/dialogs/keyboard_mode.dart';
+import 'package:mdslens/widgets/dialogs/keyboard_safe_dialog.dart';
 import 'package:mdslens/widgets/dialogs/multi_panel_export.dart';
 import 'package:mdslens/widgets/configuration_drop_region.dart';
 import 'package:mdslens/widgets/plot_panel.dart';
@@ -1587,6 +1588,86 @@ void main() {
     await tester.pump();
     expect(app.vimMode, isFalse);
     expect(app.status, 'Keyboard mode: Standard shortcuts');
+  });
+
+  testWidgets('Vim Ctrl+B and Ctrl+F follow a dialog viewport', (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    final nodes = List<FocusNode>.generate(
+      18,
+      (index) => FocusNode(debugLabel: 'page-row-$index'),
+    );
+    addTearDown(() {
+      for (final node in nodes) {
+        node.dispose();
+      }
+    });
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MaterialApp(
+          builder: (context, child) => VimModeScope(
+            notifier: app,
+            child: VimFocusHost(child: child ?? const SizedBox.shrink()),
+          ),
+          home: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () {
+                showDialog<void>(
+                  context: context,
+                  builder: (_) => KeyboardSafeDialog(
+                    maxHeight: 300,
+                    title: const Text('Paged controls'),
+                    content: Column(
+                      children: [
+                        for (var index = 0; index < nodes.length; index++)
+                          Focus(
+                            focusNode: nodes[index],
+                            descendantsAreFocusable: false,
+                            descendantsAreTraversable: false,
+                            child: SizedBox(
+                              height: 46,
+                              child: OutlinedButton(
+                                onPressed: () {},
+                                child: Text('Row $index'),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Close'),
+                      ),
+                    ],
+                  ),
+                );
+              },
+              child: const Text('Open paged controls'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open paged controls'));
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'page-row-0');
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    final afterForward = FocusManager.instance.primaryFocus?.debugLabel;
+    expect(afterForward, isNot('page-row-0'));
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyB);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'page-row-0');
   });
 
   testWidgets('Vim Layout Setup exposes its action row and scroll targets',
@@ -6655,6 +6736,73 @@ void main() {
     );
     expect(find.text('163702'), findsOneWidget);
     expect(find.text('163701'), findsOneWidget);
+  });
+
+  testWidgets('Vim shot history menu reveals gg, G, and page motions', (
+    tester,
+  ) async {
+    final shots = List<String>.generate(24, (index) => '${164000 - index}');
+    SharedPreferences.setMockInitialValues({
+      'shotHistory': jsonEncode(shots),
+      'shot': '164001',
+    });
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final anchor = FocusManager.instance.rootScope.descendants.firstWhere(
+      (node) => node.debugLabel == 'dropdown-toolbar-shot-history',
+    );
+    anchor.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'dropdown-toolbar-shot-history-menu-action',
+    );
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'dropdown-toolbar-shot-history-option-${shots.length - 1}',
+    );
+    final lastOption = find.byKey(
+      ValueKey('toolbar-shot-history-option-${shots.length - 1}'),
+    );
+    final scrollable = Scrollable.maybeOf(tester.element(lastOption));
+    expect(scrollable, isNotNull);
+    expect(scrollable!.position.pixels, greaterThan(0));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'dropdown-toolbar-shot-history-menu-action',
+    );
+    expect(scrollable.position.pixels, closeTo(0, 0.5));
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      isNot('dropdown-toolbar-shot-history-menu-action'),
+    );
+    expect(scrollable.position.pixels, greaterThan(0));
   });
 
   testWidgets(

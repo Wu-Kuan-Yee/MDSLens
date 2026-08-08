@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'vim_focus.dart';
@@ -72,6 +74,8 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
   );
   FocusNode? _actionFocusNode;
   final List<FocusNode> _optionFocusNodes = <FocusNode>[];
+  Timer? _menuSequenceTimer;
+  bool _pendingMenuG = false;
 
   @override
   void initState() {
@@ -126,19 +130,111 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
         ..._optionFocusNodes,
       ];
 
+  void _clearMenuSequence() {
+    _pendingMenuG = false;
+    _menuSequenceTimer?.cancel();
+    _menuSequenceTimer = null;
+  }
+
+  void _focusMenuNode(FocusNode node) {
+    node.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final targetContext = node.context;
+      if (!_open ||
+          !mounted ||
+          targetContext == null ||
+          !targetContext.mounted) {
+        return;
+      }
+      // A tall MenuAnchor uses an internal viewport. Reveal the new focused
+      // entry explicitly so Vim navigation never leaves its frame hidden
+      // below the clipped edge of the menu.
+      Scrollable.ensureVisible(
+        targetContext,
+        alignment: 0.35,
+        duration: Duration.zero,
+      );
+    });
+  }
+
   void _moveMenuFocus(int delta) {
     final nodes = _menuFocusNodes;
     if (nodes.isEmpty) return;
     var current = nodes.indexWhere((node) => node.hasFocus);
     if (current < 0) current = delta >= 0 ? -1 : 0;
     final next = (current + delta).clamp(0, nodes.length - 1).toInt();
-    nodes[next].requestFocus();
+    _focusMenuNode(nodes[next]);
+  }
+
+  void _moveMenuFocusToEdge({required bool last}) {
+    final nodes = _menuFocusNodes;
+    if (nodes.isEmpty) return;
+    _focusMenuNode(last ? nodes.last : nodes.first);
+  }
+
+  int _menuPageStep() {
+    final targetContext = FocusManager.instance.primaryFocus?.context;
+    final scrollable =
+        targetContext == null ? null : Scrollable.maybeOf(targetContext);
+    final viewportHeight = scrollable?.position.hasContentDimensions == true
+        ? scrollable!.position.viewportDimension
+        : widget.menuMaxHeight;
+    final visible =
+        (viewportHeight / 48).floor().clamp(1, _menuFocusNodes.length);
+    return visible > 1 ? visible - 1 : 1;
+  }
+
+  void _moveMenuFocusByPage({required bool forward}) {
+    final nodes = _menuFocusNodes;
+    if (nodes.isEmpty) return;
+    var current = nodes.indexWhere((node) => node.hasFocus);
+    if (current < 0) current = forward ? 0 : nodes.length - 1;
+    final step = _menuPageStep();
+    final next =
+        (current + (forward ? step : -step)).clamp(0, nodes.length - 1).toInt();
+    _focusMenuNode(nodes[next]);
   }
 
   KeyEventResult _handleMenuKey(KeyEvent event) {
     if (!_open || (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
       return KeyEventResult.ignored;
     }
+    final keyboard = HardwareKeyboard.instance;
+    if (keyboard.isControlPressed &&
+        !keyboard.isAltPressed &&
+        !keyboard.isMetaPressed &&
+        !keyboard.isShiftPressed) {
+      if (event.logicalKey == LogicalKeyboardKey.keyF) {
+        _moveMenuFocusByPage(forward: true);
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.keyB) {
+        _moveMenuFocusByPage(forward: false);
+        return KeyEventResult.handled;
+      }
+    }
+    if (!keyboard.isControlPressed &&
+        !keyboard.isAltPressed &&
+        !keyboard.isMetaPressed &&
+        event.logicalKey == LogicalKeyboardKey.keyG) {
+      if (keyboard.isShiftPressed) {
+        _clearMenuSequence();
+        _moveMenuFocusToEdge(last: true);
+        return KeyEventResult.handled;
+      }
+      if (_pendingMenuG) {
+        _clearMenuSequence();
+        _moveMenuFocusToEdge(last: false);
+        return KeyEventResult.handled;
+      }
+      _pendingMenuG = true;
+      _menuSequenceTimer?.cancel();
+      _menuSequenceTimer = Timer(const Duration(milliseconds: 850), () {
+        if (mounted) _clearMenuSequence();
+      });
+      return KeyEventResult.handled;
+    }
+    if (_pendingMenuG) _clearMenuSequence();
     if (event.logicalKey == LogicalKeyboardKey.keyJ ||
         event.logicalKey == LogicalKeyboardKey.arrowDown) {
       _moveMenuFocus(1);
@@ -159,6 +255,7 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
 
   @override
   void dispose() {
+    _menuSequenceTimer?.cancel();
     _focusNode.dispose();
     _actionFocusNode?.dispose();
     for (final node in _optionFocusNodes) {
@@ -178,7 +275,10 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
     final menuWidth = widget.minimumMenuWidth.clamp(120, 360).toDouble();
 
     return MenuAnchor(
-      animated: true,
+      // Flutter's cascading menu animation creates invalid Intervals for a
+      // long history/options list. The anchor itself remains animated; keep
+      // the overlay stable so every item can be focused and scrolled to.
+      animated: false,
       consumeOutsideTap: false,
       onOpen: () {
         setState(() => _open = true);
