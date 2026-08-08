@@ -344,12 +344,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('login-api-url')), findsNothing);
 
-    // A focused plot is a first-class Vim control: Enter opens its context
-    // menu and Escape returns to the control surface.
+    // A focused plot represents its parent Column first. Enter explicitly
+    // enters that Column; a second Enter activates the selected Panel and
+    // opens its context menu.
     final plot = find.byType(PlotPanel).first;
     await tester.tap(plot);
     await tester.pump();
     expect(app.selectedPlotIndex, isNotNull);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(
+      VimInputModeScope.plotSelectionLevel(
+        tester.element(find.byType(MainPage)),
+      ),
+      VimPlotSelectionLevel.panel,
+    );
+    expect(
+      find.byKey(const ValueKey('plot-context-menu-maximize')),
+      findsNothing,
+    );
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
     expect(
@@ -429,7 +442,7 @@ void main() {
     expect(app.plots[1].viewMinX, isNull);
   });
 
-  testWidgets('Vim focus crosses the plot grid and toolbar geometrically', (
+  testWidgets('Vim root navigation does not implicitly enter a plot Column', (
     tester,
   ) async {
     final app = AppState();
@@ -453,24 +466,36 @@ void main() {
       isNotNull,
     );
 
-    // A vertical motion enters the selected source Column and lands on its
-    // last Panel; it no longer falls through to an unrelated toolbar row.
+    // A selected Column is a character of the root page. K therefore moves
+    // on that parent page and must not silently enter its last Panel.
     await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
-    await tester.pump();
-    final lastPanel = FocusManager.instance.primaryFocus?.context
-        ?.findAncestorWidgetOfExactType<PlotPanel>();
-    expect(
-      lastPanel,
-      isNotNull,
-    );
-
-    // Repeating j at the column boundary remains inside the same nested page.
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
     await tester.pump();
     expect(
       FocusManager.instance.primaryFocus?.context
           ?.findAncestorWidgetOfExactType<PlotPanel>(),
-      isNotNull,
+      isNull,
+    );
+
+    // G returns to the root page's final row, whose first character is the
+    // first waveform Column. J at that level remains a parent-page motion;
+    // it does not enter a Panel.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(
+      VimInputModeScope.plotSelectionLevel(
+        tester.element(find.byType(MainPage)),
+      ),
+      VimPlotSelectionLevel.column,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    expect(
+      VimInputModeScope.plotSelectionLevel(
+        tester.element(find.byType(MainPage)),
+      ),
+      VimPlotSelectionLevel.column,
     );
   });
 
@@ -1354,6 +1379,97 @@ void main() {
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'Vim multi-panel export navigates explicit Column child pages',
+    (tester) async {
+      final app = AppState();
+      await app.preferencesReady;
+      addTearDown(app.dispose);
+      app.setVimMode(true);
+      app.applyLayoutList([2, 2]);
+      for (var index = 0; index < app.plots.length; index++) {
+        app.plots[index].series[0] = SeriesData(
+          points: [
+            [0, index.toDouble()],
+          ],
+        );
+      }
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: app,
+          child: MaterialApp(
+            builder: (context, child) => VimModeScope(
+              notifier: app,
+              child: VimFocusHost(child: child ?? const SizedBox.shrink()),
+            ),
+            home: Builder(
+              builder: (context) => FilledButton(
+                onPressed: () => showMultiPanelExportDialog(context, app),
+                child: const Text('Open Vim export'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open Vim export'));
+      await tester.pumpAndSettle();
+
+      FocusNode panelNode(int column, int row) =>
+          FocusManager.instance.rootScope.descendants
+              .where((node) => node.canRequestFocus && !node.skipTraversal)
+              .firstWhere((node) {
+            final marker =
+                node.context?.findAncestorWidgetOfExactType<VimPlotFocus>();
+            return marker?.column == column && marker?.row == row;
+          });
+
+      VimPlotFocus? focusedPanel() =>
+          FocusManager.instance.primaryFocus?.context
+              ?.findAncestorWidgetOfExactType<VimPlotFocus>();
+
+      panelNode(0, 0).requestFocus();
+      await tester.pump();
+      final dialogContext = tester.element(find.text('Export multiple panels'));
+      expect(
+        VimInputModeScope.plotSelectionLevel(dialogContext),
+        VimPlotSelectionLevel.column,
+      );
+
+      // H/L select sibling Column characters on the dialog page.
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
+      await tester.pump();
+      expect(focusedPanel()?.column, 1);
+      expect(focusedPanel()?.row, 0);
+      expect(
+        VimInputModeScope.plotSelectionLevel(dialogContext),
+        VimPlotSelectionLevel.column,
+      );
+
+      // Only Enter enters the selected Column. J/K then move between its
+      // Panel characters, while H/L cannot leak into a sibling Column.
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(
+        VimInputModeScope.plotSelectionLevel(dialogContext),
+        VimPlotSelectionLevel.panel,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+      await tester.pump();
+      expect(focusedPanel()?.column, 1);
+      expect(focusedPanel()?.row, 1);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyH);
+      await tester.pump();
+      expect(focusedPanel()?.column, 1);
+      expect(focusedPanel()?.row, 1);
+
+      // A Panel is a leaf control in this dialog, so Enter is equivalent to
+      // clicking it and toggles only that Panel's export selection.
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(find.text('Export 3 panel(s)'), findsOneWidget);
     },
   );
 

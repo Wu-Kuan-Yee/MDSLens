@@ -2655,43 +2655,49 @@ KeyEventResult handleVimDialogKey(
       (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
     return KeyEventResult.ignored;
   }
-  final input = VimInputModeScope.maybeOf(context);
+  final focusedContext = FocusManager.instance.primaryFocus?.context;
+  final navigationContext = focusedContext ?? context;
+  final input = VimInputModeScope.maybeOf(navigationContext);
   if (event.logicalKey == LogicalKeyboardKey.escape &&
       input?.consumeTextEscapeRelease() == true) {
-    if (!_claimVimHierarchyEscape(context, event)) {
+    if (!_claimVimHierarchyEscape(navigationContext, event)) {
       return KeyEventResult.handled;
     }
-    if (!leaveVimPageToParent(context)) Navigator.maybePop(context);
+    if (!leaveVimPageToParent(navigationContext)) {
+      Navigator.maybePop(context);
+    }
     return KeyEventResult.handled;
   }
-  final inputResult = handleVimInputModeKey(context, event);
+  final inputResult = handleVimInputModeKey(navigationContext, event);
   if (inputResult == KeyEventResult.handled) return inputResult;
   if ((event.logicalKey == LogicalKeyboardKey.keyI ||
           event.logicalKey == LogicalKeyboardKey.enter ||
           event.logicalKey == LogicalKeyboardKey.numpadEnter) &&
-      enterVimPlotColumnPage(context, event)) {
+      enterVimPlotColumnPage(navigationContext, event)) {
     return KeyEventResult.handled;
   }
   if ((event.logicalKey == LogicalKeyboardKey.keyI ||
           event.logicalKey == LogicalKeyboardKey.enter ||
           event.logicalKey == LogicalKeyboardKey.numpadEnter) &&
-      handleVimPageEntryKey(context, event)) {
+      handleVimPageEntryKey(navigationContext, event)) {
     return KeyEventResult.handled;
   }
-  if (handleVimLayoutNavigationKey(context, event)) {
+  if (handleVimLayoutNavigationKey(navigationContext, event)) {
     return KeyEventResult.handled;
   }
-  if (handleVimPlotNavigationKey(context, event)) {
+  if (handleVimPlotNavigationKey(navigationContext, event)) {
     return KeyEventResult.handled;
   }
   if (event.logicalKey == LogicalKeyboardKey.escape) {
-    if (!_claimVimHierarchyEscape(context, event)) {
+    if (!_claimVimHierarchyEscape(navigationContext, event)) {
       return KeyEventResult.handled;
     }
-    if (vimFocusedEditable() && leaveVimTextEditing(context)) {
+    if (vimFocusedEditable() && leaveVimTextEditing(navigationContext)) {
       return KeyEventResult.handled;
     }
-    if (!leaveVimPageToParent(context)) Navigator.maybePop(context);
+    if (!leaveVimPageToParent(navigationContext)) {
+      Navigator.maybePop(context);
+    }
     return KeyEventResult.handled;
   }
   if (vimEditingText()) return KeyEventResult.ignored;
@@ -2707,7 +2713,7 @@ KeyEventResult handleVimDialogKey(
     final lineEnd = event.logicalKey == LogicalKeyboardKey.dollar ||
         (HardwareKeyboard.instance.isShiftPressed &&
             event.logicalKey == LogicalKeyboardKey.digit4);
-    return moveVimLineEdge(context, last: lineEnd)
+    return moveVimLineEdge(navigationContext, last: lineEnd)
         ? KeyEventResult.handled
         : KeyEventResult.ignored;
   }
@@ -2733,8 +2739,6 @@ KeyEventResult handleVimDialogKey(
       HardwareKeyboard.instance.isShiftPressed) {
     return KeyEventResult.ignored;
   }
-  final focusedContext = FocusManager.instance.primaryFocus?.context;
-  final navigationContext = focusedContext ?? context;
   if (_isVimLayoutContext(navigationContext)) {
     if (moveVimLayoutFocus(navigationContext, direction)) {
       return KeyEventResult.handled;

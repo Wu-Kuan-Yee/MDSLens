@@ -148,6 +148,13 @@ Future<PanelExportRequest?> showMultiPanelExportDialog(
   Set<int>? initialSelection,
   bool allowPanelSelection = true,
 }) async {
+  final vimInput = VimInputModeScope.maybeOf(context);
+  if (app.vimMode) {
+    // The selection grid is a fresh two-level document every time the dialog
+    // opens. Never inherit a previously entered Panel page from the live plot
+    // workspace.
+    vimInput?.setPlotSelectionLevel(VimPlotSelectionLevel.column);
+  }
   final choices = panelExportChoices(app);
   final choiceColumns = panelExportChoiceColumns(app);
   final selected = initialSelection == null
@@ -205,6 +212,7 @@ Future<PanelExportRequest?> showMultiPanelExportDialog(
           }
 
           return KeyboardSafeDialog(
+            pageId: 'panel-export',
             maxWidth: 700,
             maxHeight: 820,
             title: Row(
@@ -376,6 +384,9 @@ Future<PanelExportRequest?> showMultiPanelExportDialog(
       ),
     );
   } finally {
+    if (app.vimMode) {
+      vimInput?.setPlotSelectionLevel(VimPlotSelectionLevel.column);
+    }
     xMinController.dispose();
     xMaxController.dispose();
     horizontalController.dispose();
@@ -464,57 +475,61 @@ class _PanelExportLayoutGrid extends StatelessWidget {
                                   columnIndex < columns.length;
                                   columnIndex++)
                                 Expanded(
-                                  child: Padding(
-                                    padding: EdgeInsets.only(
-                                      left: columnIndex == 0 ? 0 : 4,
-                                      right: columnIndex == columns.length - 1
-                                          ? 0
-                                          : 4,
-                                    ),
-                                    child: Column(
-                                      children: [
-                                        SizedBox(
-                                          height: 26,
-                                          child: Center(
-                                            child: Text(
-                                              'Column ${columnIndex + 1}',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .labelMedium
-                                                  ?.copyWith(
-                                                    fontWeight: FontWeight.w700,
-                                                  ),
+                                  child: VimPlotColumnFocus(
+                                    column: columns[columnIndex].first.column,
+                                    child: Padding(
+                                      padding: EdgeInsets.only(
+                                        left: columnIndex == 0 ? 0 : 4,
+                                        right: columnIndex == columns.length - 1
+                                            ? 0
+                                            : 4,
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          SizedBox(
+                                            height: 26,
+                                            child: Center(
+                                              child: Text(
+                                                'Column ${columnIndex + 1}',
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .labelMedium
+                                                    ?.copyWith(
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                        Expanded(
-                                          child: Column(
-                                            children: [
-                                              for (final choice
-                                                  in columns[columnIndex])
-                                                Expanded(
-                                                  child: Padding(
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                      vertical: 4,
-                                                    ),
-                                                    child: _PanelExportTile(
-                                                      choice: choice,
-                                                      selected:
-                                                          selected.contains(
-                                                        choice.index,
+                                          Expanded(
+                                            child: Column(
+                                              children: [
+                                                for (final choice
+                                                    in columns[columnIndex])
+                                                  Expanded(
+                                                    child: Padding(
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                        vertical: 4,
                                                       ),
-                                                      onTap: choice.hasData
-                                                          ? () =>
-                                                              onToggle(choice)
-                                                          : null,
+                                                      child: _PanelExportTile(
+                                                        choice: choice,
+                                                        selected:
+                                                            selected.contains(
+                                                          choice.index,
+                                                        ),
+                                                        onTap: choice.hasData
+                                                            ? () =>
+                                                                onToggle(choice)
+                                                            : null,
+                                                      ),
                                                     ),
                                                   ),
-                                                ),
-                                            ],
+                                              ],
+                                            ),
                                           ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -557,90 +572,96 @@ class _PanelExportTile extends StatelessWidget {
         '${choice.title.isEmpty ? "" : " · ${choice.title}"}\n'
         '${choice.hasData ? "${choice.loadedSeries} loaded curve(s)" : "No loaded data"}'
         '\n$signals';
-    return Semantics(
-      button: choice.hasData,
-      selected: selected,
-      enabled: choice.hasData,
-      label: tooltip,
-      child: Tooltip(
-        message: tooltip,
-        child: AnimatedOpacity(
-          duration: const Duration(milliseconds: 140),
-          opacity: choice.hasData ? 1 : 0.48,
-          child: Material(
-            color: selected
-                ? colors.primaryContainer.withValues(alpha: 0.86)
-                : colors.surfaceContainerLow,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-              side: BorderSide(
-                color: selected ? colors.primary : colors.outlineVariant,
-                width: selected ? 2 : 1,
+    return VimPlotFocus(
+      column: choice.column,
+      row: choice.row,
+      child: Semantics(
+        button: choice.hasData,
+        selected: selected,
+        enabled: choice.hasData,
+        label: tooltip,
+        child: Tooltip(
+          message: tooltip,
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 140),
+            opacity: choice.hasData ? 1 : 0.48,
+            child: Material(
+              color: selected
+                  ? colors.primaryContainer.withValues(alpha: 0.86)
+                  : colors.surfaceContainerLow,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: BorderSide(
+                  color: selected ? colors.primary : colors.outlineVariant,
+                  width: selected ? 2 : 1,
+                ),
               ),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              key: ValueKey('multi-panel-export-${choice.index}'),
-              onTap: onTap,
-              child: Stack(
-                children: [
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(8, 24, 8, 8),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            signals,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 7,
-                    top: 6,
-                    child: Text(
-                      'Panel ${choice.index + 1}',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: colors.onSurfaceVariant,
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                  ),
-                  Positioned(
-                    right: 6,
-                    top: 5,
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 140),
-                      child: Icon(
-                        selected
-                            ? Icons.check_circle_rounded
-                            : choice.hasData
-                                ? Icons.radio_button_unchecked_rounded
-                                : Icons.block_rounded,
-                        key: ValueKey(
-                          '${choice.index}-$selected-${choice.hasData}',
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                key: ValueKey('multi-panel-export-${choice.index}'),
+                onTap: onTap,
+                child: Stack(
+                  children: [
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 24, 8, 8),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              signals,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
                         ),
-                        size: 18,
-                        color:
-                            selected ? colors.primary : colors.onSurfaceVariant,
                       ),
                     ),
-                  ),
-                ],
+                    Positioned(
+                      left: 7,
+                      top: 6,
+                      child: Text(
+                        'Panel ${choice.index + 1}',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: colors.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                    ),
+                    Positioned(
+                      right: 6,
+                      top: 5,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 140),
+                        child: Icon(
+                          selected
+                              ? Icons.check_circle_rounded
+                              : choice.hasData
+                                  ? Icons.radio_button_unchecked_rounded
+                                  : Icons.block_rounded,
+                          key: ValueKey(
+                            '${choice.index}-$selected-${choice.hasData}',
+                          ),
+                          size: 18,
+                          color: selected
+                              ? colors.primary
+                              : colors.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
