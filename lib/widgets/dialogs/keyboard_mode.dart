@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/app_state.dart';
@@ -81,64 +80,10 @@ class _KeyboardModePanelState extends State<_KeyboardModePanel> {
     super.dispose();
   }
 
-  KeyEventResult _handleChoiceKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-      return KeyEventResult.ignored;
-    }
-    final key = event.logicalKey;
-    if (key == LogicalKeyboardKey.keyJ ||
-        key == LogicalKeyboardKey.arrowDown ||
-        key == LogicalKeyboardKey.keyL ||
-        key == LogicalKeyboardKey.arrowRight) {
-      if (identical(node, _standardNode)) {
-        _vimNode.requestFocus();
-      } else {
-        _cancelNode.requestFocus();
-      }
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.keyK ||
-        key == LogicalKeyboardKey.arrowUp ||
-        key == LogicalKeyboardKey.keyH ||
-        key == LogicalKeyboardKey.arrowLeft) {
-      _standardNode.requestFocus();
-      return KeyEventResult.handled;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.enter) {
-      setState(() => _selectedVim = identical(node, _vimNode));
-      widget.onApply(_selectedVim);
-      return KeyEventResult.handled;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.space) {
-      setState(() => _selectedVim = identical(node, _vimNode));
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
-
-  KeyEventResult _handleActionKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-      return KeyEventResult.ignored;
-    }
-    final key = event.logicalKey;
-    if (key == LogicalKeyboardKey.keyH || key == LogicalKeyboardKey.arrowLeft) {
-      _cancelNode.requestFocus();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.keyL ||
-        key == LogicalKeyboardKey.arrowRight) {
-      _applyNode.requestFocus();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.keyK || key == LogicalKeyboardKey.arrowUp) {
-      _vimNode.requestFocus();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.keyJ || key == LogicalKeyboardKey.arrowDown) {
-      (identical(node, _cancelNode) ? _applyNode : _cancelNode).requestFocus();
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
+  KeyEventResult _handleNavigationKey(FocusNode node, KeyEvent event) {
+    return handleVimKeyboardModeNavigationKey(node.context ?? context, event)
+        ? KeyEventResult.handled
+        : KeyEventResult.ignored;
   }
 
   @override
@@ -146,6 +91,7 @@ class _KeyboardModePanelState extends State<_KeyboardModePanel> {
     final colors = Theme.of(context).colorScheme;
     return KeyboardSafeDialog(
       key: const ValueKey('keyboard-mode-dialog'),
+      pageId: 'keyboard-mode',
       forceVimNavigation: true,
       maxWidth: 620,
       title: Row(
@@ -158,88 +104,98 @@ class _KeyboardModePanelState extends State<_KeyboardModePanel> {
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Focus(
-            key: const ValueKey('keyboard-mode-standard'),
-            focusNode: _standardNode,
-            descendantsAreTraversable: false,
-            onKeyEvent: _handleChoiceKey,
-            child: VimActivatable(
-              onActivate: () {
-                setState(() => _selectedVim = false);
-                widget.onApply(false);
-              },
-              child: _ModeCard(
-                selected: !_selectedVim,
-                icon: Icons.keyboard_rounded,
-                title: 'Standard Shortcuts',
-                description:
-                    'Use the configurable shortcuts and the normal pointer '
-                    'interaction model.',
-                onTap: () => setState(() => _selectedVim = false),
+          VimKeyboardModeControl(
+            row: 0,
+            column: 0,
+            child: Focus(
+              key: const ValueKey('keyboard-mode-standard'),
+              focusNode: _standardNode,
+              descendantsAreTraversable: false,
+              onKeyEvent: _handleNavigationKey,
+              child: VimActivatable(
+                onActivate: () => setState(() => _selectedVim = false),
+                child: _ModeCard(
+                  selected: !_selectedVim,
+                  icon: Icons.keyboard_rounded,
+                  title: 'Standard Shortcuts',
+                  description:
+                      'Use the configurable shortcuts and the normal pointer '
+                      'interaction model.',
+                  onTap: () => setState(() => _selectedVim = false),
+                ),
               ),
             ),
           ),
           const SizedBox(height: 10),
-          Focus(
-            key: const ValueKey('keyboard-mode-vim'),
-            focusNode: _vimNode,
-            descendantsAreTraversable: false,
-            onKeyEvent: _handleChoiceKey,
-            child: VimActivatable(
-              onActivate: () {
-                setState(() => _selectedVim = true);
-                widget.onApply(true);
-              },
-              child: _ModeCard(
-                selected: _selectedVim,
-                icon: Icons.terminal_rounded,
-                title: 'Vim Keyboard-Only',
-                description:
-                    'Use H/J/K/L to move the purple-pink selection between '
-                    'controls, Enter to activate, and Esc to cancel. Use : '
-                    'to search every command; on a selected plot, Enter opens '
-                    'its menu and Shift + H/J/K/L pans.',
-                onTap: () => setState(() => _selectedVim = true),
+          VimKeyboardModeControl(
+            row: 1,
+            column: 0,
+            child: Focus(
+              key: const ValueKey('keyboard-mode-vim'),
+              focusNode: _vimNode,
+              descendantsAreTraversable: false,
+              onKeyEvent: _handleNavigationKey,
+              child: VimActivatable(
+                onActivate: () => setState(() => _selectedVim = true),
+                child: _ModeCard(
+                  selected: _selectedVim,
+                  icon: Icons.terminal_rounded,
+                  title: 'Vim Keyboard-Only',
+                  description:
+                      'Use H/J/K/L to move the purple-pink selection between '
+                      'controls, Enter to select, and Esc to cancel. Use : '
+                      'to search every command; on a selected plot, Enter opens '
+                      'its menu and Shift + H/J/K/L pans.',
+                  onTap: () => setState(() => _selectedVim = true),
+                ),
               ),
             ),
           ),
           const SizedBox(height: 14),
           Text(
             'The mode is saved and restored when MDSLens starts again. '
-            'Use Up/Left or K/H for Standard, Down/Right or J/L for Vim, '
-            'then press Enter to apply. A hardware keyboard is required on '
+            'Use J/K or the arrow keys to select a mode, then move to Apply '
+            'and press Enter. A hardware keyboard is required on '
             'mobile devices.',
             style: TextStyle(color: colors.onSurfaceVariant),
           ),
         ],
       ),
       actions: [
-        VimActivatable(
-          onActivate: () => Navigator.pop(context, false),
-          child: Focus(
-            key: const ValueKey('keyboard-mode-cancel'),
-            focusNode: _cancelNode,
-            debugLabel: 'keyboard-mode-cancel',
-            descendantsAreTraversable: false,
-            onKeyEvent: _handleActionKey,
-            child: TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
+        VimKeyboardModeControl(
+          row: 2,
+          column: 0,
+          child: VimActivatable(
+            onActivate: () => Navigator.pop(context, false),
+            child: Focus(
+              key: const ValueKey('keyboard-mode-cancel'),
+              focusNode: _cancelNode,
+              debugLabel: 'keyboard-mode-cancel',
+              descendantsAreTraversable: false,
+              onKeyEvent: _handleNavigationKey,
+              child: TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
             ),
           ),
         ),
-        VimActivatable(
-          onActivate: () => widget.onApply(_selectedVim),
-          child: Focus(
-            key: const ValueKey('keyboard-mode-apply'),
-            focusNode: _applyNode,
-            debugLabel: 'keyboard-mode-apply',
-            descendantsAreTraversable: false,
-            onKeyEvent: _handleActionKey,
-            child: FilledButton.icon(
-              onPressed: () => widget.onApply(_selectedVim),
-              icon: const Icon(Icons.check_rounded),
-              label: const Text('Apply'),
+        VimKeyboardModeControl(
+          row: 2,
+          column: 1,
+          child: VimActivatable(
+            onActivate: () => widget.onApply(_selectedVim),
+            child: Focus(
+              key: const ValueKey('keyboard-mode-apply'),
+              focusNode: _applyNode,
+              debugLabel: 'keyboard-mode-apply',
+              descendantsAreTraversable: false,
+              onKeyEvent: _handleNavigationKey,
+              child: FilledButton.icon(
+                onPressed: () => widget.onApply(_selectedVim),
+                icon: const Icon(Icons.check_rounded),
+                label: const Text('Apply'),
+              ),
             ),
           ),
         ),

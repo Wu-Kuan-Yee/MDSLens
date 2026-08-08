@@ -28,6 +28,7 @@ import 'package:mdslens/services/user_data_store.dart';
 import 'package:mdslens/theme/mdslens_theme.dart';
 import 'package:mdslens/widgets/dialogs/about.dart';
 import 'package:mdslens/widgets/dialogs/login.dart';
+import 'package:mdslens/widgets/dialogs/keyboard_mode.dart';
 import 'package:mdslens/widgets/dialogs/multi_panel_export.dart';
 import 'package:mdslens/widgets/configuration_drop_region.dart';
 import 'package:mdslens/widgets/plot_panel.dart';
@@ -1432,6 +1433,48 @@ void main() {
       primaryHasKey(const ValueKey('keyboard-mode-apply')),
       isTrue,
     );
+  });
+
+  testWidgets('Keyboard Mode keeps HJKL navigation before Vim is enabled',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MaterialApp(
+          builder: (context, child) => VimModeScope(
+            notifier: app,
+            child: VimFocusHost(child: child ?? const SizedBox.shrink()),
+          ),
+          home: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () => KeyboardModeDialog.show(context),
+              child: const Text('Open keyboard mode'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open keyboard mode'));
+    await tester.pumpAndSettle();
+
+    expect(FocusManager.instance.primaryFocus?.debugLabel,
+        'keyboard-mode-standard');
+    expect(find.byKey(const ValueKey('vim-focus-ring')), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'keyboard-mode-vim');
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    expect(
+        FocusManager.instance.primaryFocus?.debugLabel, 'keyboard-mode-cancel');
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
+    await tester.pump();
+    expect(
+        FocusManager.instance.primaryFocus?.debugLabel, 'keyboard-mode-apply');
   });
 
   testWidgets('Vim Layout Setup exposes its action row and scroll targets',

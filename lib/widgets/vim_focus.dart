@@ -807,7 +807,14 @@ class _VimFocusHostState extends State<VimFocusHost>
       child: ValueListenableBuilder<int>(
         valueListenable: _vimFocusVisualRevision,
         builder: (context, revision, child) {
-          final enabled = VimModeScope.enabled(context);
+          // Keyboard Mode deliberately uses Vim-like navigation while the
+          // persisted preference can still be Standard. Its temporary page is
+          // below this host, so inspect the active focus context as well as
+          // the host's inherited scope before deciding whether to draw the
+          // purple focus frame.
+          final focusedContext = FocusManager.instance.primaryFocus?.context;
+          final enabled = VimModeScope.enabled(context) ||
+              (focusedContext != null && VimModeScope.enabled(focusedContext));
           return Stack(
             clipBehavior: Clip.hardEdge,
             children: [
@@ -990,6 +997,25 @@ class VimPanelExportControl extends InheritedWidget {
 
   @override
   bool updateShouldNotify(VimPanelExportControl oldWidget) =>
+      row != oldWidget.row || column != oldWidget.column;
+}
+
+/// Declares the four semantic cells of the Keyboard Mode dialog.  This dialog
+/// must be keyboard-navigable even before Vim mode has been selected, so its
+/// rows are explicit rather than inferred from the cards' changing height.
+class VimKeyboardModeControl extends InheritedWidget {
+  const VimKeyboardModeControl({
+    super.key,
+    required super.child,
+    required this.row,
+    required this.column,
+  });
+
+  final int row;
+  final int column;
+
+  @override
+  bool updateShouldNotify(VimKeyboardModeControl oldWidget) =>
       row != oldWidget.row || column != oldWidget.column;
 }
 
@@ -2221,6 +2247,105 @@ List<_VimFocusTarget> _plotColumnTargets(_VimFocusPage page) {
 VimPanelExportControl? _panelExportControlFor(_VimFocusTarget target) =>
     target.node.context?.findAncestorWidgetOfExactType<VimPanelExportControl>();
 
+VimKeyboardModeControl? _keyboardModeControlFor(_VimFocusTarget target) =>
+    target.node.context
+        ?.findAncestorWidgetOfExactType<VimKeyboardModeControl>();
+
+bool handleVimKeyboardModeNavigationKey(
+  BuildContext context,
+  KeyEvent event,
+) {
+  if (!VimModeScope.enabled(context) ||
+      (event is! KeyDownEvent && event is! KeyRepeatEvent) ||
+      HardwareKeyboard.instance.isControlPressed ||
+      HardwareKeyboard.instance.isAltPressed ||
+      HardwareKeyboard.instance.isMetaPressed ||
+      HardwareKeyboard.instance.isShiftPressed) {
+    return false;
+  }
+  final direction = switch (event.logicalKey) {
+    LogicalKeyboardKey.keyH ||
+    LogicalKeyboardKey.arrowLeft =>
+      TraversalDirection.left,
+    LogicalKeyboardKey.keyJ ||
+    LogicalKeyboardKey.arrowDown =>
+      TraversalDirection.down,
+    LogicalKeyboardKey.keyK ||
+    LogicalKeyboardKey.arrowUp =>
+      TraversalDirection.up,
+    LogicalKeyboardKey.keyL ||
+    LogicalKeyboardKey.arrowRight =>
+      TraversalDirection.right,
+    _ => null,
+  };
+  if (direction == null) return false;
+
+  final current = FocusManager.instance.primaryFocus;
+  final currentContext = current?.context;
+  final currentControl =
+      currentContext?.findAncestorWidgetOfExactType<VimKeyboardModeControl>();
+  if (currentControl == null) return false;
+
+  final scope = _vimFocusScope(context);
+  if (scope == null) return false;
+  final unique = <String, _VimFocusTarget>{};
+  for (final target in _vimFocusTargets(scope)) {
+    final marker = _keyboardModeControlFor(target);
+    if (marker == null) continue;
+    final pageId = VimPageScope.maybeOf(target.node.context!)?.pageId;
+    if (pageId != 'keyboard-mode') continue;
+    final key = '${marker.row}:${marker.column}';
+    final previous = unique[key];
+    if (previous == null || target.depth < previous.depth) {
+      unique[key] = target;
+    }
+  }
+  if (unique.isEmpty) return false;
+
+  final ordered = unique.values.toList()
+    ..sort((a, b) {
+      final aMarker = _keyboardModeControlFor(a)!;
+      final bMarker = _keyboardModeControlFor(b)!;
+      final byRow = aMarker.row.compareTo(bMarker.row);
+      return byRow != 0 ? byRow : aMarker.column.compareTo(bMarker.column);
+    });
+  final rowNumbers = ordered
+      .map((target) => _keyboardModeControlFor(target)!.row)
+      .toSet()
+      .toList()
+    ..sort();
+  final targetsById = <String, _VimFocusTarget>{};
+  final rows = <List<VimPageCell>>[];
+  for (final row in rowNumbers) {
+    final rowTargets = ordered
+        .where((target) => _keyboardModeControlFor(target)!.row == row)
+        .toList();
+    final cells = <VimPageCell>[];
+    for (final target in rowTargets) {
+      final id = _vimFocusTargetId(target);
+      targetsById[id] = target;
+      cells.add(VimPageCell(id: id, label: target.node.debugLabel ?? id));
+    }
+    rows.add(cells);
+  }
+  final navigator = VimPageStack(
+    root: VimPage(id: 'keyboard-mode', title: 'Keyboard Mode', rows: rows),
+  );
+  final currentTarget = ordered.where((target) {
+    final marker = _keyboardModeControlFor(target)!;
+    return marker.row == currentControl.row &&
+        marker.column == currentControl.column;
+  }).firstOrNull;
+  if (currentTarget == null) return false;
+  navigator.setSelection(_vimFocusTargetId(currentTarget));
+  if (!navigator.move(_vimPageMotionForDirection(direction))) return false;
+  final nextId = navigator.selectedId;
+  final next = nextId == null ? null : targetsById[nextId];
+  if (next == null) return false;
+  _requestVimFocus(next);
+  return true;
+}
+
 List<_VimFocusTarget> _panelExportControlTargets(_VimFocusPage page) {
   final unique = <String, _VimFocusTarget>{};
   for (final target in page.targets) {
@@ -3131,6 +3256,9 @@ KeyEventResult handleVimDialogKey(
   }
   if (event.logicalKey == LogicalKeyboardKey.keyI &&
       enterVimLayoutColumnPage(navigationContext, event)) {
+    return KeyEventResult.handled;
+  }
+  if (handleVimKeyboardModeNavigationKey(navigationContext, event)) {
     return KeyEventResult.handled;
   }
   if ((event.logicalKey == LogicalKeyboardKey.keyI ||
