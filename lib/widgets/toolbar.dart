@@ -198,6 +198,36 @@ bool reorderLayoutPanel(
   return true;
 }
 
+/// Move every Panel in one Column into another Column at a precise Panel
+/// insertion point.  The source Column disappears, but its Panel order is
+/// retained exactly.  This is deliberately separate from [reorderLayoutColumn]
+/// because a Column can now be dropped *inside* another Column as well as
+/// between sibling Columns.
+bool insertLayoutColumnIntoColumn(
+  List<List<Map<String, dynamic>>> columns, {
+  required int sourceColumn,
+  required int targetColumn,
+  required int insertionRow,
+}) {
+  if (sourceColumn < 0 ||
+      sourceColumn >= columns.length ||
+      targetColumn < 0 ||
+      targetColumn >= columns.length ||
+      sourceColumn == targetColumn ||
+      insertionRow < 0 ||
+      insertionRow > columns[targetColumn].length ||
+      columns[sourceColumn].isEmpty) {
+    return false;
+  }
+
+  final source = columns.removeAt(sourceColumn);
+  final adjustedTarget =
+      targetColumn > sourceColumn ? targetColumn - 1 : targetColumn;
+  final destination = columns[adjustedTarget];
+  destination.insertAll(insertionRow.clamp(0, destination.length), source);
+  return true;
+}
+
 bool moveLayoutPanelToNewColumn(
   List<List<Map<String, dynamic>>> columns, {
   required int sourceColumn,
@@ -2659,39 +2689,56 @@ class ToolbarWidget extends StatelessWidget {
   }) {
     return DragTarget<_LayoutDragData>(
       key: ValueKey('layout-panel-drop-$targetColumn-$insertionRow'),
-      onWillAcceptWithDetails: (details) => !details.data.isColumn,
+      onWillAcceptWithDetails: (details) =>
+          !details.data.isColumn || details.data.column != targetColumn,
       onAcceptWithDetails: (details) {
         onLayoutChange(() {
-          reorderLayoutPanel(
-            columns,
-            sourceColumn: details.data.column,
-            sourceRow: details.data.row!,
-            targetColumn: targetColumn,
-            insertionRow: insertionRow,
-          );
+          if (details.data.isColumn) {
+            insertLayoutColumnIntoColumn(
+              columns,
+              sourceColumn: details.data.column,
+              targetColumn: targetColumn,
+              insertionRow: insertionRow,
+            );
+          } else {
+            reorderLayoutPanel(
+              columns,
+              sourceColumn: details.data.column,
+              sourceRow: details.data.row!,
+              targetColumn: targetColumn,
+              insertionRow: insertionRow,
+            );
+          }
         });
       },
-      builder: (context, candidates, rejected) => AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        height: candidates.isEmpty ? 7 : 12,
-        margin: const EdgeInsets.symmetric(horizontal: 5),
-        decoration: BoxDecoration(
-          color: candidates.isEmpty
-              ? Colors.transparent
-              : Theme.of(context).colorScheme.primary,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: candidates.isEmpty
-              ? null
-              : [
-                  BoxShadow(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primary.withValues(alpha: 0.35),
-                    blurRadius: 8,
-                  ),
-                ],
-        ),
-      ),
+      builder: (context, candidates, rejected) {
+        final columnDrop = candidates.any(
+          (data) => data != null && data.isColumn,
+        );
+        final active = candidates.isNotEmpty;
+        final color = Theme.of(context).colorScheme.primary;
+        return Tooltip(
+          message:
+              columnDrop ? 'Insert this column here' : 'Insert this panel here',
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            height: active ? 12 : 7,
+            margin: const EdgeInsets.symmetric(horizontal: 5),
+            decoration: BoxDecoration(
+              color: active ? color : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: active
+                  ? [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.35),
+                        blurRadius: 8,
+                      ),
+                    ]
+                  : null,
+            ),
+          ),
+        );
+      },
     );
   }
 

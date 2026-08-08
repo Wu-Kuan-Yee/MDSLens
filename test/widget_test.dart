@@ -7649,6 +7649,41 @@ void main() {
         ['C'],
       ],
     );
+
+    final mergedColumns = [
+      [panel('1-1')],
+      [panel('2-1'), panel('2-2')],
+      [panel('3-1')],
+      [panel('4-1'), panel('4-2'), panel('4-3')],
+    ];
+    expect(
+      insertLayoutColumnIntoColumn(
+        mergedColumns,
+        sourceColumn: 1,
+        targetColumn: 3,
+        insertionRow: 2,
+      ),
+      isTrue,
+    );
+    expect(
+      mergedColumns
+          .map((column) => column.map((item) => item['title']).toList())
+          .toList(),
+      [
+        ['1-1'],
+        ['3-1'],
+        ['4-1', '4-2', '2-1', '2-2', '4-3'],
+      ],
+    );
+    expect(
+      insertLayoutColumnIntoColumn(
+        mergedColumns,
+        sourceColumn: 2,
+        targetColumn: 2,
+        insertionRow: 0,
+      ),
+      isFalse,
+    );
   });
 
   test('Layout selection toggles panels and whole columns by identity', () {
@@ -7834,6 +7869,55 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'Apply'));
     await tester.pumpAndSettle();
     expect(app.columns.map((column) => column.length), [1, 1, 1]);
+  });
+
+  testWidgets('A column drag inserts its Panels into another Column', (
+    tester,
+  ) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.applyLayoutList([1, 2, 1, 3]);
+    for (var column = 0; column < app.columns.length; column++) {
+      for (var row = 0; row < app.columns[column].length; row++) {
+        app.columns[column][row]['title'] = 'C${column + 1}-${row + 1}';
+      }
+    }
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1000, 900);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Layout Setup'));
+    await tester.pumpAndSettle();
+
+    final source = find.byKey(const ValueKey('layout-column-drag-handle-2'));
+    final insertion = find.byKey(const ValueKey('layout-panel-drop-3-2'));
+    final drag = await tester.startGesture(tester.getCenter(source));
+    await drag.moveTo(tester.getCenter(insertion));
+    await tester.pump(const Duration(milliseconds: 200));
+    await drag.up();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(TextButton, 'Apply'));
+    await tester.pumpAndSettle();
+    expect(
+      app.columns
+          .map((column) => column.map((panel) => panel['title']).toList())
+          .toList(),
+      [
+        ['C1-1'],
+        ['C3-1'],
+        ['C4-1', 'C4-2', 'C2-1', 'C2-2', 'C4-3'],
+      ],
+    );
   });
 
   testWidgets('Layout Setup scrolls wide columns and tall panel lists', (
