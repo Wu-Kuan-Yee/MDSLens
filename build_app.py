@@ -746,6 +746,70 @@ def create_xcarchive(app: Path, output: Path, *, name: str) -> None:
     make_zip(output, output.with_name(output.name + ".zip"), output.name)
 
 
+def stage_macos_dmg(app: Path, destination: Path) -> None:
+    """Stage the conventional drag-to-Applications disk-image layout."""
+    replace_tree(app, destination / app.name)
+    applications = destination / "Applications"
+    if applications.exists() or applications.is_symlink():
+        applications.unlink()
+    applications.symlink_to("/Applications", target_is_directory=True)
+
+
+def stage_macos_pkg_payload(app: Path, destination: Path) -> Path:
+    """Stage a fixed-location payload instead of a relocatable app component.
+
+    ``pkgbuild --component`` creates a bundle relocation rule.  That rule can
+    make Installer update a matching MDSLens.app beside the downloaded PKG
+    rather than install the release into /Applications.  A destination-root
+    payload, paired with an explicit non-relocatable component plist, gives
+    Installer exactly one valid destination.
+    """
+    payload_app = destination / app.name
+    replace_tree(app, payload_app)
+    return payload_app
+
+
+def write_macos_pkg_component_plist(path: Path, app_name: str) -> None:
+    """Describe MDSLens.app as a non-relocatable atomic replacement."""
+    with path.open("wb") as stream:
+        plistlib.dump(
+            [
+                {
+                    "RootRelativeBundlePath": app_name,
+                    "BundleIsRelocatable": False,
+                    "BundleIsVersionChecked": True,
+                    "BundleHasStrictIdentifier": True,
+                    "BundleOverwriteAction": "upgrade",
+                }
+            ],
+            stream,
+        )
+
+
+def build_macos_pkg(app: Path, output: Path, version: str, staging: Path) -> None:
+    """Build an installer that always writes MDSLens.app to /Applications."""
+    payload_root = staging / "payload"
+    stage_macos_pkg_payload(app, payload_root)
+    component_plist = staging / "components.plist"
+    write_macos_pkg_component_plist(component_plist, app.name)
+    run(
+        "pkgbuild",
+        "--root",
+        str(payload_root),
+        "--component-plist",
+        str(component_plist),
+        "--identifier",
+        "com.mdslens.app",
+        "--version",
+        version,
+        "--install-location",
+        "/Applications",
+        "--ownership",
+        "recommended",
+        str(output),
+    )
+
+
 def package_macos(formats: set[str], no_build: bool, requested_arch: str) -> None:
     if host_platform() != "macos":
         fail("macOS packages can only be built on macOS")
@@ -780,16 +844,19 @@ def package_macos(formats: set[str], no_build: bool, requested_arch: str) -> Non
             if selected(formats, "tar.bz2"):
                 make_tar(app, DIST / f"{base}.tar.bz2", app.name, "w:bz2")
             if selected(formats, "dmg"):
+                dmg_stage = Path(temporary) / arch / "dmg"
+                stage_macos_dmg(app, dmg_stage)
                 run(
                     "hdiutil", "create", "-quiet", "-volname", "MDSLens",
-                    "-srcfolder", str(app), "-ov", "-format", "UDZO",
+                    "-srcfolder", str(dmg_stage), "-ov", "-format", "UDZO",
                     str(DIST / f"{base}.dmg"),
                 )
             if selected(formats, "pkg"):
-                run(
-                    "pkgbuild", "--component", str(app),
-                    "--install-location", "/Applications",
-                    str(DIST / f"{base}.pkg"),
+                build_macos_pkg(
+                    app,
+                    DIST / f"{base}.pkg",
+                    project_version(),
+                    Path(temporary) / arch / "pkg",
                 )
             if selected(formats, "xcarchive"):
                 create_xcarchive(

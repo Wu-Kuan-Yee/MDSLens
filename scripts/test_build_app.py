@@ -216,6 +216,63 @@ class BuildAppTests(unittest.TestCase):
             ],
         )
 
+    def test_macos_dmg_stage_has_a_real_applications_shortcut(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            app = root / "source/MDSLens.app"
+            (app / "Contents/MacOS").mkdir(parents=True)
+            (app / "Contents/MacOS/MDSLens").write_bytes(b"Mach-O")
+            stage = root / "dmg"
+
+            build_app.stage_macos_dmg(app, stage)
+
+            self.assertTrue((stage / "MDSLens.app").is_dir())
+            applications = stage / "Applications"
+            self.assertTrue(applications.is_symlink())
+            self.assertEqual(os.readlink(applications), "/Applications")
+
+    def test_macos_pkg_payload_is_fixed_to_applications(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            app = root / "source/MDSLens.app"
+            (app / "Contents/MacOS").mkdir(parents=True)
+            (app / "Contents/MacOS/MDSLens").write_bytes(b"Mach-O")
+            output = root / "MDSLens.pkg"
+            staging = root / "pkg"
+
+            with mock.patch.object(build_app, "run") as run:
+                build_app.build_macos_pkg(app, output, "0.3.39", staging)
+
+            payload = staging / "payload"
+            self.assertTrue((payload / "MDSLens.app").is_dir())
+            component_plist = staging / "components.plist"
+            with component_plist.open("rb") as stream:
+                components = plistlib.load(stream)
+            self.assertEqual(components[0]["RootRelativeBundlePath"], "MDSLens.app")
+            self.assertFalse(components[0]["BundleIsRelocatable"])
+            self.assertTrue(components[0]["BundleIsVersionChecked"])
+            self.assertTrue(components[0]["BundleHasStrictIdentifier"])
+            self.assertEqual(components[0]["BundleOverwriteAction"], "upgrade")
+            self.assertEqual(
+                run.call_args.args,
+                (
+                    "pkgbuild",
+                    "--root",
+                    str(payload),
+                    "--component-plist",
+                    str(component_plist),
+                    "--identifier",
+                    "com.mdslens.app",
+                    "--version",
+                    "0.3.39",
+                    "--install-location",
+                    "/Applications",
+                    "--ownership",
+                    "recommended",
+                    str(output),
+                ),
+            )
+
     def test_windows_msix_manifest_matches_requested_architecture(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
