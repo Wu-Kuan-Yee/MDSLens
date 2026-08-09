@@ -64,11 +64,18 @@ def require_paths(paths: set[str], package: Path) -> None:
 
 def verify_deb(package: Path, architecture: str) -> None:
     require(package.is_file(), f"Missing DEB: {package}")
-    metadata = output("dpkg-deb", "--field", str(package), "Package", "Architecture")
-    fields = metadata.splitlines()
+    package_name = output(
+        "dpkg-deb", "--field", str(package), "Package"
+    ).strip()
+    package_architecture = output(
+        "dpkg-deb", "--field", str(package), "Architecture"
+    ).strip()
     require(
-        fields == ["mdslens", {"x64": "amd64", "arm64": "arm64"}[architecture]],
-        f"{package.name} has unexpected DEB metadata: {metadata!r}",
+        package_name == "mdslens"
+        and package_architecture
+        == {"x64": "amd64", "arm64": "arm64"}[architecture],
+        f"{package.name} has unexpected DEB metadata: "
+        f"package={package_name!r}, architecture={package_architecture!r}",
     )
     listing = output("dpkg-deb", "--contents", str(package))
     for expected in (
@@ -103,6 +110,7 @@ def verify_arch(package: Path) -> None:
 
 def verify_appimage(image: Path) -> None:
     require(image.is_file(), f"Missing AppImage: {image}")
+    image = image.resolve()
     with tempfile.TemporaryDirectory(prefix="mdslens-appimage-verify-") as temporary:
         extracted = Path(temporary)
         output(str(image), "--appimage-extract", cwd=extracted)
