@@ -158,10 +158,11 @@ jobs:
           path: build/update-test-logs/windows-portable
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: mdslens-windows-${{ matrix.arch }}
           path: build/dist/*
-          if-no-files-found: error
+          if-no-files-found: warn
 
   windows-msixbundle:
     name: Windows MSIX bundle
@@ -185,10 +186,11 @@ jobs:
           -Dist build/dist
           -MsixBundle
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: mdslens-windows-msixbundle
           path: build/dist/mdslens-windows.msixbundle
-          if-no-files-found: error
+          if-no-files-found: warn
 
   macos:
     name: macOS arm64, x64, and universal
@@ -222,10 +224,11 @@ jobs:
           --release-directory build/dist
           --architecture arm64 --architecture x64 --architecture universal
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: mdslens-macos-all
           path: build/dist/*
-          if-no-files-found: error
+          if-no-files-found: warn
 
   linux:
     name: Linux ${{ matrix.arch }}
@@ -362,10 +365,11 @@ jobs:
           --portable build/dist/mdslens-linux-${{ matrix.arch }}.tar.xz
           --portable build/dist/mdslens-linux-${{ matrix.arch }}.tar.bz2
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: mdslens-linux-${{ matrix.arch }}
           path: build/dist/*
-          if-no-files-found: error
+          if-no-files-found: warn
 
   linux-flatpak:
     name: Linux Flatpak ${{ matrix.arch }}
@@ -404,10 +408,11 @@ jobs:
           --architecture ${{ matrix.arch }}
           --flatpak build/dist/mdslens-linux-${{ matrix.arch }}.flatpak
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: mdslens-linux-flatpak-${{ matrix.arch }}
           path: build/dist/*.flatpak
-          if-no-files-found: error
+          if-no-files-found: warn
 
   linux-portable-runtime:
     needs: [linux]
@@ -560,10 +565,11 @@ jobs:
           --aapt "$ANDROID_HOME/build-tools/36.0.0/aapt"
           --bundletool "$BUNDLETOOL_JAR"
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: mdslens-android
           path: build/dist/*
-          if-no-files-found: error
+          if-no-files-found: warn
 
   apple-mobile:
     name: iOS and iPadOS
@@ -585,10 +591,11 @@ jobs:
       - name: Verify unsigned iOS and iPadOS package layouts
         run: python3 scripts/verify_mobile_packages.py --apple build/dist
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: mdslens-apple-mobile
           path: build/dist/*
-          if-no-files-found: error
+          if-no-files-found: warn
 
   web:
     name: Web Gateway ${{ matrix.arch }}
@@ -639,10 +646,11 @@ jobs:
           build-args: MDSLENS_VERSION=${{ github.ref_name }}
           tags: ghcr.io/wu-kuan-yee/mdslens-web-gateway:${{ github.ref_name }}-${{ matrix.arch }}
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: mdslens-web-linux-${{ matrix.arch }}
           path: build/dist/mdslens-web-linux-${{ matrix.arch }}.tar.gz
-          if-no-files-found: error
+          if-no-files-found: warn
 
   web-container:
     name: Publish multi-architecture Web Gateway image
