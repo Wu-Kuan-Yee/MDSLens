@@ -186,6 +186,26 @@ def verify_apple_archive(archive: Path) -> None:
         verify_unsigned_apple_app(top_level[0])
 
 
+def verify_apple_xcarchive_archive(archive: Path) -> None:
+    require(archive.is_file(), f"Missing Apple xcarchive ZIP: {archive}")
+    with tempfile.TemporaryDirectory(
+        prefix="mdslens-apple-xcarchive-layout-"
+    ) as temporary:
+        root = Path(temporary)
+        extract_archive(archive, root)
+        top_level = list(root.iterdir())
+        expected_name = archive.name.removesuffix(".zip")
+        require(
+            len(top_level) == 1
+            and top_level[0].name == expected_name
+            and top_level[0].is_dir(),
+            f"{archive.name} must extract exactly one {expected_name}",
+        )
+        verify_unsigned_apple_app(
+            top_level[0] / "Products/Applications/MDSLens.app"
+        )
+
+
 def verify_apple(directory: Path) -> None:
     for platform in ("ios", "ipados"):
         base = f"mdslens-{platform}-arm64-unsigned"
@@ -195,6 +215,7 @@ def verify_apple(directory: Path) -> None:
             verify_apple_archive(directory / f"{base}.{extension}")
         archive = directory / f"{base}.xcarchive"
         verify_unsigned_apple_app(archive / "Products/Applications/MDSLens.app")
+        verify_apple_xcarchive_archive(directory / f"{base}.xcarchive.zip")
 
 
 def main() -> None:
