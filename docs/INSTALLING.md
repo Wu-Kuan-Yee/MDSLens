@@ -19,6 +19,31 @@ operating system's security protections globally just to run MDSLens.
 | iOS/iPadOS | Download the unsigned IPA and re-sign it, or install from source with Xcode | Unsigned IPA cannot be installed directly |
 | Web / PWA | Open the deployment's HTTPS URL | No local runtime or manual setup; the browser may offer Install App/Add to Home Screen |
 
+### Where each package is installed
+
+An installer and a portable archive deliberately behave differently. The
+release workflow checks these destinations and archive roots before publishing
+an artifact:
+
+| Package | Installation destination |
+|---|---|
+| Windows setup EXE or MSI | `%ProgramFiles%\MDSLens` by default; an update preserves the existing installation directory |
+| Windows MSIX/MSIXBundle | A Windows-managed private `WindowsApps` location; do not move its files manually |
+| Windows ZIP/7z/tar archives | Wherever the complete `mdslens-windows-<arch>` directory is extracted; these are portable and do not install themselves |
+| macOS PKG | Exactly `/Applications/MDSLens.app`; the package is non-relocatable and cannot silently target another copy elsewhere |
+| macOS DMG | The user drags `MDSLens.app` to the included `/Applications` shortcut |
+| macOS app/ZIP/7z/tar archives | Wherever `MDSLens.app` is extracted or moved; move it to `/Applications` for a normal installation |
+| Linux DEB/RPM/Arch package | Program files under `/usr/lib/mdslens`, launcher at `/usr/bin/mdslens`, and desktop integration under `/usr/share` |
+| Linux Flatpak or Snap | A package-manager-owned location selected by Flatpak or Snap |
+| Linux AppImage or ZIP/7z/tar archives | The downloaded file or extracted directory remains the application; no system installation is performed |
+| Android APK | Android-managed private application storage for `com.mdslens.app` |
+| Android AAB/APKS | Store or bundletool input; an AAB is not directly installable and APKS installs device-selected split APKs |
+| iOS/iPadOS signed IPA | iOS/iPadOS-managed private application storage; public artifacts must first be re-signed |
+| Web/PWA | Browser-managed storage and cache; there is no conventional executable installation directory |
+
+Directory bundles such as `.app` and portable distributions must stay intact.
+Copying only the inner executable does not create a valid installation.
+
 ## In-app updates
 
 Automatic update checks are enabled by default. After startup initialization,
@@ -181,8 +206,10 @@ browser security does not allow direct MDSip or SSH sockets.
 
 ### Normal installation
 
-1. Open the DMG and drag `MDSLens.app` to `/Applications`. For a ZIP, extract
-   the complete app bundle first and then move it to `/Applications`.
+1. Open the DMG and drag `MDSLens.app` to its **Applications** shortcut. A PKG
+   installs the non-relocatable bundle directly as `/Applications/MDSLens.app`.
+   For a ZIP, 7z, or tar archive, extract the complete app bundle first and
+   then move it to `/Applications`.
 2. Open MDSLens from Applications.
 3. Repository releases are not Developer ID signed or notarized, so continue
    with the per-application Gatekeeper procedure below.
@@ -411,6 +438,9 @@ application data.
 
 Use the installer EXE/MSI, or extract the complete portable ZIP before running
 `mdslens.exe`. Do not copy the EXE away from its DLL and `data` directories.
+The setup EXE and MSI use `%ProgramFiles%\MDSLens` as their clean-install
+destination. Portable archives never write there: they run from the directory
+chosen during extraction.
 
 The release MSIX and MSIXBundle are unsigned store/sideloading source
 packages. Windows will not install them until they are signed with a
@@ -535,6 +565,11 @@ it does not disable the rest of the operating system's security policy.
 
 DEB, RPM, and Arch packages should be installed with the distribution's package
 manager so dependencies and desktop-menu integration are handled normally.
+They install the application under `/usr/lib/mdslens`, expose
+`/usr/bin/mdslens`, and place desktop, icon, and MIME metadata under
+`/usr/share`. AppImage and archive builds remain exactly where the user puts
+them. Flatpak and Snap intentionally keep their internal path under package
+manager control.
 Portable builds still require the system GTK 3, GLib/GIO, libsecret, graphics
 stack, and a glibc version compatible with the release baseline. See the Linux
 section of [BUILDING.md](BUILDING.md) for the exact boundary and verification

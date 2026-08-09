@@ -41,6 +41,10 @@ desktop target. A portable Windows application is the complete archived
 directory; `mdslens.exe` alone is not a self-contained artifact. All portable
 archive formats include `.mdslens-portable.json` and update transactionally
 from the canonical ZIP asset without changing into an installed application.
+The setup EXE and MSI are tested on native Windows runners and must place a
+clean installation in `%ProgramFiles%\MDSLens`. MSIX/MSIXBundle uses a
+Windows-managed private location. Portable archives extract exactly one
+`mdslens-windows-<arch>` directory and remain wherever the user puts it.
 
 ## macOS
 
@@ -61,6 +65,10 @@ GitHub Releases accepts files rather than directory bundles, so the `.app` is
 carried by the normal compressed archives and `.xcarchive` has an explicit
 `.xcarchive.zip` counterpart. The application itself has only an ad-hoc
 integrity signature; it is not Developer ID signed or notarized.
+The PKG payload is non-relocatable and installs exactly
+`/Applications/MDSLens.app`. The DMG contains a real **Applications** shortcut.
+All portable archives extract exactly one `MDSLens.app` bundle and do not
+choose an installation directory for the user.
 
 ## Linux
 
@@ -88,6 +96,10 @@ keeps a rollback copy during restart, and preserves the original path.
 
 Linux x86-32, LoongArch64 and RISC-V are not upstream Flutter Linux desktop
 targets. A differently named archive cannot add an absent Flutter engine.
+DEB, RPM, and Arch packages install files under `/usr/lib/mdslens`,
+`/usr/bin/mdslens`, and `/usr/share`. Flatpak and Snap own their internal
+locations. AppImage and archive packages are portable and stay at the path
+selected by the user.
 
 ## Android
 
@@ -102,6 +114,9 @@ The AAB contains all supported ABIs and is not duplicated under misleading
 per-ABI names. The APKS archive is generated from that AAB with bundletool.
 MDSLens has no OBB payload, so an XAPK would add no capability and is not
 generated.
+Android owns the final private installation path. Release validation checks
+the `com.mdslens.app` identity, each APK ABI, the universal AAB, and every APK
+inside the APKS set rather than assuming a public filesystem destination.
 
 ## iOS and iPadOS
 
@@ -120,6 +135,19 @@ For each `ios` and `ipados` filename alias:
 The iOS and iPadOS aliases contain the same universal mobile application.
 Every IPA has the standard `Payload/MDSLens.app` layout and must be re-signed
 by the user before installation.
+iOS/iPadOS owns the final private installation path. Release validation checks
+the bundle identifier, arm64 executable, iPhone/iPad device families, absence
+of signing material, and every published archive layout.
+
+## Release-time destination validation
+
+The release workflow fails before publication when an installer or archive
+does not match its documented semantics. macOS packages are built, expanded,
+and mounted on macOS; Windows setup EXE/MSI packages are actually installed to
+and removed from a clean native runner; Linux native package manifests and
+payload paths are inspected on Linux; mobile packages are inspected with the
+native Android and Apple tools. Portable archives are extracted and checked
+for one complete, correctly named application root on every desktop platform.
 
 ## Web / PWA
 
