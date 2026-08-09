@@ -1648,6 +1648,51 @@ void main() {
     expect(find.byKey(const ValueKey('keyboard-mode-dialog')), findsNothing);
   });
 
+  testWidgets('Vim u and Ctrl-R undo and redo Keyboard Mode choices', (
+    tester,
+  ) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MaterialApp(
+          builder: (context, child) => VimModeScope(
+            notifier: app,
+            child: VimFocusHost(child: child ?? const SizedBox.shrink()),
+          ),
+          home: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () => KeyboardModeDialog.show(context),
+              child: const Text('Open keyboard mode'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open keyboard mode'));
+    await tester.pumpAndSettle();
+
+    // Select Vim, undo back to Standard, then redo before applying. The
+    // dialog opts into Vim navigation even while the saved app mode is still
+    // Standard, so this also protects that transitional state.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyU);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyR);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(app.vimMode, isTrue);
+  });
+
   testWidgets('Vim mode can be toggled directly by its configured shortcut',
       (tester) async {
     final app = AppState();
