@@ -253,7 +253,18 @@ class _KeyboardSafeDialogState extends State<KeyboardSafeDialog> {
     final tinyHeight = screenSize.height < 480;
     final tinyScreen = tinyWidth || tinyHeight;
 
+    Widget observedContent() =>
+        SizeChangedLayoutNotifier(child: widget.content);
+
     Widget focusShell(Widget dialog) {
+      final geometryAwareDialog =
+          NotificationListener<SizeChangedLayoutNotification>(
+        onNotification: (_) {
+          scheduleVimFocusVisualRefresh();
+          return false;
+        },
+        child: SizeChangedLayoutNotifier(child: dialog),
+      );
       Widget popScope() => PopScope(
             canPop: widget.shouldInterceptEscape?.call() != true,
             onPopInvokedWithResult: (didPop, __) {
@@ -282,7 +293,7 @@ class _KeyboardSafeDialogState extends State<KeyboardSafeDialog> {
                   }
                   return handleVimDialogKey(node.context ?? context, event);
                 },
-                child: dialog,
+                child: geometryAwareDialog,
               ),
             ),
           );
@@ -350,7 +361,7 @@ class _KeyboardSafeDialogState extends State<KeyboardSafeDialog> {
                     Divider(height: 1, color: theme.dividerColor),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                      child: widget.content,
+                      child: observedContent(),
                     ),
                     Divider(height: 1, color: theme.dividerColor),
                     actionBar(),
@@ -386,7 +397,7 @@ class _KeyboardSafeDialogState extends State<KeyboardSafeDialog> {
                     keyboardDismissBehavior:
                         ScrollViewKeyboardDismissBehavior.onDrag,
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                    child: widget.content,
+                    child: observedContent(),
                   ),
                 ),
               ),

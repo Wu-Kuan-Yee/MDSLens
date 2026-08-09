@@ -548,6 +548,18 @@ void _refreshVimFocusVisuals() {
 /// can briefly leave the border at the pre-reorder geometry.
 void refreshVimFocusVisuals() => _refreshVimFocusVisuals();
 
+/// Re-evaluate the active ring after a control mutates layout without moving
+/// Flutter focus. Post-layout refreshes keep the border attached to the
+/// selected control while dialog contents grow, shrink, or reflow.
+void scheduleVimFocusVisualRefresh() {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    _vimFocusVisualRevision.value++;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _vimFocusVisualRevision.value++;
+    });
+  });
+}
+
 void registerVimWorkspaceFocus(FocusNode node) {
   _vimWorkspaceFocus = node;
 }
@@ -1714,10 +1726,12 @@ bool _activateVimControl(BuildContext context) {
   final standardActivation = _vimStandardActivationForFocus(context);
   if (standardActivation != null) {
     standardActivation();
+    scheduleVimFocusVisualRefresh();
     return true;
   }
   try {
     Actions.invoke(context, const ActivateIntent());
+    scheduleVimFocusVisualRefresh();
     return true;
   } on Object {
     return false;
@@ -1761,6 +1775,7 @@ bool handleVimPageEntryKey(BuildContext context, KeyEvent event) {
     if (activatable != null) {
       if (!_claimVimActivation(context, event)) return true;
       activatable.onActivate();
+      scheduleVimFocusVisualRefresh();
       return true;
     }
     final layout =
@@ -1768,6 +1783,7 @@ bool handleVimPageEntryKey(BuildContext context, KeyEvent event) {
     if (layout?.onActivate != null) {
       if (!_claimVimActivation(context, event)) return true;
       layout!.onActivate!();
+      scheduleVimFocusVisualRefresh();
       return true;
     }
     if (!_claimVimActivation(context, event)) return true;

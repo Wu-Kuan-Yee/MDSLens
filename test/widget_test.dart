@@ -9495,6 +9495,98 @@ void main() {
     },
   );
 
+  testWidgets('Vim focus ring follows dynamic Panel Setup ranges', (
+    tester,
+  ) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    final panel = <String, dynamic>{
+      'title': 'Panel',
+      'x_label': 's',
+      'y_label': 'a.u.',
+      'extraction_points': 2000,
+      'grid': true,
+    };
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(700, 900);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MaterialApp(
+          builder: (context, child) => VimModeScope(
+            notifier: app,
+            child: VimFocusHost(child: child ?? const SizedBox.shrink()),
+          ),
+          home: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () => showPanelSetupEditor(context, panel),
+              child: const Text('Open panel setup'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open panel setup'));
+    await tester.pumpAndSettle();
+
+    void expectRingAround(FocusNode node) {
+      final ring = tester.getRect(
+        find.byKey(const ValueKey('vim-focus-ring')),
+      );
+      final target = node.rect;
+      // The outer three pixels are intentionally clipped when a control is
+      // flush with a scroll viewport, so compare the visual center and allow
+      // only that small border-width difference in either dimension.
+      expect(ring.center.dx, closeTo(target.center.dx, 2));
+      expect(ring.center.dy, closeTo(target.center.dy, 2));
+      expect((ring.width - target.width).abs(), lessThanOrEqualTo(6));
+      expect((ring.height - target.height).abs(), lessThanOrEqualTo(6));
+    }
+
+    final xTile = tester.widget<CheckboxListTile>(
+      find.byKey(const ValueKey('panel-setup-custom-x-range')),
+    );
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('panel-setup-custom-x-range')),
+    );
+    await tester.pumpAndSettle();
+    xTile.focusNode!.requestFocus();
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(xTile.focusNode));
+    expectRingAround(xTile.focusNode!);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('X min'), findsOneWidget);
+    expect(find.text('X max'), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus, same(xTile.focusNode));
+    expectRingAround(xTile.focusNode!);
+
+    final yTile = tester.widget<CheckboxListTile>(
+      find.byKey(const ValueKey('panel-setup-custom-y-range')),
+    );
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('panel-setup-custom-y-range')),
+    );
+    await tester.pumpAndSettle();
+    yTile.focusNode!.requestFocus();
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(yTile.focusNode));
+    expectRingAround(yTile.focusNode!);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Y min'), findsOneWidget);
+    expect(find.text('Y max'), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus, same(yTile.focusNode));
+    expectRingAround(yTile.focusNode!);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('About dialog reflows and opens links on a phone', (
     tester,
   ) async {

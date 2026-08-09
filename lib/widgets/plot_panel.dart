@@ -2613,6 +2613,12 @@ class _PanelSetupDialog extends StatefulWidget {
 }
 
 class _PanelSetupDialogState extends State<_PanelSetupDialog> {
+  final _customXFocusNode = FocusNode(
+    debugLabel: 'panel-setup-custom-x-range',
+  );
+  final _customYFocusNode = FocusNode(
+    debugLabel: 'panel-setup-custom-y-range',
+  );
   late final TextEditingController _titleCtrl;
   late final TextEditingController _xLabelCtrl;
   late final TextEditingController _yLabelCtrl;
@@ -2703,6 +2709,8 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
     _xMaxCtrl.dispose();
     _yMinCtrl.dispose();
     _yMaxCtrl.dispose();
+    _customXFocusNode.dispose();
+    _customYFocusNode.dispose();
     super.dispose();
   }
 
@@ -2764,6 +2772,8 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
               controlAffinity: ListTileControlAffinity.leading,
             ),
             CheckboxListTile(
+              key: const ValueKey('panel-setup-custom-x-range'),
+              focusNode: _customXFocusNode,
               title: const Text('Custom X Range'),
               value: _customX,
               onChanged: (v) => setState(() => _customX = v ?? false),
@@ -2801,6 +2811,8 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
               ),
             ],
             CheckboxListTile(
+              key: const ValueKey('panel-setup-custom-y-range'),
+              focusNode: _customYFocusNode,
               title: const Text('Custom Y Range'),
               value: _customY,
               onChanged: (v) => setState(() => _customY = v ?? false),
