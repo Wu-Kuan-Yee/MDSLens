@@ -23,6 +23,7 @@ from scripts import (  # noqa: E402
     verify_icons,
     verify_linux_packages,
     verify_linux_portable,
+    verify_mobile_packages,
 )
 
 
@@ -436,6 +437,21 @@ class BuildAppTests(unittest.TestCase):
             self.assertEqual(observed["key_password"], "key-secret")
             self.assertEqual(observed["store_mode"], 0o600)
             self.assertEqual(observed["key_mode"], 0o600)
+
+    def test_unsigned_ipa_has_a_single_payload_application(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            ipa = root / "mdslens-ios-arm64-unsigned.ipa"
+            with zipfile.ZipFile(ipa, "w") as archive:
+                archive.writestr("Payload/MDSLens.app/Info.plist", b"plist")
+
+            with mock.patch.object(
+                verify_mobile_packages, "verify_unsigned_apple_app"
+            ) as verify_app:
+                verify_mobile_packages.verify_ipa(ipa)
+
+            self.assertEqual(verify_app.call_count, 1)
+            self.assertEqual(verify_app.call_args.args[0].name, "MDSLens.app")
 
     def test_linux_portable_keeps_base_and_display_abis_on_target_system(
         self,

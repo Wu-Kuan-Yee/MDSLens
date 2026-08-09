@@ -553,6 +553,12 @@ jobs:
           while IFS= read -r -d '' apk; do
             verify_apk "$apk"
           done < <(find "$split_dir" -type f -name '*.apk' -print0)
+      - name: Verify Android application identity, ABIs, and package layouts
+        run: >-
+          python3 scripts/verify_mobile_packages.py
+          --android build/dist
+          --aapt "$ANDROID_HOME/build-tools/36.0.0/aapt"
+          --bundletool "$BUNDLETOOL_JAR"
       - uses: actions/upload-artifact@v4
         with:
           name: mdslens-android
@@ -576,6 +582,8 @@ jobs:
         run: >-
           python3 build_app.py -p ios -p ipados
           -f unsigned-ipa unsigned-app xcarchive zip 7z tar.gz tar.xz tar.bz2
+      - name: Verify unsigned iOS and iPadOS package layouts
+        run: python3 scripts/verify_mobile_packages.py --apple build/dist
       - uses: actions/upload-artifact@v4
         with:
           name: mdslens-apple-mobile
