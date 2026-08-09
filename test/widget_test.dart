@@ -1037,6 +1037,80 @@ void main() {
       FocusManager.instance.primaryFocus?.debugLabel,
       'curve-color-preset-0',
     );
+    Color previewColor() {
+      final preview = tester.widget<Container>(
+        find.byKey(const ValueKey('curve-color-preview')),
+      );
+      return (preview.decoration! as BoxDecoration).color!;
+    }
+
+    final initialColor = previewColor();
+
+    // The continuous palette is a first-class cell in the Curve Color page.
+    // J reaches it from the preset row; i enters its child editing page.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'curve-color-continuous',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('curve-color-crosshair')), findsOneWidget);
+    expect(
+      VimInputModeScope.mode(
+        tester.element(find.byKey(const ValueKey('curve-color-continuous'))),
+      ),
+      VimInputMode.insert,
+    );
+
+    // Held motion keys use the picker's 60 Hz movement loop rather than the
+    // platform key-repeat cadence, and Enter selects the point while
+    // returning to the parent Curve Color page.
+    final before = tester.getTopLeft(
+      find.byKey(const ValueKey('curve-color-crosshair')),
+    );
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyL);
+    await tester.pump(const Duration(milliseconds: 80));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyL);
+    await tester.pump();
+    final after = tester.getTopLeft(
+      find.byKey(const ValueKey('curve-color-crosshair')),
+    );
+    expect(after.dx, greaterThan(before.dx));
+    expect(previewColor(), isNot(initialColor));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    final committedColor = previewColor();
+    expect(find.byKey(const ValueKey('curve-color-crosshair')), findsNothing);
+    expect(
+      VimInputModeScope.mode(
+        tester.element(find.byKey(const ValueKey('curve-color-continuous'))),
+      ),
+      VimInputMode.normal,
+    );
+    expect(find.text('Curve Color'), findsOneWidget);
+
+    // Escape has the same one-level semantics but does not close the dialog:
+    // the first Escape leaves palette editing and keeps the palette selected.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('curve-color-crosshair')), findsOneWidget);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyH);
+    await tester.pump(const Duration(milliseconds: 48));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyH);
+    await tester.pump();
+    expect(previewColor(), isNot(committedColor));
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('curve-color-crosshair')), findsNothing);
+    expect(previewColor(), committedColor);
+    expect(find.text('Curve Color'), findsOneWidget);
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'curve-color-continuous',
+    );
   });
 
   testWidgets('Vim plot navigation follows columns and Point edit mode', (

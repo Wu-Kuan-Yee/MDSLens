@@ -4058,6 +4058,7 @@ class _ColorPicker extends StatelessWidget {
                 const Text('Curve Color'),
                 const SizedBox(width: 12),
                 Container(
+                  key: const ValueKey('curve-color-preview'),
                   width: 28,
                   height: 28,
                   decoration: BoxDecoration(
@@ -4115,25 +4116,12 @@ class _ColorPicker extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    // Continuous HSV picker: X = hue, Y = value (brightness)
-                    GestureDetector(
-                      onPanDown: (d) => _pickColor(
-                        d.localPosition,
-                        setSt,
-                        (c) => selected = c,
-                      ),
-                      onPanUpdate: (d) => _pickColor(
-                        d.localPosition,
-                        setSt,
-                        (c) => selected = c,
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: CustomPaint(
-                          size: const Size(280, 180),
-                          painter: _HsvPainter(),
-                        ),
-                      ),
+                    _ContinuousHsvPicker(
+                      color: selected,
+                      onChanged: (color) {
+                        selected = color;
+                        setSt(() {});
+                      },
                     ),
                     const SizedBox(height: 8),
                     Row(
@@ -4177,25 +4165,278 @@ class _ColorPicker extends StatelessWidget {
                 child: const Text('OK'),
               ),
             ],
+            pageId: 'curve-color',
           );
         },
       ),
     );
   }
+}
 
-  void _pickColor(
-    Offset pos,
-    StateSetter setSt,
-    void Function(Color) setColor,
-  ) {
-    if (pos.dx < 0 || pos.dy < 0 || pos.dx > 280 || pos.dy > 180) return;
-    final hue = (pos.dx / 280 * 360).clamp(0.0, 359.0);
-    final val = (1.0 - pos.dy / 180).clamp(0.0, 1.0);
-    setSt(() => setColor(HSVColor.fromAHSV(1, hue, 1, val).toColor()));
+class _ContinuousHsvPicker extends StatefulWidget {
+  const _ContinuousHsvPicker({
+    required this.color,
+    required this.onChanged,
+  });
+
+  static const size = Size(280, 180);
+
+  final Color color;
+  final ValueChanged<Color> onChanged;
+
+  @override
+  State<_ContinuousHsvPicker> createState() => _ContinuousHsvPickerState();
+}
+
+class _ContinuousHsvPickerState extends State<_ContinuousHsvPicker> {
+  static const _motionInterval = Duration(milliseconds: 16);
+  static const _motionPixelsPerFrame = 1.6;
+
+  final FocusNode _focusNode = FocusNode(
+    debugLabel: 'curve-color-continuous',
+  );
+  final Set<LogicalKeyboardKey> _motionKeys = <LogicalKeyboardKey>{};
+  Timer? _motionTimer;
+  late Offset _cursor = _cursorForColor(widget.color);
+  Color? _editingStartColor;
+  bool _editing = false;
+
+  @override
+  void didUpdateWidget(covariant _ContinuousHsvPicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_editing && oldWidget.color != widget.color) {
+      _cursor = _cursorForColor(widget.color);
+    }
+  }
+
+  @override
+  void dispose() {
+    _motionTimer?.cancel();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  Offset _cursorForColor(Color color) {
+    final hsv = HSVColor.fromColor(color);
+    return Offset(
+      (hsv.hue / 360 * _ContinuousHsvPicker.size.width)
+          .clamp(0.0, _ContinuousHsvPicker.size.width - 0.001),
+      ((1 - hsv.value) * _ContinuousHsvPicker.size.height)
+          .clamp(0.0, _ContinuousHsvPicker.size.height),
+    );
+  }
+
+  Color _colorForCursor() {
+    final hue =
+        (_cursor.dx / _ContinuousHsvPicker.size.width * 360).clamp(0.0, 359.0);
+    final value =
+        (1 - _cursor.dy / _ContinuousHsvPicker.size.height).clamp(0.0, 1.0);
+    return HSVColor.fromAHSV(1, hue, 1, value).toColor();
+  }
+
+  void _setCursor(Offset position, {required bool selectColor}) {
+    final next = Offset(
+      position.dx.clamp(0.0, _ContinuousHsvPicker.size.width),
+      position.dy.clamp(0.0, _ContinuousHsvPicker.size.height),
+    );
+    if (next == _cursor && !selectColor) return;
+    setState(() => _cursor = next);
+    if (selectColor) widget.onChanged(_colorForCursor());
+  }
+
+  void _enterEditing() {
+    if (_editing) return;
+    setState(() {
+      _cursor = _cursorForColor(widget.color);
+      _editingStartColor = widget.color;
+      _editing = true;
+    });
+    VimInputModeScope.setMode(context, VimInputMode.insert);
+  }
+
+  void _leaveEditing({required bool selectColor}) {
+    if (!_editing) return;
+    _motionKeys.clear();
+    _motionTimer?.cancel();
+    _motionTimer = null;
+    final color = selectColor ? _colorForCursor() : _editingStartColor;
+    setState(() {
+      _editingStartColor = null;
+      _editing = false;
+    });
+    if (color != null) widget.onChanged(color);
+    VimInputModeScope.setMode(context, VimInputMode.normal);
+  }
+
+  bool _isMotionKey(LogicalKeyboardKey key) =>
+      key == LogicalKeyboardKey.keyH ||
+      key == LogicalKeyboardKey.keyJ ||
+      key == LogicalKeyboardKey.keyK ||
+      key == LogicalKeyboardKey.keyL ||
+      key == LogicalKeyboardKey.arrowLeft ||
+      key == LogicalKeyboardKey.arrowDown ||
+      key == LogicalKeyboardKey.arrowUp ||
+      key == LogicalKeyboardKey.arrowRight;
+
+  void _updateMotionKey(LogicalKeyboardKey key, {required bool pressed}) {
+    if (pressed) {
+      final firstPress = _motionKeys.add(key);
+      if (firstPress) _applyMotion();
+      _motionTimer ??= Timer.periodic(
+        _motionInterval,
+        (_) => _applyMotion(),
+      );
+      return;
+    }
+    _motionKeys.remove(key);
+    if (_motionKeys.isEmpty) {
+      _motionTimer?.cancel();
+      _motionTimer = null;
+    }
+  }
+
+  void _applyMotion() {
+    if (!_editing || _motionKeys.isEmpty || !mounted) return;
+    final left = _motionKeys.contains(LogicalKeyboardKey.keyH) ||
+        _motionKeys.contains(LogicalKeyboardKey.arrowLeft);
+    final right = _motionKeys.contains(LogicalKeyboardKey.keyL) ||
+        _motionKeys.contains(LogicalKeyboardKey.arrowRight);
+    final up = _motionKeys.contains(LogicalKeyboardKey.keyK) ||
+        _motionKeys.contains(LogicalKeyboardKey.arrowUp);
+    final down = _motionKeys.contains(LogicalKeyboardKey.keyJ) ||
+        _motionKeys.contains(LogicalKeyboardKey.arrowDown);
+    final dx = (right ? _motionPixelsPerFrame : 0.0) -
+        (left ? _motionPixelsPerFrame : 0.0);
+    final dy = (down ? _motionPixelsPerFrame : 0.0) -
+        (up ? _motionPixelsPerFrame : 0.0);
+    if (dx == 0 && dy == 0) return;
+    _setCursor(_cursor + Offset(dx, dy), selectColor: true);
+  }
+
+  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    if (!VimModeScope.enabled(context)) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (!_editing) {
+      if (event is KeyDownEvent && key == LogicalKeyboardKey.keyI) {
+        _enterEditing();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+    if (_isMotionKey(key)) {
+      if (event is KeyUpEvent) {
+        _updateMotionKey(key, pressed: false);
+      } else if (event is KeyDownEvent) {
+        _updateMotionKey(key, pressed: true);
+      }
+      return KeyEventResult.handled;
+    }
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (key == LogicalKeyboardKey.escape) {
+      _leaveEditing(selectColor: false);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      _leaveEditing(selectColor: true);
+      return KeyEventResult.handled;
+    }
+    // While the palette is in its child editing page, ordinary Vim page
+    // commands must not escape into the surrounding dialog.
+    return KeyEventResult.handled;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Widget picker = Focus(
+      key: const ValueKey('curve-color-continuous'),
+      focusNode: _focusNode,
+      descendantsAreTraversable: false,
+      onFocusChange: (focused) {
+        if (!focused && _editing) _leaveEditing(selectColor: false);
+      },
+      onKeyEvent: _handleKey,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanDown: (details) {
+          _focusNode.requestFocus();
+          _setCursor(details.localPosition, selectColor: true);
+        },
+        onPanUpdate: (details) =>
+            _setCursor(details.localPosition, selectColor: true),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: SizedBox.fromSize(
+            size: _ContinuousHsvPicker.size,
+            child: Stack(
+              clipBehavior: Clip.hardEdge,
+              children: [
+                const CustomPaint(
+                  size: _ContinuousHsvPicker.size,
+                  painter: _HsvPainter(),
+                ),
+                if (_editing)
+                  Positioned(
+                    key: const ValueKey('curve-color-crosshair'),
+                    left: _cursor.dx - 11,
+                    top: _cursor.dy - 11,
+                    width: 22,
+                    height: 22,
+                    child: const IgnorePointer(
+                      child: CustomPaint(painter: _ColorCrosshairPainter()),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (_editing) {
+      picker = VimPageScope(
+        pageId: 'curve-color-palette',
+        parentPageId: 'curve-color',
+        transient: true,
+        child: picker,
+      );
+    }
+    return picker;
   }
 }
 
+class _ColorCrosshairPainter extends CustomPainter {
+  const _ColorCrosshairPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final dark = Paint()
+      ..color = Colors.black.withValues(alpha: 0.82)
+      ..strokeWidth = 4
+      ..style = PaintingStyle.stroke;
+    final light = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 1.7
+      ..style = PaintingStyle.stroke;
+    final path = Path()
+      ..moveTo(0, center.dy)
+      ..lineTo(size.width, center.dy)
+      ..moveTo(center.dx, 0)
+      ..lineTo(center.dx, size.height);
+    canvas
+      ..drawPath(path, dark)
+      ..drawCircle(center, 5.5, dark)
+      ..drawPath(path, light)
+      ..drawCircle(center, 5.5, light);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ColorCrosshairPainter oldDelegate) => false;
+}
+
 class _HsvPainter extends CustomPainter {
+  const _HsvPainter();
+
   @override
   void paint(Canvas canvas, Size size) {
     for (var x = 0.0; x < size.width; x += 1.0) {
