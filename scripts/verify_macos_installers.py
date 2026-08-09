@@ -136,17 +136,47 @@ def extractor_for_7z() -> str:
 
 
 def extract_archive(archive: Path, destination: Path) -> None:
-    if archive.name.endswith(".7z"):
-        command(extractor_for_7z(), "x", "-y", str(archive), f"-o{destination}")
-        return
     try:
         shutil.unpack_archive(archive, destination)
     except (shutil.ReadError, ValueError) as error:
         raise VerificationError(f"Could not extract {archive}: {error}") from error
 
 
+def verify_7z_app_archive(archive: Path) -> None:
+    """Test and inspect 7z without restoring macOS framework symlink chains.
+
+    7-Zip 26 correctly refuses to materialize a link through another link by
+    default. Apple framework bundles intentionally use Version/Current chains,
+    so extraction is the wrong validation primitive even though the archive is
+    intact. Testing compressed data and validating every recorded path retains
+    the security check without weakening 7-Zip's link policy.
+    """
+    tool = extractor_for_7z()
+    command(tool, "t", str(archive))
+    listing = command(tool, "l", "-slt", str(archive))
+    separator = listing.find("----------")
+    require(separator >= 0, f"Could not parse the 7z listing for {archive.name}")
+    paths = [
+        line[len("Path = ") :]
+        for line in listing[separator:].splitlines()
+        if line.startswith("Path = ")
+    ]
+    require(paths, f"{archive.name} contains no archived paths")
+    require(
+        all(path == "MDSLens.app" or path.startswith("MDSLens.app/") for path in paths),
+        f"{archive.name} contains a path outside MDSLens.app",
+    )
+    require(
+        "MDSLens.app/Contents/MacOS/MDSLens" in paths,
+        f"{archive.name} is missing the application executable",
+    )
+
+
 def verify_app_archive(archive: Path) -> None:
     require(archive.is_file(), f"Missing archive: {archive}")
+    if archive.name.endswith(".7z"):
+        verify_7z_app_archive(archive)
+        return
     with tempfile.TemporaryDirectory(prefix="mdslens-macos-archive-") as temporary:
         extracted = Path(temporary)
         extract_archive(archive, extracted)

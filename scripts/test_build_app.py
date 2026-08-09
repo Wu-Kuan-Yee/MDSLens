@@ -23,6 +23,7 @@ from scripts import (  # noqa: E402
     verify_icons,
     verify_linux_packages,
     verify_linux_portable,
+    verify_macos_installers,
     verify_mobile_packages,
 )
 
@@ -114,6 +115,47 @@ class BuildAppTests(unittest.TestCase):
                     output.write(path, path.relative_to(root))
 
             verify_linux_packages.verify_portable(archive, "x64")
+
+    def test_flatpak_bundle_is_imported_and_checked_as_a_local_remote(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            bundle = Path(temporary) / "mdslens-linux-x64.flatpak"
+            bundle.touch()
+            with mock.patch.object(
+                verify_linux_packages,
+                "output",
+                side_effect=["Imported", "com.mdslens.app\tx86_64\tstable\n"],
+            ) as output:
+                verify_linux_packages.verify_flatpak(bundle, "x64")
+
+        self.assertEqual(
+            output.call_args_list[0].args[:2],
+            ("flatpak", "build-import-bundle"),
+        )
+        self.assertEqual(output.call_args_list[1].args[:2], ("flatpak", "remote-ls"))
+
+    def test_macos_7z_validation_does_not_restore_framework_symlinks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            archive = Path(temporary) / "mdslens-macos-arm64-unsigned.7z"
+            archive.touch()
+            listing = """Header
+----------
+Path = MDSLens.app
+Folder = +
+
+Path = MDSLens.app/Contents/MacOS/MDSLens
+Size = 1
+"""
+            with mock.patch.object(
+                verify_macos_installers,
+                "command",
+                side_effect=["Everything is Ok", listing],
+            ):
+                with mock.patch.object(
+                    verify_macos_installers,
+                    "extractor_for_7z",
+                    return_value="7zz",
+                ):
+                    verify_macos_installers.verify_app_archive(archive)
 
     def test_release_version_prefers_ci_value_then_exact_tag(self) -> None:
         with mock.patch.dict(

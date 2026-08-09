@@ -39,11 +39,15 @@ def output(*arguments: str, cwd: Path | None = None) -> str:
 
 
 def normalized_paths(lines: str) -> set[str]:
-    return {
-        line.strip().removeprefix("./").rstrip("/")
-        for line in lines.splitlines()
-        if line.strip()
-    }
+    paths: set[str] = set()
+    for line in lines.splitlines():
+        path = line.strip()
+        if not path:
+            continue
+        if path.startswith("./"):
+            path = path[2:]
+        paths.add(path.rstrip("/"))
+    return paths
 
 
 def require_paths(paths: set[str], package: Path) -> None:
@@ -141,12 +145,28 @@ def verify_appimage(image: Path) -> None:
 
 def verify_flatpak(bundle: Path, architecture: str) -> None:
     require(bundle.is_file(), f"Missing Flatpak bundle: {bundle}")
-    description = output("flatpak", "info", f"--file={bundle}")
+    bundle = bundle.resolve()
     expected_arch = {"x64": "x86_64", "arm64": "aarch64"}[architecture]
-    require(
-        "com.mdslens.app" in description and expected_arch in description,
-        f"{bundle.name} is not a com.mdslens.app {expected_arch} Flatpak bundle",
-    )
+    with tempfile.TemporaryDirectory(prefix="mdslens-flatpak-verify-") as temporary:
+        repository = Path(temporary) / "repo"
+        output("flatpak", "build-import-bundle", str(repository), str(bundle))
+        description = output(
+            "flatpak",
+            "remote-ls",
+            "--columns=application,arch,branch",
+            repository.resolve().as_uri(),
+        )
+        rows = [line.split() for line in description.splitlines()]
+        require(
+            any(
+                "com.mdslens.app" in row
+                and expected_arch in row
+                and "stable" in row
+                for row in rows
+            ),
+            f"{bundle.name} is not a com.mdslens.app {expected_arch} "
+            f"stable Flatpak bundle: {description!r}",
+        )
 
 
 def verify_snap(package: Path, architecture: str) -> None:
