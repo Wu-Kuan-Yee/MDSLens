@@ -204,6 +204,11 @@ jobs:
           codesign --verify --deep --strict build/dist/mdslens-macos-arm64-unsigned.app
           codesign --verify --deep --strict build/dist/mdslens-macos-x64-unsigned.app
           codesign --verify --deep --strict build/dist/mdslens-macos-universal-unsigned.app
+      - name: Verify macOS installer destinations and archive layouts
+        run: >-
+          python3 scripts/verify_macos_installers.py
+          --release-directory build/dist
+          --architecture arm64 --architecture x64 --architecture universal
       - uses: actions/upload-artifact@v4
         with:
           name: mdslens-macos-all
