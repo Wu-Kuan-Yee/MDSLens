@@ -334,6 +334,21 @@ jobs:
           python3 build_app.py -p linux -a ${{ matrix.arch }}
           -f deb rpm pkg.tar.zst pkg.tar.xz AppImage snap
           zip 7z tar.gz tar.xz tar.bz2
+      - name: Verify Linux installation destinations and portable layouts
+        run: >-
+          python3 scripts/verify_linux_packages.py
+          --architecture ${{ matrix.arch }}
+          --deb build/dist/mdslens-linux-${{ matrix.arch }}.deb
+          --rpm build/dist/mdslens-linux-${{ matrix.arch }}.rpm
+          --arch-package build/dist/mdslens-linux-${{ matrix.arch }}.pkg.tar.zst
+          --arch-package build/dist/mdslens-linux-${{ matrix.arch }}.pkg.tar.xz
+          --appimage build/dist/mdslens-linux-${{ matrix.arch }}.AppImage
+          --snap build/dist/mdslens-linux-${{ matrix.arch }}.snap
+          --portable build/dist/mdslens-linux-${{ matrix.arch }}.zip
+          --portable build/dist/mdslens-linux-${{ matrix.arch }}.7z
+          --portable build/dist/mdslens-linux-${{ matrix.arch }}.tar.gz
+          --portable build/dist/mdslens-linux-${{ matrix.arch }}.tar.xz
+          --portable build/dist/mdslens-linux-${{ matrix.arch }}.tar.bz2
       - uses: actions/upload-artifact@v4
         with:
           name: mdslens-linux-${{ matrix.arch }}
@@ -371,6 +386,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.92.0
       - name: Build Flatpak package
         run: python3 build_app.py -p linux -a ${{ matrix.arch }} -f flatpak
+      - name: Verify Flatpak identity and architecture
+        run: >-
+          python3 scripts/verify_linux_packages.py
+          --architecture ${{ matrix.arch }}
+          --flatpak build/dist/mdslens-linux-${{ matrix.arch }}.flatpak
       - uses: actions/upload-artifact@v4
         with:
           name: mdslens-linux-flatpak-${{ matrix.arch }}

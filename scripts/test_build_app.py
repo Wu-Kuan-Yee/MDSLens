@@ -11,13 +11,19 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest import mock
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import build_app  # noqa: E402
-from scripts import build_msixbundle, verify_icons, verify_linux_portable  # noqa: E402
+from scripts import (  # noqa: E402
+    build_msixbundle,
+    verify_icons,
+    verify_linux_packages,
+    verify_linux_portable,
+)
 
 
 class BuildAppTests(unittest.TestCase):
@@ -76,6 +82,37 @@ class BuildAppTests(unittest.TestCase):
             self.assertEqual(marker["product"], "com.mdslens.app")
             self.assertEqual(marker["version"], "1.2.3")
             self.assertEqual(marker["architecture"], "x64")
+
+    def test_linux_package_path_normalization(self) -> None:
+        self.assertEqual(
+            verify_linux_packages.normalized_paths(
+                "./usr/lib/mdslens/mdslens\nusr/bin/mdslens/\n\n"
+            ),
+            {"usr/lib/mdslens/mdslens", "usr/bin/mdslens"},
+        )
+
+    def test_linux_portable_archive_has_a_single_named_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            portable = root / "mdslens-linux-x64"
+            portable.mkdir()
+            (portable / "mdslens").write_bytes(b"ELF")
+            (portable / ".mdslens-portable.json").write_text(
+                json.dumps(
+                    {
+                        "product": "com.mdslens.app",
+                        "architecture": "x64",
+                        "executable": "mdslens",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            archive = root / "mdslens-linux-x64.zip"
+            with zipfile.ZipFile(archive, "w") as output:
+                for path in portable.rglob("*"):
+                    output.write(path, path.relative_to(root))
+
+            verify_linux_packages.verify_portable(archive, "x64")
 
     def test_release_version_prefers_ci_value_then_exact_tag(self) -> None:
         with mock.patch.dict(
