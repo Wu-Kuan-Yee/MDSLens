@@ -149,6 +149,12 @@ def verify_flatpak(bundle: Path, architecture: str) -> None:
     expected_arch = {"x64": "x86_64", "arm64": "aarch64"}[architecture]
     with tempfile.TemporaryDirectory(prefix="mdslens-flatpak-verify-") as temporary:
         repository = Path(temporary) / "repo"
+        output(
+            "ostree",
+            f"--repo={repository}",
+            "init",
+            "--mode=archive-z2",
+        )
         output("flatpak", "build-import-bundle", str(repository), str(bundle))
         description = output(
             "flatpak",
@@ -171,7 +177,22 @@ def verify_flatpak(bundle: Path, architecture: str) -> None:
 
 def verify_snap(package: Path, architecture: str) -> None:
     require(package.is_file(), f"Missing Snap: {package}")
-    metadata = output("unsquashfs", "-cat", str(package), "meta/snap.yaml")
+    with tempfile.TemporaryDirectory(prefix="mdslens-snap-verify-") as temporary:
+        destination = Path(temporary) / "root"
+        output(
+            "unsquashfs",
+            "-d",
+            str(destination),
+            "-no-progress",
+            str(package),
+            "meta/snap.yaml",
+        )
+        metadata_path = destination / "meta/snap.yaml"
+        require(
+            metadata_path.is_file(),
+            f"{package.name} is missing meta/snap.yaml",
+        )
+        metadata = metadata_path.read_text(encoding="utf-8")
     expected_arch = {"x64": "amd64", "arm64": "arm64"}[architecture]
     require("name: mdslens" in metadata, f"{package.name} has no MDSLens Snap metadata")
     require(expected_arch in metadata, f"{package.name} has wrong Snap architecture")

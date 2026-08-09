@@ -123,15 +123,51 @@ class BuildAppTests(unittest.TestCase):
             with mock.patch.object(
                 verify_linux_packages,
                 "output",
-                side_effect=["Imported", "com.mdslens.app\tx86_64\tstable\n"],
+                side_effect=[
+                    "",
+                    "Imported",
+                    "com.mdslens.app\tx86_64\tstable\n",
+                ],
             ) as output:
                 verify_linux_packages.verify_flatpak(bundle, "x64")
 
         self.assertEqual(
-            output.call_args_list[0].args[:2],
+            output.call_args_list[0].args[0],
+            "ostree",
+        )
+        self.assertIn("init", output.call_args_list[0].args)
+        self.assertEqual(
+            output.call_args_list[1].args[:2],
             ("flatpak", "build-import-bundle"),
         )
-        self.assertEqual(output.call_args_list[1].args[:2], ("flatpak", "remote-ls"))
+        self.assertEqual(output.call_args_list[2].args[:2], ("flatpak", "remote-ls"))
+
+    def test_snap_metadata_is_extracted_without_unsquashfs_cat(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            package = Path(temporary) / "mdslens-linux-x64.snap"
+            package.touch()
+
+            def fake_output(*arguments: str, cwd: Path | None = None) -> str:
+                self.assertNotIn("-cat", arguments)
+                if "-d" in arguments:
+                    destination = Path(arguments[arguments.index("-d") + 1])
+                    metadata = destination / "meta/snap.yaml"
+                    metadata.parent.mkdir(parents=True)
+                    metadata.write_text(
+                        "name: mdslens\narchitectures: [amd64]\n"
+                        "apps:\n  mdslens:\n"
+                        "    command: lib/mdslens/mdslens\n",
+                        encoding="utf-8",
+                    )
+                    return ""
+                return "lib/mdslens/mdslens\nmeta/gui/com.mdslens.app.desktop\nmeta/snap.yaml\n"
+
+            with mock.patch.object(
+                verify_linux_packages,
+                "output",
+                side_effect=fake_output,
+            ):
+                verify_linux_packages.verify_snap(package, "x64")
 
     def test_macos_7z_validation_does_not_restore_framework_symlinks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
