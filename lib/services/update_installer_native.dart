@@ -415,6 +415,52 @@ Future<File> _windowsUpdateLogFile() async {
   );
 }
 
+Future<File> _macOSUpdateLogFile() async {
+  final home = (Platform.environment['HOME'] ?? '').trim();
+  final candidates = <Directory>[
+    if (home.isNotEmpty)
+      Directory(
+        '$home${Platform.pathSeparator}Library${Platform.pathSeparator}'
+        'Logs${Platform.pathSeparator}MDSLens',
+      ),
+    Directory.systemTemp,
+  ];
+  for (final directory in candidates) {
+    try {
+      await directory.create(recursive: true);
+      final log = File(
+        '${directory.path}${Platform.pathSeparator}latest-update.log',
+      );
+      // Create the file as the desktop user. An authorized helper routes log
+      // writes back through that user so the file remains user-owned and no
+      // privileged process follows a user-controlled replacement path.
+      await log.writeAsString('', flush: true);
+      return log;
+    } catch (_) {}
+  }
+  throw FileSystemException('Could not create the macOS update log.');
+}
+
+Future<int?> _macOSCurrentUserId(CommandRunner commandRunner) async {
+  final result = await commandRunner('/usr/bin/id', const ['-u']);
+  if (result.exitCode != 0) return null;
+  return int.tryParse(result.stdout.toString().trim());
+}
+
+Future<({int userId, int groupId})?> _macOSBundleOwnership(
+  String path,
+  CommandRunner commandRunner,
+) async {
+  final result = await commandRunner('/usr/bin/stat', ['-f', '%u:%g', path]);
+  if (result.exitCode != 0) return null;
+  final parts = result.stdout.toString().trim().split(':');
+  if (parts.length != 2) return null;
+  final userId = int.tryParse(parts[0]);
+  final groupId = int.tryParse(parts[1]);
+  if (userId == null || groupId == null) return null;
+  return (userId: userId, groupId: groupId);
+}
+
 /// Builds the compatibility `cmd start` invocation used by older Windows
 /// runners. Current runners convert this into a direct breakaway process via
 /// [_startWindowsDetached]; keeping this shape lets already-embedded/test
@@ -478,14 +524,55 @@ commit_marker="$9"
 # marker is the tenth argument, so use the braced form or the helper will wait
 # forever even though the updater process was launched successfully.
 ready_file="${10}"
+launch_uid="${11}"
+log_file="${12}"
 previous_bundle="${current_bundle}.mdslens-previous"
+
+log_update() {
+  timestamp=$(/bin/date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || true)
+  if [ "$(/usr/bin/id -u 2>/dev/null || true)" = "0" ] &&
+     [ "$launch_uid" -gt 0 ] 2>/dev/null; then
+    log_user=$(/usr/bin/id -nu "$launch_uid" 2>/dev/null || true)
+    if [ -n "$log_user" ]; then
+      /usr/bin/printf '[%s] %s\n' "$timestamp" "$1" | \
+        /usr/bin/sudo -H -u "$log_user" /usr/bin/tee -a "$log_file" \
+        >/dev/null 2>&1 || true
+      return
+    fi
+  fi
+  /usr/bin/printf '[%s] %s\n' "$timestamp" "$1" >> "$log_file" 2>/dev/null || true
+}
 
 launch_bundle() {
   bundle="$1"
   shift
-  executable="$bundle/Contents/MacOS/MDSLens"
-  [ -x "$executable" ] || return 1
-  "$executable" "$@" >/dev/null 2>&1 &
+  [ -x "$bundle/Contents/MacOS/MDSLens" ] || return 1
+  # A helper authorized through AppleScript runs as root. Launching the GUI
+  # executable directly from that process puts MDSLens in the root login
+  # context, where it may not reach the user's WindowServer, preferences, or
+  # writable update handshake. Ask LaunchServices in the original user's
+  # bootstrap session to create the application process instead.
+  if [ "$(/usr/bin/id -u 2>/dev/null || true)" = "0" ] &&
+     [ "$launch_uid" -gt 0 ] 2>/dev/null; then
+    launch_user=$(/usr/bin/id -nu "$launch_uid" 2>/dev/null || true)
+    [ -n "$launch_user" ] || return 1
+    if [ "$#" -gt 0 ]; then
+      /bin/launchctl asuser "$launch_uid" \
+        /usr/bin/sudo -H -u "$launch_user" \
+        /usr/bin/open -n -W "$bundle" --args "$@" \
+        >/dev/null 2>&1 &
+    else
+      /bin/launchctl asuser "$launch_uid" \
+        /usr/bin/sudo -H -u "$launch_user" \
+        /usr/bin/open -n -W "$bundle" \
+        >/dev/null 2>&1 &
+    fi
+  elif [ "$#" -gt 0 ]; then
+    /usr/bin/open -n -W "$bundle" --args "$@" \
+      >>"$log_file" 2>&1 &
+  else
+    /usr/bin/open -n -W "$bundle" >>"$log_file" 2>&1 &
+  fi
   launched_pid=$!
 }
 
@@ -496,6 +583,7 @@ case "$backup_bundle" in "${current_bundle}.mdslens-backup-"*) ;; *) exit 1 ;; e
 [ -e "$backup_bundle" ] && exit 1
 [ -L "$backup_bundle" ] && exit 1
 : > "$ready_file"
+log_update "Update helper is ready for $current_bundle."
 
 attempt=0
 while kill -0 "$parent_pid" 2>/dev/null; do
@@ -509,10 +597,12 @@ done
 
 if /bin/mv "$current_bundle" "$backup_bundle" &&
    /bin/mv "$staged_bundle" "$current_bundle"; then
+  log_update "Installed the staged application bundle."
   if ! launch_bundle "$current_bundle" \
       "--mdslens-update-health=$health_file" \
       "--mdslens-update-token=$health_token" \
       "--mdslens-update-commit=$commit_marker"; then
+    log_update "Could not launch the replacement in the desktop user session; rolling back."
     /bin/rm -rf "$current_bundle"
     /bin/mv "$backup_bundle" "$current_bundle"
     /bin/rm -rf "$staged_bundle" "$work_dir"
@@ -523,6 +613,7 @@ if /bin/mv "$current_bundle" "$backup_bundle" &&
   healthy=0
   while [ "$attempt" -lt 1200 ]; do
     if ! kill -0 "$new_pid" 2>/dev/null; then
+      log_update "The replacement exited before reporting healthy startup; rolling back."
       /bin/rm -rf "$current_bundle"
       /bin/mv "$backup_bundle" "$current_bundle"
       launch_bundle "$current_bundle" || true
@@ -538,6 +629,7 @@ if /bin/mv "$current_bundle" "$backup_bundle" &&
     sleep 0.1
   done
   if [ "$healthy" -ne 1 ]; then
+    log_update "The replacement did not report healthy startup; rolling back."
     /bin/rm -rf "$current_bundle"
     /bin/mv "$backup_bundle" "$current_bundle"
     launch_bundle "$current_bundle" || true
@@ -559,6 +651,7 @@ if /bin/mv "$current_bundle" "$backup_bundle" &&
     sleep 0.1
   done
   if [ "$committed" -ne 1 ]; then
+    log_update "The replacement did not commit the transaction; rolling back."
     /bin/rm -rf "$current_bundle"
     /bin/mv "$backup_bundle" "$current_bundle"
     launch_bundle "$current_bundle" || true
@@ -577,6 +670,7 @@ if /bin/mv "$current_bundle" "$backup_bundle" &&
   fi
   /bin/rm -rf "$previous_bundle"
   /bin/rm -f "$commit_marker" "$health_file" "$archive"
+  log_update "Update completed successfully."
   /bin/rm -rf "$work_dir"
   exit 0
 fi
@@ -588,6 +682,7 @@ fi
 if [ -e "$current_bundle" ]; then
   launch_bundle "$current_bundle" || true
 fi
+log_update "The bundle swap failed; restored the available installation."
 /bin/rm -rf "$work_dir"
 exit 1
 ''';
@@ -3244,6 +3339,10 @@ Future<UpdateInstallResult?> prepareMacOSApplicationUpdate(
   required CommandRunner commandRunner,
   bool? parentWritableOverride,
   String? nonceOverride,
+  int? currentUserIdOverride,
+  int? bundleOwnerUserIdOverride,
+  int? bundleOwnerGroupIdOverride,
+  File? updateLogOverride,
 }) async {
   String resolvedExecutable;
   try {
@@ -3257,6 +3356,24 @@ Future<UpdateInstallResult?> prepareMacOSApplicationUpdate(
   if (!await currentBundle.exists()) return null;
   final parentWritable = parentWritableOverride ??
       await _directoryIsWritable(currentBundle.parent);
+  final currentUserId =
+      currentUserIdOverride ?? await _macOSCurrentUserId(commandRunner) ?? -1;
+  final detectedOwnership =
+      bundleOwnerUserIdOverride == null || bundleOwnerGroupIdOverride == null
+          ? await _macOSBundleOwnership(bundlePath, commandRunner)
+          : null;
+  final bundleOwnerUserId =
+      bundleOwnerUserIdOverride ?? detectedOwnership?.userId ?? -1;
+  final bundleOwnerGroupId =
+      bundleOwnerGroupIdOverride ?? detectedOwnership?.groupId ?? -1;
+  // A PKG-installed application is normally owned by root. /Applications can
+  // still be group-writable for administrator accounts, so a simple write
+  // probe would incorrectly treat that installation as a portable user-owned
+  // bundle. Preserve the package ownership boundary and authorize the swap.
+  final requiresAuthorization = !parentWritable ||
+      (currentUserId >= 0 &&
+          bundleOwnerUserId >= 0 &&
+          currentUserId != bundleOwnerUserId);
 
   final nonceBase =
       nonceOverride ?? '$currentPid-${DateTime.now().microsecondsSinceEpoch}';
@@ -3278,9 +3395,19 @@ Future<UpdateInstallResult?> prepareMacOSApplicationUpdate(
   final backupBundle = backupCandidate;
   final work = await Directory.systemTemp.createTemp('mdslens-macos-update-');
   final ready = File('${work.path}${Platform.pathSeparator}helper-ready');
+  final updateLog = updateLogOverride ?? await _macOSUpdateLogFile();
+  if (updateLogOverride != null) {
+    await updateLog.parent.create(recursive: true);
+    await updateLog.writeAsString('', flush: true);
+  }
   final handshake = _createUpdateHandshake(
     work,
-    commitMarker: '$bundlePath.mdslens-update-committed',
+    // A desktop-user replacement cannot write beside a protected
+    // /Applications bundle. Keep the nonce-bound commit inside the user-owned
+    // transaction directory when an administrator performs only the swap.
+    commitMarker: requiresAuthorization
+        ? '${work.path}${Platform.pathSeparator}committed'
+        : '$bundlePath.mdslens-update-committed',
   );
   final extracted = Directory(
     '${work.path}${Platform.pathSeparator}extracted',
@@ -3329,8 +3456,10 @@ Future<UpdateInstallResult?> prepareMacOSApplicationUpdate(
       handshake.token,
       handshake.commitMarker,
       ready.path,
+      '$currentUserId',
+      updateLog.path,
     ];
-    if (parentWritable) {
+    if (!requiresAuthorization) {
       final stage = await commandRunner('/usr/bin/ditto', [
         candidate.path,
         stagedBundle.path,
@@ -3350,9 +3479,16 @@ Future<UpdateInstallResult?> prepareMacOSApplicationUpdate(
         ...applyArguments,
       ]);
     } else {
+      final ownerUserId = bundleOwnerUserId >= 0 ? bundleOwnerUserId : 0;
+      final ownerGroupId = bundleOwnerGroupId >= 0 ? bundleOwnerGroupId : 0;
       final privilegedCommand = [
         '/usr/bin/ditto',
         _shellQuote(candidate.path),
+        _shellQuote(stagedBundle.path),
+        '&&',
+        '/usr/sbin/chown',
+        '-R',
+        '$ownerUserId:$ownerGroupId',
         _shellQuote(stagedBundle.path),
         '&&',
         '/usr/bin/codesign',

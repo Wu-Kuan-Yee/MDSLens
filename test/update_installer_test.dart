@@ -769,6 +769,7 @@ void main() {
       path: archive.path,
     );
     List<String>? launchedArguments;
+    final updateLog = File('${directory.path}/latest-update.log');
 
     final result = await prepareMacOSApplicationUpdate(
       update,
@@ -776,9 +777,15 @@ void main() {
       currentPid: 12345,
       parentWritableOverride: true,
       nonceOverride: 'collision',
+      currentUserIdOverride: 502,
+      bundleOwnerUserIdOverride: 502,
+      bundleOwnerGroupIdOverride: 20,
+      updateLogOverride: updateLog,
       commandLauncher: (command, arguments) async {
         launchedArguments = arguments;
-        await File(arguments.last).create(recursive: true);
+        await File(
+          arguments.firstWhere((argument) => argument.endsWith('helper-ready')),
+        ).create(recursive: true);
       },
       commandRunner: (command, arguments) async {
         if (command == '/usr/bin/ditto' && arguments.first == '-x') {
@@ -806,13 +813,18 @@ void main() {
     );
     expect(launchedArguments?[1], contains(r'launch_bundle "$current_bundle"'));
     expect(launchedArguments?[1], contains(r'ready_file="${10}"'));
+    expect(launchedArguments?[1], contains(r'launch_uid="${11}"'));
+    expect(launchedArguments?[1], contains('/usr/bin/open -n -W'));
+    expect(launchedArguments?[1], contains('/bin/launchctl asuser'));
     expect(launchedArguments?[1], contains(r'kill -0 "$new_pid"'));
     expect(launchedArguments?[1], contains('/usr/libexec/PlistBuddy'));
+    expect(launchedArguments, contains('502'));
+    expect(launchedArguments, contains(updateLog.path));
     expect(await collidingStage.exists(), isTrue);
     expect(await collidingBackup.exists(), isTrue);
   });
 
-  test('macOS protected installs request administrator authorization',
+  test('macOS root-owned package installs request administrator authorization',
       () async {
     final directory = await Directory.systemTemp.createTemp(
       'mdslens-macos-authorization-test-',
@@ -839,12 +851,17 @@ void main() {
       path: archive.path,
     );
     final commands = <(String, List<String>)>[];
+    final updateLog = File('${directory.path}/latest-update.log');
 
     final result = await prepareMacOSApplicationUpdate(
       update,
       currentExecutable: executable.path,
       currentPid: 12345,
-      parentWritableOverride: false,
+      parentWritableOverride: true,
+      currentUserIdOverride: 502,
+      bundleOwnerUserIdOverride: 0,
+      bundleOwnerGroupIdOverride: 0,
+      updateLogOverride: updateLog,
       commandLauncher: (executable, arguments) async {},
       commandRunner: (command, arguments) async {
         commands.add((command, arguments));
@@ -865,6 +882,22 @@ void main() {
 
     expect(
         commands.map((command) => command.$1), contains('/usr/bin/osascript'));
+    final authorization = commands.singleWhere(
+      (command) => command.$1 == '/usr/bin/osascript',
+    );
+    final appleScript = authorization.$2.join('\n');
+    expect(appleScript, contains('/usr/sbin/chown'));
+    expect(appleScript, contains('0:0'));
+    expect(appleScript, contains('/bin/launchctl asuser'));
+    expect(appleScript, contains('/usr/bin/open -n -W'));
+    expect(appleScript, contains('/usr/bin/tee -a'));
+    expect(
+      appleScript,
+      isNot(contains('${directory.path}/MDSLens.app.mdslens-update-committed')),
+      reason: 'a desktop user cannot commit beside a protected bundle',
+    );
+    expect(appleScript, contains('/committed'));
+    expect(appleScript, contains(updateLog.path));
     expect(result?.status, UpdateLaunchStatus.permissionRequired);
     expect(result?.closeApplication, isFalse);
   });
