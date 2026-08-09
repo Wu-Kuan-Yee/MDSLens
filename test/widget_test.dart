@@ -7459,6 +7459,48 @@ void main() {
     expect(treeField.controller!.text, isNotEmpty);
   });
 
+  testWidgets('Vim Add Curve keeps focus on the Data Source action', (
+    tester,
+  ) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tapAt(
+      tester.getCenter(find.byType(PlotPanel).first),
+      buttons: kSecondaryMouseButton,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('plot-context-menu-data-source')),
+    );
+    await tester.pumpAndSettle();
+
+    final addButton = tester.widget<IconButton>(
+      find.ancestor(
+        of: find.byIcon(Icons.add),
+        matching: find.byType(IconButton),
+      ),
+    );
+    expect(addButton.focusNode?.debugLabel, 'data-source-add-curve');
+    addButton.focusNode!.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('data-shot-1')), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus, same(addButton.focusNode));
+    expect(find.byKey(const ValueKey('vim-focus-ring')), findsOneWidget);
+  });
+
   testWidgets(
     'Data source Shot inherits the loaded shot when config is empty',
     (tester) async {

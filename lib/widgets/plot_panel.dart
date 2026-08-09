@@ -2982,6 +2982,9 @@ class _DataSourceDialog extends StatefulWidget {
 
 class _DataSourceDialogState extends State<_DataSourceDialog> {
   final _rows = <_DSRow>[];
+  final _addCurveFocusNode = FocusNode(
+    debugLabel: 'data-source-add-curve',
+  );
   // Keep one valid, immediately usable Tree while the bundled index is being
   // loaded.  Besides avoiding an empty autocomplete flash on a real device,
   // this means Vim Insert + Tab has a deterministic first suggestion even
@@ -3228,6 +3231,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
 
   @override
   void dispose() {
+    _addCurveFocusNode.dispose();
     for (final r in _rows) {
       r.dispose();
     }
@@ -3250,11 +3254,15 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
               ),
             ),
             IconButton(
+              focusNode: _addCurveFocusNode,
               icon: const Icon(Icons.add, size: 18),
               tooltip: 'Add Curve',
               onPressed: _rows.length < 8
                   ? () {
-                      FocusManager.instance.primaryFocus?.unfocus();
+                      final keepVimFocus = VimModeScope.enabled(ctx);
+                      if (!keepVimFocus) {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                      }
                       final last = _rows.isNotEmpty ? _rows.last : null;
                       final shotCtrl = TextEditingController(
                         text: last?.shot.text ?? widget.defaultShot,
@@ -3283,6 +3291,15 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
                         _rows.add(newRow);
                       });
                       _updateSignalOptions(newRow);
+                      if (keepVimFocus) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (!mounted || !_addCurveFocusNode.canRequestFocus) {
+                            return;
+                          }
+                          _addCurveFocusNode.requestFocus();
+                          refreshVimFocusVisuals();
+                        });
+                      }
                     }
                   : null,
             ),
