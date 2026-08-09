@@ -494,6 +494,47 @@ VimActivatable? _vimActivatableForFocus(BuildContext context) {
   return descendant;
 }
 
+/// Resolve ordinary Material/Gesture controls when a dialog did not need a
+/// bespoke [VimActivatable] wrapper.  Focus frequently sits one element above
+/// a ButtonStyleButton or InkWell, so relying only on ActivateIntent leaves
+/// an Enter press silently unhandled on otherwise navigable dialog actions.
+VoidCallback? _vimStandardActivationForFocus(BuildContext context) {
+  VoidCallback? callbackFor(Widget widget) {
+    return switch (widget) {
+      ButtonStyleButton(onPressed: final callback?) => callback,
+      IconButton(onPressed: final callback?) => callback,
+      InkWell(onTap: final callback?) => callback,
+      GestureDetector(onTap: final callback?) => callback,
+      ListTile(onTap: final callback?) => callback,
+      _ => null,
+    };
+  }
+
+  final self = callbackFor(context.widget);
+  if (self != null) return self;
+
+  VoidCallback? ancestor;
+  context.visitAncestorElements((element) {
+    ancestor = callbackFor(element.widget);
+    return ancestor == null;
+  });
+  if (ancestor != null) return ancestor;
+
+  VoidCallback? descendant;
+  void visit(Element element) {
+    if (descendant != null) return;
+    final callback = callbackFor(element.widget);
+    if (callback != null) {
+      descendant = callback;
+      return;
+    }
+    element.visitChildElements(visit);
+  }
+
+  context.visitChildElements(visit);
+  return descendant;
+}
+
 FocusNode? _vimWorkspaceFocus;
 final ValueNotifier<int> _vimFocusVisualRevision = ValueNotifier<int>(0);
 
@@ -1670,6 +1711,11 @@ FocusNode? _firstDirectVimChild(FocusNode node) {
 }
 
 bool _activateVimControl(BuildContext context) {
+  final standardActivation = _vimStandardActivationForFocus(context);
+  if (standardActivation != null) {
+    standardActivation();
+    return true;
+  }
   try {
     Actions.invoke(context, const ActivateIntent());
     return true;

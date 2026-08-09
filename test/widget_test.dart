@@ -1395,6 +1395,88 @@ void main() {
     );
   });
 
+  testWidgets('Vim Enter activates the focused About action', (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('About MDSLens'));
+    await tester.pumpAndSettle();
+
+    final close = Focus.maybeOf(
+      tester.element(find.text('Close')),
+      scopeOk: false,
+    );
+    expect(close, isNotNull);
+    close!.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('MDSLens Version'), findsNothing);
+  });
+
+  testWidgets('Vim Escape returns shortcut-editor focus to Keyboard Mode', (
+    tester,
+  ) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 1000);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Keyboard Mode'));
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'keyboard-mode-toggle-shortcut',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Keyboard Shortcuts'), findsOneWidget);
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<VimPageScope>()
+          ?.pageId,
+      'keyboard-shortcuts',
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('Keyboard Mode'), findsOneWidget);
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<VimPageScope>()
+          ?.pageId,
+      'keyboard-mode',
+    );
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'keyboard-mode-toggle-shortcut',
+    );
+  });
+
   testWidgets('Vim Keyboard Mode reaches both action buttons', (tester) async {
     final app = AppState();
     await app.preferencesReady;

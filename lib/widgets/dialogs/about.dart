@@ -703,8 +703,11 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
       parentPageId: 'root',
       transient: true,
       child: PopScope(
-        onPopInvokedWithResult: (_, __) {
+        onPopInvokedWithResult: (didPop, __) {
           VimInputModeScope.setMode(context, VimInputMode.normal);
+          if (didPop && VimModeScope.enabled(context)) {
+            scheduleVimPageParentFocus('root');
+          }
         },
         child: FocusTraversalGroup(
           child: Focus(

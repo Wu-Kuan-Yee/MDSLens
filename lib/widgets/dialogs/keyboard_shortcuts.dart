@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/app_state.dart';
 import '../../services/keyboard_shortcuts.dart';
+import '../vim_focus.dart';
 import 'keyboard_safe_dialog.dart';
 
 class KeyboardShortcutsDialog {
@@ -13,6 +14,14 @@ class KeyboardShortcutsDialog {
 
   static Future<void> show(BuildContext context) async {
     final app = context.read<AppState>();
+    // The opener's State context can sit above KeyboardSafeDialog's
+    // VimPageScope. The active Focus node is the reliable semantic location
+    // at the instant the nested editor is opened.
+    final parentPageId = VimPageScope.maybeOf(
+          FocusManager.instance.primaryFocus?.context ?? context,
+        )?.pageId ??
+        VimPageScope.maybeOf(context)?.pageId ??
+        'root';
     var draft = Map<MdsShortcutCommand, MdsShortcutBinding>.from(
       app.keyboardShortcuts,
     );
@@ -23,6 +32,8 @@ class KeyboardShortcutsDialog {
         builder: (dialogContext, setState) {
           final conflicts = _conflictingSequences(draft);
           return KeyboardSafeDialog(
+            pageId: 'keyboard-shortcuts',
+            parentPageId: parentPageId,
             maxWidth: 760,
             maxHeight: 820,
             title: const Row(
@@ -224,7 +235,11 @@ class _ShortcutRow extends StatelessWidget {
                   )),
                 ),
               ];
-              if (constraints.maxWidth < 520) {
+              // Two shortcut capture controls and their label need more room
+              // than this dialog's normal 700px content area. Stacking here
+              // prevents a clipped Row on desktop while remaining natural on
+              // small touch screens.
+              if (constraints.maxWidth < 780) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [

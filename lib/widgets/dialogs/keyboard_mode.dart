@@ -81,9 +81,12 @@ class _KeyboardModePanelState extends State<_KeyboardModePanel> {
   }
 
   KeyEventResult _handleNavigationKey(FocusNode node, KeyEvent event) {
-    return handleVimKeyboardModeNavigationKey(node.context ?? context, event)
-        ? KeyEventResult.handled
-        : KeyEventResult.ignored;
+    final navigationContext = node.context ?? context;
+    if (handleVimKeyboardModeNavigationKey(navigationContext, event) ||
+        handleVimPageEntryKey(navigationContext, event)) {
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   void _selectMode(bool vim) {
@@ -101,6 +104,17 @@ class _KeyboardModePanelState extends State<_KeyboardModePanel> {
         },
       ),
     );
+  }
+
+  Future<void> _configureModeToggle() async {
+    await KeyboardShortcutsDialog.show(context);
+    if (!mounted) return;
+    setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _toggleShortcutNode.requestFocus();
+      });
+    });
   }
 
   @override
@@ -184,15 +198,9 @@ class _KeyboardModePanelState extends State<_KeyboardModePanel> {
               descendantsAreTraversable: false,
               onKeyEvent: _handleNavigationKey,
               child: VimActivatable(
-                onActivate: () async {
-                  await KeyboardShortcutsDialog.show(context);
-                  if (mounted) setState(() {});
-                },
+                onActivate: _configureModeToggle,
                 child: OutlinedButton.icon(
-                  onPressed: () async {
-                    await KeyboardShortcutsDialog.show(context);
-                    if (mounted) setState(() {});
-                  },
+                  onPressed: _configureModeToggle,
                   icon: const Icon(Icons.tune_rounded),
                   label: Text('Configure mode toggle ($toggleShortcut)'),
                 ),

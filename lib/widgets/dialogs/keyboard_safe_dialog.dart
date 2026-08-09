@@ -139,7 +139,7 @@ class KeyboardSafeDialog extends StatefulWidget {
     required this.content,
     required this.actions,
     this.pageId = 'dialog',
-    this.parentPageId = 'root',
+    this.parentPageId,
     this.forceVimNavigation = false,
     this.onEscape,
     this.escapeInterceptionListenable,
@@ -152,6 +152,10 @@ class KeyboardSafeDialog extends StatefulWidget {
   final Widget content;
   final List<Widget> actions;
   final String pageId;
+
+  /// Explicit semantic parent. When omitted, the dialog captures the current
+  /// focused Vim page as it opens, which keeps ordinary nested dialogs from
+  /// dropping focus back to the workspace on close.
   final String? parentPageId;
   final bool forceVimNavigation;
 
@@ -175,9 +179,16 @@ class KeyboardSafeDialog extends StatefulWidget {
 }
 
 class _KeyboardSafeDialogState extends State<KeyboardSafeDialog> {
+  late final String _resolvedParentPageId;
+
   @override
   void initState() {
     super.initState();
+    final focusedContext = FocusManager.instance.primaryFocus?.context;
+    _resolvedParentPageId = widget.parentPageId ??
+        focusedContext?.findAncestorWidgetOfExactType<VimPageScope>()?.pageId ??
+        context.findAncestorWidgetOfExactType<VimPageScope>()?.pageId ??
+        'root';
     WidgetsBinding.instance.addPostFrameCallback((_) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _requestInitialVimFocus();
@@ -254,7 +265,7 @@ class _KeyboardSafeDialogState extends State<KeyboardSafeDialog> {
               }
               VimInputModeScope.setMode(context, VimInputMode.normal);
               if (didPop && VimModeScope.enabled(context)) {
-                scheduleVimPageParentFocus(widget.parentPageId);
+                scheduleVimPageParentFocus(_resolvedParentPageId);
               }
             },
             child: FocusTraversalGroup(
@@ -277,7 +288,7 @@ class _KeyboardSafeDialogState extends State<KeyboardSafeDialog> {
           );
       return VimPageScope(
         pageId: widget.pageId,
-        parentPageId: widget.parentPageId,
+        parentPageId: _resolvedParentPageId,
         transient: true,
         forceNavigation: widget.forceVimNavigation,
         child: widget.escapeInterceptionListenable == null
