@@ -138,6 +138,12 @@ jobs:
           python scripts/verify_icons.py
           --windows-executable
           build/windows/${{ matrix.arch }}/runner/Release/mdslens.exe
+      - name: Verify Windows installer destinations and portable layouts
+        shell: pwsh
+        run: >-
+          ./scripts/verify_windows_installers.ps1
+          -Dist build/dist
+          -Architecture ${{ matrix.arch }}
       - name: Verify the Windows portable updater transaction
         if: matrix.arch == 'x64'
         shell: pwsh
@@ -172,6 +178,12 @@ jobs:
         run: >-
           python scripts/build_msixbundle.py msix-input
           build/dist/mdslens-windows.msixbundle
+      - name: Verify the MSIX bundle architectures and application identity
+        shell: pwsh
+        run: >-
+          ./scripts/verify_windows_installers.ps1
+          -Dist build/dist
+          -MsixBundle
       - uses: actions/upload-artifact@v4
         with:
           name: mdslens-windows-msixbundle
