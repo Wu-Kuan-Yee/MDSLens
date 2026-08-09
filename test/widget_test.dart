@@ -1892,6 +1892,113 @@ void main() {
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'page-row-0');
   });
 
+  testWidgets('Vim child dialog restores its exact parent control', (
+    tester,
+  ) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    final parentFirst = FocusNode(debugLabel: 'parent-first');
+    final parentOpener = FocusNode(debugLabel: 'parent-opener');
+    final childClose = FocusNode(debugLabel: 'child-close');
+    addTearDown(parentFirst.dispose);
+    addTearDown(parentOpener.dispose);
+    addTearDown(childClose.dispose);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MaterialApp(
+          builder: (context, child) => VimModeScope(
+            notifier: app,
+            child: VimFocusHost(child: child ?? const SizedBox.shrink()),
+          ),
+          home: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => KeyboardSafeDialog(
+                  pageId: 'parent-dialog',
+                  parentPageId: 'root',
+                  title: const Text('Parent page'),
+                  content: Builder(
+                    builder: (parentContext) => Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        OutlinedButton(
+                          focusNode: parentFirst,
+                          onPressed: () {},
+                          child: const Text('First parent control'),
+                        ),
+                        OutlinedButton(
+                          focusNode: parentOpener,
+                          onPressed: () => showDialog<void>(
+                            context: parentContext,
+                            builder: (childContext) => KeyboardSafeDialog(
+                              pageId: 'child-dialog',
+                              parentPageId: 'parent-dialog',
+                              title: const Text('Child page'),
+                              content: const Text('Nested content'),
+                              actions: [
+                                FilledButton(
+                                  focusNode: childClose,
+                                  onPressed: () => Navigator.pop(childContext),
+                                  child: const Text('Close child'),
+                                ),
+                              ],
+                            ),
+                          ),
+                          child: const Text('Open child'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Close parent'),
+                    ),
+                  ],
+                ),
+              ),
+              child: const Text('Open parent'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open parent'));
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(parentFirst));
+
+    parentOpener.requestFocus();
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Child page'), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus, same(childClose));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Child page'), findsNothing);
+    expect(find.text('Parent page'), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus, same(parentOpener));
+    final ring = tester.getRect(
+      find.byKey(const ValueKey('vim-focus-ring')),
+    );
+    expect(ring.center.dx, closeTo(parentOpener.rect.center.dx, 2));
+    expect(ring.center.dy, closeTo(parentOpener.rect.center.dy, 2));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Child page'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('Child page'), findsNothing);
+    expect(FocusManager.instance.primaryFocus, same(parentOpener));
+  });
+
   testWidgets('Vim Layout Setup exposes its action row and scroll targets',
       (tester) async {
     final app = AppState();

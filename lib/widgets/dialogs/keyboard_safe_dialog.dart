@@ -180,15 +180,24 @@ class KeyboardSafeDialog extends StatefulWidget {
 
 class _KeyboardSafeDialogState extends State<KeyboardSafeDialog> {
   late final String _resolvedParentPageId;
+  late final FocusNode? _parentFocusNode;
 
   @override
   void initState() {
     super.initState();
-    final focusedContext = FocusManager.instance.primaryFocus?.context;
+    final focused = FocusManager.instance.primaryFocus;
+    final focusedContext = focused?.context;
     _resolvedParentPageId = widget.parentPageId ??
         focusedContext?.findAncestorWidgetOfExactType<VimPageScope>()?.pageId ??
         context.findAncestorWidgetOfExactType<VimPageScope>()?.pageId ??
         'root';
+    _parentFocusNode = focused != null &&
+            focused.canRequestFocus &&
+            !focused.skipTraversal &&
+            focusedContext != null &&
+            focusedContext.mounted
+        ? focused
+        : null;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _requestInitialVimFocus();
@@ -276,7 +285,10 @@ class _KeyboardSafeDialogState extends State<KeyboardSafeDialog> {
               }
               VimInputModeScope.setMode(context, VimInputMode.normal);
               if (didPop && VimModeScope.enabled(context)) {
-                scheduleVimPageParentFocus(_resolvedParentPageId);
+                scheduleVimPageParentFocus(
+                  _resolvedParentPageId,
+                  preferredFocus: _parentFocusNode,
+                );
               }
             },
             child: FocusTraversalGroup(

@@ -536,6 +536,8 @@ VoidCallback? _vimStandardActivationForFocus(BuildContext context) {
 }
 
 FocusNode? _vimWorkspaceFocus;
+FocusNode? _vimLastStableFocus;
+final Map<String, FocusNode> _vimLastFocusByPage = <String, FocusNode>{};
 final ValueNotifier<int> _vimFocusVisualRevision = ValueNotifier<int>(0);
 
 void _refreshVimFocusVisuals() {
@@ -650,18 +652,51 @@ FocusNode? _findVimPageFocus(String pageId) {
   return null;
 }
 
-/// Restore the unique semantic parent page after a child route closes. This
-/// intentionally resolves the parent from the widget's page declaration on
-/// every Escape; it never records or replays a focus history stack.
-void scheduleVimPageParentFocus(String? parentPageId) {
+bool _isUsableVimFocus(FocusNode? node, {String? pageId}) {
+  final nodeContext = node?.context;
+  if (node == null ||
+      !node.canRequestFocus ||
+      node.skipTraversal ||
+      nodeContext == null ||
+      !nodeContext.mounted) {
+    return false;
+  }
+  return pageId == null || VimPageScope.maybeOf(nodeContext)?.pageId == pageId;
+}
+
+bool _requestUsableVimFocus(FocusNode? node, {String? pageId}) {
+  if (!_isUsableVimFocus(node, pageId: pageId)) return false;
+  node!.requestFocus();
+  _refreshVimFocusVisuals();
+  return true;
+}
+
+/// Restore the exact cursor in the semantic parent page after a child route
+/// closes. A captured opener is preferred, followed by the most recent live
+/// control in that page; the first page control is only a final fallback.
+void scheduleVimPageParentFocus(
+  String? parentPageId, {
+  FocusNode? preferredFocus,
+}) {
   if (parentPageId == null) return;
 
   void request() {
+    if (_requestUsableVimFocus(preferredFocus)) return;
+    if (_requestUsableVimFocus(
+      _vimLastFocusByPage[parentPageId],
+      pageId: parentPageId,
+    )) {
+      return;
+    }
     if (parentPageId == 'root') {
+      if (_requestUsableVimFocus(_vimLastStableFocus)) return;
       requestVimWorkspaceFocus();
       return;
     }
-    _findVimPageFocus(parentPageId)?.requestFocus();
+    _requestUsableVimFocus(
+      _findVimPageFocus(parentPageId),
+      pageId: parentPageId,
+    );
   }
 
   WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -725,6 +760,8 @@ class _VimFocusHostState extends State<VimFocusHost>
   @override
   void dispose() {
     FocusManager.instance.removeListener(_focusChanged);
+    _vimLastFocusByPage.clear();
+    _vimLastStableFocus = null;
     HardwareKeyboard.instance.removeHandler(_handleGlobalFocusKey);
     _vimSequenceTimer?.cancel();
     _vimInputState.removeListener(_inputModeChanged);
@@ -783,6 +820,21 @@ class _VimFocusHostState extends State<VimFocusHost>
   }
 
   void _focusChanged() {
+    final focus = FocusManager.instance.primaryFocus;
+    final focusContext = focus?.context;
+    if (_isUsableVimFocus(focus) && focusContext != null) {
+      final page = VimPageScope.maybeOf(focusContext);
+      if (page != null) {
+        _vimLastFocusByPage[page.pageId] = focus!;
+        if (!page.transient) _vimLastStableFocus = focus;
+      }
+    }
+    _vimLastFocusByPage.removeWhere(
+      (_, node) => !_isUsableVimFocus(node),
+    );
+    if (!_isUsableVimFocus(_vimLastStableFocus)) {
+      _vimLastStableFocus = null;
+    }
     if (_vimInputState.mode == VimInputMode.plot && !_focusedPlotContext()) {
       _vimInputState.setMode(VimInputMode.normal);
     }
