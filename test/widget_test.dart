@@ -8758,6 +8758,53 @@ void main() {
     ]);
   });
 
+  testWidgets('Vim u and Ctrl-R undo and redo Layout Setup mutations', (
+    tester,
+  ) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(760, 900);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    app.applyLayoutList([1, 1]);
+    await tester.pump();
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Layout Setup'));
+    await tester.pumpAndSettle();
+
+    final firstColumn = Focus.maybeOf(
+      tester.element(find.byKey(const ValueKey('layout-column-focus-0'))),
+      scopeOk: false,
+    );
+    firstColumn!.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyX);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('layout-preview-column-1')), findsNothing);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyU);
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(const ValueKey('layout-preview-column-1')), findsOneWidget);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyR);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('layout-preview-column-1')), findsNothing);
+  });
+
   testWidgets('Layout Setup scrolls wide columns and tall panel lists', (
     tester,
   ) async {

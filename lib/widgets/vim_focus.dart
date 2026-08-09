@@ -313,6 +313,114 @@ class VimInputModeScope extends InheritedNotifier<VimInputState> {
   }
 }
 
+/// One reversible user-visible change made while navigating a semantic Vim
+/// page.  Keeping the page id with the action prevents a child dialog's
+/// history from unexpectedly changing its parent after Escape returns there.
+class VimUndoRecord {
+  const VimUndoRecord({
+    required this.pageId,
+    required this.undo,
+    required this.redo,
+  });
+
+  final String pageId;
+  final VoidCallback undo;
+  final VoidCallback redo;
+}
+
+/// A compact, page-scoped undo/redo journal for Vim commands.
+///
+/// It follows Vim's essential behaviour: a new mutation after undo discards
+/// the redo branch; repeated `u` walks backward; repeated Ctrl-R walks
+/// forward.  The journal deliberately records semantic mutations only, not
+/// focus motion, so selection navigation remains immediate and unsurprising.
+class VimUndoHistory extends ChangeNotifier {
+  static const _limit = 128;
+  final List<VimUndoRecord> _entries = <VimUndoRecord>[];
+  int _cursor = 0;
+
+  bool record(VimUndoRecord record) {
+    if (_cursor < _entries.length) {
+      _entries.removeRange(_cursor, _entries.length);
+    }
+    _entries.add(record);
+    if (_entries.length > _limit) {
+      _entries.removeAt(0);
+    }
+    _cursor = _entries.length;
+    notifyListeners();
+    return true;
+  }
+
+  bool undo(String pageId) {
+    if (_cursor == 0 || _entries[_cursor - 1].pageId != pageId) return false;
+    final record = _entries[_cursor - 1];
+    _cursor--;
+    record.undo();
+    notifyListeners();
+    return true;
+  }
+
+  bool redo(String pageId) {
+    if (_cursor >= _entries.length || _entries[_cursor].pageId != pageId) {
+      return false;
+    }
+    final record = _entries[_cursor];
+    _cursor++;
+    record.redo();
+    notifyListeners();
+    return true;
+  }
+
+  void clearPage(String pageId) {
+    final before = _entries.length;
+    _entries.removeWhere((entry) => entry.pageId == pageId);
+    _cursor = _cursor.clamp(0, _entries.length);
+    if (_entries.length != before) notifyListeners();
+  }
+}
+
+class VimUndoScope extends InheritedNotifier<VimUndoHistory> {
+  const VimUndoScope({
+    super.key,
+    required super.notifier,
+    required super.child,
+  });
+
+  static VimUndoHistory? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<VimUndoScope>()?.notifier;
+}
+
+/// Consumes Vim's normal-mode `u` and Ctrl-R commands for the semantic page
+/// that owns the active focus target.  Insert-mode text continues to use the
+/// platform editor's native editing/undo path instead.
+bool handleVimUndoRedoKey(BuildContext context, KeyEvent event) {
+  if (!VimModeScope.enabled(context) ||
+      (event is! KeyDownEvent && event is! KeyRepeatEvent) ||
+      vimEditingText()) {
+    return false;
+  }
+  final keyboard = HardwareKeyboard.instance;
+  if (keyboard.isAltPressed || keyboard.isMetaPressed) return false;
+  final focusContext = FocusManager.instance.primaryFocus?.context;
+  final pageId =
+      VimPageScope.maybeOf(focusContext ?? context)?.pageId ?? 'root';
+  final history = VimUndoScope.maybeOf(focusContext ?? context) ??
+      VimUndoScope.maybeOf(context);
+  if (history == null) return false;
+  if (!keyboard.isControlPressed &&
+      !keyboard.isShiftPressed &&
+      event.logicalKey == LogicalKeyboardKey.keyU) {
+    return history.undo(pageId);
+  }
+  if (keyboard.isControlPressed &&
+      !keyboard.isShiftPressed &&
+      event.logicalKey == LogicalKeyboardKey.keyR) {
+    return history.redo(pageId);
+  }
+  return false;
+}
+
 bool _claimVimHierarchyEscape(BuildContext context, KeyEvent event) {
   final input = VimInputModeScope.maybeOf(context);
   return input?.claimHierarchyEscape(event) ?? event is! KeyRepeatEvent;
@@ -536,6 +644,7 @@ class VimFocusHost extends StatefulWidget {
 class _VimFocusHostState extends State<VimFocusHost>
     with SingleTickerProviderStateMixin {
   final _vimInputState = VimInputState();
+  final _vimUndoHistory = VimUndoHistory();
   late final AnimationController _focusRingController;
   Timer? _vimSequenceTimer;
   final List<ScrollPosition> _ringScrollPositions = <ScrollPosition>[];
@@ -572,6 +681,7 @@ class _VimFocusHostState extends State<VimFocusHost>
     }
     _ringScrollPositions.clear();
     _vimInputState.dispose();
+    _vimUndoHistory.dispose();
     super.dispose();
   }
 
@@ -742,6 +852,7 @@ class _VimFocusHostState extends State<VimFocusHost>
     final inputResult = handleVimInputModeKey(focusContext ?? context, event);
     if (inputResult == KeyEventResult.handled) return true;
     if (vimEditingText()) return false;
+    if (handleVimUndoRedoKey(focusContext ?? context, event)) return true;
     if (handleVimPageScrollKey(focusContext ?? context, event)) return true;
     if (handleVimPlotEditingKey(focusContext ?? context, event)) return true;
     if (enterVimPlotColumnPage(focusContext ?? context, event)) return true;
@@ -838,25 +949,29 @@ class _VimFocusHostState extends State<VimFocusHost>
     // or shows the ring immediately, without requiring a route rebuild.
     return VimInputModeScope(
       notifier: _vimInputState,
-      child: ValueListenableBuilder<int>(
-        valueListenable: _vimFocusVisualRevision,
-        builder: (context, revision, child) {
-          // Keyboard Mode deliberately uses Vim-like navigation while the
-          // persisted preference can still be Standard. Its temporary page is
-          // below this host, so inspect the active focus context as well as
-          // the host's inherited scope before deciding whether to draw the
-          // purple focus frame.
-          final focusedContext = FocusManager.instance.primaryFocus?.context;
-          final enabled = VimModeScope.enabled(context) ||
-              (focusedContext != null && VimModeScope.enabled(focusedContext));
-          return Stack(
-            clipBehavior: Clip.hardEdge,
-            children: [
-              widget.child,
-              if (enabled) _buildFocusRing(context),
-            ],
-          );
-        },
+      child: VimUndoScope(
+        notifier: _vimUndoHistory,
+        child: ValueListenableBuilder<int>(
+          valueListenable: _vimFocusVisualRevision,
+          builder: (context, revision, child) {
+            // Keyboard Mode deliberately uses Vim-like navigation while the
+            // persisted preference can still be Standard. Its temporary page is
+            // below this host, so inspect the active focus context as well as
+            // the host's inherited scope before deciding whether to draw the
+            // purple focus frame.
+            final focusedContext = FocusManager.instance.primaryFocus?.context;
+            final enabled = VimModeScope.enabled(context) ||
+                (focusedContext != null &&
+                    VimModeScope.enabled(focusedContext));
+            return Stack(
+              clipBehavior: Clip.hardEdge,
+              children: [
+                widget.child,
+                if (enabled) _buildFocusRing(context),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -2788,6 +2903,7 @@ bool handleVimLayoutNavigationKey(BuildContext context, KeyEvent event) {
           ? context
           : focusedContext ?? context;
   if (!_isVimLayoutContext(navigationContext)) return false;
+  if (handleVimUndoRedoKey(navigationContext, event)) return true;
   final current = _currentVimLayoutTarget(
     _vimFocusPage(navigationContext) ?? _VimFocusPage(const []),
     FocusManager.instance.primaryFocus,
@@ -3455,6 +3571,9 @@ KeyEventResult handleVimDialogKey(
   }
   final inputResult = handleVimInputModeKey(navigationContext, event);
   if (inputResult == KeyEventResult.handled) return inputResult;
+  if (handleVimUndoRedoKey(navigationContext, event)) {
+    return KeyEventResult.handled;
+  }
   if ((event.logicalKey == LogicalKeyboardKey.keyI ||
           event.logicalKey == LogicalKeyboardKey.enter ||
           event.logicalKey == LogicalKeyboardKey.numpadEnter) &&

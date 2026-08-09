@@ -2024,12 +2024,13 @@ class ToolbarWidget extends StatelessWidget {
     var layoutRevision = 0;
     _LayoutClipboard? layoutClipboard;
     final dragSession = _LayoutDragSession();
+    final undoHistory = VimUndoScope.maybeOf(ctx);
 
     final dialogFuture = showDialog<void>(
       context: ctx,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) {
-          void animateLayoutChange(VoidCallback change) {
+          void applyLayoutChange(VoidCallback change) {
             final oldPanels = _snapshotLayoutPanelPositions(draftColumns);
             final oldColumns = _snapshotLayoutColumnPositions(draftColumns);
             setState(() {
@@ -2057,6 +2058,50 @@ class ToolbarWidget extends StatelessWidget {
                 );
               layoutRevision++;
             });
+          }
+
+          void restoreLayoutDraft(
+            List<List<Map<String, dynamic>>> snapshot,
+          ) {
+            if (!ctx.mounted) return;
+            final focused = FocusManager.instance.primaryFocus?.context
+                ?.findAncestorWidgetOfExactType<VimLayoutFocus>();
+            applyLayoutChange(() {
+              draftColumns
+                ..clear()
+                ..addAll(_cloneLayoutColumns(snapshot));
+              selectedPanels.clear();
+              layoutClipboard = null;
+            });
+            if (draftColumns.isEmpty) return;
+            final column = (focused?.column ?? 0)
+                .clamp(0, draftColumns.length - 1)
+                .toInt();
+            final wantsPanel =
+                focused?.isColumn == false && draftColumns[column].isNotEmpty;
+            scheduleVimLayoutFocus(
+              column: column,
+              row: wantsPanel
+                  ? (focused?.row ?? 0)
+                      .clamp(0, draftColumns[column].length - 1)
+                      .toInt()
+                  : null,
+              isColumn: !wantsPanel,
+            );
+          }
+
+          void animateLayoutChange(VoidCallback change) {
+            final before = _cloneLayoutColumns(draftColumns);
+            applyLayoutChange(change);
+            final after = _cloneLayoutColumns(draftColumns);
+            if (jsonEncode(before) == jsonEncode(after)) return;
+            undoHistory?.record(
+              VimUndoRecord(
+                pageId: 'layout',
+                undo: () => restoreLayoutDraft(before),
+                redo: () => restoreLayoutDraft(after),
+              ),
+            );
           }
 
           void clearSelection() => setState(selectedPanels.clear);
@@ -2831,6 +2876,7 @@ class ToolbarWidget extends StatelessWidget {
       ),
     );
     dialogFuture.whenComplete(() {
+      undoHistory?.clearPage('layout');
       horizontalController.dispose();
       for (final controller in verticalControllers.values) {
         controller.dispose();

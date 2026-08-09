@@ -86,6 +86,23 @@ class _KeyboardModePanelState extends State<_KeyboardModePanel> {
         : KeyEventResult.ignored;
   }
 
+  void _selectMode(bool vim) {
+    if (_selectedVim == vim) return;
+    final previous = _selectedVim;
+    setState(() => _selectedVim = vim);
+    VimUndoScope.maybeOf(context)?.record(
+      VimUndoRecord(
+        pageId: 'keyboard-mode',
+        undo: () {
+          if (mounted) setState(() => _selectedVim = previous);
+        },
+        redo: () {
+          if (mounted) setState(() => _selectedVim = vim);
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -119,7 +136,7 @@ class _KeyboardModePanelState extends State<_KeyboardModePanel> {
               descendantsAreTraversable: false,
               onKeyEvent: _handleNavigationKey,
               child: VimActivatable(
-                onActivate: () => setState(() => _selectedVim = false),
+                onActivate: () => _selectMode(false),
                 child: _ModeCard(
                   selected: !_selectedVim,
                   icon: Icons.keyboard_rounded,
@@ -127,7 +144,7 @@ class _KeyboardModePanelState extends State<_KeyboardModePanel> {
                   description:
                       'Use the configurable shortcuts and the normal pointer '
                       'interaction model.',
-                  onTap: () => setState(() => _selectedVim = false),
+                  onTap: () => _selectMode(false),
                 ),
               ),
             ),
@@ -142,7 +159,7 @@ class _KeyboardModePanelState extends State<_KeyboardModePanel> {
               descendantsAreTraversable: false,
               onKeyEvent: _handleNavigationKey,
               child: VimActivatable(
-                onActivate: () => setState(() => _selectedVim = true),
+                onActivate: () => _selectMode(true),
                 child: _ModeCard(
                   selected: _selectedVim,
                   icon: Icons.terminal_rounded,
@@ -152,7 +169,7 @@ class _KeyboardModePanelState extends State<_KeyboardModePanel> {
                       'controls, Enter to select, and Esc to cancel. Use : '
                       'to search every command; on a selected plot, Enter opens '
                       'its menu and Shift + H/J/K/L pans.',
-                  onTap: () => setState(() => _selectedVim = true),
+                  onTap: () => _selectMode(true),
                 ),
               ),
             ),
