@@ -139,7 +139,11 @@ class KeyboardSafeDialog extends StatefulWidget {
     required this.content,
     required this.actions,
     this.pageId = 'dialog',
+    this.parentPageId = 'root',
     this.forceVimNavigation = false,
+    this.onEscape,
+    this.escapeInterceptionListenable,
+    this.shouldInterceptEscape,
     this.maxWidth = 440,
     this.maxHeight = 620,
   });
@@ -148,7 +152,21 @@ class KeyboardSafeDialog extends StatefulWidget {
   final Widget content;
   final List<Widget> actions;
   final String pageId;
+  final String? parentPageId;
   final bool forceVimNavigation;
+
+  /// Gives an owning transient interaction (such as a drag operation) a
+  /// chance to consume Escape without closing this dialog.  It is deliberately
+  /// only consulted outside Vim mode so Vim's page hierarchy keeps owning Esc.
+  final bool Function()? onEscape;
+
+  /// Rebuilds the route's pop guard while a transient operation is active.
+  /// This is needed because desktop Flutter routes can turn Escape directly
+  /// into a dismiss intent before a non-focusable dialog shell sees the key.
+  final Listenable? escapeInterceptionListenable;
+
+  /// When true, an attempted route pop is converted into [onEscape].
+  final bool Function()? shouldInterceptEscape;
   final double maxWidth;
   final double maxHeight;
 
@@ -225,25 +243,49 @@ class _KeyboardSafeDialogState extends State<KeyboardSafeDialog> {
     final tinyScreen = tinyWidth || tinyHeight;
 
     Widget focusShell(Widget dialog) {
+      Widget popScope() => PopScope(
+            canPop: widget.shouldInterceptEscape?.call() != true,
+            onPopInvokedWithResult: (didPop, __) {
+              if (!didPop &&
+                  !VimModeScope.enabled(context) &&
+                  widget.shouldInterceptEscape?.call() == true &&
+                  widget.onEscape?.call() == true) {
+                return;
+              }
+              VimInputModeScope.setMode(context, VimInputMode.normal);
+              if (didPop && VimModeScope.enabled(context)) {
+                scheduleVimPageParentFocus(widget.parentPageId);
+              }
+            },
+            child: FocusTraversalGroup(
+              child: Focus(
+                canRequestFocus: false,
+                skipTraversal: true,
+                onKeyEvent: (node, event) {
+                  final isEscape = event is KeyDownEvent &&
+                      event.logicalKey == LogicalKeyboardKey.escape;
+                  if (isEscape &&
+                      !VimModeScope.enabled(context) &&
+                      widget.onEscape?.call() == true) {
+                    return KeyEventResult.handled;
+                  }
+                  return handleVimDialogKey(node.context ?? context, event);
+                },
+                child: dialog,
+              ),
+            ),
+          );
       return VimPageScope(
         pageId: widget.pageId,
-        parentPageId: 'root',
+        parentPageId: widget.parentPageId,
         transient: true,
         forceNavigation: widget.forceVimNavigation,
-        child: PopScope(
-          onPopInvokedWithResult: (_, __) {
-            VimInputModeScope.setMode(context, VimInputMode.normal);
-          },
-          child: FocusTraversalGroup(
-            child: Focus(
-              canRequestFocus: false,
-              skipTraversal: true,
-              onKeyEvent: (node, event) =>
-                  handleVimDialogKey(node.context ?? context, event),
-              child: dialog,
-            ),
-          ),
-        ),
+        child: widget.escapeInterceptionListenable == null
+            ? popScope()
+            : ListenableBuilder(
+                listenable: widget.escapeInterceptionListenable!,
+                builder: (context, _) => popScope(),
+              ),
       );
     }
 

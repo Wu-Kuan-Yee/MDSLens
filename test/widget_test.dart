@@ -8527,6 +8527,53 @@ void main() {
     );
   });
 
+  testWidgets('Escape cancels an in-progress non-Vim Layout Setup drag', (
+    tester,
+  ) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.applyLayoutList([1, 1]);
+    app.columns[0][0]['title'] = 'First';
+    app.columns[1][0]['title'] = 'Second';
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(760, 900);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Layout Setup'));
+    await tester.pumpAndSettle();
+
+    final source = find.byKey(const ValueKey('layout-column-drag-handle-1'));
+    final destination = find.byKey(const ValueKey('layout-panel-drop-1-1'));
+    final drag = await tester.startGesture(tester.getCenter(source));
+    await drag.moveTo(tester.getCenter(destination));
+    await tester.pump(const Duration(milliseconds: 120));
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    await drag.up();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('layout-apply')));
+    await tester.pumpAndSettle();
+    expect(
+      app.columns
+          .map((column) => column.map((panel) => panel['title']).toList())
+          .toList(),
+      [
+        ['First'],
+        ['Second'],
+      ],
+    );
+  });
+
   testWidgets('Vim cut and paste moves Layout Columns and Panels', (
     tester,
   ) async {
