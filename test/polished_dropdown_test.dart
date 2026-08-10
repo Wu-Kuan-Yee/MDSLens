@@ -31,18 +31,18 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('long-dropdown-anchor')));
     await tester.pumpAndSettle();
 
-    final scrollbarFinder = find.byType(Scrollbar);
+    final scrollbarFinder = find.byKey(
+      const ValueKey('long-dropdown-scrollbar'),
+    );
     expect(scrollbarFinder, findsOneWidget);
-    final scrollbarElement = tester.element(scrollbarFinder);
-    final scrollbarTheme = ScrollbarTheme.of(scrollbarElement);
-    expect(scrollbarTheme.interactive, isTrue);
-    expect(
-      scrollbarTheme.thumbVisibility?.resolve(<WidgetState>{}),
-      isTrue,
+    final scrollbar = tester.widget<RawScrollbar>(scrollbarFinder);
+    expect(scrollbar.interactive, isTrue);
+    expect(scrollbar.thumbVisibility, isTrue);
+    final scrollableFinder = find.descendant(
+      of: scrollbarFinder,
+      matching: find.byType(Scrollable),
     );
-    final scrollableState = tester.state<ScrollableState>(
-      find.byType(Scrollable),
-    );
+    final scrollableState = tester.state<ScrollableState>(scrollableFinder);
     final before = scrollableState.position.pixels;
     final scrollbarRect = tester.getRect(scrollbarFinder);
     final gesture = await tester.startGesture(
@@ -138,7 +138,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final scrollbarRect = tester.getRect(
-      find.byType(Scrollbar),
+      find.byKey(const ValueKey('narrow-dropdown-scrollbar')),
     );
     expect(scrollbarRect.left, greaterThanOrEqualTo(0));
     expect(scrollbarRect.right, lessThanOrEqualTo(320));

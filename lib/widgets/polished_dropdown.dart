@@ -83,6 +83,9 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
   );
   FocusNode? _actionFocusNode;
   final List<FocusNode> _optionFocusNodes = <FocusNode>[];
+  late final ScrollController _menuScrollController = ScrollController(
+    debugLabel: 'dropdown-${widget.id}-menu-scroll',
+  );
   Timer? _menuSequenceTimer;
   bool _pendingMenuG = false;
 
@@ -266,6 +269,7 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
   void dispose() {
     _menuSequenceTimer?.cancel();
     _focusNode.dispose();
+    _menuScrollController.dispose();
     _actionFocusNode?.dispose();
     for (final node in _optionFocusNodes) {
       node.dispose();
@@ -294,6 +298,7 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
       math.max(120.0, widget.minimumMenuWidth),
       maximumMenuWidth,
     );
+    final menuContentWidth = math.max(84.0, menuWidth - 12);
     final menuItems = <Widget>[
       if (widget.menuAction != null) ...[
         _withMenuVimNavigation(
@@ -326,11 +331,43 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
         ),
       ],
     ];
+    final menuChildren = widget.showScrollbar
+        ? <Widget>[
+            SizedBox(
+              width: menuContentWidth,
+              height: math.max(120, widget.menuMaxHeight - 14),
+              child: RawScrollbar(
+                key: ValueKey('${widget.id}-scrollbar'),
+                controller: _menuScrollController,
+                thumbVisibility: true,
+                trackVisibility: true,
+                interactive: true,
+                thickness: 7,
+                radius: const Radius.circular(999),
+                crossAxisMargin: 3,
+                mainAxisMargin: 4,
+                thumbColor: colors.primary.withValues(alpha: 0.72),
+                trackColor: colors.surfaceContainerHighest,
+                trackBorderColor: colors.outlineVariant,
+                child: SingleChildScrollView(
+                  controller: _menuScrollController,
+                  primary: false,
+                  padding: const EdgeInsetsDirectional.only(end: 11),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: menuItems,
+                  ),
+                ),
+              ),
+            ),
+          ]
+        : menuItems;
     final menuAnchor = MenuAnchor(
       // Flutter's cascading menu animation creates invalid Intervals for a
       // long history/options list. The anchor itself remains animated; keep
       // the overlay stable so every item can be focused and scrolled to.
       animated: false,
+      clipBehavior: Clip.antiAlias,
       consumeOutsideTap: false,
       onOpen: () {
         setState(() => _open = true);
@@ -359,7 +396,7 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
           ),
         ),
       ),
-      menuChildren: menuItems,
+      menuChildren: menuChildren,
       builder: (context, controller, _) {
         _menuController = controller;
         return VimActivatable(
@@ -455,18 +492,13 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
       },
     );
     if (!widget.showScrollbar) return menuAnchor;
-    // MenuAnchor supplies the actual scroll controller and viewport. Configure
-    // its built-in Scrollbar instead of nesting another ListView/Scrollbar;
-    // this keeps the thumb draggable on platforms where Scrollbar.interactive
-    // would otherwise default to false.
+    // The outer MenuAnchor always creates its own Scrollbar. The fixed-size
+    // child above gives that outer viewport no scroll extent, while this theme
+    // disables its hit testing. RawScrollbar remains the only visible and
+    // draggable scrollbar, backed by _menuScrollController.
     return ScrollbarTheme(
       data: theme.scrollbarTheme.copyWith(
-        interactive: true,
-        thumbVisibility: const WidgetStatePropertyAll(true),
-        trackVisibility: const WidgetStatePropertyAll(true),
-        thickness: const WidgetStatePropertyAll(7),
-        crossAxisMargin: 4,
-        mainAxisMargin: 4,
+        interactive: false,
       ),
       child: menuAnchor,
     );
@@ -687,6 +719,7 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
         child: Text(
           option.label,
           maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(fontFamily: option.fontFamily),
         ),
       ),
