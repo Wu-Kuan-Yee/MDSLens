@@ -68,6 +68,17 @@ class UserDataStore {
     }
   }
 
+  Future<Directory?> languageDirectory() async {
+    final root = await rootDirectory();
+    if (root == null) return null;
+    try {
+      await _prepareDirectories(root);
+      return Directory(_join(root.path, 'languages'));
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<bool> writeSettings(Map<String, dynamic> settings) {
     final completer = Completer<bool>();
     _writeTail = _writeTail.then((_) async {
@@ -98,6 +109,7 @@ class UserDataStore {
     await root.create(recursive: true);
     await Directory(_join(root.path, 'configurations')).create(recursive: true);
     await Directory(_join(root.path, 'cache')).create(recursive: true);
+    await Directory(_join(root.path, 'languages')).create(recursive: true);
   }
 
   static String _join(String parent, String child) {

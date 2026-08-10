@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:flutter/material.dart';
+import 'package:mdslens/i18n/localized_material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../models/app_state.dart';
@@ -118,7 +118,7 @@ class SshDialog extends StatelessWidget {
                   if (testing)
                     Semantics(
                       liveRegion: true,
-                      label: 'Connecting to SSH server',
+                      label: ctx.tr('Connecting to SSH server'),
                       child: Row(
                         children: [
                           Icon(
@@ -144,7 +144,7 @@ class SshDialog extends StatelessWidget {
                     ),
                   if (!testing && result.isNotEmpty && result != 'ok')
                     SelectableText(
-                      'Error: $result',
+                      ctx.tr('Error: {value1}', {'value1': result}),
                       style: const TextStyle(fontSize: 13, color: Colors.red),
                     ),
                   const SizedBox(height: 8),
@@ -194,8 +194,8 @@ class SshDialog extends StatelessWidget {
                     focusNode: hostFocus,
                     autofocus: true,
                     readOnly: vimTextFieldReadOnly(ctx),
-                    decoration: const InputDecoration(
-                      labelText: 'Host',
+                    decoration: InputDecoration(
+                      labelText: ctx.tr('Host'),
                       hintText: 'ssh.example.com',
                     ),
                     textInputAction: TextInputAction.next,
@@ -214,7 +214,9 @@ class SshDialog extends StatelessWidget {
                           controller: userCtrl,
                           focusNode: userFocus,
                           readOnly: vimTextFieldReadOnly(ctx),
-                          decoration: const InputDecoration(labelText: 'User'),
+                          decoration: InputDecoration(
+                            labelText: ctx.tr('User'),
+                          ),
                           textInputAction: TextInputAction.next,
                           autofillHints: const [AutofillHints.username],
                           onSubmitted: (_) =>
@@ -229,7 +231,9 @@ class SshDialog extends StatelessWidget {
                           controller: portCtrl,
                           focusNode: portFocus,
                           readOnly: vimTextFieldReadOnly(ctx),
-                          decoration: const InputDecoration(labelText: 'Port'),
+                          decoration: InputDecoration(
+                            labelText: ctx.tr('Port'),
+                          ),
                           keyboardType: TextInputType.number,
                           textInputAction: TextInputAction.next,
                           onSubmitted: (_) =>
@@ -247,7 +251,9 @@ class SshDialog extends StatelessWidget {
                     controller: passCtrl,
                     focusNode: passFocus,
                     readOnly: vimTextFieldReadOnly(ctx),
-                    decoration: const InputDecoration(labelText: 'Password'),
+                    decoration: InputDecoration(
+                      labelText: ctx.tr('Password'),
+                    ),
                     obscureText: true,
                     enableSuggestions: false,
                     autocorrect: false,
@@ -269,8 +275,8 @@ class SshDialog extends StatelessWidget {
                           controller: keyCtrl,
                           focusNode: keyFocus,
                           readOnly: vimTextFieldReadOnly(ctx),
-                          decoration: const InputDecoration(
-                            labelText: 'Identity File',
+                          decoration: InputDecoration(
+                            labelText: ctx.tr('Identity File'),
                             hintText: '~/.ssh/id_ed25519',
                           ),
                         ),

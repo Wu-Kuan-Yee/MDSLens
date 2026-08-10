@@ -3,7 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:mdslens/i18n/localized_material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'plot_render_cache.dart';
@@ -2726,8 +2726,8 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
               key: const ValueKey('panel-setup-title'),
               controller: _titleCtrl,
               readOnly: vimTextFieldReadOnly(ctx),
-              decoration: const InputDecoration(
-                labelText: 'Title',
+              decoration: InputDecoration(
+                labelText: ctx.tr('Title'),
                 isDense: true,
               ),
             ),
@@ -2736,8 +2736,8 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
               key: const ValueKey('panel-setup-x-label'),
               controller: _xLabelCtrl,
               readOnly: vimTextFieldReadOnly(ctx),
-              decoration: const InputDecoration(
-                labelText: 'X Label',
+              decoration: InputDecoration(
+                labelText: ctx.tr('X Label'),
                 isDense: true,
               ),
             ),
@@ -2746,8 +2746,8 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
               key: const ValueKey('panel-setup-y-label'),
               controller: _yLabelCtrl,
               readOnly: vimTextFieldReadOnly(ctx),
-              decoration: const InputDecoration(
-                labelText: 'Y Label',
+              decoration: InputDecoration(
+                labelText: ctx.tr('Y Label'),
                 isDense: true,
               ),
             ),
@@ -2756,8 +2756,8 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
               key: const ValueKey('panel-setup-extraction-points'),
               controller: _pointsCtrl,
               readOnly: vimTextFieldReadOnly(ctx),
-              decoration: const InputDecoration(
-                labelText: 'Extraction Points',
+              decoration: InputDecoration(
+                labelText: ctx.tr('Extraction Points'),
                 isDense: true,
               ),
               keyboardType: TextInputType.number,
@@ -2788,8 +2788,8 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
                     child: TextField(
                       controller: _xMinCtrl,
                       readOnly: vimTextFieldReadOnly(ctx),
-                      decoration: const InputDecoration(
-                        labelText: 'X min',
+                      decoration: InputDecoration(
+                        labelText: ctx.tr('X min'),
                         isDense: true,
                       ),
                       keyboardType: TextInputType.number,
@@ -2800,8 +2800,8 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
                     child: TextField(
                       controller: _xMaxCtrl,
                       readOnly: vimTextFieldReadOnly(ctx),
-                      decoration: const InputDecoration(
-                        labelText: 'X max',
+                      decoration: InputDecoration(
+                        labelText: ctx.tr('X max'),
                         isDense: true,
                       ),
                       keyboardType: TextInputType.number,
@@ -2827,8 +2827,8 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
                     child: TextField(
                       controller: _yMinCtrl,
                       readOnly: vimTextFieldReadOnly(ctx),
-                      decoration: const InputDecoration(
-                        labelText: 'Y min',
+                      decoration: InputDecoration(
+                        labelText: ctx.tr('Y min'),
                         isDense: true,
                       ),
                       keyboardType: TextInputType.number,
@@ -2839,8 +2839,8 @@ class _PanelSetupDialogState extends State<_PanelSetupDialog> {
                     child: TextField(
                       controller: _yMaxCtrl,
                       readOnly: vimTextFieldReadOnly(ctx),
-                      decoration: const InputDecoration(
-                        labelText: 'Y max',
+                      decoration: InputDecoration(
+                        labelText: ctx.tr('Y max'),
                         isDense: true,
                       ),
                       keyboardType: TextInputType.number,
@@ -3268,7 +3268,7 @@ class _DataSourceDialogState extends State<_DataSourceDialog> {
             IconButton(
               focusNode: _addCurveFocusNode,
               icon: const Icon(Icons.add, size: 18),
-              tooltip: 'Add Curve',
+              tooltip: ctx.tr('Add Curve'),
               onPressed: _rows.length < 8
                   ? () {
                       final keepVimFocus = VimModeScope.enabled(ctx);

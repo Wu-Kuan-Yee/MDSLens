@@ -13,6 +13,7 @@ enum MdsShortcutCommand {
   openLogin,
   openSshTunnel,
   openFontSettings,
+  openLanguageSettings,
   openShotHistory,
   openKeyboardShortcuts,
   openAbout,
@@ -235,6 +236,12 @@ const mdsShortcutDefinitions = <MdsShortcutDefinition>[
     'open_font_settings',
     'Settings',
     'Customize fonts',
+  ),
+  MdsShortcutDefinition(
+    MdsShortcutCommand.openLanguageSettings,
+    'open_language_settings',
+    'Settings',
+    'Choose language',
   ),
   MdsShortcutDefinition(
     MdsShortcutCommand.restoreAllSettings,

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:mdslens/i18n/localized_material.dart';
 import 'package:provider/provider.dart';
 import '../../models/app_state.dart';
 import 'keyboard_safe_dialog.dart';
@@ -101,7 +101,7 @@ class LoginDialog extends StatelessWidget {
                 if (error.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   SelectableText(
-                    error,
+                    ctx.tr(error),
                     style: const TextStyle(color: Colors.red, fontSize: 13),
                   ),
                 ],
@@ -113,7 +113,9 @@ class LoginDialog extends StatelessWidget {
                   autofocus: true,
                   readOnly: vimTextFieldReadOnly(ctx),
                   enabled: !loading,
-                  decoration: const InputDecoration(labelText: 'API URL'),
+                  decoration: InputDecoration(
+                    labelText: ctx.tr('API URL'),
+                  ),
                   keyboardType: TextInputType.url,
                   textInputAction: TextInputAction.next,
                   autofillHints: const [AutofillHints.url],
@@ -126,7 +128,9 @@ class LoginDialog extends StatelessWidget {
                   focusNode: userFocus,
                   readOnly: vimTextFieldReadOnly(ctx),
                   enabled: !loading,
-                  decoration: const InputDecoration(labelText: 'Username'),
+                  decoration: InputDecoration(
+                    labelText: ctx.tr('Username'),
+                  ),
                   textInputAction: TextInputAction.next,
                   autofillHints: const [AutofillHints.username],
                   onSubmitted: (_) => focusAndShowKeyboard(ctx, passFocus),
@@ -141,7 +145,9 @@ class LoginDialog extends StatelessWidget {
                   focusNode: passFocus,
                   readOnly: vimTextFieldReadOnly(ctx),
                   enabled: !loading,
-                  decoration: const InputDecoration(labelText: 'Password'),
+                  decoration: InputDecoration(
+                    labelText: ctx.tr('Password'),
+                  ),
                   obscureText: true,
                   enableSuggestions: false,
                   autocorrect: false,

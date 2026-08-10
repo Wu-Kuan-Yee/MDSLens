@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:mdslens/i18n/localized_material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/app_state.dart';
@@ -110,10 +110,12 @@ class _MainPageState extends State<MainPage> {
                     Expanded(
                       child: ConfigurationDropRegion(
                         child: app.columns.isEmpty
-                            ? const Center(
+                            ? Center(
                                 child: SelectableText(
-                                  'This configuration contains no panels. '
-                                  'Use Settings > Layout Setup to add one.',
+                                  context.tr(
+                                    'This configuration contains no panels. '
+                                    'Use Settings > Layout Setup to add one.',
+                                  ),
                                   textAlign: TextAlign.center,
                                 ),
                               )
@@ -152,7 +154,7 @@ class _MainPageState extends State<MainPage> {
                           else
                             Expanded(
                               child: SelectableText(
-                                app.status,
+                                context.tr(app.status),
                                 style: statusStyle,
                               ),
                             ),
@@ -501,6 +503,9 @@ class _MainPageState extends State<MainPage> {
         break;
       case MdsShortcutCommand.openFontSettings:
         const ToolbarWidget().openFontSettingsShortcut(context, app);
+        break;
+      case MdsShortcutCommand.openLanguageSettings:
+        const ToolbarWidget().openLanguageSettingsShortcut(context, app);
         break;
       case MdsShortcutCommand.openShotHistory:
         unawaited(

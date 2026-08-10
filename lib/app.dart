@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:ui' show AppExitResponse;
 
-import 'package:flutter/material.dart';
+import 'package:mdslens/i18n/localized_material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
+import 'i18n/language_scope.dart';
 import 'models/app_state.dart';
 import 'services/stylus_mode_channel.dart';
 import 'services/theme_channel.dart';
@@ -138,9 +140,16 @@ class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
   }
 
   @override
+  void didChangeLocales(List<Locale>? locales) {
+    if (locales == null || locales.isEmpty) return;
+    context.read<AppState>().updateSystemLocales(locales);
+  }
+
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _scheduleThemeCalibration();
+      unawaited(context.read<AppState>().refreshLanguages());
     }
   }
 
@@ -175,8 +184,15 @@ class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
             : _sysDark;
     return MaterialApp(
       navigatorKey: _navigatorKey,
-      title: 'MDSLens',
+      title: app.tr('MDSLens'),
       debugShowCheckedModeBanner: false,
+      locale: app.languages.activeFlutterLocale,
+      supportedLocales: app.languages.supportedFlutterLocales,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: MDSLensTheme.light(
         fontFamily: app.effectiveFontFamily,
         uiFontSize: app.fontUiSize.toDouble(),
@@ -188,9 +204,12 @@ class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
         iconSize: app.iconSize.toDouble(),
       ),
       themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
-      builder: (context, child) => VimModeScope(
-        notifier: app,
-        child: VimFocusHost(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => LanguageScope(
+        notifier: app.languages,
+        child: VimModeScope(
+          notifier: app,
+          child: VimFocusHost(child: child ?? const SizedBox.shrink()),
+        ),
       ),
       home: NetworkPermissionGate(
         app: app,

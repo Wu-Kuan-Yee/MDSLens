@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
-import 'package:flutter/material.dart';
+import 'package:mdslens/i18n/localized_material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../i18n/language_service.dart';
 import '../models/app_state.dart';
 import '../services/external_url_launcher.dart';
 import '../services/keyboard_shortcuts.dart';
@@ -15,6 +16,7 @@ import 'dialogs/about.dart';
 import 'dialogs/keyboard_safe_dialog.dart';
 import 'dialogs/keyboard_shortcuts.dart';
 import 'dialogs/keyboard_mode.dart';
+import 'dialogs/language_settings.dart';
 import 'dropdown_items.dart';
 import 'plot_panel.dart';
 import 'polished_dropdown.dart';
@@ -649,6 +651,7 @@ String _shortcutTooltipFor(
   String label,
   Iterable<MdsShortcutCommand> commands,
 ) {
+  final translatedLabel = app.tr(label);
   final shortcuts = <String>{
     for (final command in commands)
       ...app
@@ -657,7 +660,7 @@ String _shortcutTooltipFor(
           .where((text) => text.isNotEmpty),
   };
   final shortcut = shortcuts.join(' / ');
-  return shortcut.isEmpty ? label : '$label ($shortcut)';
+  return shortcut.isEmpty ? translatedLabel : '$translatedLabel ($shortcut)';
 }
 
 class _CollapsedMetadataScroller extends StatefulWidget {
@@ -752,6 +755,10 @@ class ToolbarWidget extends StatelessWidget {
     _showFontDialog(context, app);
   }
 
+  void openLanguageSettingsShortcut(BuildContext context, AppState app) {
+    LanguageSettingsDialog.show(context, app);
+  }
+
   Future<void> openShotHistoryShortcut(
     BuildContext context,
     AppState app,
@@ -827,7 +834,7 @@ class ToolbarWidget extends StatelessWidget {
         _toolbarIconButton(
           context,
           icon: Icons.settings_backup_restore_rounded,
-          tooltip: 'Restore default configuration',
+          tooltip: context.tr('Restore default configuration'),
           onPressed: () => _confirmRestoreDefaultConfiguration(context, app),
         ),
         _toolbarIconButton(
@@ -1303,7 +1310,7 @@ class ToolbarWidget extends StatelessWidget {
     return _vimActivationBoundary(
       ctx,
       PopupMenuButton<String>(
-        tooltip: 'Settings',
+        tooltip: ctx.tr('Settings'),
         position: PopupMenuPosition.under,
         child: Container(
           height: 44,
@@ -1328,6 +1335,9 @@ class ToolbarWidget extends StatelessWidget {
               break;
             case 'fonts':
               _showFontDialog(ctx, app);
+              break;
+            case 'language':
+              LanguageSettingsDialog.show(ctx, app);
               break;
             case 'shortcuts':
               KeyboardShortcutsDialog.show(ctx);
@@ -1359,7 +1369,16 @@ class ToolbarWidget extends StatelessWidget {
           _settingsMenuItem(
             value: 'fonts',
             icon: Icons.font_download_outlined,
-            label: 'Customize Fonts',
+            label: ctx.tr('Customize Fonts'),
+          ),
+          _settingsMenuItem(
+            value: 'language',
+            icon: Icons.translate_rounded,
+            label: ctx.tr('Language'),
+            trailing: app.languagePreference == systemLanguagePreference
+                ? ctx.tr('System')
+                : app.languages.activeLanguage?.nativeName ??
+                    app.languages.activeLocale,
           ),
           _settingsMenuItem(
             value: 'shortcuts',
@@ -1536,7 +1555,7 @@ class ToolbarWidget extends StatelessWidget {
                           children: [
                             IconButton(
                               key: ValueKey('internal-web-page-edit-$i'),
-                              tooltip: 'Edit web page',
+                              tooltip: ctx.tr('Edit web page'),
                               visualDensity: VisualDensity.compact,
                               onPressed: () =>
                                   _editBookmark(ctx, app, setState, i),
@@ -1600,13 +1619,13 @@ class ToolbarWidget extends StatelessWidget {
             TextField(
               controller: aliasCtrl,
               readOnly: vimTextFieldReadOnly(ctx),
-              decoration: const InputDecoration(labelText: 'Alias'),
+              decoration: InputDecoration(labelText: ctx.tr('Alias')),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: urlCtrl,
               readOnly: vimTextFieldReadOnly(ctx),
-              decoration: const InputDecoration(labelText: 'URL'),
+              decoration: InputDecoration(labelText: ctx.tr('URL')),
             ),
           ],
         ),
@@ -1664,12 +1683,12 @@ class ToolbarWidget extends StatelessWidget {
                 controller: aliasCtrl,
                 autofocus: true,
                 readOnly: vimTextFieldReadOnly(dialogContext),
-                decoration: const InputDecoration(
-                  labelText: 'Alias',
-                  prefixIcon: Icon(Icons.label_outline_rounded),
+                decoration: InputDecoration(
+                  labelText: dialogContext.tr('Alias'),
+                  prefixIcon: const Icon(Icons.label_outline_rounded),
                 ),
                 validator: (value) => value == null || value.trim().isEmpty
-                    ? 'Enter a display name'
+                    ? dialogContext.tr('Enter a display name')
                     : null,
               ),
               const SizedBox(height: 14),
@@ -1679,12 +1698,12 @@ class ToolbarWidget extends StatelessWidget {
                 readOnly: vimTextFieldReadOnly(dialogContext),
                 keyboardType: TextInputType.url,
                 autocorrect: false,
-                decoration: const InputDecoration(
-                  labelText: 'URL',
-                  prefixIcon: Icon(Icons.link_rounded),
+                decoration: InputDecoration(
+                  labelText: dialogContext.tr('URL'),
+                  prefixIcon: const Icon(Icons.link_rounded),
                 ),
                 validator: (value) => value == null || value.trim().isEmpty
-                    ? 'Enter a web address'
+                    ? dialogContext.tr('Enter a web address')
                     : null,
                 onFieldSubmitted: (_) async {
                   if (formKey.currentState?.validate() != true) return;
@@ -2934,7 +2953,7 @@ class ToolbarWidget extends StatelessWidget {
     return IconButton(
       key: key,
       onPressed: onPressed,
-      tooltip: tooltip,
+      tooltip: context.tr(tooltip),
       visualDensity: VisualDensity.compact,
       constraints: const BoxConstraints.tightFor(width: 26, height: 26),
       padding: EdgeInsets.zero,
@@ -3493,120 +3512,127 @@ class ToolbarWidget extends StatelessWidget {
     var unitSize = app.fontUnitSize;
     var uiSize = app.fontUiSize;
     var iconSize = app.iconSize;
-    var families = <String>['System', ...SystemFontService.fallbackFamilies];
-    var fontLoadScheduled = false;
+    final fontCatalog = SystemFontCatalog();
+    unawaited(fontCatalog.start());
     showDialog<void>(
       context: ctx,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) {
-          if (!fontLoadScheduled) {
-            fontLoadScheduled = true;
-            SystemFontService.loadFamilies().then((discovered) {
-              if (!ctx.mounted) return;
-              setState(() {
-                families = ['System', ...discovered];
-                if (!families.contains(fontFamily)) fontFamily = 'System';
-              });
-            });
-          }
-          return KeyboardSafeDialog(
-            title: const Text('Customize Fonts'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
+          return ListenableBuilder(
+            listenable: fontCatalog,
+            builder: (ctx, _) {
+              final families = <String>[
+                'System',
+                ...fontCatalog.families,
+              ];
+              final selectedFamily =
+                  families.contains(fontFamily) ? fontFamily : 'System';
+              return KeyboardSafeDialog(
+                title: Text(ctx.tr('Customize Fonts')),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const SizedBox(width: 100, child: Text('Font')),
-                    Expanded(
-                      child: PolishedDropdown<String>(
-                        key: const ValueKey('font-family-dropdown'),
-                        id: 'font-family',
-                        value: families.contains(fontFamily)
-                            ? fontFamily
-                            : 'System',
-                        leadingIcon: Icons.font_download_outlined,
-                        fontSize: 12,
-                        minimumMenuWidth: 220,
-                        menuMaxHeight: 360,
-                        options: [
-                          for (final family in families)
-                            PolishedDropdownOption(
-                              value: family,
-                              label: family,
-                              fontFamily: family == 'System' ? null : family,
-                              icon: family == 'System'
-                                  ? Icons.devices_rounded
-                                  : Icons.text_fields_rounded,
-                            ),
-                        ],
-                        onChanged: (value) =>
-                            setState(() => fontFamily = value),
-                      ),
+                    Row(
+                      children: [
+                        SizedBox(width: 100, child: Text(ctx.tr('Font'))),
+                        Expanded(
+                          child: PolishedDropdown<String>(
+                            key: const ValueKey('font-family-dropdown'),
+                            id: 'font-family',
+                            value: selectedFamily,
+                            leadingIcon: Icons.font_download_outlined,
+                            fontSize: 12,
+                            minimumMenuWidth: 220,
+                            menuMaxHeight: 360,
+                            options: [
+                              for (final family in families)
+                                PolishedDropdownOption(
+                                  value: family,
+                                  label: family,
+                                  fontFamily:
+                                      family == 'System' ? null : family,
+                                  icon: family == 'System'
+                                      ? Icons.devices_rounded
+                                      : Icons.text_fields_rounded,
+                                ),
+                            ],
+                            onChanged: (value) =>
+                                setState(() => fontFamily = value),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _fontRow(
+                      ctx.tr('Legend size'),
+                      legendSize,
+                      (v) => setState(() => legendSize = v),
+                    ),
+                    _fontRow(
+                      ctx.tr('Axis size'),
+                      axisSize,
+                      (v) => setState(() => axisSize = v),
+                    ),
+                    _fontRow(
+                      ctx.tr('Unit size'),
+                      unitSize,
+                      (v) => setState(() => unitSize = v),
+                    ),
+                    _fontRow(
+                      ctx.tr('UI size'),
+                      uiSize,
+                      (v) => setState(() => uiSize = v),
+                    ),
+                    _fontRow(
+                      ctx.tr('Icon size'),
+                      iconSize,
+                      (v) => setState(() => iconSize = v),
+                      minimum: 18,
+                      maximum: 32,
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                _fontRow(
-                  'Legend size',
-                  legendSize,
-                  (v) => setState(() => legendSize = v),
-                ),
-                _fontRow(
-                  'Axis size',
-                  axisSize,
-                  (v) => setState(() => axisSize = v),
-                ),
-                _fontRow(
-                  'Unit size',
-                  unitSize,
-                  (v) => setState(() => unitSize = v),
-                ),
-                _fontRow('UI size', uiSize, (v) => setState(() => uiSize = v)),
-                _fontRow(
-                  'Icon size',
-                  iconSize,
-                  (v) => setState(() => iconSize = v),
-                  minimum: 18,
-                  maximum: 32,
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  try {
-                    await SystemFontService.prepareFamily(fontFamily);
-                    app.applyFontSettings(
-                      fontFamily,
-                      legendSize,
-                      axisSize,
-                      unitSize,
-                      uiSize,
-                      iconSize: iconSize,
-                    );
-                    if (ctx.mounted) Navigator.pop(ctx);
-                  } catch (error) {
-                    if (!ctx.mounted) return;
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'The browser could not load this local font: $error',
-                        ),
-                      ),
-                    );
-                  }
-                },
-                child: const Text('OK'),
-              ),
-            ],
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: Text(ctx.tr('Cancel')),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      try {
+                        await SystemFontService.prepareFamily(selectedFamily);
+                        app.applyFontSettings(
+                          selectedFamily,
+                          legendSize,
+                          axisSize,
+                          unitSize,
+                          uiSize,
+                          iconSize: iconSize,
+                        );
+                        if (ctx.mounted) Navigator.pop(ctx);
+                      } catch (error) {
+                        if (!ctx.mounted) return;
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              ctx.tr(
+                                'The browser could not load this local font: {error}',
+                                {'error': error},
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    child: Text(ctx.tr('OK')),
+                  ),
+                ],
+              );
+            },
           );
         },
       ),
-    );
+    ).whenComplete(fontCatalog.dispose);
   }
 
   Widget _fontRow(
@@ -3724,9 +3750,16 @@ class ToolbarWidget extends StatelessWidget {
                                   enabled: app.limitShotHistory,
                                   keyboardType: TextInputType.number,
                                   decoration: InputDecoration(
-                                    labelText: 'Maximum saved shots',
-                                    helperText:
-                                        'From 1 to ${AppState.maximumShotHistoryLimit}',
+                                    labelText: dialogContext.tr(
+                                      'Maximum saved shots',
+                                    ),
+                                    helperText: dialogContext.tr(
+                                      'From 1 to {value1}',
+                                      {
+                                        'value1':
+                                            AppState.maximumShotHistoryLimit,
+                                      },
+                                    ),
                                     errorText: limitError,
                                     isDense: true,
                                   ),
@@ -3737,7 +3770,9 @@ class ToolbarWidget extends StatelessWidget {
                                         value >
                                             AppState.maximumShotHistoryLimit) {
                                       setState(() {
-                                        limitError = 'Enter a valid number';
+                                        limitError = dialogContext.tr(
+                                          'Enter a valid number',
+                                        );
                                       });
                                       return;
                                     }
@@ -3752,8 +3787,12 @@ class ToolbarWidget extends StatelessWidget {
                                 key: const ValueKey(
                                   'shot-history-retention-restore-default',
                                 ),
-                                tooltip: 'Restore the default limit '
-                                    '(${AppState.defaultShotHistoryLimit})',
+                                tooltip: dialogContext.tr(
+                                  'Restore the default limit ({value1})',
+                                  {
+                                    'value1': AppState.defaultShotHistoryLimit,
+                                  },
+                                ),
                                 onPressed: () {
                                   app.restoreDefaultShotHistoryLimit();
                                   limitController.text = AppState
@@ -4175,7 +4214,9 @@ class ToolbarWidget extends StatelessWidget {
                                   key: ValueKey(
                                     'recent-configuration-remove-$index',
                                   ),
-                                  tooltip: 'Remove from recent list',
+                                  tooltip: dialogContext.tr(
+                                    'Remove from recent list',
+                                  ),
                                   onPressed: () async {
                                     await app.removeRecentConfiguration(entry);
                                     setDialogState(() {});
@@ -4395,6 +4436,7 @@ class ToolbarWidget extends StatelessWidget {
   }) {
     final colors = Theme.of(context).colorScheme;
     final highlight = activeColor ?? colors.primary;
+    final translatedTooltip = context.tr(tooltip);
     return Focus(
       // ButtonStyleButton owns the actual focus node. This non-focusable
       // ancestor only consumes a second framework dispatch of the same Enter
@@ -4424,9 +4466,9 @@ class ToolbarWidget extends StatelessWidget {
       child: Semantics(
         button: true,
         selected: active,
-        label: tooltip,
+        label: translatedTooltip,
         child: Tooltip(
-          message: tooltip,
+          message: translatedTooltip,
           child: DecoratedBox(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
@@ -4484,7 +4526,7 @@ class ToolbarWidget extends StatelessWidget {
     );
     return Semantics(
       button: true,
-      label: tooltip,
+      label: context.tr(tooltip),
       child: VimActivatable(
         onActivate: () => _showRecentConfigurations(context, app),
         child: Focus(
@@ -4697,9 +4739,9 @@ class ToolbarWidget extends StatelessWidget {
             key: key,
             button: true,
             selected: active,
-            label: label,
+            label: ctx.tr(label),
             child: Tooltip(
-              message: label,
+              message: ctx.tr(label),
               child: InkResponse(
                 onTap: onTap,
                 radius: 18,

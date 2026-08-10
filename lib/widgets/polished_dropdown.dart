@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:mdslens/i18n/localized_material.dart';
 import 'package:flutter/services.dart';
 import 'vim_focus.dart';
 
@@ -380,8 +380,8 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
                   button: true,
                   expanded: _open,
                   label: widget.iconOnly
-                      ? (widget.tooltip ?? widget.id)
-                      : '${widget.id}: ${selected.label}',
+                      ? context.tr(widget.tooltip ?? widget.id)
+                      : '${context.tr(widget.id)}: ${context.tr(selected.label)}',
                   child: Material(
                     color: Colors.transparent,
                     child: InkWell(

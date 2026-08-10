@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:mdslens/app.dart';
+import 'package:mdslens/i18n/language_service.dart';
 import 'package:mdslens/pages/main_page.dart';
 import 'package:mdslens/models/app_state.dart';
 import 'package:mdslens/services/credential_store.dart';
@@ -3408,6 +3409,7 @@ void main() {
     first.toolbarCollapsed = true;
     first.setVimMode(true);
     first.setAutoCheckUpdates(false);
+    first.setLanguagePreference('en');
     first.shotText = '163701';
     first.applyFontSettings(
       'Courier New',
@@ -3435,6 +3437,7 @@ void main() {
     expect(second.toolbarCollapsed, isTrue);
     expect(second.vimMode, isTrue);
     expect(second.autoCheckUpdates, isFalse);
+    expect(second.languagePreference, 'en');
     expect(second.shotText, '163701');
     expect(second.fontFamily, 'Courier New');
     expect(second.fontLegendSize, 17);
@@ -3456,6 +3459,10 @@ void main() {
     expect(
       jsonDecode(await settingsFile.readAsString())['autoCheckUpdates'],
       isFalse,
+    );
+    expect(
+      jsonDecode(await settingsFile.readAsString())['languagePreference'],
+      'en',
     );
     final legacy = await SharedPreferences.getInstance();
     expect(legacy.containsKey('shotHistory'), isFalse);
@@ -7013,7 +7020,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    expect(find.byType(PopupMenuDivider), findsNWidgets(6));
+    expect(find.byType(PopupMenuDivider), findsNWidgets(7));
   });
 
   testWidgets('Shot history uses the polished compact dropdown', (
@@ -7830,6 +7837,37 @@ void main() {
     expect(find.text('Keyboard Mode'), findsWidgets);
   });
 
+  testWidgets('Language settings follows Customize Fonts in Settings', (
+    tester,
+  ) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Customize Fonts'), findsOneWidget);
+    expect(find.text('Language'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Language')).dy,
+      greaterThan(tester.getTopLeft(find.text('Customize Fonts')).dy),
+    );
+
+    await tester.tap(find.text('Language'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('language-dropdown')), findsOneWidget);
+    expect(find.text('System (automatic)'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('language-dropdown')));
+    await tester.pumpAndSettle();
+    expect(find.text('English'), findsWidgets);
+  });
+
   testWidgets('Settings can restore every preference after confirmation', (
     tester,
   ) async {
@@ -7839,6 +7877,7 @@ void main() {
     app.themeMode = 1;
     app.dataMode = 2;
     app.setVimMode(true);
+    app.setLanguagePreference('en');
     app.applyFontSettings('Arial', 17, 12, 13, 16, iconSize: 30);
     app.addWebBookmark('Example', 'https://example.com');
     app.shotText = '163714';
@@ -7873,6 +7912,7 @@ void main() {
 
     expect(app.themeMode, 2);
     expect(app.vimMode, isFalse);
+    expect(app.languagePreference, systemLanguagePreference);
     expect(app.dataMode, 0);
     expect(app.fontFamily, 'System');
     expect(app.fontLegendSize, 11);
@@ -8434,7 +8474,11 @@ void main() {
     final summaryFinder = find.byKey(
       const ValueKey('toolbar-collapsed-summary'),
     );
-    final summary = tester.widget<Text>(summaryFinder).data!;
+    final summary = tester
+        .widget<Text>(
+          find.descendant(of: summaryFinder, matching: find.byType(Text)),
+        )
+        .data!;
     expect(summary, contains('Shot: 163714'));
     expect(summary, contains('Ip: --'));
     expect(summary, contains('Pulse: --'));

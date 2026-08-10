@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:mdslens/i18n/localized_material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/app_state.dart';
@@ -37,6 +37,7 @@ class _KeyboardSettingsPaletteState extends State<KeyboardSettingsPalette> {
     MdsShortcutCommand.openWebMenu,
     MdsShortcutCommand.globalLayout,
     MdsShortcutCommand.openFontSettings,
+    MdsShortcutCommand.openLanguageSettings,
     MdsShortcutCommand.openKeyboardShortcuts,
     MdsShortcutCommand.openKeyboardMode,
     MdsShortcutCommand.openLogin,
@@ -186,9 +187,9 @@ class _KeyboardSettingsPaletteState extends State<KeyboardSettingsPalette> {
               focusNode: _queryFocus,
               autofocus: true,
               readOnly: false,
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search_rounded),
-                hintText: 'Search settings, then press Enter',
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.search_rounded),
+                hintText: context.tr('Search settings, then press Enter'),
               ),
               onChanged: _handleQueryChanged,
             ),

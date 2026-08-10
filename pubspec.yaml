@@ -9,6 +9,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   ffi: ^2.0.0
   fl_chart: ^0.70.0
   provider: ^6.1.0
@@ -33,5 +35,6 @@ flutter:
         - asset: assets/fonts/NotoSansSC-Variable.ttf
   assets:
     - assets/app_icon.png
+    - assets/languages/
     - assets/source_index/trees.txt
     - assets/source_index/signals/

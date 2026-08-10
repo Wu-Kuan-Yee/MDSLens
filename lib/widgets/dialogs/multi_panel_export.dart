@@ -1,10 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:math' as math;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:mdslens/i18n/localized_material.dart';
 
 import '../../models/app_state.dart';
 import '../../services/platform_file_dialog.dart';
@@ -309,8 +308,8 @@ Future<PanelExportRequest?> showMultiPanelExportDialog(
                                 signed: true,
                                 decimal: true,
                               ),
-                              decoration: const InputDecoration(
-                                labelText: 'X minimum',
+                              decoration: InputDecoration(
+                                labelText: context.tr('X minimum'),
                               ),
                             ),
                           ),
@@ -329,8 +328,8 @@ Future<PanelExportRequest?> showMultiPanelExportDialog(
                                 signed: true,
                                 decimal: true,
                               ),
-                              decoration: const InputDecoration(
-                                labelText: 'X maximum',
+                              decoration: InputDecoration(
+                                labelText: context.tr('X maximum'),
                               ),
                             ),
                           ),
@@ -622,7 +621,7 @@ class _PanelExportTile extends StatelessWidget {
         button: choice.hasData,
         selected: selected,
         enabled: choice.hasData,
-        label: tooltip,
+        label: context.tr(tooltip),
         child: Tooltip(
           message: tooltip,
           child: AnimatedOpacity(
@@ -767,8 +766,9 @@ Future<void> exportMultiplePanels(
   // TypedData series on the UI isolate.
   await Future<void>.delayed(Duration.zero);
   final snapshot = panelExportSnapshot(app, request);
-  final files = await Isolate.run(
-    () => buildPanelExportFiles(snapshot, request.format),
+  final files = await compute(
+    _buildPanelExportFilesInBackground,
+    (panels: snapshot, format: request.format),
   );
   if (files.isEmpty) {
     app.setStatus('Export error: no data exists in the selected range');
@@ -794,7 +794,7 @@ Future<void> exportMultiplePanels(
     if (files.length == 1) {
       final file = files.single;
       final destination = await saveBytesWithFilePicker(
-        dialogTitle: 'Export panel data',
+        dialogTitle: app.tr('Export panel data'),
         fileName: file.name,
         allowedExtensions: [request.format.extension],
         bytes: file.bytes,
@@ -815,7 +815,7 @@ Future<void> exportMultiplePanels(
         for (final file in files) file.name: file.bytes,
       });
       final destination = await saveBytesWithFilePicker(
-        dialogTitle: 'Export panel data files',
+        dialogTitle: app.tr('Export panel data files'),
         fileName: archiveName,
         allowedExtensions: const ['zip'],
         bytes: archive,
@@ -834,7 +834,7 @@ Future<void> exportMultiplePanels(
 
     final directory = await (directoryDialog ??
         () => FilePicker.platform.getDirectoryPath(
-              dialogTitle: 'Export each panel to this folder',
+              dialogTitle: app.tr('Export each panel to this folder'),
               lockParentWindow: true,
             ))();
     if (directory == null || directory.trim().isEmpty) {
@@ -880,7 +880,7 @@ Future<_DesktopPanelExportDestination?> _chooseDesktopPanelExportDestination(
     final matching = choices.where((choice) => choice.index == selectedIndex);
     final choice = matching.isEmpty ? null : matching.first;
     final path = await FilePicker.platform.saveFile(
-      dialogTitle: 'Export panel data',
+      dialogTitle: app.tr('Export panel data'),
       fileName: _anticipatedPanelFileName(choice, request.format),
       type: FileType.custom,
       allowedExtensions: [request.format.extension],
@@ -897,7 +897,7 @@ Future<_DesktopPanelExportDestination?> _chooseDesktopPanelExportDestination(
 
   final directory = await (directoryDialog ??
       () => FilePicker.platform.getDirectoryPath(
-            dialogTitle: 'Export each panel to this folder',
+            dialogTitle: app.tr('Export each panel to this folder'),
             lockParentWindow: true,
           ))();
   if (directory == null || directory.trim().isEmpty) return null;
@@ -1030,6 +1030,12 @@ List<PanelExportFile> buildPanelExportFiles(
         ),
       ),
   ];
+}
+
+List<PanelExportFile> _buildPanelExportFilesInBackground(
+  ({List<Map<String, dynamic>> panels, PanelExportFormat format}) request,
+) {
+  return buildPanelExportFiles(request.panels, request.format);
 }
 
 String encodeMultiplePanelCsv(List<Map<String, dynamic>> panels) {

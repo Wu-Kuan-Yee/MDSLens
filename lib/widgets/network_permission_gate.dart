@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:mdslens/i18n/localized_material.dart';
 
 import '../models/app_state.dart';
 import '../services/network_permission_service.dart';
@@ -75,8 +75,7 @@ class _NetworkPermissionGateState extends State<NetworkPermissionGate> {
   }
 
   void _scheduleStartupRequest() {
-    final shouldRequest =
-        widget.requestOnStartup ??
+    final shouldRequest = widget.requestOnStartup ??
         NetworkPermissionService.requestsLocalNetworkOnStartup;
     if (!shouldRequest || _startupRequestScheduled) return;
     _startupRequestScheduled = true;
@@ -148,9 +147,9 @@ class _NetworkPermissionGateState extends State<NetworkPermissionGate> {
             key: const ValueKey('network-permission-retry'),
             onPressed: widget.app.canRetryNetworkOperation
                 ? () => Navigator.pop(
-                    dialogContext,
-                    _NetworkPermissionAction.retry,
-                  )
+                      dialogContext,
+                      _NetworkPermissionAction.retry,
+                    )
                 : null,
             icon: const Icon(Icons.refresh_rounded),
             label: const Text('Retry'),

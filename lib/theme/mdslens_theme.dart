@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:mdslens/i18n/localized_material.dart';
 import 'package:flutter/foundation.dart';
 
 class MDSLensTheme {

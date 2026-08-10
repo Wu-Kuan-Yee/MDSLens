@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math' as math;
-import 'package:flutter/material.dart';
+import 'package:mdslens/i18n/localized_material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,6 +17,7 @@ import '../services/source_index.dart';
 import '../services/user_data_store.dart';
 import '../services/web_gateway_client.dart';
 import '../services/web_configuration_encoder.dart';
+import '../i18n/language_service.dart';
 
 const _configurationSignalColors = [
   '#2364aa',
@@ -53,6 +54,7 @@ const _filePreferenceKeys = <String>[
   'toolbarCollapsed',
   'vimMode',
   'autoCheckUpdates',
+  'languagePreference',
   'fontFamily',
   'fontLegendSize',
   'fontAxisSize',
@@ -297,12 +299,16 @@ typedef LatestShotWorker = Future<dynamic> Function(
   String sshSettingsJson,
 );
 
-Future<ConfigOpenSelection?> _pickConfigurationFile() async {
+Future<ConfigOpenSelection?> _pickConfigurationFile({
+  String dialogTitle = 'Open MDSLens configuration',
+  String invalidSelectionMessage =
+      'Please choose an MDSLens .toml or .webscp configuration file.',
+}) async {
   final mobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
   final privateDirectory =
       mobile ? null : await UserDataStore().configurationDirectory();
   final result = await FilePicker.platform.pickFiles(
-    dialogTitle: 'Open MDSLens configuration',
+    dialogTitle: dialogTitle,
     // iOS/iPadOS document providers do not consistently map the non-standard
     // TOML extension to a UTI, which makes valid files appear disabled.
     // Validate the selected filename ourselves on mobile instead.
@@ -316,9 +322,7 @@ Future<ConfigOpenSelection?> _pickConfigurationFile() async {
   final file = result.files.single;
   final lowerName = file.name.toLowerCase();
   if (!lowerName.endsWith('.toml') && !lowerName.endsWith('.webscp')) {
-    throw const FormatException(
-      'Please choose an MDSLens .toml or .webscp configuration file.',
-    );
+    throw FormatException(invalidSelectionMessage);
   }
   return ConfigOpenSelection(
     name: file.name,
@@ -331,15 +335,16 @@ Future<ConfigOpenSelection?> _pickConfigurationFile() async {
 
 Future<String?> _saveConfigurationFile(
   String suggestedName,
-  Uint8List bytes,
-) async {
+  Uint8List bytes, {
+  String dialogTitle = 'Save MDSLens configuration',
+}) async {
   final mobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
   final extension =
       suggestedName.toLowerCase().endsWith('.webscp') ? 'webscp' : 'toml';
   final privateDirectory =
       mobile ? null : await UserDataStore().configurationDirectory();
   return saveBytesWithFilePicker(
-    dialogTitle: 'Save MDSLens configuration',
+    dialogTitle: dialogTitle,
     fileName: suggestedName,
     allowedExtensions: [extension],
     bytes: bytes,
@@ -669,8 +674,8 @@ class AppState extends ChangeNotifier {
   final ShotInfoFetchWorker _shotInfoFetchWorker;
   final LoginWorker _loginWorker;
   final LatestShotWorker _latestShotWorker;
-  final ConfigOpenPicker _configOpenPicker;
-  final ConfigSavePicker _configSavePicker;
+  late final ConfigOpenPicker _configOpenPicker;
+  late final ConfigSavePicker _configSavePicker;
   final ConfigParser _configParser;
   final ConfigEncoder _configEncoder;
   final ConfigEncoder _webscpConfigEncoder;
@@ -978,6 +983,7 @@ class AppState extends ChangeNotifier {
 
   final UserDataStore _userDataStore;
   final CredentialStore _credentialStore;
+  late final LanguageService languages;
 
   AppState({
     SignalFetchWorker? signalFetchWorker,
@@ -995,6 +1001,7 @@ class AppState extends ChangeNotifier {
     SshTestWorker? sshTestWorker,
     UserDataStore? userDataStore,
     CredentialStore? credentialStore,
+    LanguageService? languageService,
   })  : _signalFetchWorker = signalFetchWorker ?? _fetchSignalsInBackground,
         _streamingSignalFetchWorker = streamingSignalFetchWorker ??
             (signalFetchWorker == null
@@ -1016,8 +1023,6 @@ class AppState extends ChangeNotifier {
             shotInfoFetchWorker ?? _fetchShotInfoInBackground,
         _loginWorker = loginWorker ?? _loginToApi,
         _latestShotWorker = latestShotWorker ?? _fetchLatestShotFromApi,
-        _configOpenPicker = configOpenPicker ?? _pickConfigurationFile,
-        _configSavePicker = configSavePicker ?? _saveConfigurationFile,
         _configParser = configParser ?? _parseConfiguration,
         _configEncoder = configEncoder ?? _encodeConfiguration,
         _webscpConfigEncoder =
@@ -1025,6 +1030,22 @@ class AppState extends ChangeNotifier {
         _sshTestWorker = sshTestWorker ?? _testSshInBackground,
         _userDataStore = userDataStore ?? UserDataStore(),
         _credentialStore = credentialStore ?? PlatformCredentialStore() {
+    languages =
+        languageService ?? LanguageService(userDataStore: _userDataStore);
+    languages.addListener(_handleLanguageChanged);
+    _configOpenPicker = configOpenPicker ??
+        () => _pickConfigurationFile(
+              dialogTitle: tr('Open MDSLens configuration'),
+              invalidSelectionMessage: tr(
+                'Please choose an MDSLens .toml or .webscp configuration file.',
+              ),
+            );
+    _configSavePicker = configSavePicker ??
+        (suggestedName, bytes) => _saveConfigurationFile(
+              suggestedName,
+              bytes,
+              dialogTitle: tr('Save MDSLens configuration'),
+            );
     _shotCtrl.addListener(() {
       if (_shotCtrl.text != _shotText) {
         _invalidateFetchForSettingsChange();
@@ -1037,6 +1058,10 @@ class AppState extends ChangeNotifier {
     });
     loadDefaultConfig();
     preferencesReady = initPreferences();
+  }
+
+  void _handleLanguageChanged() {
+    if (!_disposed) notifyListeners();
   }
 
   void setShotFromApi(String v) {
@@ -1202,6 +1227,32 @@ class AppState extends ChangeNotifier {
     savePreferences();
     notifyListeners();
   }
+
+  String _languagePreference = systemLanguagePreference;
+  String get languagePreference => _languagePreference;
+
+  void setLanguagePreference(String preference) {
+    final normalized = preference.trim().isEmpty
+        ? systemLanguagePreference
+        : preference.trim();
+    if (_languagePreference == normalized) return;
+    _languagePreference = normalized;
+    languages.setPreference(normalized);
+    savePreferences();
+    notifyListeners();
+  }
+
+  void updateSystemLocales(List<Locale> locales) {
+    languages.updateSystemLocales(locales);
+  }
+
+  Future<void> refreshLanguages() => languages.refresh();
+
+  String tr(
+    String key, [
+    Map<String, Object?> parameters = const {},
+  ]) =>
+      languages.translate(key, parameters);
 
   // Font settings (Customize Fonts dialog)
   String _fontFamily = 'System';
@@ -2258,6 +2309,12 @@ class AppState extends ChangeNotifier {
       _autoCheckUpdates = setting('autoCheckUpdates') is bool
           ? setting('autoCheckUpdates') as bool
           : _autoCheckUpdates;
+      _languagePreference =
+          setting('languagePreference')?.toString() ?? _languagePreference;
+      await languages.initialize(
+        preference: _languagePreference,
+        systemLocales: WidgetsBinding.instance.platformDispatcher.locales,
+      );
       _fontFamily = setting('fontFamily')?.toString() ?? _fontFamily;
       _fontLegendSize = setting('fontLegendSize') is num
           ? (setting('fontLegendSize') as num).toInt()
@@ -2389,6 +2446,7 @@ class AppState extends ChangeNotifier {
         'toolbarCollapsed': _toolbarCollapsed,
         'vimMode': _vimMode,
         'autoCheckUpdates': _autoCheckUpdates,
+        'languagePreference': _languagePreference,
         'fontFamily': _fontFamily,
         'fontLegendSize': _fontLegendSize,
         'fontAxisSize': _fontAxisSize,
@@ -2944,6 +3002,8 @@ class AppState extends ChangeNotifier {
     _toolbarCollapsed = false;
     _vimMode = false;
     _autoCheckUpdates = true;
+    _languagePreference = systemLanguagePreference;
+    languages.setPreference(systemLanguagePreference);
     _fontFamily = 'System';
     _fontLegendSize = 11;
     _fontAxisSize = 8;
@@ -4583,6 +4643,8 @@ class AppState extends ChangeNotifier {
   void dispose() {
     markStartupInitializationComplete();
     prepareForExit();
+    languages.removeListener(_handleLanguageChanged);
+    languages.dispose();
     _shotCtrl.dispose();
     shotFocusNode.dispose();
     crosshairChanges.dispose();

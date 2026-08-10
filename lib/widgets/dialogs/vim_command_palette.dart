@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:mdslens/i18n/localized_material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/app_state.dart';
@@ -272,9 +272,9 @@ class _VimCommandPaletteState extends State<VimCommandPalette> {
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.search_rounded),
-                hintText: 'Type a command, then press Enter',
+                hintText: context.tr('Type a command, then press Enter'),
                 suffixIcon: IconButton(
-                  tooltip: 'Clear command',
+                  tooltip: context.tr('Clear command'),
                   onPressed: () {
                     _queryController.clear();
                     _selectIndex(0);
