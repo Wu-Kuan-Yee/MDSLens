@@ -315,6 +315,7 @@ user's home directory:
 ~/.mdslens/settings.json
 ~/.mdslens/configurations/
 ~/.mdslens/cache/
+~/.mdslens/languages/
 ```
 
 Windows resolves `~` through `USERPROFILE`. Android, iOS, and iPadOS place the

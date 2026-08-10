@@ -27,8 +27,10 @@ The project website is available at
   the current view, or a custom X range. Each panel is written to an
   independent file; mobile platforms package multi-panel results in one ZIP
   while preserving those separate files.
-- Responsive layouts, configurable fonts, icon sizes and themes, internal web
-  bookmarks, shot history management, and native system file/link integration.
+- Responsive layouts, hot-discovered system fonts, runtime JSON language
+  catalogs, icon sizes and themes, internal web bookmarks, shot history
+  management, and native system file/link integration. See
+  [Languages and runtime fonts](docs/LOCALIZATION.md).
 - Configurable desktop keyboard shortcuts with platform-aware navigation,
   multi-stroke commands, and safe text-field behavior. See
   [Keyboard shortcuts](docs/KEYBOARD_SHORTCUTS.md).
@@ -140,6 +142,7 @@ Desktop builds keep their private state under `~/.mdslens/`:
 ~/.mdslens/
 ├── settings.json
 ├── configurations/
+├── languages/
 └── cache/
 ```
 
@@ -168,4 +171,5 @@ MDSLens is licensed under [GPL-3.0-or-later](LICENSE).
 - [Build & Signing Guide](docs/BUILDING.md)
 - [Platforms, Architectures & Static Linking Boundaries](docs/PLATFORM_SUPPORT.md)
 - [Performance, Dependencies & Size Audit](docs/PERFORMANCE_AUDIT.md)
+- [Languages and Runtime Font Discovery](docs/LOCALIZATION.md)
 - [Web / PWA Build and Deployment](docs/WEB_DEPLOYMENT.md)
