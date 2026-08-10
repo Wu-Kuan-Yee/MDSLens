@@ -467,6 +467,28 @@ class VimActivatable extends InheritedWidget {
       !identical(onActivate, oldWidget.onActivate);
 }
 
+/// Stable, language-independent identity for a character in a Vim page.
+///
+/// Visible labels and tooltips are localized and can also reflow.  Navigation
+/// semantics must therefore never infer a control's identity from translated
+/// text.  Composite pages use this marker when a small set of controls has a
+/// deliberate document order that differs from its rendered geometry.
+class VimCellIdentity extends InheritedWidget {
+  const VimCellIdentity({
+    super.key,
+    required this.id,
+    required super.child,
+  });
+
+  final String id;
+
+  static VimCellIdentity? maybeOf(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<VimCellIdentity>();
+
+  @override
+  bool updateShouldNotify(VimCellIdentity oldWidget) => id != oldWidget.id;
+}
+
 /// Resolve an explicit Vim activation contract for a focused cell.
 ///
 /// Most buttons put [VimActivatable] *around* their Focus widget, which makes
@@ -2960,22 +2982,15 @@ List<_VimFocusTarget> _layoutTargets(
   return result;
 }
 
-String _vimTargetLabel(_VimFocusTarget target) {
-  final targetContext = target.node.context;
-  if (targetContext != null) {
-    final tooltip =
-        targetContext.findAncestorWidgetOfExactType<Tooltip>()?.message;
-    if (tooltip != null && tooltip.trim().isNotEmpty) return tooltip;
-  }
-  return target.node.debugLabel ?? '';
-}
-
 int _vimRootControlRank(_VimFocusTarget target) {
-  final label = _vimTargetLabel(target).trim().toLowerCase();
-  if (label.startsWith('open configuration')) return 0;
-  if (label.startsWith('recent configurations')) return 1;
-  if (label.startsWith('save configuration')) return 2;
-  return 100;
+  final context = target.node.context;
+  return switch (
+      context == null ? null : VimCellIdentity.maybeOf(context)?.id) {
+    'toolbar/open-configuration' => 0,
+    'toolbar/recent-configurations' => 1,
+    'toolbar/save-configuration' => 2,
+    _ => 100,
+  };
 }
 
 /// Return the controls of the root application page in semantic order.

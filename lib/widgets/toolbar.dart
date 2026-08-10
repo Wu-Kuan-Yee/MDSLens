@@ -809,6 +809,7 @@ class ToolbarWidget extends StatelessWidget {
       children: [
         _toolbarIconButton(
           context,
+          vimCellId: 'toolbar/open-configuration',
           icon: Icons.folder_open_rounded,
           tooltip: _shortcutTooltip(
             app,
@@ -823,6 +824,7 @@ class ToolbarWidget extends StatelessWidget {
         ),
         _toolbarIconButton(
           context,
+          vimCellId: 'toolbar/save-configuration',
           icon: Icons.save_rounded,
           tooltip: _shortcutTooltip(
             app,
@@ -4428,6 +4430,7 @@ class ToolbarWidget extends StatelessWidget {
 
   Widget _toolbarIconButton(
     BuildContext context, {
+    String? vimCellId,
     required IconData icon,
     required String tooltip,
     required VoidCallback onPressed,
@@ -4437,7 +4440,7 @@ class ToolbarWidget extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final highlight = activeColor ?? colors.primary;
     final translatedTooltip = context.tr(tooltip);
-    return Focus(
+    final button = Focus(
       // ButtonStyleButton owns the actual focus node. This non-focusable
       // ancestor only consumes a second framework dispatch of the same Enter
       // event after the application-level Vim handler has activated it.
@@ -4512,6 +4515,9 @@ class ToolbarWidget extends StatelessWidget {
         ),
       ),
     );
+    return vimCellId == null
+        ? button
+        : VimCellIdentity(id: vimCellId, child: button);
   }
 
   Widget _toolbarRecentConfigurationButton(
@@ -4524,49 +4530,52 @@ class ToolbarWidget extends StatelessWidget {
       'Recent configurations',
       MdsShortcutCommand.openRecentFiles,
     );
-    return Semantics(
-      button: true,
-      label: context.tr(tooltip),
-      child: VimActivatable(
-        onActivate: () => _showRecentConfigurations(context, app),
-        child: Focus(
-          debugLabel: 'toolbar-recent-configurations',
-          canRequestFocus: true,
-          skipTraversal: false,
-          descendantsAreTraversable: false,
-          onKeyEvent: (node, event) {
-            if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-              return KeyEventResult.ignored;
-            }
-            if (event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.space) {
-              if (!claimVimActivation(context, event)) {
+    return VimCellIdentity(
+      id: 'toolbar/recent-configurations',
+      child: Semantics(
+        button: true,
+        label: context.tr(tooltip),
+        child: VimActivatable(
+          onActivate: () => _showRecentConfigurations(context, app),
+          child: Focus(
+            debugLabel: 'toolbar-recent-configurations',
+            canRequestFocus: true,
+            skipTraversal: false,
+            descendantsAreTraversable: false,
+            onKeyEvent: (node, event) {
+              if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+                return KeyEventResult.ignored;
+              }
+              if (event.logicalKey == LogicalKeyboardKey.enter ||
+                  event.logicalKey == LogicalKeyboardKey.space) {
+                if (!claimVimActivation(context, event)) {
+                  return KeyEventResult.handled;
+                }
+                _showRecentConfigurations(context, app);
                 return KeyEventResult.handled;
               }
-              _showRecentConfigurations(context, app);
-              return KeyEventResult.handled;
-            }
-            return KeyEventResult.ignored;
-          },
-          child: Tooltip(
-            message: tooltip,
-            child: Material(
-              color: Colors.transparent,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 44),
-                child: Ink(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: colors.outlineVariant),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(10),
-                    onTap: () => _showRecentConfigurations(context, app),
-                    child: Center(
-                      child: Icon(
-                        Icons.history_rounded,
-                        size: app.iconSize.toDouble(),
-                        color: colors.onSurface,
+              return KeyEventResult.ignored;
+            },
+            child: Tooltip(
+              message: tooltip,
+              child: Material(
+                color: Colors.transparent,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 44),
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: colors.outlineVariant),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () => _showRecentConfigurations(context, app),
+                      child: Center(
+                        child: Icon(
+                          Icons.history_rounded,
+                          size: app.iconSize.toDouble(),
+                          color: colors.onSurface,
+                        ),
                       ),
                     ),
                   ),

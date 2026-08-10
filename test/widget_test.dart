@@ -737,6 +737,34 @@ void main() {
     expect(tooltip, startsWith('Open configuration'));
   });
 
+  testWidgets('Vim gg order is independent of the active language',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app
+      ..setLanguagePreference('zh-Hans')
+      ..setVimMode(true);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(PlotPanel).first);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.pump();
+
+    final tooltip = FocusManager.instance.primaryFocus?.context
+        ?.findAncestorWidgetOfExactType<Tooltip>()
+        ?.message;
+    expect(tooltip, startsWith('打开配置'));
+  });
+
   testWidgets('Vim Enter activates a toolbar control only once',
       (tester) async {
     var openCalls = 0;
