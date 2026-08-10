@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mdslens/widgets/polished_dropdown.dart';
 
@@ -30,16 +31,76 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('long-dropdown-anchor')));
     await tester.pumpAndSettle();
 
-    final scrollbar = tester.widget<Scrollbar>(
-      find.byKey(const ValueKey('long-dropdown-scrollbar')),
+    final scrollbarFinder = find.byType(Scrollbar);
+    expect(scrollbarFinder, findsOneWidget);
+    final scrollbarElement = tester.element(scrollbarFinder);
+    final scrollbarTheme = ScrollbarTheme.of(scrollbarElement);
+    expect(scrollbarTheme.interactive, isTrue);
+    expect(
+      scrollbarTheme.thumbVisibility?.resolve(<WidgetState>{}),
+      isTrue,
     );
-    expect(scrollbar.interactive, isTrue);
-    expect(scrollbar.thumbVisibility, isTrue);
+    final scrollableState = tester.state<ScrollableState>(
+      find.byType(Scrollable),
+    );
+    final before = scrollableState.position.pixels;
+    final scrollbarRect = tester.getRect(scrollbarFinder);
+    final gesture = await tester.startGesture(
+      Offset(scrollbarRect.right - 2, scrollbarRect.top + 20),
+    );
+    await gesture.moveBy(const Offset(0, 80));
+    await gesture.up();
+    await tester.pump();
+    expect(scrollableState.position.pixels, greaterThan(before));
     // Only visible entries need to be built initially; the scrollbar provides
     // access to the remaining locale records.
     expect(
       find.byKey(const ValueKey('long-dropdown-option-0')),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('long polished dropdown supports gg and G edge navigation', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PolishedDropdown<int>(
+            id: 'vim-dropdown',
+            value: 0,
+            menuMaxHeight: 240,
+            showScrollbar: true,
+            options: [
+              for (var index = 0; index < 40; index++)
+                PolishedDropdownOption(
+                  value: index,
+                  label: 'Locale $index',
+                ),
+            ],
+            onChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('vim-dropdown-anchor')));
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'dropdown-vim-dropdown-option-0',
+    );
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'dropdown-vim-dropdown-option-39',
     );
   });
 }

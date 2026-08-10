@@ -82,9 +82,6 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
   );
   FocusNode? _actionFocusNode;
   final List<FocusNode> _optionFocusNodes = <FocusNode>[];
-  late final ScrollController _menuScrollController = ScrollController(
-    debugLabel: 'dropdown-${widget.id}-menu-scroll',
-  );
   Timer? _menuSequenceTimer;
   bool _pendingMenuG = false;
 
@@ -268,7 +265,6 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
   void dispose() {
     _menuSequenceTimer?.cancel();
     _focusNode.dispose();
-    _menuScrollController.dispose();
     _actionFocusNode?.dispose();
     for (final node in _optionFocusNodes) {
       node.dispose();
@@ -317,28 +313,7 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
         ),
       ],
     ];
-    final menuChildren = widget.showScrollbar
-        ? <Widget>[
-            SizedBox(
-              width: menuWidth,
-              height: (widget.menuMaxHeight - 14).clamp(120, 406).toDouble(),
-              child: Scrollbar(
-                key: ValueKey('${widget.id}-scrollbar'),
-                thumbVisibility: true,
-                trackVisibility: true,
-                interactive: true,
-                child: ListView(
-                  controller: _menuScrollController,
-                  padding: EdgeInsets.zero,
-                  primary: false,
-                  children: menuItems,
-                ),
-              ),
-            ),
-          ]
-        : menuItems;
-
-    return MenuAnchor(
+    final menuAnchor = MenuAnchor(
       // Flutter's cascading menu animation creates invalid Intervals for a
       // long history/options list. The anchor itself remains animated; keep
       // the overlay stable so every item can be focused and scrolled to.
@@ -369,7 +344,7 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
           ),
         ),
       ),
-      menuChildren: menuChildren,
+      menuChildren: menuItems,
       builder: (context, controller, _) {
         _menuController = controller;
         return VimActivatable(
@@ -463,6 +438,19 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
           ),
         );
       },
+    );
+    if (!widget.showScrollbar) return menuAnchor;
+    // MenuAnchor supplies the actual scroll controller and viewport. Configure
+    // its built-in Scrollbar instead of nesting another ListView/Scrollbar;
+    // this keeps the thumb draggable on platforms where Scrollbar.interactive
+    // would otherwise default to false.
+    return ScrollbarTheme(
+      data: theme.scrollbarTheme.copyWith(
+        interactive: true,
+        thumbVisibility: const WidgetStatePropertyAll(true),
+        trackVisibility: const WidgetStatePropertyAll(true),
+      ),
+      child: menuAnchor,
     );
   }
 
