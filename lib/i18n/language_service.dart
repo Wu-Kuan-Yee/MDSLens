@@ -114,7 +114,13 @@ class LanguageService extends ChangeNotifier {
         );
         // A user language file intentionally overrides a bundled locale,
         // which also makes live translation editing possible.
-        next[language.locale] = language;
+        final bundled = next[language.locale];
+        next[language.locale] = language.copyWith(
+          baseLocale: language.baseLocale ?? bundled?.baseLocale,
+          coverageLevel: language.coverageLevel ?? bundled?.coverageLevel,
+          script: language.script ?? bundled?.script,
+          defaultRegion: language.defaultRegion ?? bundled?.defaultRegion,
+        );
       } catch (_) {
         // One malformed file must not make all valid languages disappear.
       }
@@ -134,6 +140,10 @@ class LanguageService extends ChangeNotifier {
         entry.key: {
           'name': entry.value.name,
           'nativeName': entry.value.nativeName,
+          'baseLocale': entry.value.baseLocale,
+          'coverageLevel': entry.value.coverageLevel,
+          'script': entry.value.script,
+          'defaultRegion': entry.value.defaultRegion,
           'messages': entry.value.messages,
           'source': entry.value.source,
         },
@@ -193,15 +203,11 @@ class LanguageService extends ChangeNotifier {
 
   String? _lookupMessage(String source) {
     final catalogs = <Map<String, String>>[];
-    void addCatalog(LanguageDefinition? language) {
-      if (language != null && !catalogs.contains(language.messages)) {
+    for (final language in _fallbackChain(_activeLocale)) {
+      if (!catalogs.contains(language.messages)) {
         catalogs.add(language.messages);
       }
     }
-
-    addCatalog(_languages[_activeLocale]);
-    addCatalog(_languages[_activeLocale.split('-').first]);
-    addCatalog(_languages['en']);
     for (final catalog in catalogs) {
       final exact = catalog[source];
       if (exact != null) return exact;
@@ -242,9 +248,31 @@ class LanguageService extends ChangeNotifier {
   String? _bestAvailable(String locale) {
     final normalized = normalizeLocaleTag(locale);
     if (normalized.isEmpty) return null;
-    if (_languages.containsKey(normalized)) return normalized;
+    final exact = _languages[normalized];
+    if (exact != null && exact.messages.isNotEmpty) return normalized;
+    for (final parent in _implicitParentLocales(normalized)) {
+      final candidate = _languages[parent];
+      if (candidate != null && candidate.messages.isNotEmpty) return parent;
+    }
     final language = normalized.split('-').first;
-    if (_languages.containsKey(language)) return language;
+    // English is the guaranteed source catalog.  Prefer it over a generated
+    // CLDR region placeholder so an English system does not report a random
+    // region as the active translated catalog.
+    if (language == 'en' && _languages.containsKey('en')) return 'en';
+    final languageCatalog = _languages[language];
+    if (languageCatalog != null && languageCatalog.messages.isNotEmpty) {
+      return language;
+    }
+    for (final available in _languages.keys) {
+      final candidate = _languages[available];
+      if (available.split('-').first == language &&
+          candidate != null &&
+          candidate.messages.isNotEmpty) {
+        return available;
+      }
+    }
+    if (exact != null) return normalized;
+    if (languageCatalog != null) return language;
     for (final available in _languages.keys) {
       if (available.split('-').first == language) return available;
     }
@@ -270,12 +298,17 @@ class LanguageService extends ChangeNotifier {
       final languages = <LanguageDefinition>[];
       for (final path in paths) {
         try {
-          languages.add(
-            LanguageDefinition.parse(
-              await rootBundle.loadString(path),
-              source: path,
-            ),
-          );
+          final content = await rootBundle.loadString(path);
+          if (path.endsWith('/cldr-modern.toml')) {
+            languages.addAll(
+              LocaleRegistryDocument.parse(content, source: path)
+                  .localeDefinitions,
+            );
+          } else {
+            languages.add(
+              LanguageDefinition.parse(content, source: path),
+            );
+          }
         } catch (_) {
           // Invalid optional bundles are ignored independently.
         }
@@ -286,12 +319,45 @@ class LanguageService extends ChangeNotifier {
     }
   }
 
+  List<LanguageDefinition> _fallbackChain(String locale) {
+    final chain = <LanguageDefinition>[];
+    final visited = <String>{};
+    String? current = normalizeLocaleTag(locale);
+    while (current != null && current.isNotEmpty) {
+      if (!visited.add(current)) break;
+      final language = _languages[current];
+      if (language != null) {
+        chain.add(language);
+        current = language.baseLocale;
+        if (current == null || current.isEmpty) {
+          final parents = _implicitParentLocales(language.locale);
+          current = parents.isEmpty ? null : parents.first;
+        }
+      } else {
+        final parents = _implicitParentLocales(current);
+        current = parents.isEmpty ? null : parents.first;
+      }
+    }
+    final english = _languages['en'];
+    if (english != null && !visited.contains('en')) chain.add(english);
+    return chain;
+  }
+
   @override
   void dispose() {
     _reloadDebounce?.cancel();
     _storageSubscription?.cancel();
     super.dispose();
   }
+}
+
+List<String> _implicitParentLocales(String locale) {
+  final normalized = normalizeLocaleTag(locale);
+  if (normalized.isEmpty) return const [];
+  final parts = normalized.split('-');
+  if (parts.length <= 1) return const [];
+  final parent = parts.sublist(0, parts.length - 1).join('-');
+  return [parent];
 }
 
 String? _lookupTemplatedMessage(

@@ -2,7 +2,11 @@
 
 MDSLens currently ships English and Simplified Chinese interfaces. Its UI text
 is resolved through runtime TOML catalogs, so adding another language does not
-require generating or editing Dart source.
+require generating or editing Dart source. The catalog loader also ships the
+CLDR 48.2 Modern locale registry: 104 Modern language/script parents and all
+563 production locale records (104 parents plus 459 regional/script variants)
+are available for selection. A registry record is metadata plus a fallback
+link; it is not a claim that all 563 translations have already been authored.
 
 ## Language files
 
@@ -27,16 +31,43 @@ version = 1
 locale = "en-GB"
 name = "British English"
 nativeName = "British English"
+baseLocale = "en"
 
 [messages]
 "Color" = "Colour"
 "Loaded {value1} panels" = "{value1} panels ready"
 ```
 
-Locale tags use BCP 47 form. MDSLens tries an exact system locale, then a
-language-only match, then English. The default `System (automatic)` setting
-listens for operating-system locale changes while the application is running.
-An explicitly selected language remains selected until the user changes it.
+Locale tags use BCP 47 form. Sparse regional catalogs can set `baseLocale` to
+inherit from a parent catalog; omitted parents use the normal BCP 47 parent
+chain. MDSLens tries an exact catalog with translations, then translated
+parents, then the selected locale's registry metadata, and finally English.
+The default `System (automatic)` setting listens for operating-system locale
+changes while the application is running. An explicitly selected language
+remains selected until the user changes it.
+
+## CLDR Modern registry
+
+`assets/languages/cldr-modern.toml` is generated from the official Unicode
+CLDR 48.2 `common/properties/coverageLevels.txt`, locale coverage TSV, and
+`common/main/` data. It intentionally keeps every production regional/script
+record under a Modern language parent, including records whose translation
+data is inherited or sparse. The registry is small metadata, not 563 copies
+of the 514-message English catalog.
+
+To regenerate it after downloading a newer CLDR release:
+
+```sh
+python3 tool/generate_cldr_registry.py \
+  --coverage-levels /path/to/cldr/common/properties/coverageLevels.txt \
+  --locale-coverage /path/to/locale-coverage.tsv \
+  --main-directory /path/to/cldr/common/main \
+  --output assets/languages/cldr-modern.toml
+```
+
+The generated file is committed so offline builds and all platforms use the
+same deterministic locale list. Unicode CLDR data remains subject to the
+[Unicode CLDR terms of use](https://cldr.unicode.org/index/license).
 
 The visible English source text is the stable message key. Placeholders must be
 kept in translated values. Regenerate and validate the English source catalog
@@ -66,20 +97,22 @@ such as `{value1}` rather than interpolating before translation. Runtime data
 (signal names, URLs, paths, shot numbers, and server-provided diagnostics) is
 not translated, but any surrounding label or status template is.
 
-The English catalog is generated from the Dart UI sources and every bundled
-catalog is required to have the same keys and placeholders. Run both checks
-before committing a UI change:
+The English catalog is generated from the Dart UI sources. Fully translated
+catalogs should keep the same keys and placeholders; sparse catalogs may
+contain only the keys they intentionally override. Run both checks before
+committing a UI change:
 
 ```sh
 dart tool/update_english_catalog.dart --check
 flutter test test/language_service_test.dart
 ```
 
-The language test parses every TOML file in `assets/languages/`, verifies exact
-key parity with English, checks placeholder parity, and exercises ordinary
+The language test parses every shipped catalog, verifies that catalog keys are
+known English keys and that their placeholders match, validates the CLDR
+registry count and representative region/script tags, and exercises ordinary
 `Text`, `SelectableText`, interpolation, system-locale selection, and live
 catalog add/edit/remove. This keeps new UI strings from silently bypassing
-translation or leaving a bundled language incomplete.
+translation while allowing the registry's deliberate sparse fallback model.
 
 ## Font discovery
 

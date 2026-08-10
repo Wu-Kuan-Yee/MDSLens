@@ -1,0 +1,4415 @@
+# Generated from Unicode CLDR 48.2 locale coverage and main data.
+# This registry contains Modern language parents and all production
+# regional/script variants under those parents. Translation catalogs
+# are separate and may override any entry at runtime.
+# Unicode CLDR: https://cldr.unicode.org/
+version = 1
+kind = "locale-registry"
+coverage = "CLDR 48.2 Modern"
+baseLocaleCount = 104
+localeCount = 563
+
+[locales."af"]
+name = "Afrikaans"
+nativeName = "Afrikaans"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "ZA"
+
+[locales."af-NA"]
+name = "Afrikaans (NA)"
+nativeName = "Afrikaans (NA)"
+baseLocale = "af"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "NA"
+
+[locales."af-ZA"]
+name = "Afrikaans (ZA)"
+nativeName = "Afrikaans (ZA)"
+baseLocale = "af"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "ZA"
+
+[locales."ak"]
+name = "Akan"
+nativeName = "Akan"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "GH"
+
+[locales."ak-GH"]
+name = "Akan (GH)"
+nativeName = "Akan (GH)"
+baseLocale = "ak"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GH"
+
+[locales."am"]
+name = "Amharic"
+nativeName = "አማርኛ"
+coverageLevel = "modern"
+script = "Ethi"
+defaultRegion = "ET"
+
+[locales."am-ET"]
+name = "Amharic (ET)"
+nativeName = "አማርኛ (ET)"
+baseLocale = "am"
+coverageLevel = "modern-inherited"
+script = "Ethi"
+defaultRegion = "ET"
+
+[locales."ar"]
+name = "Arabic"
+nativeName = "‫العربية‬"
+coverageLevel = "modern"
+script = "Arab"
+defaultRegion = "EG"
+
+[locales."ar-001"]
+name = "Arabic (001)"
+nativeName = "‫العربية‬ (001)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "001"
+
+[locales."ar-AE"]
+name = "Arabic (AE)"
+nativeName = "‫العربية‬ (AE)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "AE"
+
+[locales."ar-BH"]
+name = "Arabic (BH)"
+nativeName = "‫العربية‬ (BH)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "BH"
+
+[locales."ar-DJ"]
+name = "Arabic (DJ)"
+nativeName = "‫العربية‬ (DJ)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "DJ"
+
+[locales."ar-DZ"]
+name = "Arabic (DZ)"
+nativeName = "‫العربية‬ (DZ)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "DZ"
+
+[locales."ar-EG"]
+name = "Arabic (EG)"
+nativeName = "‫العربية‬ (EG)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "EG"
+
+[locales."ar-EH"]
+name = "Arabic (EH)"
+nativeName = "‫العربية‬ (EH)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "EH"
+
+[locales."ar-ER"]
+name = "Arabic (ER)"
+nativeName = "‫العربية‬ (ER)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "ER"
+
+[locales."ar-IL"]
+name = "Arabic (IL)"
+nativeName = "‫العربية‬ (IL)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "IL"
+
+[locales."ar-IQ"]
+name = "Arabic (IQ)"
+nativeName = "‫العربية‬ (IQ)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "IQ"
+
+[locales."ar-JO"]
+name = "Arabic (JO)"
+nativeName = "‫العربية‬ (JO)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "JO"
+
+[locales."ar-KM"]
+name = "Arabic (KM)"
+nativeName = "‫العربية‬ (KM)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "KM"
+
+[locales."ar-KW"]
+name = "Arabic (KW)"
+nativeName = "‫العربية‬ (KW)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "KW"
+
+[locales."ar-LB"]
+name = "Arabic (LB)"
+nativeName = "‫العربية‬ (LB)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "LB"
+
+[locales."ar-LY"]
+name = "Arabic (LY)"
+nativeName = "‫العربية‬ (LY)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "LY"
+
+[locales."ar-MA"]
+name = "Arabic (MA)"
+nativeName = "‫العربية‬ (MA)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "MA"
+
+[locales."ar-MR"]
+name = "Arabic (MR)"
+nativeName = "‫العربية‬ (MR)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "MR"
+
+[locales."ar-OM"]
+name = "Arabic (OM)"
+nativeName = "‫العربية‬ (OM)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "OM"
+
+[locales."ar-PS"]
+name = "Arabic (PS)"
+nativeName = "‫العربية‬ (PS)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "PS"
+
+[locales."ar-QA"]
+name = "Arabic (QA)"
+nativeName = "‫العربية‬ (QA)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "QA"
+
+[locales."ar-SA"]
+name = "Arabic (SA)"
+nativeName = "‫العربية‬ (SA)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "SA"
+
+[locales."ar-SD"]
+name = "Arabic (SD)"
+nativeName = "‫العربية‬ (SD)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "SD"
+
+[locales."ar-SO"]
+name = "Arabic (SO)"
+nativeName = "‫العربية‬ (SO)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "SO"
+
+[locales."ar-SS"]
+name = "Arabic (SS)"
+nativeName = "‫العربية‬ (SS)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "SS"
+
+[locales."ar-SY"]
+name = "Arabic (SY)"
+nativeName = "‫العربية‬ (SY)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "SY"
+
+[locales."ar-TD"]
+name = "Arabic (TD)"
+nativeName = "‫العربية‬ (TD)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "TD"
+
+[locales."ar-TN"]
+name = "Arabic (TN)"
+nativeName = "‫العربية‬ (TN)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "TN"
+
+[locales."ar-YE"]
+name = "Arabic (YE)"
+nativeName = "‫العربية‬ (YE)"
+baseLocale = "ar"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "YE"
+
+[locales."as"]
+name = "Assamese"
+nativeName = "অসমীয়া"
+coverageLevel = "modern"
+script = "Beng"
+defaultRegion = "IN"
+
+[locales."as-IN"]
+name = "Assamese (IN)"
+nativeName = "অসমীয়া (IN)"
+baseLocale = "as"
+coverageLevel = "modern-inherited"
+script = "Beng"
+defaultRegion = "IN"
+
+[locales."az"]
+name = "Azeri"
+nativeName = "azərbaycan"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "AZ"
+
+[locales."az-Arab"]
+name = "Azeri (Arabic) (Arab)"
+nativeName = "‫تۆرکجه‬ (Arab)"
+baseLocale = "az"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "IR"
+
+[locales."az-Arab-IQ"]
+name = "Azeri (Arab IQ)"
+nativeName = "azərbaycan (Arab IQ)"
+baseLocale = "az-Arab"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "IQ"
+
+[locales."az-Arab-IR"]
+name = "Azeri (Arab IR)"
+nativeName = "azərbaycan (Arab IR)"
+baseLocale = "az-Arab"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "IR"
+
+[locales."az-Arab-TR"]
+name = "Azeri (Arab TR)"
+nativeName = "azərbaycan (Arab TR)"
+baseLocale = "az-Arab"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "TR"
+
+[locales."az-Cyrl"]
+name = "Azeri (Cyrillic) (Cyrl)"
+nativeName = "азәрбајҹан (Кирил) (Cyrl)"
+baseLocale = "az"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "AZ"
+
+[locales."az-Cyrl-AZ"]
+name = "Azeri (Cyrl AZ)"
+nativeName = "azərbaycan (Cyrl AZ)"
+baseLocale = "az-Cyrl"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "AZ"
+
+[locales."az-Latn"]
+name = "Azeri (Latn)"
+nativeName = "azərbaycan (Latn)"
+baseLocale = "az"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "AZ"
+
+[locales."az-Latn-AZ"]
+name = "Azeri (Latn AZ)"
+nativeName = "azərbaycan (Latn AZ)"
+baseLocale = "az-Latn"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "AZ"
+
+[locales."ba"]
+name = "Bashkir"
+nativeName = "башҡорт"
+coverageLevel = "modern"
+script = "Cyrl"
+defaultRegion = "RU"
+
+[locales."ba-RU"]
+name = "Bashkir (RU)"
+nativeName = "башҡорт (RU)"
+baseLocale = "ba"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "RU"
+
+[locales."be"]
+name = "Belarusian"
+nativeName = "беларуская"
+coverageLevel = "modern"
+script = "Cyrl"
+defaultRegion = "BY"
+
+[locales."be-BY"]
+name = "Belarusian (BY)"
+nativeName = "беларуская (BY)"
+baseLocale = "be"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "BY"
+
+[locales."be-tarask"]
+name = "Belarusian (tarask)"
+nativeName = "беларуская (tarask)"
+baseLocale = "be"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "BY"
+
+[locales."bg"]
+name = "Bulgarian"
+nativeName = "български"
+coverageLevel = "modern"
+script = "Cyrl"
+defaultRegion = "BG"
+
+[locales."bg-BG"]
+name = "Bulgarian (BG)"
+nativeName = "български (BG)"
+baseLocale = "bg"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "BG"
+
+[locales."bn"]
+name = "Bangla"
+nativeName = "বাংলা"
+coverageLevel = "modern"
+script = "Beng"
+defaultRegion = "BD"
+
+[locales."bn-BD"]
+name = "Bangla (BD)"
+nativeName = "বাংলা (BD)"
+baseLocale = "bn"
+coverageLevel = "modern-inherited"
+script = "Beng"
+defaultRegion = "BD"
+
+[locales."bn-IN"]
+name = "Bangla (IN)"
+nativeName = "বাংলা (IN)"
+baseLocale = "bn"
+coverageLevel = "modern-inherited"
+script = "Beng"
+defaultRegion = "IN"
+
+[locales."bs"]
+name = "Bosnian"
+nativeName = "bosanski"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "BA"
+
+[locales."bs-Cyrl"]
+name = "Bosnian (Cyrillic) (Cyrl)"
+nativeName = "босански (ћирилица) (Cyrl)"
+baseLocale = "bs"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "BA"
+
+[locales."bs-Cyrl-BA"]
+name = "Bosnian (Cyrl BA)"
+nativeName = "bosanski (Cyrl BA)"
+baseLocale = "bs-Cyrl"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "BA"
+
+[locales."bs-Latn"]
+name = "Bosnian (Latn)"
+nativeName = "bosanski (Latn)"
+baseLocale = "bs"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BA"
+
+[locales."bs-Latn-BA"]
+name = "Bosnian (Latn BA)"
+nativeName = "bosanski (Latn BA)"
+baseLocale = "bs-Latn"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BA"
+
+[locales."ca"]
+name = "Catalan"
+nativeName = "català"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "ES"
+
+[locales."ca-AD"]
+name = "Catalan (AD)"
+nativeName = "català (AD)"
+baseLocale = "ca"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "AD"
+
+[locales."ca-ES"]
+name = "Catalan (ES)"
+nativeName = "català (ES)"
+baseLocale = "ca"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "ES"
+
+[locales."ca-ES-valencia"]
+name = "Catalan (ES valencia)"
+nativeName = "català (ES valencia)"
+baseLocale = "ca-ES"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "ES"
+
+[locales."ca-FR"]
+name = "Catalan (FR)"
+nativeName = "català (FR)"
+baseLocale = "ca"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "FR"
+
+[locales."ca-IT"]
+name = "Catalan (IT)"
+nativeName = "català (IT)"
+baseLocale = "ca"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "IT"
+
+[locales."chr"]
+name = "Cherokee"
+nativeName = "ᏣᎳᎩ"
+coverageLevel = "modern"
+script = "Cher"
+defaultRegion = "US"
+
+[locales."chr-US"]
+name = "Cherokee (US)"
+nativeName = "ᏣᎳᎩ (US)"
+baseLocale = "chr"
+coverageLevel = "modern-inherited"
+script = "Cher"
+defaultRegion = "US"
+
+[locales."cs"]
+name = "Czech"
+nativeName = "čeština"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "CZ"
+
+[locales."cs-CZ"]
+name = "Czech (CZ)"
+nativeName = "čeština (CZ)"
+baseLocale = "cs"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CZ"
+
+[locales."cv"]
+name = "Chuvash"
+nativeName = "чӑваш чӗлхи"
+coverageLevel = "modern"
+script = "Cyrl"
+defaultRegion = "RU"
+
+[locales."cv-RU"]
+name = "Chuvash (RU)"
+nativeName = "чӑваш чӗлхи (RU)"
+baseLocale = "cv"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "RU"
+
+[locales."cy"]
+name = "Welsh"
+nativeName = "Cymraeg"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "GB"
+
+[locales."cy-GB"]
+name = "Welsh (GB)"
+nativeName = "Cymraeg (GB)"
+baseLocale = "cy"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GB"
+
+[locales."da"]
+name = "Danish"
+nativeName = "dansk"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "DK"
+
+[locales."da-DK"]
+name = "Danish (DK)"
+nativeName = "dansk (DK)"
+baseLocale = "da"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "DK"
+
+[locales."da-GL"]
+name = "Danish (GL)"
+nativeName = "dansk (GL)"
+baseLocale = "da"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GL"
+
+[locales."de"]
+name = "German"
+nativeName = "Deutsch"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "DE"
+
+[locales."de-AT"]
+name = "German (AT)"
+nativeName = "Deutsch (AT)"
+baseLocale = "de"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "AT"
+
+[locales."de-BE"]
+name = "German (BE)"
+nativeName = "Deutsch (BE)"
+baseLocale = "de"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BE"
+
+[locales."de-CH"]
+name = "German (CH)"
+nativeName = "Deutsch (CH)"
+baseLocale = "de"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CH"
+
+[locales."de-DE"]
+name = "German (DE)"
+nativeName = "Deutsch (DE)"
+baseLocale = "de"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "DE"
+
+[locales."de-IT"]
+name = "German (IT)"
+nativeName = "Deutsch (IT)"
+baseLocale = "de"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "IT"
+
+[locales."de-LI"]
+name = "German (LI)"
+nativeName = "Deutsch (LI)"
+baseLocale = "de"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "LI"
+
+[locales."de-LU"]
+name = "German (LU)"
+nativeName = "Deutsch (LU)"
+baseLocale = "de"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "LU"
+
+[locales."dsb"]
+name = "Lower Sorbian"
+nativeName = "dolnoserbšćina"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "DE"
+
+[locales."dsb-DE"]
+name = "Lower Sorbian (DE)"
+nativeName = "dolnoserbšćina (DE)"
+baseLocale = "dsb"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "DE"
+
+[locales."el"]
+name = "Greek"
+nativeName = "Ελληνικά"
+coverageLevel = "modern"
+script = "Grek"
+defaultRegion = "GR"
+
+[locales."el-CY"]
+name = "Greek (CY)"
+nativeName = "Ελληνικά (CY)"
+baseLocale = "el"
+coverageLevel = "modern-inherited"
+script = "Grek"
+defaultRegion = "CY"
+
+[locales."el-GR"]
+name = "Greek (GR)"
+nativeName = "Ελληνικά (GR)"
+baseLocale = "el"
+coverageLevel = "modern-inherited"
+script = "Grek"
+defaultRegion = "GR"
+
+[locales."el-polyton"]
+name = "Greek (polyton)"
+nativeName = "Ελληνικά (polyton)"
+baseLocale = "el"
+coverageLevel = "modern-inherited"
+script = "Grek"
+defaultRegion = "GR"
+
+[locales."en"]
+name = "English"
+nativeName = "English"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "US"
+
+[locales."en-001"]
+name = "English (001)"
+nativeName = "English (001)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "001"
+
+[locales."en-150"]
+name = "English (150)"
+nativeName = "English (150)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "150"
+
+[locales."en-AE"]
+name = "English (AE)"
+nativeName = "English (AE)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "AE"
+
+[locales."en-AG"]
+name = "English (AG)"
+nativeName = "English (AG)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "AG"
+
+[locales."en-AI"]
+name = "English (AI)"
+nativeName = "English (AI)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "AI"
+
+[locales."en-AS"]
+name = "English (AS)"
+nativeName = "English (AS)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "AS"
+
+[locales."en-AT"]
+name = "English (AT)"
+nativeName = "English (AT)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "AT"
+
+[locales."en-AU"]
+name = "English (AU)"
+nativeName = "English (AU)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "AU"
+
+[locales."en-BB"]
+name = "English (BB)"
+nativeName = "English (BB)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BB"
+
+[locales."en-BE"]
+name = "English (BE)"
+nativeName = "English (BE)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BE"
+
+[locales."en-BI"]
+name = "English (BI)"
+nativeName = "English (BI)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BI"
+
+[locales."en-BM"]
+name = "English (BM)"
+nativeName = "English (BM)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BM"
+
+[locales."en-BS"]
+name = "English (BS)"
+nativeName = "English (BS)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BS"
+
+[locales."en-BW"]
+name = "English (BW)"
+nativeName = "English (BW)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BW"
+
+[locales."en-BZ"]
+name = "English (BZ)"
+nativeName = "English (BZ)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BZ"
+
+[locales."en-CA"]
+name = "English (CA)"
+nativeName = "English (CA)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CA"
+
+[locales."en-CC"]
+name = "English (CC)"
+nativeName = "English (CC)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CC"
+
+[locales."en-CH"]
+name = "English (CH)"
+nativeName = "English (CH)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CH"
+
+[locales."en-CK"]
+name = "English (CK)"
+nativeName = "English (CK)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CK"
+
+[locales."en-CM"]
+name = "English (CM)"
+nativeName = "English (CM)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CM"
+
+[locales."en-CX"]
+name = "English (CX)"
+nativeName = "English (CX)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CX"
+
+[locales."en-CY"]
+name = "English (CY)"
+nativeName = "English (CY)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CY"
+
+[locales."en-CZ"]
+name = "English (CZ)"
+nativeName = "English (CZ)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CZ"
+
+[locales."en-DE"]
+name = "English (DE)"
+nativeName = "English (DE)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "DE"
+
+[locales."en-DG"]
+name = "English (DG)"
+nativeName = "English (DG)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "DG"
+
+[locales."en-DK"]
+name = "English (DK)"
+nativeName = "English (DK)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "DK"
+
+[locales."en-DM"]
+name = "English (DM)"
+nativeName = "English (DM)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "DM"
+
+[locales."en-Dsrt"]
+name = "English (Deseret) (Dsrt)"
+nativeName = "𐐀𐑍𐑊𐐮𐑇 (𐐔𐐯𐑆𐐲𐑉𐐯𐐻) (Dsrt)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Dsrt"
+defaultRegion = "US"
+
+[locales."en-Dsrt-US"]
+name = "English (Dsrt US)"
+nativeName = "English (Dsrt US)"
+baseLocale = "en-Dsrt"
+coverageLevel = "modern-inherited"
+script = "Dsrt"
+defaultRegion = "US"
+
+[locales."en-EE"]
+name = "English (EE)"
+nativeName = "English (EE)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "EE"
+
+[locales."en-ER"]
+name = "English (ER)"
+nativeName = "English (ER)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "ER"
+
+[locales."en-ES"]
+name = "English (ES)"
+nativeName = "English (ES)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "ES"
+
+[locales."en-FI"]
+name = "English (FI)"
+nativeName = "English (FI)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "FI"
+
+[locales."en-FJ"]
+name = "English (FJ)"
+nativeName = "English (FJ)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "FJ"
+
+[locales."en-FK"]
+name = "English (FK)"
+nativeName = "English (FK)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "FK"
+
+[locales."en-FM"]
+name = "English (FM)"
+nativeName = "English (FM)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "FM"
+
+[locales."en-FR"]
+name = "English (FR)"
+nativeName = "English (FR)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "FR"
+
+[locales."en-GB"]
+name = "English (GB)"
+nativeName = "English (GB)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GB"
+
+[locales."en-GD"]
+name = "English (GD)"
+nativeName = "English (GD)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GD"
+
+[locales."en-GE"]
+name = "English (GE)"
+nativeName = "English (GE)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GE"
+
+[locales."en-GG"]
+name = "English (GG)"
+nativeName = "English (GG)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GG"
+
+[locales."en-GH"]
+name = "English (GH)"
+nativeName = "English (GH)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GH"
+
+[locales."en-GI"]
+name = "English (GI)"
+nativeName = "English (GI)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GI"
+
+[locales."en-GM"]
+name = "English (GM)"
+nativeName = "English (GM)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GM"
+
+[locales."en-GS"]
+name = "English (GS)"
+nativeName = "English (GS)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GS"
+
+[locales."en-GU"]
+name = "English (GU)"
+nativeName = "English (GU)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GU"
+
+[locales."en-GY"]
+name = "English (GY)"
+nativeName = "English (GY)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GY"
+
+[locales."en-HK"]
+name = "English (HK)"
+nativeName = "English (HK)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "HK"
+
+[locales."en-HU"]
+name = "English (HU)"
+nativeName = "English (HU)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "HU"
+
+[locales."en-ID"]
+name = "English (ID)"
+nativeName = "English (ID)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "ID"
+
+[locales."en-IE"]
+name = "English (IE)"
+nativeName = "English (IE)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "IE"
+
+[locales."en-IL"]
+name = "English (IL)"
+nativeName = "English (IL)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "IL"
+
+[locales."en-IM"]
+name = "English (IM)"
+nativeName = "English (IM)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "IM"
+
+[locales."en-IN"]
+name = "English (IN)"
+nativeName = "English (IN)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "IN"
+
+[locales."en-IO"]
+name = "English (IO)"
+nativeName = "English (IO)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "IO"
+
+[locales."en-IT"]
+name = "English (IT)"
+nativeName = "English (IT)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "IT"
+
+[locales."en-JE"]
+name = "English (JE)"
+nativeName = "English (JE)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "JE"
+
+[locales."en-JM"]
+name = "English (JM)"
+nativeName = "English (JM)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "JM"
+
+[locales."en-JP"]
+name = "English (JP)"
+nativeName = "English (JP)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "JP"
+
+[locales."en-KE"]
+name = "English (KE)"
+nativeName = "English (KE)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "KE"
+
+[locales."en-KI"]
+name = "English (KI)"
+nativeName = "English (KI)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "KI"
+
+[locales."en-KN"]
+name = "English (KN)"
+nativeName = "English (KN)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "KN"
+
+[locales."en-KY"]
+name = "English (KY)"
+nativeName = "English (KY)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "KY"
+
+[locales."en-LC"]
+name = "English (LC)"
+nativeName = "English (LC)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "LC"
+
+[locales."en-LR"]
+name = "English (LR)"
+nativeName = "English (LR)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "LR"
+
+[locales."en-LS"]
+name = "English (LS)"
+nativeName = "English (LS)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "LS"
+
+[locales."en-LT"]
+name = "English (LT)"
+nativeName = "English (LT)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "LT"
+
+[locales."en-LV"]
+name = "English (LV)"
+nativeName = "English (LV)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "LV"
+
+[locales."en-MG"]
+name = "English (MG)"
+nativeName = "English (MG)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MG"
+
+[locales."en-MH"]
+name = "English (MH)"
+nativeName = "English (MH)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MH"
+
+[locales."en-MO"]
+name = "English (MO)"
+nativeName = "English (MO)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MO"
+
+[locales."en-MP"]
+name = "English (MP)"
+nativeName = "English (MP)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MP"
+
+[locales."en-MS"]
+name = "English (MS)"
+nativeName = "English (MS)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MS"
+
+[locales."en-MT"]
+name = "English (MT)"
+nativeName = "English (MT)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MT"
+
+[locales."en-MU"]
+name = "English (MU)"
+nativeName = "English (MU)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MU"
+
+[locales."en-MV"]
+name = "English (MV)"
+nativeName = "English (MV)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MV"
+
+[locales."en-MW"]
+name = "English (MW)"
+nativeName = "English (MW)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MW"
+
+[locales."en-MY"]
+name = "English (MY)"
+nativeName = "English (MY)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MY"
+
+[locales."en-NA"]
+name = "English (NA)"
+nativeName = "English (NA)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "NA"
+
+[locales."en-NF"]
+name = "English (NF)"
+nativeName = "English (NF)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "NF"
+
+[locales."en-NG"]
+name = "English (NG)"
+nativeName = "English (NG)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "NG"
+
+[locales."en-NL"]
+name = "English (NL)"
+nativeName = "English (NL)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "NL"
+
+[locales."en-NO"]
+name = "English (NO)"
+nativeName = "English (NO)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "NO"
+
+[locales."en-NR"]
+name = "English (NR)"
+nativeName = "English (NR)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "NR"
+
+[locales."en-NU"]
+name = "English (NU)"
+nativeName = "English (NU)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "NU"
+
+[locales."en-NZ"]
+name = "English (NZ)"
+nativeName = "English (NZ)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "NZ"
+
+[locales."en-PG"]
+name = "English (PG)"
+nativeName = "English (PG)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "PG"
+
+[locales."en-PH"]
+name = "English (PH)"
+nativeName = "English (PH)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "PH"
+
+[locales."en-PK"]
+name = "English (PK)"
+nativeName = "English (PK)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "PK"
+
+[locales."en-PL"]
+name = "English (PL)"
+nativeName = "English (PL)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "PL"
+
+[locales."en-PN"]
+name = "English (PN)"
+nativeName = "English (PN)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "PN"
+
+[locales."en-PR"]
+name = "English (PR)"
+nativeName = "English (PR)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "PR"
+
+[locales."en-PT"]
+name = "English (PT)"
+nativeName = "English (PT)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "PT"
+
+[locales."en-PW"]
+name = "English (PW)"
+nativeName = "English (PW)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "PW"
+
+[locales."en-RO"]
+name = "English (RO)"
+nativeName = "English (RO)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "RO"
+
+[locales."en-RW"]
+name = "English (RW)"
+nativeName = "English (RW)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "RW"
+
+[locales."en-SB"]
+name = "English (SB)"
+nativeName = "English (SB)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SB"
+
+[locales."en-SC"]
+name = "English (SC)"
+nativeName = "English (SC)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SC"
+
+[locales."en-SD"]
+name = "English (SD)"
+nativeName = "English (SD)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SD"
+
+[locales."en-SE"]
+name = "English (SE)"
+nativeName = "English (SE)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SE"
+
+[locales."en-SG"]
+name = "English (SG)"
+nativeName = "English (SG)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SG"
+
+[locales."en-SH"]
+name = "English (SH)"
+nativeName = "English (SH)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SH"
+
+[locales."en-SI"]
+name = "English (SI)"
+nativeName = "English (SI)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SI"
+
+[locales."en-SK"]
+name = "English (SK)"
+nativeName = "English (SK)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SK"
+
+[locales."en-SL"]
+name = "English (SL)"
+nativeName = "English (SL)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SL"
+
+[locales."en-SS"]
+name = "English (SS)"
+nativeName = "English (SS)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SS"
+
+[locales."en-SX"]
+name = "English (SX)"
+nativeName = "English (SX)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SX"
+
+[locales."en-SZ"]
+name = "English (SZ)"
+nativeName = "English (SZ)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SZ"
+
+[locales."en-Shaw"]
+name = "English (Shavian) (Shaw)"
+nativeName = "𐑦𐑙𐑜𐑤𐑦𐑖 (Shaw) (Shaw)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Shaw"
+defaultRegion = "GB"
+
+[locales."en-Shaw-GB"]
+name = "English (Shaw GB)"
+nativeName = "English (Shaw GB)"
+baseLocale = "en-Shaw"
+coverageLevel = "modern-inherited"
+script = "Shaw"
+defaultRegion = "GB"
+
+[locales."en-TC"]
+name = "English (TC)"
+nativeName = "English (TC)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "TC"
+
+[locales."en-TK"]
+name = "English (TK)"
+nativeName = "English (TK)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "TK"
+
+[locales."en-TO"]
+name = "English (TO)"
+nativeName = "English (TO)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "TO"
+
+[locales."en-TT"]
+name = "English (TT)"
+nativeName = "English (TT)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "TT"
+
+[locales."en-TV"]
+name = "English (TV)"
+nativeName = "English (TV)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "TV"
+
+[locales."en-TZ"]
+name = "English (TZ)"
+nativeName = "English (TZ)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "TZ"
+
+[locales."en-UA"]
+name = "English (UA)"
+nativeName = "English (UA)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "UA"
+
+[locales."en-UG"]
+name = "English (UG)"
+nativeName = "English (UG)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "UG"
+
+[locales."en-UM"]
+name = "English (UM)"
+nativeName = "English (UM)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "UM"
+
+[locales."en-US"]
+name = "English (US)"
+nativeName = "English (US)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "US"
+
+[locales."en-US-posix"]
+name = "English (US posix)"
+nativeName = "English (US posix)"
+baseLocale = "en-US"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "US"
+
+[locales."en-VC"]
+name = "English (VC)"
+nativeName = "English (VC)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "VC"
+
+[locales."en-VG"]
+name = "English (VG)"
+nativeName = "English (VG)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "VG"
+
+[locales."en-VI"]
+name = "English (VI)"
+nativeName = "English (VI)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "VI"
+
+[locales."en-VU"]
+name = "English (VU)"
+nativeName = "English (VU)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "VU"
+
+[locales."en-WS"]
+name = "English (WS)"
+nativeName = "English (WS)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "WS"
+
+[locales."en-ZA"]
+name = "English (ZA)"
+nativeName = "English (ZA)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "ZA"
+
+[locales."en-ZM"]
+name = "English (ZM)"
+nativeName = "English (ZM)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "ZM"
+
+[locales."en-ZW"]
+name = "English (ZW)"
+nativeName = "English (ZW)"
+baseLocale = "en"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "ZW"
+
+[locales."es"]
+name = "Spanish"
+nativeName = "español"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "ES"
+
+[locales."es-419"]
+name = "Spanish (419)"
+nativeName = "español (419)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "419"
+
+[locales."es-AR"]
+name = "Spanish (AR)"
+nativeName = "español (AR)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "AR"
+
+[locales."es-BO"]
+name = "Spanish (BO)"
+nativeName = "español (BO)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BO"
+
+[locales."es-BR"]
+name = "Spanish (BR)"
+nativeName = "español (BR)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BR"
+
+[locales."es-BZ"]
+name = "Spanish (BZ)"
+nativeName = "español (BZ)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BZ"
+
+[locales."es-CL"]
+name = "Spanish (CL)"
+nativeName = "español (CL)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CL"
+
+[locales."es-CO"]
+name = "Spanish (CO)"
+nativeName = "español (CO)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CO"
+
+[locales."es-CR"]
+name = "Spanish (CR)"
+nativeName = "español (CR)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CR"
+
+[locales."es-CU"]
+name = "Spanish (CU)"
+nativeName = "español (CU)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CU"
+
+[locales."es-DO"]
+name = "Spanish (DO)"
+nativeName = "español (DO)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "DO"
+
+[locales."es-EA"]
+name = "Spanish (EA)"
+nativeName = "español (EA)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "EA"
+
+[locales."es-EC"]
+name = "Spanish (EC)"
+nativeName = "español (EC)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "EC"
+
+[locales."es-ES"]
+name = "Spanish (ES)"
+nativeName = "español (ES)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "ES"
+
+[locales."es-GQ"]
+name = "Spanish (GQ)"
+nativeName = "español (GQ)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GQ"
+
+[locales."es-GT"]
+name = "Spanish (GT)"
+nativeName = "español (GT)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GT"
+
+[locales."es-HN"]
+name = "Spanish (HN)"
+nativeName = "español (HN)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "HN"
+
+[locales."es-IC"]
+name = "Spanish (IC)"
+nativeName = "español (IC)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "IC"
+
+[locales."es-MX"]
+name = "Spanish (MX)"
+nativeName = "español (MX)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MX"
+
+[locales."es-NI"]
+name = "Spanish (NI)"
+nativeName = "español (NI)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "NI"
+
+[locales."es-PA"]
+name = "Spanish (PA)"
+nativeName = "español (PA)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "PA"
+
+[locales."es-PE"]
+name = "Spanish (PE)"
+nativeName = "español (PE)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "PE"
+
+[locales."es-PH"]
+name = "Spanish (PH)"
+nativeName = "español (PH)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "PH"
+
+[locales."es-PR"]
+name = "Spanish (PR)"
+nativeName = "español (PR)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "PR"
+
+[locales."es-PY"]
+name = "Spanish (PY)"
+nativeName = "español (PY)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "PY"
+
+[locales."es-SV"]
+name = "Spanish (SV)"
+nativeName = "español (SV)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SV"
+
+[locales."es-US"]
+name = "Spanish (US)"
+nativeName = "español (US)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "US"
+
+[locales."es-UY"]
+name = "Spanish (UY)"
+nativeName = "español (UY)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "UY"
+
+[locales."es-VE"]
+name = "Spanish (VE)"
+nativeName = "español (VE)"
+baseLocale = "es"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "VE"
+
+[locales."et"]
+name = "Estonian"
+nativeName = "eesti"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "EE"
+
+[locales."et-EE"]
+name = "Estonian (EE)"
+nativeName = "eesti (EE)"
+baseLocale = "et"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "EE"
+
+[locales."eu"]
+name = "Basque"
+nativeName = "euskara"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "ES"
+
+[locales."eu-ES"]
+name = "Basque (ES)"
+nativeName = "euskara (ES)"
+baseLocale = "eu"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "ES"
+
+[locales."fa"]
+name = "Persian"
+nativeName = "‫فارسی‬"
+coverageLevel = "modern"
+script = "Arab"
+defaultRegion = "IR"
+
+[locales."fa-AF"]
+name = "Persian (AF)"
+nativeName = "‫فارسی‬ (AF)"
+baseLocale = "fa"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "AF"
+
+[locales."fa-IR"]
+name = "Persian (IR)"
+nativeName = "‫فارسی‬ (IR)"
+baseLocale = "fa"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "IR"
+
+[locales."fi"]
+name = "Finnish"
+nativeName = "suomi"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "FI"
+
+[locales."fi-FI"]
+name = "Finnish (FI)"
+nativeName = "suomi (FI)"
+baseLocale = "fi"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "FI"
+
+[locales."fil"]
+name = "Filipino"
+nativeName = "Filipino"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "PH"
+
+[locales."fil-PH"]
+name = "Filipino (PH)"
+nativeName = "Filipino (PH)"
+baseLocale = "fil"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "PH"
+
+[locales."fr"]
+name = "French"
+nativeName = "français"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "FR"
+
+[locales."fr-BE"]
+name = "French (BE)"
+nativeName = "français (BE)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BE"
+
+[locales."fr-BF"]
+name = "French (BF)"
+nativeName = "français (BF)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BF"
+
+[locales."fr-BI"]
+name = "French (BI)"
+nativeName = "français (BI)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BI"
+
+[locales."fr-BJ"]
+name = "French (BJ)"
+nativeName = "français (BJ)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BJ"
+
+[locales."fr-BL"]
+name = "French (BL)"
+nativeName = "français (BL)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BL"
+
+[locales."fr-CA"]
+name = "French (CA)"
+nativeName = "français (CA)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CA"
+
+[locales."fr-CD"]
+name = "French (CD)"
+nativeName = "français (CD)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CD"
+
+[locales."fr-CF"]
+name = "French (CF)"
+nativeName = "français (CF)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CF"
+
+[locales."fr-CG"]
+name = "French (CG)"
+nativeName = "français (CG)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CG"
+
+[locales."fr-CH"]
+name = "French (CH)"
+nativeName = "français (CH)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CH"
+
+[locales."fr-CI"]
+name = "French (CI)"
+nativeName = "français (CI)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CI"
+
+[locales."fr-CM"]
+name = "French (CM)"
+nativeName = "français (CM)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CM"
+
+[locales."fr-DJ"]
+name = "French (DJ)"
+nativeName = "français (DJ)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "DJ"
+
+[locales."fr-DZ"]
+name = "French (DZ)"
+nativeName = "français (DZ)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "DZ"
+
+[locales."fr-FR"]
+name = "French (FR)"
+nativeName = "français (FR)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "FR"
+
+[locales."fr-GA"]
+name = "French (GA)"
+nativeName = "français (GA)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GA"
+
+[locales."fr-GF"]
+name = "French (GF)"
+nativeName = "français (GF)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GF"
+
+[locales."fr-GN"]
+name = "French (GN)"
+nativeName = "français (GN)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GN"
+
+[locales."fr-GP"]
+name = "French (GP)"
+nativeName = "français (GP)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GP"
+
+[locales."fr-GQ"]
+name = "French (GQ)"
+nativeName = "français (GQ)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GQ"
+
+[locales."fr-HT"]
+name = "French (HT)"
+nativeName = "français (HT)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "HT"
+
+[locales."fr-KM"]
+name = "French (KM)"
+nativeName = "français (KM)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "KM"
+
+[locales."fr-LU"]
+name = "French (LU)"
+nativeName = "français (LU)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "LU"
+
+[locales."fr-MA"]
+name = "French (MA)"
+nativeName = "français (MA)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MA"
+
+[locales."fr-MC"]
+name = "French (MC)"
+nativeName = "français (MC)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MC"
+
+[locales."fr-MF"]
+name = "French (MF)"
+nativeName = "français (MF)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MF"
+
+[locales."fr-MG"]
+name = "French (MG)"
+nativeName = "français (MG)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MG"
+
+[locales."fr-ML"]
+name = "French (ML)"
+nativeName = "français (ML)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "ML"
+
+[locales."fr-MQ"]
+name = "French (MQ)"
+nativeName = "français (MQ)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MQ"
+
+[locales."fr-MR"]
+name = "French (MR)"
+nativeName = "français (MR)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MR"
+
+[locales."fr-MU"]
+name = "French (MU)"
+nativeName = "français (MU)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MU"
+
+[locales."fr-NC"]
+name = "French (NC)"
+nativeName = "français (NC)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "NC"
+
+[locales."fr-NE"]
+name = "French (NE)"
+nativeName = "français (NE)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "NE"
+
+[locales."fr-PF"]
+name = "French (PF)"
+nativeName = "français (PF)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "PF"
+
+[locales."fr-PM"]
+name = "French (PM)"
+nativeName = "français (PM)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "PM"
+
+[locales."fr-RE"]
+name = "French (RE)"
+nativeName = "français (RE)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "RE"
+
+[locales."fr-RW"]
+name = "French (RW)"
+nativeName = "français (RW)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "RW"
+
+[locales."fr-SC"]
+name = "French (SC)"
+nativeName = "français (SC)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SC"
+
+[locales."fr-SN"]
+name = "French (SN)"
+nativeName = "français (SN)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SN"
+
+[locales."fr-SY"]
+name = "French (SY)"
+nativeName = "français (SY)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SY"
+
+[locales."fr-TD"]
+name = "French (TD)"
+nativeName = "français (TD)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "TD"
+
+[locales."fr-TG"]
+name = "French (TG)"
+nativeName = "français (TG)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "TG"
+
+[locales."fr-TN"]
+name = "French (TN)"
+nativeName = "français (TN)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "TN"
+
+[locales."fr-VU"]
+name = "French (VU)"
+nativeName = "français (VU)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "VU"
+
+[locales."fr-WF"]
+name = "French (WF)"
+nativeName = "français (WF)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "WF"
+
+[locales."fr-YT"]
+name = "French (YT)"
+nativeName = "français (YT)"
+baseLocale = "fr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "YT"
+
+[locales."ga"]
+name = "Irish"
+nativeName = "Gaeilge"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "IE"
+
+[locales."ga-GB"]
+name = "Irish (GB)"
+nativeName = "Gaeilge (GB)"
+baseLocale = "ga"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GB"
+
+[locales."ga-IE"]
+name = "Irish (IE)"
+nativeName = "Gaeilge (IE)"
+baseLocale = "ga"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "IE"
+
+[locales."gd"]
+name = "Scottish Gaelic"
+nativeName = "Gàidhlig"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "GB"
+
+[locales."gd-GB"]
+name = "Scottish Gaelic (GB)"
+nativeName = "Gàidhlig (GB)"
+baseLocale = "gd"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GB"
+
+[locales."gl"]
+name = "Galician"
+nativeName = "galego"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "ES"
+
+[locales."gl-ES"]
+name = "Galician (ES)"
+nativeName = "galego (ES)"
+baseLocale = "gl"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "ES"
+
+[locales."gu"]
+name = "Gujarati"
+nativeName = "ગુજરાતી"
+coverageLevel = "modern"
+script = "Gujr"
+defaultRegion = "IN"
+
+[locales."gu-IN"]
+name = "Gujarati (IN)"
+nativeName = "ગુજરાતી (IN)"
+baseLocale = "gu"
+coverageLevel = "modern-inherited"
+script = "Gujr"
+defaultRegion = "IN"
+
+[locales."ha"]
+name = "Hausa"
+nativeName = "Hausa"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "NG"
+
+[locales."ha-Arab"]
+name = "Hausa (Arabic) (Arab)"
+nativeName = "ha (Arab) (Arab)"
+baseLocale = "ha"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "NG"
+
+[locales."ha-Arab-NG"]
+name = "Hausa (Arab NG)"
+nativeName = "Hausa (Arab NG)"
+baseLocale = "ha-Arab"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "NG"
+
+[locales."ha-Arab-SD"]
+name = "Hausa (Arab SD)"
+nativeName = "Hausa (Arab SD)"
+baseLocale = "ha-Arab"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "SD"
+
+[locales."ha-GH"]
+name = "Hausa (GH)"
+nativeName = "Hausa (GH)"
+baseLocale = "ha"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GH"
+
+[locales."ha-NE"]
+name = "Hausa (NE)"
+nativeName = "Hausa (NE)"
+baseLocale = "ha"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "NE"
+
+[locales."ha-NG"]
+name = "Hausa (NG)"
+nativeName = "Hausa (NG)"
+baseLocale = "ha"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "NG"
+
+[locales."he"]
+name = "Hebrew"
+nativeName = "‫עברית‬"
+coverageLevel = "modern"
+script = "Hebr"
+defaultRegion = "IL"
+
+[locales."he-IL"]
+name = "Hebrew (IL)"
+nativeName = "‫עברית‬ (IL)"
+baseLocale = "he"
+coverageLevel = "modern-inherited"
+script = "Hebr"
+defaultRegion = "IL"
+
+[locales."hi"]
+name = "Hindi"
+nativeName = "हिन्दी"
+coverageLevel = "modern"
+script = "Deva"
+defaultRegion = "IN"
+
+[locales."hi-IN"]
+name = "Hindi (IN)"
+nativeName = "हिन्दी (IN)"
+baseLocale = "hi"
+coverageLevel = "modern-inherited"
+script = "Deva"
+defaultRegion = "IN"
+
+[locales."hi-Latn"]
+name = "Hindi (Latin)"
+nativeName = "Hindi [Latin]"
+baseLocale = "hi"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "IN"
+
+[locales."hi-Latn-IN"]
+name = "Hindi (Latn IN)"
+nativeName = "हिन्दी (Latn IN)"
+baseLocale = "hi-Latn"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "IN"
+
+[locales."hr"]
+name = "Croatian"
+nativeName = "hrvatski"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "HR"
+
+[locales."hr-BA"]
+name = "Croatian (BA)"
+nativeName = "hrvatski (BA)"
+baseLocale = "hr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BA"
+
+[locales."hr-HR"]
+name = "Croatian (HR)"
+nativeName = "hrvatski (HR)"
+baseLocale = "hr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "HR"
+
+[locales."hsb"]
+name = "Upper Sorbian"
+nativeName = "hornjoserbšćina"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "DE"
+
+[locales."hsb-DE"]
+name = "Upper Sorbian (DE)"
+nativeName = "hornjoserbšćina (DE)"
+baseLocale = "hsb"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "DE"
+
+[locales."hu"]
+name = "Hungarian"
+nativeName = "magyar"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "HU"
+
+[locales."hu-HU"]
+name = "Hungarian (HU)"
+nativeName = "magyar (HU)"
+baseLocale = "hu"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "HU"
+
+[locales."hy"]
+name = "Armenian"
+nativeName = "հայերեն"
+coverageLevel = "modern"
+script = "Armn"
+defaultRegion = "AM"
+
+[locales."hy-AM"]
+name = "Armenian (AM)"
+nativeName = "հայերեն (AM)"
+baseLocale = "hy"
+coverageLevel = "modern-inherited"
+script = "Armn"
+defaultRegion = "AM"
+
+[locales."id"]
+name = "Indonesian"
+nativeName = "Indonesia"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "ID"
+
+[locales."id-ID"]
+name = "Indonesian (ID)"
+nativeName = "Indonesia (ID)"
+baseLocale = "id"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "ID"
+
+[locales."ig"]
+name = "Igbo"
+nativeName = "Igbo"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "NG"
+
+[locales."ig-NG"]
+name = "Igbo (NG)"
+nativeName = "Igbo (NG)"
+baseLocale = "ig"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "NG"
+
+[locales."is"]
+name = "Icelandic"
+nativeName = "íslenska"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "IS"
+
+[locales."is-IS"]
+name = "Icelandic (IS)"
+nativeName = "íslenska (IS)"
+baseLocale = "is"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "IS"
+
+[locales."it"]
+name = "Italian"
+nativeName = "italiano"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "IT"
+
+[locales."it-CH"]
+name = "Italian (CH)"
+nativeName = "italiano (CH)"
+baseLocale = "it"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CH"
+
+[locales."it-IT"]
+name = "Italian (IT)"
+nativeName = "italiano (IT)"
+baseLocale = "it"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "IT"
+
+[locales."it-SM"]
+name = "Italian (SM)"
+nativeName = "italiano (SM)"
+baseLocale = "it"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SM"
+
+[locales."it-VA"]
+name = "Italian (VA)"
+nativeName = "italiano (VA)"
+baseLocale = "it"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "VA"
+
+[locales."ja"]
+name = "Japanese"
+nativeName = "日本語"
+coverageLevel = "modern"
+script = "Jpan"
+defaultRegion = "JP"
+
+[locales."ja-JP"]
+name = "Japanese (JP)"
+nativeName = "日本語 (JP)"
+baseLocale = "ja"
+coverageLevel = "modern-inherited"
+script = "Jpan"
+defaultRegion = "JP"
+
+[locales."jv"]
+name = "Javanese"
+nativeName = "Jawa"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "ID"
+
+[locales."jv-ID"]
+name = "Javanese (ID)"
+nativeName = "Jawa (ID)"
+baseLocale = "jv"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "ID"
+
+[locales."ka"]
+name = "Georgian"
+nativeName = "ქართული"
+coverageLevel = "modern"
+script = "Geor"
+defaultRegion = "GE"
+
+[locales."ka-GE"]
+name = "Georgian (GE)"
+nativeName = "ქართული (GE)"
+baseLocale = "ka"
+coverageLevel = "modern-inherited"
+script = "Geor"
+defaultRegion = "GE"
+
+[locales."kk"]
+name = "Kazakh"
+nativeName = "қазақ тілі"
+coverageLevel = "modern"
+script = "Cyrl"
+defaultRegion = "KZ"
+
+[locales."kk-Arab"]
+name = "Kazakh (Arabic)"
+nativeName = "‫قازاق ءتىلى [توتە]‬"
+baseLocale = "kk"
+coverageLevel = "modern"
+script = "Arab"
+defaultRegion = "CN"
+
+[locales."kk-Arab-CN"]
+name = "Kazakh (Arab CN)"
+nativeName = "қазақ тілі (Arab CN)"
+baseLocale = "kk-Arab"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "CN"
+
+[locales."kk-Cyrl"]
+name = "Kazakh (Cyrl)"
+nativeName = "қазақ тілі (Cyrl)"
+baseLocale = "kk"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "KZ"
+
+[locales."kk-Cyrl-KZ"]
+name = "Kazakh (Cyrl KZ)"
+nativeName = "қазақ тілі (Cyrl KZ)"
+baseLocale = "kk-Cyrl"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "KZ"
+
+[locales."kk-KZ"]
+name = "Kazakh (KZ)"
+nativeName = "қазақ тілі (KZ)"
+baseLocale = "kk"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "KZ"
+
+[locales."km"]
+name = "Khmer"
+nativeName = "ខ្មែរ"
+coverageLevel = "modern"
+script = "Khmr"
+defaultRegion = "KH"
+
+[locales."km-KH"]
+name = "Khmer (KH)"
+nativeName = "ខ្មែរ (KH)"
+baseLocale = "km"
+coverageLevel = "modern-inherited"
+script = "Khmr"
+defaultRegion = "KH"
+
+[locales."kn"]
+name = "Kannada"
+nativeName = "ಕನ್ನಡ"
+coverageLevel = "modern"
+script = "Knda"
+defaultRegion = "IN"
+
+[locales."kn-IN"]
+name = "Kannada (IN)"
+nativeName = "ಕನ್ನಡ (IN)"
+baseLocale = "kn"
+coverageLevel = "modern-inherited"
+script = "Knda"
+defaultRegion = "IN"
+
+[locales."ko"]
+name = "Korean"
+nativeName = "한국어"
+coverageLevel = "modern"
+script = "Kore"
+defaultRegion = "KR"
+
+[locales."ko-CN"]
+name = "Korean (CN)"
+nativeName = "한국어 (CN)"
+baseLocale = "ko"
+coverageLevel = "modern-inherited"
+script = "Kore"
+defaultRegion = "CN"
+
+[locales."ko-KP"]
+name = "Korean (KP)"
+nativeName = "한국어 (KP)"
+baseLocale = "ko"
+coverageLevel = "modern-inherited"
+script = "Kore"
+defaultRegion = "KP"
+
+[locales."ko-KR"]
+name = "Korean (KR)"
+nativeName = "한국어 (KR)"
+baseLocale = "ko"
+coverageLevel = "modern-inherited"
+script = "Kore"
+defaultRegion = "KR"
+
+[locales."kok"]
+name = "Konkani"
+nativeName = "कोंकणी"
+coverageLevel = "modern"
+script = "Deva"
+defaultRegion = "IN"
+
+[locales."kok-Deva"]
+name = "Konkani (Deva)"
+nativeName = "कोंकणी (Deva)"
+baseLocale = "kok"
+coverageLevel = "modern-inherited"
+script = "Deva"
+defaultRegion = "IN"
+
+[locales."kok-Deva-IN"]
+name = "Konkani (Deva IN)"
+nativeName = "कोंकणी (Deva IN)"
+baseLocale = "kok-Deva"
+coverageLevel = "modern-inherited"
+script = "Deva"
+defaultRegion = "IN"
+
+[locales."kok-Latn"]
+name = "Konkani (Latin) (Latn)"
+nativeName = "Konknni (Romi) (Latn)"
+baseLocale = "kok"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "IN"
+
+[locales."kok-Latn-IN"]
+name = "Konkani (Latn IN)"
+nativeName = "कोंकणी (Latn IN)"
+baseLocale = "kok-Latn"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "IN"
+
+[locales."ky"]
+name = "Kyrgyz"
+nativeName = "кыргызча"
+coverageLevel = "modern"
+script = "Cyrl"
+defaultRegion = "KG"
+
+[locales."ky-KG"]
+name = "Kyrgyz (KG)"
+nativeName = "кыргызча (KG)"
+baseLocale = "ky"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "KG"
+
+[locales."lo"]
+name = "Lao"
+nativeName = "ລາວ"
+coverageLevel = "modern"
+script = "Laoo"
+defaultRegion = "LA"
+
+[locales."lo-LA"]
+name = "Lao (LA)"
+nativeName = "ລາວ (LA)"
+baseLocale = "lo"
+coverageLevel = "modern-inherited"
+script = "Laoo"
+defaultRegion = "LA"
+
+[locales."lt"]
+name = "Lithuanian"
+nativeName = "lietuvių"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "LT"
+
+[locales."lt-LT"]
+name = "Lithuanian (LT)"
+nativeName = "lietuvių (LT)"
+baseLocale = "lt"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "LT"
+
+[locales."lv"]
+name = "Latvian"
+nativeName = "latviešu"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "LV"
+
+[locales."lv-LV"]
+name = "Latvian (LV)"
+nativeName = "latviešu (LV)"
+baseLocale = "lv"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "LV"
+
+[locales."mk"]
+name = "Macedonian"
+nativeName = "македонски"
+coverageLevel = "modern"
+script = "Cyrl"
+defaultRegion = "MK"
+
+[locales."mk-MK"]
+name = "Macedonian (MK)"
+nativeName = "македонски (MK)"
+baseLocale = "mk"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "MK"
+
+[locales."ml"]
+name = "Malayalam"
+nativeName = "മലയാളം"
+coverageLevel = "modern"
+script = "Mlym"
+defaultRegion = "IN"
+
+[locales."ml-IN"]
+name = "Malayalam (IN)"
+nativeName = "മലയാളം (IN)"
+baseLocale = "ml"
+coverageLevel = "modern-inherited"
+script = "Mlym"
+defaultRegion = "IN"
+
+[locales."mn"]
+name = "Mongolian"
+nativeName = "монгол"
+coverageLevel = "modern"
+script = "Cyrl"
+defaultRegion = "MN"
+
+[locales."mn-MN"]
+name = "Mongolian (MN)"
+nativeName = "монгол (MN)"
+baseLocale = "mn"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "MN"
+
+[locales."mn-Mong"]
+name = "Mongolian (Mongolian) (Mong)"
+nativeName = "mn (Mong) (Mong)"
+baseLocale = "mn"
+coverageLevel = "modern-inherited"
+script = "Mong"
+defaultRegion = "CN"
+
+[locales."mn-Mong-CN"]
+name = "Mongolian (Mong CN)"
+nativeName = "монгол (Mong CN)"
+baseLocale = "mn-Mong"
+coverageLevel = "modern-inherited"
+script = "Mong"
+defaultRegion = "CN"
+
+[locales."mn-Mong-MN"]
+name = "Mongolian (Mong MN)"
+nativeName = "монгол (Mong MN)"
+baseLocale = "mn-Mong"
+coverageLevel = "modern-inherited"
+script = "Mong"
+defaultRegion = "MN"
+
+[locales."mr"]
+name = "Marathi"
+nativeName = "मराठी"
+coverageLevel = "modern"
+script = "Deva"
+defaultRegion = "IN"
+
+[locales."mr-IN"]
+name = "Marathi (IN)"
+nativeName = "मराठी (IN)"
+baseLocale = "mr"
+coverageLevel = "modern-inherited"
+script = "Deva"
+defaultRegion = "IN"
+
+[locales."ms"]
+name = "Malay"
+nativeName = "Melayu"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "MY"
+
+[locales."ms-Arab"]
+name = "Malay (Arabic) (Arab)"
+nativeName = "‫بهاس ملايو (عرب)‬ (Arab)"
+baseLocale = "ms"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "MY"
+
+[locales."ms-Arab-BN"]
+name = "Malay (Arab BN)"
+nativeName = "Melayu (Arab BN)"
+baseLocale = "ms-Arab"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "BN"
+
+[locales."ms-Arab-MY"]
+name = "Malay (Arab MY)"
+nativeName = "Melayu (Arab MY)"
+baseLocale = "ms-Arab"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "MY"
+
+[locales."ms-BN"]
+name = "Malay (BN)"
+nativeName = "Melayu (BN)"
+baseLocale = "ms"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BN"
+
+[locales."ms-ID"]
+name = "Malay (ID)"
+nativeName = "Melayu (ID)"
+baseLocale = "ms"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "ID"
+
+[locales."ms-MY"]
+name = "Malay (MY)"
+nativeName = "Melayu (MY)"
+baseLocale = "ms"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MY"
+
+[locales."ms-SG"]
+name = "Malay (SG)"
+nativeName = "Melayu (SG)"
+baseLocale = "ms"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SG"
+
+[locales."my"]
+name = "Burmese"
+nativeName = "မြန်မာ"
+coverageLevel = "modern"
+script = "Mymr"
+defaultRegion = "MM"
+
+[locales."my-MM"]
+name = "Burmese (MM)"
+nativeName = "မြန်မာ (MM)"
+baseLocale = "my"
+coverageLevel = "modern-inherited"
+script = "Mymr"
+defaultRegion = "MM"
+
+[locales."ne"]
+name = "Nepali"
+nativeName = "नेपाली"
+coverageLevel = "modern"
+script = "Deva"
+defaultRegion = "NP"
+
+[locales."ne-IN"]
+name = "Nepali (IN)"
+nativeName = "नेपाली (IN)"
+baseLocale = "ne"
+coverageLevel = "modern-inherited"
+script = "Deva"
+defaultRegion = "IN"
+
+[locales."ne-NP"]
+name = "Nepali (NP)"
+nativeName = "नेपाली (NP)"
+baseLocale = "ne"
+coverageLevel = "modern-inherited"
+script = "Deva"
+defaultRegion = "NP"
+
+[locales."nl"]
+name = "Dutch"
+nativeName = "Nederlands"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "NL"
+
+[locales."nl-AW"]
+name = "Dutch (AW)"
+nativeName = "Nederlands (AW)"
+baseLocale = "nl"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "AW"
+
+[locales."nl-BE"]
+name = "Dutch (BE)"
+nativeName = "Nederlands (BE)"
+baseLocale = "nl"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BE"
+
+[locales."nl-BQ"]
+name = "Dutch (BQ)"
+nativeName = "Nederlands (BQ)"
+baseLocale = "nl"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BQ"
+
+[locales."nl-CW"]
+name = "Dutch (CW)"
+nativeName = "Nederlands (CW)"
+baseLocale = "nl"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CW"
+
+[locales."nl-NL"]
+name = "Dutch (NL)"
+nativeName = "Nederlands (NL)"
+baseLocale = "nl"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "NL"
+
+[locales."nl-SR"]
+name = "Dutch (SR)"
+nativeName = "Nederlands (SR)"
+baseLocale = "nl"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SR"
+
+[locales."nl-SX"]
+name = "Dutch (SX)"
+nativeName = "Nederlands (SX)"
+baseLocale = "nl"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SX"
+
+[locales."nn"]
+name = "Norwegian Nynorsk"
+nativeName = "norsk nynorsk"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "NO"
+
+[locales."nn-NO"]
+name = "Norwegian Nynorsk (NO)"
+nativeName = "norsk nynorsk (NO)"
+baseLocale = "nn"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "NO"
+
+[locales."no"]
+name = "Norwegian"
+nativeName = "norsk"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "NO"
+
+[locales."or"]
+name = "Odia"
+nativeName = "ଓଡ଼ିଆ"
+coverageLevel = "modern"
+script = "Orya"
+defaultRegion = "IN"
+
+[locales."or-IN"]
+name = "Odia (IN)"
+nativeName = "ଓଡ଼ିଆ (IN)"
+baseLocale = "or"
+coverageLevel = "modern-inherited"
+script = "Orya"
+defaultRegion = "IN"
+
+[locales."pa"]
+name = "Punjabi"
+nativeName = "ਪੰਜਾਬੀ"
+coverageLevel = "modern"
+script = "Guru"
+defaultRegion = "IN"
+
+[locales."pa-Arab"]
+name = "Punjabi (Arabic) (Arab)"
+nativeName = "‫پنجابی (عربی)‬ (Arab)"
+baseLocale = "pa"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "PK"
+
+[locales."pa-Arab-PK"]
+name = "Punjabi (Arab PK)"
+nativeName = "ਪੰਜਾਬੀ (Arab PK)"
+baseLocale = "pa-Arab"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "PK"
+
+[locales."pa-Guru"]
+name = "Punjabi (Guru)"
+nativeName = "ਪੰਜਾਬੀ (Guru)"
+baseLocale = "pa"
+coverageLevel = "modern-inherited"
+script = "Guru"
+defaultRegion = "IN"
+
+[locales."pa-Guru-IN"]
+name = "Punjabi (Guru IN)"
+nativeName = "ਪੰਜਾਬੀ (Guru IN)"
+baseLocale = "pa-Guru"
+coverageLevel = "modern-inherited"
+script = "Guru"
+defaultRegion = "IN"
+
+[locales."pcm"]
+name = "Nigerian Pidgin"
+nativeName = "Naijíriá Píjin"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "NG"
+
+[locales."pcm-NG"]
+name = "Nigerian Pidgin (NG)"
+nativeName = "Naijíriá Píjin (NG)"
+baseLocale = "pcm"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "NG"
+
+[locales."pl"]
+name = "Polish"
+nativeName = "polski"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "PL"
+
+[locales."pl-PL"]
+name = "Polish (PL)"
+nativeName = "polski (PL)"
+baseLocale = "pl"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "PL"
+
+[locales."ps"]
+name = "Pashto"
+nativeName = "‫پښتو‬"
+coverageLevel = "modern"
+script = "Arab"
+defaultRegion = "AF"
+
+[locales."ps-AF"]
+name = "Pashto (AF)"
+nativeName = "‫پښتو‬ (AF)"
+baseLocale = "ps"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "AF"
+
+[locales."ps-PK"]
+name = "Pashto (PK)"
+nativeName = "‫پښتو‬ (PK)"
+baseLocale = "ps"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "PK"
+
+[locales."pt"]
+name = "Portuguese"
+nativeName = "português"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "BR"
+
+[locales."pt-AO"]
+name = "Portuguese (AO)"
+nativeName = "português (AO)"
+baseLocale = "pt"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "AO"
+
+[locales."pt-BR"]
+name = "Portuguese (BR)"
+nativeName = "português (BR)"
+baseLocale = "pt"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BR"
+
+[locales."pt-CH"]
+name = "Portuguese (CH)"
+nativeName = "português (CH)"
+baseLocale = "pt"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CH"
+
+[locales."pt-CV"]
+name = "Portuguese (CV)"
+nativeName = "português (CV)"
+baseLocale = "pt"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CV"
+
+[locales."pt-GQ"]
+name = "Portuguese (GQ)"
+nativeName = "português (GQ)"
+baseLocale = "pt"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GQ"
+
+[locales."pt-GW"]
+name = "Portuguese (GW)"
+nativeName = "português (GW)"
+baseLocale = "pt"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "GW"
+
+[locales."pt-LU"]
+name = "Portuguese (LU)"
+nativeName = "português (LU)"
+baseLocale = "pt"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "LU"
+
+[locales."pt-MO"]
+name = "Portuguese (MO)"
+nativeName = "português (MO)"
+baseLocale = "pt"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MO"
+
+[locales."pt-MZ"]
+name = "Portuguese (MZ)"
+nativeName = "português (MZ)"
+baseLocale = "pt"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MZ"
+
+[locales."pt-PT"]
+name = "Portuguese (PT)"
+nativeName = "português (PT)"
+baseLocale = "pt"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "PT"
+
+[locales."pt-ST"]
+name = "Portuguese (ST)"
+nativeName = "português (ST)"
+baseLocale = "pt"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "ST"
+
+[locales."pt-TL"]
+name = "Portuguese (TL)"
+nativeName = "português (TL)"
+baseLocale = "pt"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "TL"
+
+[locales."qu"]
+name = "Quechua"
+nativeName = "Runasimi"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "PE"
+
+[locales."qu-BO"]
+name = "Quechua (BO)"
+nativeName = "Runasimi (BO)"
+baseLocale = "qu"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BO"
+
+[locales."qu-EC"]
+name = "Quechua (EC)"
+nativeName = "Runasimi (EC)"
+baseLocale = "qu"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "EC"
+
+[locales."qu-PE"]
+name = "Quechua (PE)"
+nativeName = "Runasimi (PE)"
+baseLocale = "qu"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "PE"
+
+[locales."rm"]
+name = "Romansh"
+nativeName = "rumantsch"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "CH"
+
+[locales."rm-CH"]
+name = "Romansh (CH)"
+nativeName = "rumantsch (CH)"
+baseLocale = "rm"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CH"
+
+[locales."ro"]
+name = "Romanian"
+nativeName = "română"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "RO"
+
+[locales."ro-MD"]
+name = "Romanian (MD)"
+nativeName = "română (MD)"
+baseLocale = "ro"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MD"
+
+[locales."ro-RO"]
+name = "Romanian (RO)"
+nativeName = "română (RO)"
+baseLocale = "ro"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "RO"
+
+[locales."ru"]
+name = "Russian"
+nativeName = "русский"
+coverageLevel = "modern"
+script = "Cyrl"
+defaultRegion = "RU"
+
+[locales."ru-BY"]
+name = "Russian (BY)"
+nativeName = "русский (BY)"
+baseLocale = "ru"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "BY"
+
+[locales."ru-KG"]
+name = "Russian (KG)"
+nativeName = "русский (KG)"
+baseLocale = "ru"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "KG"
+
+[locales."ru-KZ"]
+name = "Russian (KZ)"
+nativeName = "русский (KZ)"
+baseLocale = "ru"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "KZ"
+
+[locales."ru-MD"]
+name = "Russian (MD)"
+nativeName = "русский (MD)"
+baseLocale = "ru"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "MD"
+
+[locales."ru-RU"]
+name = "Russian (RU)"
+nativeName = "русский (RU)"
+baseLocale = "ru"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "RU"
+
+[locales."ru-UA"]
+name = "Russian (UA)"
+nativeName = "русский (UA)"
+baseLocale = "ru"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "UA"
+
+[locales."sd"]
+name = "Sindhi"
+nativeName = "‫سنڌي‬"
+coverageLevel = "modern"
+script = "Arab"
+defaultRegion = "PK"
+
+[locales."sd-Arab"]
+name = "Sindhi (Arab)"
+nativeName = "‫سنڌي‬ (Arab)"
+baseLocale = "sd"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "PK"
+
+[locales."sd-Arab-PK"]
+name = "Sindhi (Arab PK)"
+nativeName = "‫سنڌي‬ (Arab PK)"
+baseLocale = "sd-Arab"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "PK"
+
+[locales."sd-Deva"]
+name = "Sindhi (Devanagari) (Deva)"
+nativeName = "सिन्धी (देवनागिरी) (Deva)"
+baseLocale = "sd"
+coverageLevel = "modern-inherited"
+script = "Deva"
+defaultRegion = "IN"
+
+[locales."sd-Deva-IN"]
+name = "Sindhi (Deva IN)"
+nativeName = "‫سنڌي‬ (Deva IN)"
+baseLocale = "sd-Deva"
+coverageLevel = "modern-inherited"
+script = "Deva"
+defaultRegion = "IN"
+
+[locales."shn"]
+name = "Shan"
+nativeName = "တႆး"
+coverageLevel = "modern"
+script = "Mymr"
+defaultRegion = "MM"
+
+[locales."shn-MM"]
+name = "Shan (MM)"
+nativeName = "တႆး (MM)"
+baseLocale = "shn"
+coverageLevel = "modern-inherited"
+script = "Mymr"
+defaultRegion = "MM"
+
+[locales."shn-TH"]
+name = "Shan (TH)"
+nativeName = "တႆး (TH)"
+baseLocale = "shn"
+coverageLevel = "modern-inherited"
+script = "Mymr"
+defaultRegion = "TH"
+
+[locales."si"]
+name = "Sinhala"
+nativeName = "සිංහල"
+coverageLevel = "modern"
+script = "Sinh"
+defaultRegion = "LK"
+
+[locales."si-LK"]
+name = "Sinhala (LK)"
+nativeName = "සිංහල (LK)"
+baseLocale = "si"
+coverageLevel = "modern-inherited"
+script = "Sinh"
+defaultRegion = "LK"
+
+[locales."sk"]
+name = "Slovak"
+nativeName = "slovenčina"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "SK"
+
+[locales."sk-SK"]
+name = "Slovak (SK)"
+nativeName = "slovenčina (SK)"
+baseLocale = "sk"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SK"
+
+[locales."sl"]
+name = "Slovenian"
+nativeName = "slovenščina"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "SI"
+
+[locales."sl-SI"]
+name = "Slovenian (SI)"
+nativeName = "slovenščina (SI)"
+baseLocale = "sl"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SI"
+
+[locales."so"]
+name = "Somali"
+nativeName = "Soomaali"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "SO"
+
+[locales."so-DJ"]
+name = "Somali (DJ)"
+nativeName = "Soomaali (DJ)"
+baseLocale = "so"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "DJ"
+
+[locales."so-ET"]
+name = "Somali (ET)"
+nativeName = "Soomaali (ET)"
+baseLocale = "so"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "ET"
+
+[locales."so-KE"]
+name = "Somali (KE)"
+nativeName = "Soomaali (KE)"
+baseLocale = "so"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "KE"
+
+[locales."so-SO"]
+name = "Somali (SO)"
+nativeName = "Soomaali (SO)"
+baseLocale = "so"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SO"
+
+[locales."sq"]
+name = "Albanian"
+nativeName = "shqip"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "AL"
+
+[locales."sq-AL"]
+name = "Albanian (AL)"
+nativeName = "shqip (AL)"
+baseLocale = "sq"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "AL"
+
+[locales."sq-MK"]
+name = "Albanian (MK)"
+nativeName = "shqip (MK)"
+baseLocale = "sq"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "MK"
+
+[locales."sq-XK"]
+name = "Albanian (XK)"
+nativeName = "shqip (XK)"
+baseLocale = "sq"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "XK"
+
+[locales."sr"]
+name = "Serbian"
+nativeName = "српски"
+coverageLevel = "modern"
+script = "Cyrl"
+defaultRegion = "RS"
+
+[locales."sr-Cyrl"]
+name = "Serbian (Cyrl)"
+nativeName = "српски (Cyrl)"
+baseLocale = "sr"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "RS"
+
+[locales."sr-Cyrl-BA"]
+name = "Serbian (Cyrl BA)"
+nativeName = "српски (Cyrl BA)"
+baseLocale = "sr-Cyrl"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "BA"
+
+[locales."sr-Cyrl-ME"]
+name = "Serbian (Cyrl ME)"
+nativeName = "српски (Cyrl ME)"
+baseLocale = "sr-Cyrl"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "ME"
+
+[locales."sr-Cyrl-RS"]
+name = "Serbian (Cyrl RS)"
+nativeName = "српски (Cyrl RS)"
+baseLocale = "sr-Cyrl"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "RS"
+
+[locales."sr-Cyrl-XK"]
+name = "Serbian (Cyrl XK)"
+nativeName = "српски (Cyrl XK)"
+baseLocale = "sr-Cyrl"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "XK"
+
+[locales."sr-Latn"]
+name = "Serbian (Latin)"
+nativeName = "srpski (latinica)"
+baseLocale = "sr"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "RS"
+
+[locales."sr-Latn-BA"]
+name = "Serbian (Latn BA)"
+nativeName = "српски (Latn BA)"
+baseLocale = "sr-Latn"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BA"
+
+[locales."sr-Latn-ME"]
+name = "Serbian (Latn ME)"
+nativeName = "српски (Latn ME)"
+baseLocale = "sr-Latn"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "ME"
+
+[locales."sr-Latn-RS"]
+name = "Serbian (Latn RS)"
+nativeName = "српски (Latn RS)"
+baseLocale = "sr-Latn"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "RS"
+
+[locales."sr-Latn-XK"]
+name = "Serbian (Latn XK)"
+nativeName = "српски (Latn XK)"
+baseLocale = "sr-Latn"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "XK"
+
+[locales."sv"]
+name = "Swedish"
+nativeName = "svenska"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "SE"
+
+[locales."sv-AX"]
+name = "Swedish (AX)"
+nativeName = "svenska (AX)"
+baseLocale = "sv"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "AX"
+
+[locales."sv-FI"]
+name = "Swedish (FI)"
+nativeName = "svenska (FI)"
+baseLocale = "sv"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "FI"
+
+[locales."sv-SE"]
+name = "Swedish (SE)"
+nativeName = "svenska (SE)"
+baseLocale = "sv"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "SE"
+
+[locales."sw"]
+name = "Swahili"
+nativeName = "Kiswahili"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "TZ"
+
+[locales."sw-CD"]
+name = "Swahili (CD)"
+nativeName = "Kiswahili (CD)"
+baseLocale = "sw"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CD"
+
+[locales."sw-KE"]
+name = "Swahili (KE)"
+nativeName = "Kiswahili (KE)"
+baseLocale = "sw"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "KE"
+
+[locales."sw-TZ"]
+name = "Swahili (TZ)"
+nativeName = "Kiswahili (TZ)"
+baseLocale = "sw"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "TZ"
+
+[locales."sw-UG"]
+name = "Swahili (UG)"
+nativeName = "Kiswahili (UG)"
+baseLocale = "sw"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "UG"
+
+[locales."ta"]
+name = "Tamil"
+nativeName = "தமிழ்"
+coverageLevel = "modern"
+script = "Taml"
+defaultRegion = "IN"
+
+[locales."ta-IN"]
+name = "Tamil (IN)"
+nativeName = "தமிழ் (IN)"
+baseLocale = "ta"
+coverageLevel = "modern-inherited"
+script = "Taml"
+defaultRegion = "IN"
+
+[locales."ta-LK"]
+name = "Tamil (LK)"
+nativeName = "தமிழ் (LK)"
+baseLocale = "ta"
+coverageLevel = "modern-inherited"
+script = "Taml"
+defaultRegion = "LK"
+
+[locales."ta-MY"]
+name = "Tamil (MY)"
+nativeName = "தமிழ் (MY)"
+baseLocale = "ta"
+coverageLevel = "modern-inherited"
+script = "Taml"
+defaultRegion = "MY"
+
+[locales."ta-SG"]
+name = "Tamil (SG)"
+nativeName = "தமிழ் (SG)"
+baseLocale = "ta"
+coverageLevel = "modern-inherited"
+script = "Taml"
+defaultRegion = "SG"
+
+[locales."te"]
+name = "Telugu"
+nativeName = "తెలుగు"
+coverageLevel = "modern"
+script = "Telu"
+defaultRegion = "IN"
+
+[locales."te-IN"]
+name = "Telugu (IN)"
+nativeName = "తెలుగు (IN)"
+baseLocale = "te"
+coverageLevel = "modern-inherited"
+script = "Telu"
+defaultRegion = "IN"
+
+[locales."th"]
+name = "Thai"
+nativeName = "ไทย"
+coverageLevel = "modern"
+script = "Thai"
+defaultRegion = "TH"
+
+[locales."th-TH"]
+name = "Thai (TH)"
+nativeName = "ไทย (TH)"
+baseLocale = "th"
+coverageLevel = "modern-inherited"
+script = "Thai"
+defaultRegion = "TH"
+
+[locales."ti"]
+name = "Tigrinya"
+nativeName = "ትግርኛ"
+coverageLevel = "modern"
+script = "Ethi"
+defaultRegion = "ET"
+
+[locales."ti-ER"]
+name = "Tigrinya (ER)"
+nativeName = "ትግርኛ (ER)"
+baseLocale = "ti"
+coverageLevel = "modern-inherited"
+script = "Ethi"
+defaultRegion = "ER"
+
+[locales."ti-ET"]
+name = "Tigrinya (ET)"
+nativeName = "ትግርኛ (ET)"
+baseLocale = "ti"
+coverageLevel = "modern-inherited"
+script = "Ethi"
+defaultRegion = "ET"
+
+[locales."tk"]
+name = "Turkmen"
+nativeName = "türkmen dili"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "TM"
+
+[locales."tk-TM"]
+name = "Turkmen (TM)"
+nativeName = "türkmen dili (TM)"
+baseLocale = "tk"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "TM"
+
+[locales."tr"]
+name = "Turkish"
+nativeName = "Türkçe"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "TR"
+
+[locales."tr-CY"]
+name = "Turkish (CY)"
+nativeName = "Türkçe (CY)"
+baseLocale = "tr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CY"
+
+[locales."tr-TR"]
+name = "Turkish (TR)"
+nativeName = "Türkçe (TR)"
+baseLocale = "tr"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "TR"
+
+[locales."uk"]
+name = "Ukrainian"
+nativeName = "українська"
+coverageLevel = "modern"
+script = "Cyrl"
+defaultRegion = "UA"
+
+[locales."uk-UA"]
+name = "Ukrainian (UA)"
+nativeName = "українська (UA)"
+baseLocale = "uk"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "UA"
+
+[locales."ur"]
+name = "Urdu"
+nativeName = "‫اردو‬"
+coverageLevel = "modern"
+script = "Arab"
+defaultRegion = "PK"
+
+[locales."ur-IN"]
+name = "Urdu (IN)"
+nativeName = "‫اردو‬ (IN)"
+baseLocale = "ur"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "IN"
+
+[locales."ur-PK"]
+name = "Urdu (PK)"
+nativeName = "‫اردو‬ (PK)"
+baseLocale = "ur"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "PK"
+
+[locales."uz"]
+name = "Uzbek"
+nativeName = "o‘zbek"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "UZ"
+
+[locales."uz-Arab"]
+name = "Uzbek (Arabic) (Arab)"
+nativeName = "‫اوزبیک (عربی)‬ (Arab)"
+baseLocale = "uz"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "AF"
+
+[locales."uz-Arab-AF"]
+name = "Uzbek (Arab AF)"
+nativeName = "o‘zbek (Arab AF)"
+baseLocale = "uz-Arab"
+coverageLevel = "modern-inherited"
+script = "Arab"
+defaultRegion = "AF"
+
+[locales."uz-Cyrl"]
+name = "Uzbek (Cyrillic) (Cyrl)"
+nativeName = "ўзбекча (Кирил) (Cyrl)"
+baseLocale = "uz"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "UZ"
+
+[locales."uz-Cyrl-UZ"]
+name = "Uzbek (Cyrl UZ)"
+nativeName = "o‘zbek (Cyrl UZ)"
+baseLocale = "uz-Cyrl"
+coverageLevel = "modern-inherited"
+script = "Cyrl"
+defaultRegion = "UZ"
+
+[locales."uz-Latn"]
+name = "Uzbek (Latn)"
+nativeName = "o‘zbek (Latn)"
+baseLocale = "uz"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "UZ"
+
+[locales."uz-Latn-UZ"]
+name = "Uzbek (Latn UZ)"
+nativeName = "o‘zbek (Latn UZ)"
+baseLocale = "uz-Latn"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "UZ"
+
+[locales."vi"]
+name = "Vietnamese"
+nativeName = "Tiếng Việt"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "VN"
+
+[locales."vi-VN"]
+name = "Vietnamese (VN)"
+nativeName = "Tiếng Việt (VN)"
+baseLocale = "vi"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "VN"
+
+[locales."yo"]
+name = "Yoruba"
+nativeName = "Èdè Yorùbá"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "NG"
+
+[locales."yo-BJ"]
+name = "Yoruba (BJ)"
+nativeName = "Èdè Yorùbá (BJ)"
+baseLocale = "yo"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "BJ"
+
+[locales."yo-NG"]
+name = "Yoruba (NG)"
+nativeName = "Èdè Yorùbá (NG)"
+baseLocale = "yo"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "NG"
+
+[locales."yue"]
+name = "Cantonese"
+nativeName = "粵語"
+coverageLevel = "modern"
+script = "Hant"
+defaultRegion = "HK"
+
+[locales."yue-Hans"]
+name = "Cantonese (Simplified)"
+nativeName = "粤语 (简体)"
+baseLocale = "yue"
+coverageLevel = "modern"
+script = "Hans"
+defaultRegion = "CN"
+
+[locales."yue-Hans-CN"]
+name = "Cantonese (Hans CN)"
+nativeName = "粵語 (Hans CN)"
+baseLocale = "yue-Hans"
+coverageLevel = "modern-inherited"
+script = "Hans"
+defaultRegion = "CN"
+
+[locales."yue-Hant"]
+name = "Cantonese (Hant)"
+nativeName = "粵語 (Hant)"
+baseLocale = "yue"
+coverageLevel = "modern-inherited"
+script = "Hant"
+defaultRegion = "HK"
+
+[locales."yue-Hant-CN"]
+name = "Cantonese (Hant CN)"
+nativeName = "粵語 (Hant CN)"
+baseLocale = "yue-Hant"
+coverageLevel = "modern-inherited"
+script = "Hant"
+defaultRegion = "CN"
+
+[locales."yue-Hant-HK"]
+name = "Cantonese (Hant HK)"
+nativeName = "粵語 (Hant HK)"
+baseLocale = "yue-Hant"
+coverageLevel = "modern-inherited"
+script = "Hant"
+defaultRegion = "HK"
+
+[locales."yue-Hant-MO"]
+name = "Cantonese (Hant MO)"
+nativeName = "粵語 (Hant MO)"
+baseLocale = "yue-Hant"
+coverageLevel = "modern-inherited"
+script = "Hant"
+defaultRegion = "MO"
+
+[locales."zh"]
+name = "Chinese"
+nativeName = "中文"
+coverageLevel = "modern"
+script = "Hans"
+defaultRegion = "CN"
+
+[locales."zh-Hans"]
+name = "Chinese (Hans)"
+nativeName = "中文 (Hans)"
+baseLocale = "zh"
+coverageLevel = "modern-inherited"
+script = "Hans"
+defaultRegion = "CN"
+
+[locales."zh-Hans-CN"]
+name = "Chinese (Hans CN)"
+nativeName = "中文 (Hans CN)"
+baseLocale = "zh-Hans"
+coverageLevel = "modern-inherited"
+script = "Hans"
+defaultRegion = "CN"
+
+[locales."zh-Hans-HK"]
+name = "Chinese (Hans HK)"
+nativeName = "中文 (Hans HK)"
+baseLocale = "zh-Hans"
+coverageLevel = "modern-inherited"
+script = "Hans"
+defaultRegion = "HK"
+
+[locales."zh-Hans-MO"]
+name = "Chinese (Hans MO)"
+nativeName = "中文 (Hans MO)"
+baseLocale = "zh-Hans"
+coverageLevel = "modern-inherited"
+script = "Hans"
+defaultRegion = "MO"
+
+[locales."zh-Hans-MY"]
+name = "Chinese (Hans MY)"
+nativeName = "中文 (Hans MY)"
+baseLocale = "zh-Hans"
+coverageLevel = "modern-inherited"
+script = "Hans"
+defaultRegion = "MY"
+
+[locales."zh-Hans-SG"]
+name = "Chinese (Hans SG)"
+nativeName = "中文 (Hans SG)"
+baseLocale = "zh-Hans"
+coverageLevel = "modern-inherited"
+script = "Hans"
+defaultRegion = "SG"
+
+[locales."zh-Hant"]
+name = "Chinese (Traditional)"
+nativeName = "繁體中文"
+baseLocale = "zh"
+coverageLevel = "modern"
+script = "Hant"
+defaultRegion = "TW"
+
+[locales."zh-Hant-HK"]
+name = "Chinese (Hant HK)"
+nativeName = "中文 (Hant HK)"
+baseLocale = "zh-Hant"
+coverageLevel = "modern-inherited"
+script = "Hant"
+defaultRegion = "HK"
+
+[locales."zh-Hant-MO"]
+name = "Chinese (Hant MO)"
+nativeName = "中文 (Hant MO)"
+baseLocale = "zh-Hant"
+coverageLevel = "modern-inherited"
+script = "Hant"
+defaultRegion = "MO"
+
+[locales."zh-Hant-MY"]
+name = "Chinese (Hant MY)"
+nativeName = "中文 (Hant MY)"
+baseLocale = "zh-Hant"
+coverageLevel = "modern-inherited"
+script = "Hant"
+defaultRegion = "MY"
+
+[locales."zh-Hant-TW"]
+name = "Chinese (Hant TW)"
+nativeName = "中文 (Hant TW)"
+baseLocale = "zh-Hant"
+coverageLevel = "modern-inherited"
+script = "Hant"
+defaultRegion = "TW"
+
+[locales."zh-Latn"]
+name = "Chinese (Latin) (Latn)"
+nativeName = "zh (Latn) (Latn)"
+baseLocale = "zh"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CN"
+
+[locales."zh-Latn-CN"]
+name = "Chinese (Latn CN)"
+nativeName = "中文 (Latn CN)"
+baseLocale = "zh-Latn"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "CN"
+
+[locales."zu"]
+name = "Zulu"
+nativeName = "isiZulu"
+coverageLevel = "modern"
+script = "Latn"
+defaultRegion = "ZA"
+
+[locales."zu-ZA"]
+name = "Zulu (ZA)"
+nativeName = "isiZulu (ZA)"
+baseLocale = "zu"
+coverageLevel = "modern-inherited"
+script = "Latn"
+defaultRegion = "ZA"
