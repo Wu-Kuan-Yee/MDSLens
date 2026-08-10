@@ -121,6 +121,8 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
                 value: selected,
                 leadingIcon: Icons.translate_rounded,
                 minimumMenuWidth: 280,
+                menuMaxHeight: 360,
+                showScrollbar: true,
                 options: [
                   PolishedDropdownOption(
                     value: systemLanguagePreference,

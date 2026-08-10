@@ -44,6 +44,7 @@ class PolishedDropdown<T> extends StatefulWidget {
     this.fontSize,
     this.minimumMenuWidth = 172,
     this.menuMaxHeight = 280,
+    this.showScrollbar = false,
     this.iconOnly = false,
     this.tooltip,
     this.menuAction,
@@ -58,6 +59,13 @@ class PolishedDropdown<T> extends StatefulWidget {
   final double? fontSize;
   final double minimumMenuWidth;
   final double menuMaxHeight;
+
+  /// Shows an always-visible, draggable scrollbar inside long option lists.
+  ///
+  /// Most dropdowns are short enough for MenuAnchor's native clipping. Long
+  /// catalogs (for example the CLDR locale registry) opt in so a user can
+  /// discover and drag the viewport directly on desktop and touch devices.
+  final bool showScrollbar;
   final bool iconOnly;
   final String? tooltip;
   final PolishedDropdownAction? menuAction;
@@ -74,6 +82,9 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
   );
   FocusNode? _actionFocusNode;
   final List<FocusNode> _optionFocusNodes = <FocusNode>[];
+  late final ScrollController _menuScrollController = ScrollController(
+    debugLabel: 'dropdown-${widget.id}-menu-scroll',
+  );
   Timer? _menuSequenceTimer;
   bool _pendingMenuG = false;
 
@@ -257,6 +268,7 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
   void dispose() {
     _menuSequenceTimer?.cancel();
     _focusNode.dispose();
+    _menuScrollController.dispose();
     _actionFocusNode?.dispose();
     for (final node in _optionFocusNodes) {
       node.dispose();
@@ -273,6 +285,58 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
       orElse: () => widget.options.first,
     );
     final menuWidth = widget.minimumMenuWidth.clamp(120, 360).toDouble();
+    final menuItems = <Widget>[
+      if (widget.menuAction != null) ...[
+        _withMenuVimNavigation(
+          _menuAction(context, widget.menuAction!),
+          onActivate: () => _activateMenuAction(widget.menuAction!),
+        ),
+        Divider(
+          key: ValueKey('${widget.id}-action-divider'),
+          height: 7,
+          indent: 8,
+          endIndent: 8,
+          color: theme.dividerColor.withValues(alpha: 0.7),
+        ),
+      ],
+      for (var index = 0; index < widget.options.length; index++) ...[
+        if (index > 0)
+          Divider(
+            key: ValueKey('${widget.id}-divider-$index'),
+            height: 1,
+            indent: 10,
+            endIndent: 10,
+            color: theme.dividerColor.withValues(alpha: 0.55),
+          ),
+        _withMenuVimNavigation(
+          _menuOption(context, widget.options[index], index),
+          onActivate: () {
+            _menuController?.close();
+            widget.onChanged(widget.options[index].value);
+          },
+        ),
+      ],
+    ];
+    final menuChildren = widget.showScrollbar
+        ? <Widget>[
+            SizedBox(
+              width: menuWidth,
+              height: (widget.menuMaxHeight - 14).clamp(120, 406).toDouble(),
+              child: Scrollbar(
+                key: ValueKey('${widget.id}-scrollbar'),
+                thumbVisibility: true,
+                trackVisibility: true,
+                interactive: true,
+                child: ListView(
+                  controller: _menuScrollController,
+                  padding: EdgeInsets.zero,
+                  primary: false,
+                  children: menuItems,
+                ),
+              ),
+            ),
+          ]
+        : menuItems;
 
     return MenuAnchor(
       // Flutter's cascading menu animation creates invalid Intervals for a
@@ -305,38 +369,7 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
           ),
         ),
       ),
-      menuChildren: [
-        if (widget.menuAction != null) ...[
-          _withMenuVimNavigation(
-            _menuAction(context, widget.menuAction!),
-            onActivate: () => _activateMenuAction(widget.menuAction!),
-          ),
-          Divider(
-            key: ValueKey('${widget.id}-action-divider'),
-            height: 7,
-            indent: 8,
-            endIndent: 8,
-            color: theme.dividerColor.withValues(alpha: 0.7),
-          ),
-        ],
-        for (var index = 0; index < widget.options.length; index++) ...[
-          if (index > 0)
-            Divider(
-              key: ValueKey('${widget.id}-divider-$index'),
-              height: 1,
-              indent: 10,
-              endIndent: 10,
-              color: theme.dividerColor.withValues(alpha: 0.55),
-            ),
-          _withMenuVimNavigation(
-            _menuOption(context, widget.options[index], index),
-            onActivate: () {
-              _menuController?.close();
-              widget.onChanged(widget.options[index].value);
-            },
-          ),
-        ],
-      ],
+      menuChildren: menuChildren,
       builder: (context, controller, _) {
         _menuController = controller;
         return VimActivatable(
