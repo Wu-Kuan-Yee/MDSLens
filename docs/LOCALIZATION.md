@@ -1,8 +1,8 @@
 # Languages and Runtime Font Discovery
 
-MDSLens currently ships an English interface, but its UI text is resolved
-through runtime JSON catalogs. Adding a language does not require generating or
-editing Dart source.
+MDSLens currently ships English and Simplified Chinese interfaces. Its UI text
+is resolved through runtime JSON catalogs, so adding another language does not
+require generating or editing Dart source.
 
 ## Language files
 

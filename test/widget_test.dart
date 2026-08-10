@@ -7866,6 +7866,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('language-dropdown')));
     await tester.pumpAndSettle();
     expect(find.text('English'), findsWidgets);
+    expect(find.text('简体中文 — Chinese (Simplified)'), findsOneWidget);
   });
 
   testWidgets('Settings can restore every preference after confirmation', (
