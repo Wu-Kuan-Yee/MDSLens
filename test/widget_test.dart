@@ -7906,9 +7906,19 @@ void main() {
   testWidgets('Language settings follows Customize Fonts in Settings', (
     tester,
   ) async {
-    final app = AppState();
-    await app.preferencesReady;
-    addTearDown(app.dispose);
+    late Directory root;
+    late AppState app;
+    await tester.runAsync(() async {
+      root = await Directory.systemTemp.createTemp('mdslens-language-ui-');
+      app = AppState(
+        userDataStore: UserDataStore(rootOverride: root),
+      );
+      await app.preferencesReady;
+    });
+    addTearDown(() async {
+      app.dispose();
+      await root.delete(recursive: true);
+    });
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
         value: app,
@@ -7932,7 +7942,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('language-dropdown')));
     await tester.pumpAndSettle();
     expect(find.text('English'), findsWidgets);
-    expect(find.text('简体中文 — Chinese (Simplified)'), findsOneWidget);
+    expect(find.text('简体中文 — Chinese (Simplified)'), findsWidgets);
   });
 
   testWidgets('Settings can restore every preference after confirmation', (

@@ -6,7 +6,30 @@ import '../services/toml_codec.dart';
 import 'language_document.dart';
 
 const _storageKey = 'mdslens.runtimeLanguageFiles';
+const _initializationKey = 'mdslens.runtimeLanguageFiles.initializedV1';
 final _changes = StreamController<void>.broadcast();
+
+Future<void> initializeStoredLanguageDocuments(
+  UserDataStore _,
+  List<StoredLanguageDocument> initialDocuments,
+) async {
+  final preferences = await SharedPreferences.getInstance();
+  if (preferences.getBool(_initializationKey) == true) return;
+  final existing = await loadStoredLanguageDocuments(UserDataStore());
+  if (existing.isEmpty && initialDocuments.isNotEmpty) {
+    await preferences.setString(
+      _storageKey,
+      encodeTomlDocument({
+        'documents': {
+          for (final document in initialDocuments)
+            _safeFileName(document.name): document.content,
+        },
+      }),
+    );
+    _changes.add(null);
+  }
+  await preferences.setBool(_initializationKey, true);
+}
 
 Future<List<StoredLanguageDocument>> loadStoredLanguageDocuments(
   UserDataStore _,

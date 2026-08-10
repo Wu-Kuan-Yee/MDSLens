@@ -4,6 +4,44 @@ import 'dart:io';
 import '../services/user_data_store.dart';
 import 'language_document.dart';
 
+const _initializationMarkerName = '.external-language-store-v1';
+
+Future<void> initializeStoredLanguageDocuments(
+  UserDataStore userDataStore,
+  List<StoredLanguageDocument> initialDocuments,
+) async {
+  final directory = await userDataStore.languageDirectory();
+  if (directory == null) return;
+  final marker = File(
+    '${directory.path}${Platform.pathSeparator}$_initializationMarkerName',
+  );
+  if (await marker.exists()) return;
+
+  var containsCatalog = false;
+  await for (final entity in directory.list(followLinks: false)) {
+    if (entity is File &&
+        entity.path.toLowerCase().endsWith('.toml') &&
+        !entity.path.split(Platform.pathSeparator).last.startsWith('.')) {
+      containsCatalog = true;
+      break;
+    }
+  }
+  if (!containsCatalog) {
+    for (final document in initialDocuments) {
+      await installStoredLanguageDocument(
+        userDataStore,
+        document.name,
+        document.content,
+      );
+    }
+  }
+
+  final temporary = File('${marker.path}.tmp');
+  await temporary.writeAsString('version = 1\n', flush: true);
+  if (await marker.exists()) await marker.delete();
+  await temporary.rename(marker.path);
+}
+
 Future<List<StoredLanguageDocument>> loadStoredLanguageDocuments(
   UserDataStore userDataStore,
 ) async {

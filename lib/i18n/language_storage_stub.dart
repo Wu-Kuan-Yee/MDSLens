@@ -1,6 +1,11 @@
 import '../services/user_data_store.dart';
 import 'language_document.dart';
 
+Future<void> initializeStoredLanguageDocuments(
+  UserDataStore _,
+  List<StoredLanguageDocument> __,
+) async {}
+
 Future<List<StoredLanguageDocument>> loadStoredLanguageDocuments(
   UserDataStore _,
 ) async =>

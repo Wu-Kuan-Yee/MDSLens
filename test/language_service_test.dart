@@ -27,7 +27,7 @@ void main() {
   });
 
   test(
-      'bundled catalogs preserve placeholders and the CLDR registry is complete',
+      'initial catalog templates preserve placeholders and the tooling CLDR registry is complete',
       () async {
     final english = LanguageDefinition.parse(
       await File('assets/languages/en.toml').readAsString(),
@@ -84,7 +84,7 @@ void main() {
     expect(language.messages.keys, contains('Color'));
   });
 
-  test('system Simplified Chinese selects the bundled Chinese catalog',
+  test('system Simplified Chinese selects the initialized external catalog',
       () async {
     final root = await Directory.systemTemp.createTemp('mdslens-language-');
     final service = LanguageService(
@@ -123,8 +123,8 @@ void main() {
     expect(service.translate('Color'), 'Colour');
 
     service.updateSystemLocales(const [Locale('en', 'US')]);
-    expect(service.activeLocale, 'en');
-    expect(service.translate('Hello'), 'Hello');
+    expect(service.activeLocale, 'en-GB');
+    expect(service.translate('Color'), 'Colour');
 
     service.setPreference('en-GB');
     service.updateSystemLocales(const [Locale('en', 'US')]);
@@ -168,6 +168,51 @@ void main() {
     );
     expect(service.activeLocale, 'en');
     expect(service.translate('Color'), 'Color');
+  });
+
+  test(
+      'runtime languages exactly follow the external directory after one-time initialization',
+      () async {
+    final root = await Directory.systemTemp.createTemp('mdslens-language-');
+    final store = UserDataStore(rootOverride: root);
+    final services = <LanguageService>[];
+    final service = LanguageService(userDataStore: store);
+    services.add(service);
+    addTearDown(() async {
+      for (final current in services) {
+        current.dispose();
+      }
+      await _deleteLanguageRoot(root);
+    });
+
+    await service.initialize();
+    final directory = await store.languageDirectory();
+    expect(
+      service.availableLanguages.map((item) => item.locale).toSet(),
+      {'en', 'zh-Hans'},
+    );
+    expect(await File('${directory!.path}/en.toml').exists(), isTrue);
+    expect(await File('${directory.path}/zh-Hans.toml').exists(), isTrue);
+    expect(
+      service.availableLanguages.any((item) => item.locale == 'af'),
+      isFalse,
+    );
+
+    await File('${directory.path}/en.toml').delete();
+    await _waitUntil(
+      () => service.availableLanguages.every((item) => item.locale != 'en'),
+    );
+    service.dispose();
+    services.remove(service);
+
+    final restarted = LanguageService(userDataStore: store);
+    services.add(restarted);
+    await restarted.initialize();
+    expect(
+      restarted.availableLanguages.map((item) => item.locale).toSet(),
+      {'zh-Hans'},
+    );
+    expect(await File('${directory.path}/en.toml').exists(), isFalse);
   });
 
   test('font catalog refreshes only when the installed family list changes',
@@ -272,6 +317,10 @@ Future<void> _disposeLanguageService(
   Directory root,
 ) async {
   service.dispose();
+  await _deleteLanguageRoot(root);
+}
+
+Future<void> _deleteLanguageRoot(Directory root) async {
   Object? lastError;
   for (var attempt = 0; attempt < 20; attempt++) {
     try {

@@ -171,9 +171,7 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
                   ),
                 ],
               ),
-              for (final language in languages.where(
-                (item) => !item.source.startsWith('assets/languages/'),
-              ))
+              for (final language in languages)
                 ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
@@ -198,7 +196,7 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
             FilledButton(
               key: const ValueKey('apply-language'),
               onPressed: () {
-                widget.app.setLanguagePreference(_preference);
+                widget.app.setLanguagePreference(selected);
                 Navigator.pop(context);
               },
               child: Text(context.tr('Apply')),

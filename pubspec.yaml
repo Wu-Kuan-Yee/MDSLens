@@ -36,6 +36,7 @@ flutter:
         - asset: assets/fonts/NotoSansSC-Variable.ttf
   assets:
     - assets/app_icon.png
-    - assets/languages/
+    - assets/languages/en.toml
+    - assets/languages/zh-Hans.toml
     - assets/source_index/trees.txt
     - assets/source_index/signals/

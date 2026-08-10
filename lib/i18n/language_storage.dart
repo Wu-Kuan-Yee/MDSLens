@@ -9,6 +9,15 @@ Future<List<StoredLanguageDocument>> loadStoredLanguageDocuments(
 ) =>
     backend.loadStoredLanguageDocuments(userDataStore);
 
+Future<void> initializeStoredLanguageDocuments(
+  UserDataStore userDataStore,
+  List<StoredLanguageDocument> initialDocuments,
+) =>
+    backend.initializeStoredLanguageDocuments(
+      userDataStore,
+      initialDocuments,
+    );
+
 Stream<void> watchStoredLanguageDocuments(UserDataStore userDataStore) =>
     backend.watchStoredLanguageDocuments(userDataStore);
 

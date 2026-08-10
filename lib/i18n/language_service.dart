@@ -28,10 +28,9 @@ class LanguageService extends ChangeNotifier {
   bool _refreshRequested = false;
   bool _initialized = false;
 
-  // Asset bundles are immutable for the lifetime of a running application.
-  // Share their parsed catalog so rebuilding AppState (including between
-  // widget tests) never opens a second platform-asset request unnecessarily.
-  static Future<List<LanguageDefinition>>? _bundledLanguageLoad;
+  // These are installation templates only. They are copied into the external
+  // language store once and are never merged directly into the runtime list.
+  static Future<List<StoredLanguageDocument>>? _initialLanguageLoad;
 
   List<LanguageDefinition> get availableLanguages {
     final values = _languages.values.toList(growable: false)
@@ -61,6 +60,10 @@ class LanguageService extends ChangeNotifier {
     if (systemLocales != null && systemLocales.isNotEmpty) {
       _systemLocales = List.unmodifiable(systemLocales);
     }
+    await initializeStoredLanguageDocuments(
+      _userDataStore,
+      await (_initialLanguageLoad ??= _readInitialLanguages()),
+    );
     await refresh();
     if (_initialized) return;
     _initialized = true;
@@ -102,39 +105,17 @@ class LanguageService extends ChangeNotifier {
 
   Future<void> _performRefresh() async {
     final next = <String, LanguageDefinition>{};
-    final assets = await _loadBundledLanguages();
-    for (final language in assets) {
-      next[language.locale] = language;
-    }
     for (final document in await loadStoredLanguageDocuments(_userDataStore)) {
       try {
         final language = LanguageDefinition.parse(
           document.content,
           source: document.name,
         );
-        // A user language file intentionally overrides a bundled locale,
-        // which also makes live translation editing possible.
-        final bundled = next[language.locale];
-        next[language.locale] = language.copyWith(
-          baseLocale: language.baseLocale ?? bundled?.baseLocale,
-          coverageLevel: language.coverageLevel ?? bundled?.coverageLevel,
-          script: language.script ?? bundled?.script,
-          defaultRegion: language.defaultRegion ?? bundled?.defaultRegion,
-        );
+        next[language.locale] = language;
       } catch (_) {
-        // One malformed file must not make all valid languages disappear.
+        // One malformed external file must not hide other valid catalogs.
       }
     }
-    next.putIfAbsent(
-      'en',
-      () => const LanguageDefinition(
-        locale: 'en',
-        name: 'English',
-        nativeName: 'English',
-        messages: {},
-        source: 'built-in fallback',
-      ),
-    );
     final fingerprint = encodeTomlDocument({
       for (final entry in next.entries)
         entry.key: {
@@ -255,9 +236,7 @@ class LanguageService extends ChangeNotifier {
       if (candidate != null && candidate.messages.isNotEmpty) return parent;
     }
     final language = normalized.split('-').first;
-    // English is the guaranteed source catalog.  Prefer it over a generated
-    // CLDR region placeholder so an English system does not report a random
-    // region as the active translated catalog.
+    // Prefer an installed base-language catalog over a regional sibling.
     if (language == 'en' && _languages.containsKey('en')) return 'en';
     final languageCatalog = _languages[language];
     if (languageCatalog != null && languageCatalog.messages.isNotEmpty) {
@@ -279,44 +258,28 @@ class LanguageService extends ChangeNotifier {
     return null;
   }
 
-  Future<List<LanguageDefinition>> _loadBundledLanguages() async {
-    return _bundledLanguageLoad ??= _readBundledLanguages();
-  }
-
-  static Future<List<LanguageDefinition>> _readBundledLanguages() async {
-    try {
-      final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
-      final paths = manifest
-          .listAssets()
-          .where(
-            (path) =>
-                path.startsWith('assets/languages/') &&
-                path.toLowerCase().endsWith('.toml'),
-          )
-          .toList(growable: false)
-        ..sort();
-      final languages = <LanguageDefinition>[];
-      for (final path in paths) {
-        try {
-          final content = await rootBundle.loadString(path);
-          if (path.endsWith('/cldr-modern.toml')) {
-            languages.addAll(
-              LocaleRegistryDocument.parse(content, source: path)
-                  .localeDefinitions,
-            );
-          } else {
-            languages.add(
-              LanguageDefinition.parse(content, source: path),
-            );
-          }
-        } catch (_) {
-          // Invalid optional bundles are ignored independently.
-        }
+  static Future<List<StoredLanguageDocument>> _readInitialLanguages() async {
+    const paths = <String>[
+      'assets/languages/en.toml',
+      'assets/languages/zh-Hans.toml',
+    ];
+    final documents = <StoredLanguageDocument>[];
+    for (final path in paths) {
+      try {
+        final content = await rootBundle.loadString(path);
+        LanguageDefinition.parse(content, source: path);
+        documents.add(
+          StoredLanguageDocument(
+            name: path.split('/').last,
+            content: content,
+          ),
+        );
+      } catch (_) {
+        // A missing installation template must not prevent startup. The
+        // source-keyed English interface remains usable without any catalog.
       }
-      return languages;
-    } catch (_) {
-      return const [];
     }
+    return List.unmodifiable(documents);
   }
 
   List<LanguageDefinition> _fallbackChain(String locale) {
