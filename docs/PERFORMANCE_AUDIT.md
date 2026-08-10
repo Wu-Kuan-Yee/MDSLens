@@ -9,6 +9,9 @@
 - Network and FFI data fetching runs in a background isolate. New user actions
   cancel the obsolete native request, invalidate its generation, and prevent a
   stale result from replacing newer settings.
+- High-volume waveform samples cross the Rust-to-Dart FFI boundary through
+  typed binary buffers. JSON is limited to small control and metadata messages,
+  so Full-rate samples are not serialized into a large text document.
 - MDS connections are pooled and reused. Cancellation drains a response when it
   is safe to preserve the protocol boundary and closes the socket when a Full
   response cannot safely be retained.
@@ -51,7 +54,9 @@ The Rust bridge depends only on internal crates, serde/JSON, and the cryptograph
 
 - Profile 1st, 50th, and 99th percentile frame times with DevTools on a target phone, an integrated-GPU Windows laptop, and a low-memory Linux device;
 - Measure isolate serialization overhead, peak memory, and network throughput with real maximum shot data;
-- Decide whether to switch from JSON FFI to a binary buffer or shared memory only after real bottlenecks are confirmed, rather than preemptively adding complexity;
+- Measure whether shared memory can improve on the existing typed binary FFI
+  buffers for unusually large Full-rate shots without weakening ownership and
+  cancellation guarantees;
 - Establish baselines for cold start, first SSH handshake, rapid shot switching, and background resume, and persist them in a CI performance history;
 - Check for leaks and power draw with native profiling tools on every release platform.
 

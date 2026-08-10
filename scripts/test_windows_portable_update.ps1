@@ -130,7 +130,11 @@ $context = [ordered]@{
   helper_working_directory = $helperWorkingDirectory
   parent_working_directory = $currentRoot
 }
-$context | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $logRoot 'context.json') -Encoding UTF8
+$contextToml = foreach ($entry in $context.GetEnumerator()) {
+  $escaped = ([string] $entry.Value).Replace('\', '\\').Replace('"', '\"')
+  "$($entry.Key) = `"$escaped`""
+}
+Set-Content -LiteralPath (Join-Path $logRoot 'context.toml') -Value $contextToml -Encoding UTF8
 
 $helperProcess = $null
 $parentProcess = $null

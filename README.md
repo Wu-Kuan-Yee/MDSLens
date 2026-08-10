@@ -161,6 +161,11 @@ Keystore-backed encryption, Windows protected credential storage, or Linux
 Secret Service. No plaintext fallback is used when a secure vault is
 unavailable.
 
+All project-controlled persistent configuration and package metadata use TOML.
+The exact boundary between TOML configuration, protocol-mandated JSON, and data
+export formats is documented in
+[Configuration and Data Formats](docs/DATA_FORMATS.md).
+
 ## License
 
 MDSLens is licensed under [GPL-3.0-or-later](LICENSE).
@@ -172,4 +177,5 @@ MDSLens is licensed under [GPL-3.0-or-later](LICENSE).
 - [Platforms, Architectures & Static Linking Boundaries](docs/PLATFORM_SUPPORT.md)
 - [Performance, Dependencies & Size Audit](docs/PERFORMANCE_AUDIT.md)
 - [Languages and Runtime Font Discovery](docs/LOCALIZATION.md)
+- [Configuration and Data Formats](docs/DATA_FORMATS.md)
 - [Web / PWA Build and Deployment](docs/WEB_DEPLOYMENT.md)
