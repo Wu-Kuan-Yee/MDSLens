@@ -1065,7 +1065,23 @@ class AppState extends ChangeNotifier {
   }
 
   void _handleLanguageChanged() {
+    final changed = _useInstalledEnglishWhenSystemIsUnavailable();
+    if (changed && _languagePreferencesLoaded) {
+      unawaited(savePreferences());
+    }
     if (!_disposed) notifyListeners();
+  }
+
+  bool _useInstalledEnglishWhenSystemIsUnavailable() {
+    if (_languagePreference != systemLanguagePreference ||
+        languages.systemLocaleMatch != null) {
+      return false;
+    }
+    final english = languages.installedEnglishLocale;
+    if (english == null) return false;
+    _languagePreference = english;
+    if (languages.preference != english) languages.setPreference(english);
+    return true;
   }
 
   void setShotFromApi(String v) {
@@ -1233,6 +1249,7 @@ class AppState extends ChangeNotifier {
   }
 
   String _languagePreference = systemLanguagePreference;
+  bool _languagePreferencesLoaded = false;
   String get languagePreference => _languagePreference;
 
   void setLanguagePreference(String preference) {
@@ -1242,6 +1259,7 @@ class AppState extends ChangeNotifier {
     if (_languagePreference == normalized) return;
     _languagePreference = normalized;
     languages.setPreference(normalized);
+    _useInstalledEnglishWhenSystemIsUnavailable();
     savePreferences();
     notifyListeners();
   }
@@ -2350,10 +2368,14 @@ class AppState extends ChangeNotifier {
           : _autoCheckUpdates;
       _languagePreference =
           setting('languagePreference')?.toString() ?? _languagePreference;
+      final requestedLanguagePreference = _languagePreference;
       await languages.initialize(
         preference: _languagePreference,
         systemLocales: WidgetsBinding.instance.platformDispatcher.locales,
       );
+      _useInstalledEnglishWhenSystemIsUnavailable();
+      final adjustedLanguagePreference =
+          _languagePreference != requestedLanguagePreference;
       _fontFamily = setting('fontFamily')?.toString() ?? _fontFamily;
       _fontLegendSize = setting('fontLegendSize') is num
           ? (setting('fontLegendSize') as num).toInt()
@@ -2433,12 +2455,15 @@ class AppState extends ChangeNotifier {
       // changes are visual inputs of every plot, so advance the grid revision
       // once rather than relying on a data-load notification.
       _markPlotVisualChanged();
+      _languagePreferencesLoaded = true;
       notifyListeners();
-      if (migrateLegacySettings) {
+      if (migrateLegacySettings || adjustedLanguagePreference) {
         await savePreferences();
       }
       await _removePlaintextCredentials(prefs);
-    } catch (_) {}
+    } catch (_) {
+      _languagePreferencesLoaded = true;
+    }
   }
 
   Future<void> savePreferences() async {

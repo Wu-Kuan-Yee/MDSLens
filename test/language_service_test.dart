@@ -131,6 +131,47 @@ void main() {
     expect(service.activeLocale, 'en-GB');
   });
 
+  test('unsupported system language reports no match and renders in English',
+      () async {
+    final root = await Directory.systemTemp.createTemp('mdslens-language-');
+    final service = LanguageService(
+      userDataStore: UserDataStore(rootOverride: root),
+    );
+    addTearDown(() => _disposeLanguageService(service, root));
+
+    await service.initialize(systemLocales: const [Locale('fr', 'FR')]);
+
+    expect(service.preference, systemLanguagePreference);
+    expect(service.systemLocaleMatch, isNull);
+    expect(service.installedEnglishLocale, 'en');
+    expect(service.activeLocale, 'en');
+    expect(service.translate('Settings'), 'Settings');
+  });
+
+  test('system Chinese never substitutes the opposite writing system',
+      () async {
+    final root = await Directory.systemTemp.createTemp('mdslens-language-');
+    final store = UserDataStore(rootOverride: root);
+    final directory = await store.languageDirectory();
+    await File('${directory!.path}/en.toml').writeAsString(
+      await File('assets/languages/en.toml').readAsString(),
+    );
+    await File('${directory.path}/zh-Hans.toml').writeAsString(
+      await File('assets/languages/zh-Hans.toml').readAsString(),
+    );
+    final service = LanguageService(
+      userDataStore: store,
+    );
+    addTearDown(() => _disposeLanguageService(service, root));
+
+    await service.initialize(systemLocales: const [Locale('zh', 'TW')]);
+
+    // This external store contains Simplified Chinese but not Traditional
+    // Chinese, so zh-TW must use English rather than silently choosing Hans.
+    expect(service.systemLocaleMatch, isNull);
+    expect(service.activeLocale, 'en');
+  });
+
   test('native language directory hot-adds and hot-removes files', () async {
     final root = await Directory.systemTemp.createTemp('mdslens-language-');
     final store = UserDataStore(rootOverride: root);

@@ -41,6 +41,8 @@ class LanguageService extends ChangeNotifier {
   String get preference => _preference;
   String get activeLocale => _activeLocale;
   LanguageDefinition? get activeLanguage => _languages[_activeLocale];
+  String? get systemLocaleMatch => _resolveSystemLocale();
+  String? get installedEnglishLocale => _bestAvailable('en');
   Locale get activeFlutterLocale => localeFromTag(_activeLocale);
   List<Locale> get supportedFlutterLocales {
     final locales = availableLanguages
@@ -111,6 +113,9 @@ class LanguageService extends ChangeNotifier {
           document.content,
           source: document.name,
         );
+        // Metadata-only files are not usable translations and must not become
+        // selectable placeholders in Language Settings.
+        if (language.messages.isEmpty) continue;
         next[language.locale] = language;
       } catch (_) {
         // One malformed external file must not hide other valid catalogs.
@@ -165,7 +170,11 @@ class LanguageService extends ChangeNotifier {
     final previous = _activeLocale;
     _activeLocale = _resolveActiveLocale();
     _translationCache.clear();
-    if (previous != _activeLocale) notifyListeners();
+    // AppState also needs this event when rendering remains English but the
+    // automatic system-language selection has lost its installed match.
+    if (previous != _activeLocale || !listEquals(nextTags, currentTags)) {
+      notifyListeners();
+    }
   }
 
   String translate(
@@ -219,11 +228,53 @@ class LanguageService extends ChangeNotifier {
     if (_preference != systemLanguagePreference) {
       return _bestAvailable(_preference) ?? 'en';
     }
+    return _resolveSystemLocale() ?? installedEnglishLocale ?? 'en';
+  }
+
+  String? _resolveSystemLocale() {
     for (final locale in _systemLocales) {
-      final match = _bestAvailable(locale.toLanguageTag());
+      final match = _bestSystemAvailable(locale.toLanguageTag());
       if (match != null) return match;
     }
-    return 'en';
+    return null;
+  }
+
+  String? _bestSystemAvailable(String locale) {
+    final normalized = normalizeLocaleTag(locale);
+    if (normalized.isEmpty) return null;
+    if (_languages.containsKey(normalized)) return normalized;
+
+    final parts = normalized.split('-');
+    final language = parts.first;
+    if (language == 'zh') {
+      String? script;
+      String? region;
+      for (final part in parts.skip(1)) {
+        if (part.length == 4) {
+          script = '${part[0].toUpperCase()}'
+              '${part.substring(1).toLowerCase()}';
+        } else if (part.length == 2 && part == part.toUpperCase()) {
+          region = part;
+        }
+      }
+      final preferredScript = script ??
+          (const {'TW', 'HK', 'MO'}.contains(region) ? 'Hant' : 'Hans');
+      final scripted = 'zh-$preferredScript';
+      if (_languages.containsKey(scripted)) return scripted;
+      if (_languages.containsKey('zh')) return 'zh';
+      // Simplified and Traditional Chinese are distinct choices. Never use
+      // the opposite script only because it shares the `zh` language tag.
+      return null;
+    }
+
+    for (final parent in _implicitParentLocales(normalized)) {
+      if (_languages.containsKey(parent)) return parent;
+    }
+    if (_languages.containsKey(language)) return language;
+    for (final available in _languages.keys) {
+      if (available.split('-').first == language) return available;
+    }
+    return null;
   }
 
   String? _bestAvailable(String locale) {

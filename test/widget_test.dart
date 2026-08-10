@@ -7945,6 +7945,40 @@ void main() {
     expect(find.text('简体中文 — Chinese (Simplified)'), findsWidgets);
   });
 
+  testWidgets('unsupported automatic language changes the selection to English',
+      (tester) async {
+    late Directory root;
+    late AppState app;
+    await tester.runAsync(() async {
+      root = await Directory.systemTemp.createTemp('mdslens-language-ui-');
+      app = AppState(userDataStore: UserDataStore(rootOverride: root));
+      await app.preferencesReady;
+      app.setLanguagePreference('zh-Hans');
+      app.updateSystemLocales(const [Locale('fr', 'FR')]);
+      app.setLanguagePreference(systemLanguagePreference);
+    });
+    addTearDown(() async {
+      app.dispose();
+      await root.delete(recursive: true);
+    });
+
+    expect(app.languagePreference, 'en');
+    expect(app.languages.activeLocale, 'en');
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Language'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('language-dropdown')));
+    await tester.pumpAndSettle();
+    expect(find.text('English'), findsWidgets);
+  });
+
   testWidgets('Settings can restore every preference after confirmation', (
     tester,
   ) async {
