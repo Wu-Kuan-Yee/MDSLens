@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import re
 from pathlib import Path
 
@@ -179,9 +180,22 @@ def main() -> None:
     parser.add_argument("--artifacts", type=Path, required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--legacy-json-output",
+        type=Path,
+        help=(
+            "optional compatibility artifact for already released clients; "
+            "new clients use only the TOML output"
+        ),
+    )
     args = parser.parse_args()
     manifest = generate_manifest(args.artifacts, args.version)
     args.output.write_text(serialize_manifest(manifest), encoding="utf-8")
+    if args.legacy_json_output is not None:
+        args.legacy_json_output.write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
 
 
 if __name__ == "__main__":

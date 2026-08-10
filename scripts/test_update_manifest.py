@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import tempfile
 import tomllib
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from scripts import generate_update_manifest
 
@@ -95,6 +97,35 @@ class UpdateManifestTests(unittest.TestCase):
             generate_update_manifest.serialize_manifest(manifest)
         )
         self.assertEqual(decoded, manifest)
+
+    def test_cli_can_emit_a_legacy_client_compatibility_copy(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            artifacts = root / "artifacts"
+            artifacts.mkdir()
+            (artifacts / "mdslens-windows-x64.zip").write_bytes(b"portable")
+            toml_output = root / "update-manifest.toml"
+            legacy_output = root / "update-manifest.json"
+            with mock.patch(
+                "sys.argv",
+                [
+                    "generate_update_manifest.py",
+                    "--artifacts",
+                    str(artifacts),
+                    "--version",
+                    "v1.2.3",
+                    "--output",
+                    str(toml_output),
+                    "--legacy-json-output",
+                    str(legacy_output),
+                ],
+            ):
+                generate_update_manifest.main()
+
+            self.assertEqual(
+                tomllib.loads(toml_output.read_text(encoding="utf-8")),
+                json.loads(legacy_output.read_text(encoding="utf-8")),
+            )
 
 
 if __name__ == "__main__":

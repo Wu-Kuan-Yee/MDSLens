@@ -28,6 +28,10 @@ data-export feature:
   `web/manifest.json` are filenames and schemas required by Apple and browsers;
 - GitHub, EAST login/latest-shot endpoints, the private Web Gateway, and JWT
   claims exchange JSON as part of their external wire protocols;
+- Releases temporarily include a generated `update-manifest.json` protocol
+  compatibility copy because already deployed MDSLens versions request that
+  exact asset name. `update-manifest.toml` is the source of truth, and current
+  builds read only TOML;
 - Flutter-to-Rust control messages use an internal JSON wire representation,
   while high-volume waveform samples already use binary typed buffers. These
   messages are transient and are never configuration files on disk;

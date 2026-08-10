@@ -13,6 +13,8 @@ Every tagged release also contains:
 
 - `update-manifest.toml`, which maps supported update packages to platform,
   architecture, format, byte size, SHA-256 digest, and installation strategy;
+- `update-manifest.json`, a generated protocol-compatibility copy required
+  only by already released clients; current builds do not read it;
 - `SHA256SUMS`, covering all uploaded files, including the update manifest.
 
 MDSLens requires an exact platform and architecture match and verifies the
