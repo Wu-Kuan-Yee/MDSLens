@@ -605,15 +605,24 @@ class _PanelExportTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final title =
-        choice.title.isEmpty ? 'Panel ${choice.index + 1}' : choice.title;
+    final panelLabel = context.tr(
+      'Panel {value1}',
+      {'value1': choice.index + 1},
+    );
+    final title = choice.title.isEmpty ? panelLabel : choice.title;
     final signals = choice.signalNames.isEmpty
-        ? 'No configured signals'
+        ? context.tr('No configured signals')
         : choice.signalNames.join(', ');
-    final tooltip = 'Panel ${choice.index + 1}'
-        '${choice.title.isEmpty ? "" : " · ${choice.title}"}\n'
-        '${choice.hasData ? "${choice.loadedSeries} loaded curve(s)" : "No loaded data"}'
-        '\n$signals';
+    final tooltip = [
+      choice.title.isEmpty ? panelLabel : '$panelLabel · ${choice.title}',
+      choice.hasData
+          ? context.tr(
+              '{value1} loaded curve(s)',
+              {'value1': choice.loadedSeries},
+            )
+          : context.tr('No loaded data'),
+      signals,
+    ].join('\n');
     return VimPlotFocus(
       column: choice.column,
       row: choice.row,

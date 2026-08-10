@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:mdslens/i18n/localized_material.dart';
+import 'package:flutter/material.dart' as material;
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../i18n/language_service.dart';
@@ -1233,8 +1234,13 @@ class ToolbarWidget extends StatelessWidget {
     final theme = Theme.of(context);
     final divider = theme.dividerColor.withValues(alpha: 0.65);
 
-    Widget infoCell(int index) =>
-        _infoCell(entries[index].$1, entries[index].$2, labelStyle, valueStyle);
+    Widget infoCell(int index) => _infoCell(
+          context,
+          entries[index].$1,
+          entries[index].$2,
+          labelStyle,
+          valueStyle,
+        );
 
     Widget compactRow(List<int> indices, {int lastFlex = 1}) {
       return IntrinsicHeight(
@@ -1283,21 +1289,33 @@ class ToolbarWidget extends StatelessWidget {
   }
 
   Widget _infoCell(
+    BuildContext context,
     String label,
     String value,
     TextStyle labelStyle,
     TextStyle valueStyle,
   ) {
-    final message = '$label: $value';
+    final message = switch (label) {
+      'Shot' => context.tr('Shot: {value1}', {'value1': value}),
+      'Ip' => context.tr('Ip: {value1}', {'value1': value}),
+      'Pulse' => context.tr('Pulse: {value1}', {'value1': value}),
+      'It' => context.tr('It: {value1}', {'value1': value}),
+      'Time' => context.tr('Time: {value1}', {'value1': value}),
+      _ => '${context.tr(label)}: $value',
+    };
+    final translatedLabel = context.tr(label);
     return Tooltip(
       message: message,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Text.rich(
-          TextSpan(
+        child: material.Text.rich(
+          material.TextSpan(
             children: [
-              TextSpan(text: '$label: ', style: labelStyle),
-              TextSpan(text: value, style: valueStyle),
+              material.TextSpan(
+                text: '$translatedLabel: ',
+                style: labelStyle,
+              ),
+              material.TextSpan(text: value, style: valueStyle),
             ],
           ),
           maxLines: 1,

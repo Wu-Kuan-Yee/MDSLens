@@ -462,8 +462,10 @@ Future<T?> showPolishedPopupMenu<T>({
                   .map((sequence) => sequence.displayText)
                   .join(' / ') ??
               '';
-      final optionTooltip =
-          shortcut.isEmpty ? option.label : '${option.label} ($shortcut)';
+      final translatedLabel = context.tr(option.label);
+      final optionTooltip = shortcut.isEmpty
+          ? translatedLabel
+          : '$translatedLabel ($shortcut)';
       entries.add(
         _KeyboardPopupMenuItem<T>(
           key: ValueKey('$id-${option.id}'),
@@ -490,7 +492,7 @@ Future<T?> showPolishedPopupMenu<T>({
                 const SizedBox(width: 11),
                 Expanded(
                   child: Text(
-                    option.label,
+                    translatedLabel,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium?.copyWith(

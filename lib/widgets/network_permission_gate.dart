@@ -121,7 +121,7 @@ class _NetworkPermissionGateState extends State<NetworkPermissionGate> {
                 if (details.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   SelectableText(
-                    details,
+                    dialogContext.tr(details),
                     style: Theme.of(dialogContext).textTheme.bodySmall,
                   ),
                 ],

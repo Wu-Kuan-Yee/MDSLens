@@ -4,7 +4,7 @@ import 'package:flutter/material.dart' as material;
 
 import 'language_scope.dart';
 
-export 'package:flutter/material.dart' hide Text, Tooltip;
+export 'package:flutter/material.dart' hide Text, Tooltip, SelectableText;
 export 'language_scope.dart' show TranslatedBuildContext;
 
 /// Drop-in localized counterpart of Flutter's [material.Text].
@@ -117,6 +117,98 @@ class Text extends material.StatelessWidget {
   }
 }
 
+/// Selectable counterpart of [Text] that uses the same source-keyed catalog.
+///
+/// `SelectableText` is not covered by Flutter's ordinary `Text` widget, so a
+/// direct use would otherwise be the one easy way for a visible string to
+/// bypass the active language.  Keep this API close to Flutter's widget and
+/// translate both the plain and rich forms at build time, just like [Text].
+class SelectableText extends material.StatelessWidget {
+  const SelectableText(
+    String this.data, {
+    super.key,
+    this.style,
+    this.strutStyle,
+    this.textAlign,
+    this.textDirection,
+    @Deprecated('Use textScaler instead.') this.textScaleFactor,
+    this.textScaler,
+    this.maxLines,
+    this.selectionColor,
+    this.semanticsLabel,
+    this.textHeightBehavior,
+    this.textWidthBasis,
+  }) : textSpan = null;
+
+  const SelectableText.rich(
+    material.TextSpan this.textSpan, {
+    super.key,
+    this.style,
+    this.strutStyle,
+    this.textAlign,
+    this.textDirection,
+    @Deprecated('Use textScaler instead.') this.textScaleFactor,
+    this.textScaler,
+    this.maxLines,
+    this.selectionColor,
+    this.semanticsLabel,
+    this.textHeightBehavior,
+    this.textWidthBasis,
+  }) : data = null;
+
+  final String? data;
+  final material.TextSpan? textSpan;
+  final material.TextStyle? style;
+  final material.StrutStyle? strutStyle;
+  final material.TextAlign? textAlign;
+  final material.TextDirection? textDirection;
+  final double? textScaleFactor;
+  final material.TextScaler? textScaler;
+  final int? maxLines;
+  final material.Color? selectionColor;
+  final String? semanticsLabel;
+  final material.TextHeightBehavior? textHeightBehavior;
+  final material.TextWidthBasis? textWidthBasis;
+
+  @override
+  material.Widget build(material.BuildContext context) {
+    final localizedSemantics =
+        semanticsLabel == null ? null : context.tr(semanticsLabel!);
+    if (data != null) {
+      return material.SelectableText(
+        context.tr(data!),
+        key: key,
+        style: style,
+        strutStyle: strutStyle,
+        textAlign: textAlign,
+        textDirection: textDirection,
+        textScaleFactor: textScaleFactor,
+        textScaler: textScaler,
+        maxLines: maxLines,
+        selectionColor: selectionColor,
+        semanticsLabel: localizedSemantics,
+        textHeightBehavior: textHeightBehavior,
+        textWidthBasis: textWidthBasis,
+      );
+    }
+    return material.SelectableText.rich(
+      _localizedTextSpan(context, textSpan!),
+      key: key,
+      style: style,
+      strutStyle: strutStyle,
+      textAlign: textAlign,
+      textDirection: textDirection,
+      textScaleFactor: textScaleFactor,
+      textScaler: textScaler,
+      maxLines: maxLines,
+      selectionColor: selectionColor,
+      semanticsLabel: localizedSemantics,
+      textHeightBehavior: textHeightBehavior,
+      textWidthBasis: textWidthBasis,
+    );
+  }
+}
+
 class Tooltip extends material.StatelessWidget {
   const Tooltip({
     super.key,
@@ -219,4 +311,11 @@ material.InlineSpan _localizedSpan(
     locale: span.locale,
     spellOut: span.spellOut,
   );
+}
+
+material.TextSpan _localizedTextSpan(
+  material.BuildContext context,
+  material.TextSpan span,
+) {
+  return _localizedSpan(context, span) as material.TextSpan;
 }
