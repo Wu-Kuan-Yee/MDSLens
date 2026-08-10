@@ -1,28 +1,38 @@
 # Languages and Runtime Font Discovery
 
-MDSLens currently ships English and Simplified Chinese interfaces. Its UI text
-is resolved through runtime TOML catalogs, so adding another language does not
-require generating or editing Dart source. The catalog loader also ships the
-CLDR 48.2 Modern locale registry: 104 Modern language/script parents and all
-563 production locale records (104 parents plus 459 regional/script variants)
-are available for selection. A registry record is metadata plus a fallback
-link; it is not a claim that all 563 translations have already been authored.
+MDSLens resolves interface text through runtime TOML catalogs, so adding or
+removing a language does not require generating or editing Dart source. The
+runtime language list has one authoritative source: the user's language store.
+No bundled locale registry, hard-coded locale list, or metadata-only locale is
+merged into the list shown in Language Settings.
 
 ## Language files
 
-Bundled catalogs live in `assets/languages/`. Flutter's asset manifest is
-scanned at runtime, so no separate language manifest or hard-coded locale list
-is maintained. Native builds also scan the private runtime directory:
+Desktop builds continuously scan this directory:
 
 ```text
 ~/.mdslens/languages/
 ```
 
-Android, iOS, and iPadOS use the equivalent `.mdslens/languages/` directory in
-their application-support sandbox. The Language panel can import a TOML file,
-which is the portable way to add a runtime catalog on sandboxed devices. The
-Web build stores imported catalogs in browser application storage because a web
-page cannot watch an arbitrary system folder.
+Windows resolves `~` through `USERPROFILE`. Android, iOS, and iPadOS use the
+equivalent `.mdslens/languages/` directory in their application-support
+sandbox. The Language panel can import a TOML file, which is the portable way
+to add a runtime catalog on sandboxed devices. The Web build stores imported
+catalogs in browser application storage because a web page cannot watch an
+arbitrary system folder.
+
+On a new, empty language store, MDSLens copies the real English and Simplified
+Chinese starter TOML files into that store once and records that initialization
+with a hidden marker. From then on, only files actually present in the external
+store are loaded. Deleting either starter file removes that language from the
+open list immediately and does not recreate it on the next launch. If the
+store already contains a TOML catalog when this version first runs, MDSLens
+does not add any starter files.
+
+Only non-hidden `.toml` files that successfully parse as language catalogs are
+shown. Adding, editing, renaming, or deleting such files updates an open
+Language Settings panel and the running interface without a restart. One
+malformed file is ignored independently and cannot hide the other valid files.
 
 Each file has this schema:
 
@@ -39,21 +49,22 @@ baseLocale = "en"
 ```
 
 Locale tags use BCP 47 form. Sparse regional catalogs can set `baseLocale` to
-inherit from a parent catalog; omitted parents use the normal BCP 47 parent
-chain. MDSLens tries an exact catalog with translations, then translated
-parents, then the selected locale's registry metadata, and finally English.
-The default `System (automatic)` setting listens for operating-system locale
-changes while the application is running. An explicitly selected language
-remains selected until the user changes it.
+inherit from another installed catalog; omitted parents use the normal BCP 47
+parent chain. MDSLens tries the selected catalog, then installed parent
+catalogs, then an installed English catalog. If none supplies a message, the
+stable English source key itself is displayed. No missing language is invented
+for fallback. The default `System (automatic)` setting is a preference mode,
+not a language catalog: it listens for operating-system locale changes and
+selects the closest catalog that is actually installed. An explicitly selected
+language remains selected until the user changes it or removes its file.
 
-## CLDR Modern registry
+## CLDR Modern development registry
 
 `assets/languages/cldr-modern.toml` is generated from the official Unicode
 CLDR 48.2 `common/properties/coverageLevels.txt`, locale coverage TSV, and
-`common/main/` data. It intentionally keeps every production regional/script
-record under a Modern language parent, including records whose translation
-data is inherited or sparse. The registry is small metadata, not 563 copies
-of the 514-message English catalog.
+`common/main/` data. It is retained only as development/reference data for
+translation tooling and tests. It is excluded from Flutter assets, is never
+loaded by `LanguageService`, and creates no selectable runtime language.
 
 To regenerate it after downloading a newer CLDR release:
 
@@ -65,8 +76,9 @@ python3 tool/generate_cldr_registry.py \
   --output assets/languages/cldr-modern.toml
 ```
 
-The generated file is committed so offline builds and all platforms use the
-same deterministic locale list. Unicode CLDR data remains subject to the
+The generated file is committed so translation tooling has deterministic
+reference metadata while remaining completely separate from runtime language
+discovery. Unicode CLDR data remains subject to the
 [Unicode CLDR terms of use](https://cldr.unicode.org/index/license).
 
 The visible English source text is the stable message key. Placeholders must be
@@ -78,12 +90,9 @@ dart run tool/update_english_catalog.dart
 dart run tool/update_english_catalog.dart --check
 ```
 
-Malformed optional files are ignored independently, so one bad translation
-cannot remove English or other valid languages. A runtime file with the same
-locale intentionally overrides its bundled counterpart; editing, adding, or
-deleting it updates an open Language panel and the running interface without a
-restart. Bundled application assets are read-only and change only when a new
-application build is installed.
+`assets/languages/en.toml` and `assets/languages/zh-Hans.toml` are first-run
+copy templates, not a second runtime catalog source. Application updates never
+merge them into or overwrite an initialized external language store.
 
 ## UI coverage contract
 
@@ -97,22 +106,21 @@ such as `{value1}` rather than interpolating before translation. Runtime data
 (signal names, URLs, paths, shot numbers, and server-provided diagnostics) is
 not translated, but any surrounding label or status template is.
 
-The English catalog is generated from the Dart UI sources. Fully translated
-catalogs should keep the same keys and placeholders; sparse catalogs may
-contain only the keys they intentionally override. Run both checks before
-committing a UI change:
+The English first-run template is generated from the Dart UI sources. Fully
+translated catalogs should keep the same keys and placeholders; sparse
+catalogs may contain only the keys they intentionally override. Run both checks
+before committing a UI change:
 
 ```sh
 dart tool/update_english_catalog.dart --check
 flutter test test/language_service_test.dart
 ```
 
-The language test parses every shipped catalog, verifies that catalog keys are
-known English keys and that their placeholders match, validates the CLDR
-registry count and representative region/script tags, and exercises ordinary
-`Text`, `SelectableText`, interpolation, system-locale selection, and live
-catalog add/edit/remove. This keeps new UI strings from silently bypassing
-translation while allowing the registry's deliberate sparse fallback model.
+The language test parses every starter catalog, verifies that catalog keys are
+known English keys and that their placeholders match, validates the tooling
+CLDR registry, and exercises ordinary `Text`, `SelectableText`, interpolation,
+system-locale selection, and live external catalog add/edit/remove. It also
+verifies that a deleted starter file is not recreated on a later launch.
 
 ## Font discovery
 

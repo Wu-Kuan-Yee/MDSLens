@@ -3,11 +3,13 @@ import 'dart:io';
 
 import 'package:mdslens/services/toml_codec.dart';
 
-/// Updates the source-keyed English runtime language catalog.
+/// Updates the source-keyed English first-run language template.
 ///
 /// MDSLens deliberately uses the visible English source text as the stable
 /// message key. This keeps runtime-added TOML language files possible on every
 /// platform and avoids a generated Dart localization class for each locale.
+/// The template is copied once into a new empty external language store; it is
+/// never merged directly into the runtime language list.
 void main(List<String> arguments) {
   final checkOnly = arguments.contains('--check');
   final catalogFile = File('assets/languages/en.toml');

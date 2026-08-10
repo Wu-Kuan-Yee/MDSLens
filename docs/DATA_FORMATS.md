@@ -6,7 +6,7 @@ format is controlled by this project:
 - user preferences: `~/.mdslens/settings.toml`;
 - waveform layouts: `.toml` (with `.webscp` retained for WebScope
   interoperability);
-- bundled and runtime-installed language catalogs: `.toml`;
+- external runtime language catalogs and first-run catalog templates: `.toml`;
 - release update metadata: `update-manifest.toml`;
 - Windows and Linux portable-package metadata: `.mdslens-portable.toml`;
 - the optional encrypted Rust authentication-cache wrapper and its encrypted

@@ -146,6 +146,13 @@ Desktop builds keep their private state under `~/.mdslens/`:
 └── cache/
 ```
 
+The language list is derived only from valid TOML files currently present in
+`languages/` and updates while MDSLens is running. On a new empty store, the
+English and Simplified Chinese starter files are copied there once; deleting
+them later removes those languages and they are not silently restored. CLDR
+registry metadata and other missing locales never appear as selectable
+placeholders.
+
 Open and Save dialogs default to `configurations/`, but users may select any
 accessible location. Android, iOS, and iPadOS use the same `.mdslens` layout
 inside the application-support sandbox. MDSLens does not read or overwrite the

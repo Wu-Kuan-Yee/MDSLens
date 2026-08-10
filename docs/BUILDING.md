@@ -325,6 +325,14 @@ use `configurations/` as their desktop default. MDSLens does not automatically
 read settings from `~/.mdsscope/` or `~/.config/mdsscope/`; those legacy
 MdsScope directories are also rejected as configuration import locations.
 
+The runtime language list is built exclusively from valid TOML documents in
+the platform's `languages/` store and hot-updates as those documents change.
+English and Simplified Chinese templates are copied into a new empty store
+once, but they are not merged from application assets afterward; deleting a
+catalog therefore removes it permanently unless the user imports or restores
+the file. The Web build uses browser application storage as the sandboxed
+equivalent of this directory.
+
 Passwords and session tokens are stored only in the operating system's secure
 credential vault: Apple Keychain, Android Keystore-backed encrypted storage,
 Windows protected credential storage, or Linux Secret Service. Plaintext
