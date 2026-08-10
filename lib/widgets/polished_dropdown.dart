@@ -45,6 +45,7 @@ class PolishedDropdown<T> extends StatefulWidget {
     this.fontSize,
     this.minimumMenuWidth = 172,
     this.menuMaxHeight = 280,
+    this.menuLabelMaxLines = 1,
     this.showScrollbar = false,
     this.iconOnly = false,
     this.tooltip,
@@ -60,6 +61,13 @@ class PolishedDropdown<T> extends StatefulWidget {
   final double? fontSize;
   final double minimumMenuWidth;
   final double menuMaxHeight;
+
+  /// Maximum number of lines used by an option label.
+  ///
+  /// Set this to null for catalogs whose labels must always be shown in full.
+  /// The menu item then grows vertically and remains reachable through the
+  /// menu's scroll view.
+  final int? menuLabelMaxLines;
 
   /// Shows an always-visible, draggable scrollbar inside long option lists.
   ///
@@ -292,7 +300,7 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
     final viewportWidth = MediaQuery.sizeOf(context).width;
     final maximumMenuWidth = math.max(
       96.0,
-      math.min(360.0, viewportWidth - 24),
+      math.min(480.0, viewportWidth - 24),
     );
     final menuWidth = math.min(
       math.max(120.0, widget.minimumMenuWidth),
@@ -718,8 +726,11 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
         ),
         child: Text(
           option.label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+          maxLines: widget.menuLabelMaxLines,
+          overflow: widget.menuLabelMaxLines == null
+              ? TextOverflow.visible
+              : TextOverflow.ellipsis,
+          softWrap: true,
           style: TextStyle(fontFamily: option.fontFamily),
         ),
       ),

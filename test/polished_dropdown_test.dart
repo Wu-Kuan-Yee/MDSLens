@@ -52,8 +52,8 @@ void main() {
     await gesture.up();
     await tester.pump();
     expect(scrollableState.position.pixels, greaterThan(before));
-    // Only visible entries need to be built initially; the scrollbar provides
-    // access to the remaining locale records.
+    // The first entry remains mounted while the scrollbar provides access to
+    // every remaining locale record.
     expect(
       find.byKey(const ValueKey('long-dropdown-option-0')),
       findsOneWidget,
@@ -142,5 +142,42 @@ void main() {
     );
     expect(scrollbarRect.left, greaterThanOrEqualTo(0));
     expect(scrollbarRect.right, lessThanOrEqualTo(320));
+  });
+
+  testWidgets('catalog dropdown wraps long option labels without truncation', (
+    tester,
+  ) async {
+    const longLabel =
+        'A very long native language name with a regional variant — '
+        'A very long English language name with a regional variant';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PolishedDropdown<int>(
+            id: 'wrapping-dropdown',
+            value: 0,
+            minimumMenuWidth: 280,
+            menuMaxHeight: 240,
+            menuLabelMaxLines: null,
+            showScrollbar: true,
+            options: const [
+              PolishedDropdownOption(value: 0, label: 'System'),
+              PolishedDropdownOption(value: 1, label: longLabel),
+            ],
+            onChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('wrapping-dropdown-anchor')));
+    await tester.pumpAndSettle();
+
+    final labelFinder = find.text(longLabel);
+    final label = tester.widget<Text>(labelFinder);
+    expect(label.maxLines, isNull);
+    expect(label.overflow, TextOverflow.visible);
+    expect(tester.getSize(labelFinder).height, greaterThan(24));
+    expect(tester.takeException(), isNull);
   });
 }
