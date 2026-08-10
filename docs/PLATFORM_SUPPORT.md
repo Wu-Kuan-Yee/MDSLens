@@ -67,7 +67,7 @@ Alpine/musl), obsolete kernels and missing/incompatible desktop or graphics
 runtimes require a different runtime baseline.
 
 Every ZIP, 7z, and tar portable archive contains the same
-`.mdslens-portable.json` channel marker. Once extracted, these variants share
+`.mdslens-portable.toml` channel marker. Once extracted, these variants share
 one verified in-place updater: it downloads the release `tar.gz`, stages the
 complete application beside the running directory, swaps directories only
 after MDSLens exits, restarts from the unchanged path, and restores the backup

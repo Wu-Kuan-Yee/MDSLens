@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import plistlib
 import shutil
@@ -26,6 +25,7 @@ from scripts import (  # noqa: E402
     verify_macos_installers,
     verify_mobile_packages,
 )
+from scripts.flat_toml import read_flat_toml, write_flat_toml  # noqa: E402
 
 
 class BuildAppTests(unittest.TestCase):
@@ -39,11 +39,7 @@ class BuildAppTests(unittest.TestCase):
 
             build_app.stage_windows_portable(bundle, portable, "0.3.2", "x64")
 
-            metadata = json.loads(
-                (portable / ".mdslens-portable.json").read_text(
-                    encoding="utf-8"
-                )
-            )
+            metadata = read_flat_toml(portable / ".mdslens-portable.toml")
             self.assertEqual(metadata["product"], "com.mdslens.app")
             self.assertEqual(metadata["platform"], "windows")
             self.assertEqual(metadata["architecture"], "x64")
@@ -76,11 +72,7 @@ class BuildAppTests(unittest.TestCase):
                                 "1.2.3",
                                 "x64",
                             )
-            marker = json.loads(
-                (portable / ".mdslens-portable.json").read_text(
-                    encoding="utf-8"
-                )
-            )
+            marker = read_flat_toml(portable / ".mdslens-portable.toml")
             self.assertEqual(marker["product"], "com.mdslens.app")
             self.assertEqual(marker["version"], "1.2.3")
             self.assertEqual(marker["architecture"], "x64")
@@ -99,15 +91,13 @@ class BuildAppTests(unittest.TestCase):
             portable = root / "mdslens-linux-x64"
             portable.mkdir()
             (portable / "mdslens").write_bytes(b"ELF")
-            (portable / ".mdslens-portable.json").write_text(
-                json.dumps(
-                    {
-                        "product": "com.mdslens.app",
-                        "architecture": "x64",
-                        "executable": "mdslens",
-                    }
-                ),
-                encoding="utf-8",
+            write_flat_toml(
+                portable / ".mdslens-portable.toml",
+                {
+                    "product": "com.mdslens.app",
+                    "architecture": "x64",
+                    "executable": "mdslens",
+                },
             )
             archive = root / "mdslens-linux-x64.zip"
             with zipfile.ZipFile(archive, "w") as output:

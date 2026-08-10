@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:mdslens/services/toml_codec.dart';
 import 'package:mdslens/services/update_installer.dart';
 import 'package:mdslens/services/update_service.dart';
 
@@ -342,8 +343,8 @@ void main() {
     final current = Directory('${root.path}/mdslens-windows-x64');
     await current.create();
     await File('${current.path}/mdslens.exe').writeAsString('old');
-    await File('${current.path}/.mdslens-portable.json').writeAsString(
-      jsonEncode({
+    await File('${current.path}/.mdslens-portable.toml').writeAsString(
+      encodeTomlDocument({
         'schema_version': 1,
         'product': 'com.mdslens.app',
         'platform': 'windows',
@@ -384,8 +385,8 @@ void main() {
           );
           await candidate.create(recursive: true);
           await File('${candidate.path}/mdslens.exe').writeAsString('new');
-          await File('${candidate.path}/.mdslens-portable.json').writeAsString(
-            jsonEncode({
+          await File('${candidate.path}/.mdslens-portable.toml').writeAsString(
+            encodeTomlDocument({
               'schema_version': 1,
               'product': 'com.mdslens.app',
               'platform': 'windows',
@@ -478,8 +479,8 @@ void main() {
     final current = Directory('${root.path}/mdslens-windows-x64');
     await current.create();
     await File('${current.path}/mdslens.exe').writeAsString('old');
-    await File('${current.path}/.mdslens-portable.json').writeAsString(
-      jsonEncode({
+    await File('${current.path}/.mdslens-portable.toml').writeAsString(
+      encodeTomlDocument({
         'schema_version': 1,
         'product': 'com.mdslens.app',
         'platform': 'windows',
@@ -518,8 +519,8 @@ void main() {
           final candidate = Directory('${arguments.last}/mdslens-windows-x64');
           await candidate.create(recursive: true);
           await File('${candidate.path}/mdslens.exe').writeAsString('new');
-          await File('${candidate.path}/.mdslens-portable.json').writeAsString(
-            jsonEncode({
+          await File('${candidate.path}/.mdslens-portable.toml').writeAsString(
+            encodeTomlDocument({
               'schema_version': 1,
               'product': 'com.mdslens.app',
               'platform': 'windows',
@@ -571,8 +572,8 @@ void main() {
     final current = Directory('${root.path}/mdslens-windows-x64');
     await current.create();
     await File('${current.path}/mdslens.exe').writeAsString('old');
-    await File('${current.path}/.mdslens-portable.json').writeAsString(
-      jsonEncode({
+    await File('${current.path}/.mdslens-portable.toml').writeAsString(
+      encodeTomlDocument({
         'schema_version': 1,
         'product': 'com.mdslens.app',
         'platform': 'windows',
@@ -613,8 +614,8 @@ void main() {
           );
           await candidate.create(recursive: true);
           await File('${candidate.path}/mdslens.exe').writeAsString('new');
-          await File('${candidate.path}/.mdslens-portable.json').writeAsString(
-            jsonEncode({
+          await File('${candidate.path}/.mdslens-portable.toml').writeAsString(
+            encodeTomlDocument({
               'schema_version': 1,
               'product': 'com.mdslens.app',
               'platform': 'windows',
@@ -663,8 +664,8 @@ void main() {
     final current = Directory('${root.path}/mdslens-windows-x64');
     await current.create();
     await File('${current.path}/mdslens.exe').writeAsString('old');
-    await File('${current.path}/.mdslens-portable.json').writeAsString(
-      jsonEncode({
+    await File('${current.path}/.mdslens-portable.toml').writeAsString(
+      encodeTomlDocument({
         'schema_version': 1,
         'product': 'com.mdslens.app',
         'platform': 'windows',
@@ -701,8 +702,8 @@ void main() {
           );
           await candidate.create(recursive: true);
           await File('${candidate.path}/mdslens.exe').writeAsString('new');
-          await File('${candidate.path}/.mdslens-portable.json').writeAsString(
-            jsonEncode({
+          await File('${candidate.path}/.mdslens-portable.toml').writeAsString(
+            encodeTomlDocument({
               'schema_version': 1,
               'product': 'com.mdslens.app',
               'platform': 'windows',
@@ -1313,8 +1314,8 @@ void main() {
     );
     addTearDown(() => root.delete(recursive: true));
     await File('${root.path}/mdslens').writeAsString('old');
-    await File('${root.path}/.mdslens-portable.json').writeAsString(
-      jsonEncode({
+    await File('${root.path}/.mdslens-portable.toml').writeAsString(
+      encodeTomlDocument({
         'schema_version': 1,
         'product': 'com.mdslens.app',
         'architecture': 'x64',
@@ -1365,8 +1366,8 @@ void main() {
     final current = Directory('${root.path}/MDSLens');
     await current.create();
     await File('${current.path}/mdslens').writeAsString('old');
-    await File('${current.path}/.mdslens-portable.json').writeAsString(
-      jsonEncode({
+    await File('${current.path}/.mdslens-portable.toml').writeAsString(
+      encodeTomlDocument({
         'schema_version': 1,
         'product': 'com.mdslens.app',
         'version': '0.2.6',
@@ -1382,8 +1383,8 @@ void main() {
     final payload = Directory('${root.path}/payload/mdslens-linux-x64');
     await payload.create(recursive: true);
     await File('${payload.path}/mdslens').writeAsString('new');
-    await File('${payload.path}/.mdslens-portable.json').writeAsString(
-      jsonEncode({
+    await File('${payload.path}/.mdslens-portable.toml').writeAsString(
+      encodeTomlDocument({
         'schema_version': 1,
         'product': 'com.mdslens.app',
         'version': '0.2.7',
@@ -1467,8 +1468,8 @@ void main() {
       await current.create();
       await File('${current.path}/mdslens')
           .writeAsString('#!/bin/sh\nexit 0\n');
-      await File('${current.path}/.mdslens-portable.json').writeAsString(
-        jsonEncode({
+      await File('${current.path}/.mdslens-portable.toml').writeAsString(
+        encodeTomlDocument({
           'schema_version': 1,
           'product': 'com.mdslens.app',
           'version': '0.3.0',
@@ -1496,8 +1497,8 @@ void main() {
         'echo \$\$ > "${observedProcessId.path}"\n'
         'sleep 10\n',
       );
-      await File('${payload.path}/.mdslens-portable.json').writeAsString(
-        jsonEncode({
+      await File('${payload.path}/.mdslens-portable.toml').writeAsString(
+        encodeTomlDocument({
           'schema_version': 1,
           'product': 'com.mdslens.app',
           'version': '0.3.1',
@@ -1596,16 +1597,16 @@ void main() {
     await current.create(recursive: true);
     await previous.create(recursive: true);
     await File('${current.path}/mdslens').writeAsString('current');
-    final marker = jsonEncode({
+    final marker = encodeTomlDocument({
       'schema_version': 1,
       'product': 'com.mdslens.app',
       'version': '0.3.7',
       'architecture': 'x64',
       'executable': 'mdslens',
     });
-    await File('${current.path}/.mdslens-portable.json').writeAsString(marker);
+    await File('${current.path}/.mdslens-portable.toml').writeAsString(marker);
     await File('${previous.path}/mdslens').writeAsString('previous');
-    await File('${previous.path}/.mdslens-portable.json').writeAsString(marker);
+    await File('${previous.path}/.mdslens-portable.toml').writeAsString(marker);
     await File('${current.path}.mdslens-update-committed')
         .writeAsString('a' * 43);
 
@@ -1628,7 +1629,7 @@ void main() {
     final previous = Directory('${current.path}.mdslens-previous');
     await current.create(recursive: true);
     await previous.create(recursive: true);
-    final marker = jsonEncode({
+    final marker = encodeTomlDocument({
       'schema_version': 1,
       'product': 'com.mdslens.app',
       'platform': 'windows',
@@ -1637,9 +1638,9 @@ void main() {
       'executable': 'mdslens.exe',
     });
     await File('${current.path}/mdslens.exe').writeAsString('current');
-    await File('${current.path}/.mdslens-portable.json').writeAsString(marker);
+    await File('${current.path}/.mdslens-portable.toml').writeAsString(marker);
     await File('${previous.path}/mdslens.exe').writeAsString('previous');
-    await File('${previous.path}/.mdslens-portable.json').writeAsString(marker);
+    await File('${previous.path}/.mdslens-portable.toml').writeAsString(marker);
     await File('${current.path}.mdslens-update-committed')
         .writeAsString('a' * 43);
 
@@ -1722,8 +1723,8 @@ void main() {
     final current = Directory('${root.path}/MDSLens');
     await current.create();
     await File('${current.path}/mdslens').writeAsString('old');
-    await File('${current.path}/.mdslens-portable.json').writeAsString(
-      jsonEncode({
+    await File('${current.path}/.mdslens-portable.toml').writeAsString(
+      encodeTomlDocument({
         'schema_version': 1,
         'product': 'com.mdslens.app',
         'architecture': 'x64',

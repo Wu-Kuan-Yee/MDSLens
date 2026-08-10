@@ -28,6 +28,43 @@ function Quote-ProcessArgument {
   return '"' + $Value.Replace('"', '\"') + '"'
 }
 
+function Read-PortableMetadata {
+  param([Parameter(Mandatory = $true)][string] $Path)
+  $metadata = @{}
+  foreach ($line in Get-Content -LiteralPath $Path) {
+    $value = $line.Trim()
+    if ($value.Length -eq 0 -or $value.StartsWith('#')) { continue }
+    if ($value -match '^([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*"([^"\\]*)"$') {
+      $metadata[$Matches[1]] = $Matches[2]
+      continue
+    }
+    if ($value -match '^([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*([+-]?[0-9]+)$') {
+      $metadata[$Matches[1]] = [int64]$Matches[2]
+      continue
+    }
+    throw "Unsupported portable TOML metadata line: $value"
+  }
+  return $metadata
+}
+
+function Write-PortableMetadata {
+  param(
+    [Parameter(Mandatory = $true)][string] $Path,
+    [Parameter(Mandatory = $true)][hashtable] $Metadata
+  )
+  $lines = foreach ($key in @('schema_version', 'product', 'platform', 'version', 'architecture', 'executable')) {
+    if (-not $Metadata.ContainsKey($key)) { continue }
+    $value = $Metadata[$key]
+    if ($value -is [int] -or $value -is [int64]) {
+      "$key = $value"
+    } else {
+      $escaped = ([string] $value).Replace('\', '\\').Replace('"', '\"')
+      "$key = `"$escaped`""
+    }
+  }
+  Set-Content -LiteralPath $Path -Value $lines -Encoding UTF8
+}
+
 function Save-Diagnostics {
   param([string] $Reason = '')
   if ($Reason) {
@@ -102,14 +139,14 @@ try {
   Copy-Item -LiteralPath $archivePath -Destination $archiveCopy
   Expand-Archive -LiteralPath $archiveCopy -DestinationPath $extractionRoot -Force
   $candidateRoot = Join-Path $extractionRoot 'mdslens-windows-x64'
-  $candidateMarker = Join-Path $candidateRoot '.mdslens-portable.json'
+  $candidateMarker = Join-Path $candidateRoot '.mdslens-portable.toml'
   if (-not (Test-Path -LiteralPath (Join-Path $candidateRoot 'mdslens.exe') -PathType Leaf)) {
     throw 'The release archive does not contain mdslens-windows-x64/mdslens.exe.'
   }
   if (-not (Test-Path -LiteralPath $candidateMarker -PathType Leaf)) {
     throw 'The release archive does not contain its portable metadata marker.'
   }
-  $metadata = Get-Content -LiteralPath $candidateMarker -Raw | ConvertFrom-Json
+  $metadata = Read-PortableMetadata -Path $candidateMarker
   if ($metadata.product -ne 'com.mdslens.app' -or
       $metadata.platform -ne 'windows' -or
       $metadata.architecture -ne 'x64' -or
@@ -127,9 +164,9 @@ try {
   # name may belong to an unrelated application and must never be removed.
   New-Item -ItemType Directory -Path $previousRoot -Force | Out-Null
   Set-Content -LiteralPath $unrelatedRollbackMarker -Value 'must-survive' -Encoding Ascii
-  $oldMetadata = Get-Content -LiteralPath (Join-Path $currentRoot '.mdslens-portable.json') -Raw | ConvertFrom-Json
+  $oldMetadata = Read-PortableMetadata -Path (Join-Path $currentRoot '.mdslens-portable.toml')
   $oldMetadata.version = '0.0.0-ci-old'
-  $oldMetadata | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $currentRoot '.mdslens-portable.json') -Encoding UTF8
+  Write-PortableMetadata -Path (Join-Path $currentRoot '.mdslens-portable.toml') -Metadata $oldMetadata
 
   New-Item -ItemType Directory -Path $workRoot -Force | Out-Null
   New-Item -ItemType Directory -Path $helperWorkingDirectory -Force | Out-Null
@@ -253,7 +290,7 @@ if ($LASTEXITCODE -ne 0) {
       (Test-Path -LiteralPath (Join-Path $currentRoot 'old-version-only.txt'))) {
     throw 'The current portable directory was not replaced atomically.'
   }
-  $installedMetadata = Get-Content -LiteralPath (Join-Path $currentRoot '.mdslens-portable.json') -Raw | ConvertFrom-Json
+  $installedMetadata = Read-PortableMetadata -Path (Join-Path $currentRoot '.mdslens-portable.toml')
   if ([string] $installedMetadata.version -ne $newVersion) {
     throw "The replacement metadata version is '$($installedMetadata.version)', expected '$newVersion'."
   }

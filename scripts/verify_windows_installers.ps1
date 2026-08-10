@@ -14,6 +14,24 @@ function Assert-Condition([bool] $Condition, [string] $Message) {
   if (-not $Condition) { throw $Message }
 }
 
+function Read-PortableMetadata([string] $Path) {
+  $metadata = @{}
+  foreach ($line in Get-Content -LiteralPath $Path) {
+    $value = $line.Trim()
+    if ($value.Length -eq 0 -or $value.StartsWith('#')) { continue }
+    if ($value -match '^([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*"([^"\\]*)"$') {
+      $metadata[$Matches[1]] = $Matches[2]
+      continue
+    }
+    if ($value -match '^([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*([+-]?[0-9]+)$') {
+      $metadata[$Matches[1]] = [int64]$Matches[2]
+      continue
+    }
+    throw "Unsupported portable TOML metadata line: $value"
+  }
+  return $metadata
+}
+
 function Find-MakeAppx {
   $command = Get-Command makeappx.exe -ErrorAction SilentlyContinue
   if ($command) { return $command.Source }
@@ -106,11 +124,11 @@ function Verify-Portable([string] $Archive, [string] $ExpectedRoot, [string] $Ar
     Assert-Condition (Test-Path -LiteralPath (Join-Path $root 'mdslens.exe') -PathType Leaf) (
       "$Archive is missing mdslens.exe."
     )
-    $metadataPath = Join-Path $root '.mdslens-portable.json'
+    $metadataPath = Join-Path $root '.mdslens-portable.toml'
     Assert-Condition (Test-Path -LiteralPath $metadataPath -PathType Leaf) (
       "$Archive has no portable metadata."
     )
-    $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+    $metadata = Read-PortableMetadata $metadataPath
     Assert-Condition (
       $metadata.product -eq 'com.mdslens.app' -and
       $metadata.platform -eq 'windows' -and

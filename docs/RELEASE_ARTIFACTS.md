@@ -39,7 +39,7 @@ The workflow also combines both MSIX files into the unsigned
 `mdslens-windows.msixbundle`. Windows x86-32 is not an upstream Flutter
 desktop target. A portable Windows application is the complete archived
 directory; `mdslens.exe` alone is not a self-contained artifact. All portable
-archive formats include `.mdslens-portable.json` and update transactionally
+archive formats include `.mdslens-portable.toml` and update transactionally
 from the canonical ZIP asset without changing into an installed application.
 The setup EXE and MSI are tested on native Windows runners and must place a
 clean installation in `%ProgramFiles%\MDSLens`. MSIX/MSIXBundle uses a

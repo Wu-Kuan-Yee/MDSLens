@@ -4,13 +4,17 @@
 from __future__ import annotations
 
 import argparse
-import json
 import shutil
 import subprocess
 import tarfile
 import tempfile
 import zipfile
 from pathlib import Path
+
+try:
+    from scripts.flat_toml import read_flat_toml
+except ModuleNotFoundError:  # Direct execution from the scripts directory.
+    from flat_toml import read_flat_toml
 
 
 class VerificationError(RuntimeError):
@@ -131,7 +135,7 @@ def verify_appimage(image: Path) -> None:
             "com.mdslens.app.desktop",
             "com.mdslens.app.png",
             "usr/lib/mdslens/mdslens",
-            "usr/lib/mdslens/.mdslens-portable.json",
+            "usr/lib/mdslens/.mdslens-portable.toml",
             "usr/lib/mdslens/share/applications/com.mdslens.app.desktop",
             "usr/lib/mdslens/share/icons/hicolor/512x512/apps/com.mdslens.app.png",
             "usr/lib/mdslens/share/mime/packages/com.mdslens.configuration.xml",
@@ -240,9 +244,9 @@ def verify_portable(archive: Path, architecture: str) -> None:
             f"{archive.name} must extract exactly one {expected_root} directory",
         )
         root = roots[0]
-        metadata_path = root / ".mdslens-portable.json"
+        metadata_path = root / ".mdslens-portable.toml"
         require(metadata_path.is_file(), f"{archive.name} has no portable metadata")
-        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata = read_flat_toml(metadata_path)
         require(
             metadata.get("product") == "com.mdslens.app"
             and metadata.get("architecture") == architecture

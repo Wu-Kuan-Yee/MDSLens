@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
 import shutil
@@ -13,6 +12,11 @@ import tempfile
 import time
 import zipfile
 from pathlib import Path
+
+try:
+    from scripts.flat_toml import read_flat_toml
+except ModuleNotFoundError:  # Direct execution from the scripts directory.
+    from flat_toml import read_flat_toml
 
 
 SYSTEM_RUNTIME = re.compile(
@@ -121,11 +125,11 @@ def needed_libraries(binary: Path) -> set[str]:
 def verify(root: Path, maximum_glibc: tuple[int, int], launch: bool) -> None:
     executable = root / "mdslens"
     library_dir = root / "lib"
-    marker = root / ".mdslens-portable.json"
+    marker = root / ".mdslens-portable.toml"
     for required in (executable, library_dir, marker):
         if not required.exists():
             raise RuntimeError(f"Portable bundle is missing {required.relative_to(root)}")
-    metadata = json.loads(marker.read_text(encoding="utf-8"))
+    metadata = read_flat_toml(marker)
     if (
         metadata.get("schema_version") != 1
         or metadata.get("product") != "com.mdslens.app"

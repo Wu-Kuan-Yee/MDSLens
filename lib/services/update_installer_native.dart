@@ -1,4 +1,4 @@
-import 'dart:convert';
+import 'dart:convert' show base64Url;
 import 'dart:io';
 import 'dart:math';
 
@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import 'runtime_build_info.dart';
+import 'toml_codec.dart';
 import 'update_installer_models.dart';
 import 'update_service.dart';
 
@@ -1436,6 +1437,25 @@ function Write-UpdateLog {
   } catch {}
 }
 
+function Read-PortableMetadata {
+  param([Parameter(Mandatory = $true)][string]$Path)
+  $metadata = @{}
+  foreach ($line in Get-Content -LiteralPath $Path) {
+    $value = $line.Trim()
+    if ($value.Length -eq 0 -or $value.StartsWith('#')) { continue }
+    if ($value -match '^([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*"([^"\\]*)"$') {
+      $metadata[$Matches[1]] = $Matches[2]
+      continue
+    }
+    if ($value -match '^([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*([+-]?[0-9]+)$') {
+      $metadata[$Matches[1]] = [int64]$Matches[2]
+      continue
+    }
+    throw "Unsupported portable TOML metadata line: $value"
+  }
+  return $metadata
+}
+
 function Invoke-WithRetry {
   param(
     [scriptblock]$Operation,
@@ -1550,10 +1570,10 @@ try {
   Write-UpdateLog 'Replacement reported healthy startup and committed the transaction.'
   $previousOwned = $false
   $rollbackCopyCreated = $false
-  $previousMarker = Join-Path $previousRoot '.mdslens-portable.json'
+  $previousMarker = Join-Path $previousRoot '.mdslens-portable.toml'
   if (Test-Path -LiteralPath $previousMarker -PathType Leaf) {
     try {
-      $metadata = Get-Content -LiteralPath $previousMarker -Raw | ConvertFrom-Json
+      $metadata = Read-PortableMetadata -Path $previousMarker
       $previousOwned = $metadata.product -eq 'com.mdslens.app' -and
         $metadata.platform -eq 'windows'
     } catch {}
@@ -1669,6 +1689,25 @@ function Write-UpdateLog {
   } catch {}
 }
 
+function Read-PortableMetadata {
+  param([Parameter(Mandatory = $true)][string]$Path)
+  $metadata = @{}
+  foreach ($line in Get-Content -LiteralPath $Path) {
+    $value = $line.Trim()
+    if ($value.Length -eq 0 -or $value.StartsWith('#')) { continue }
+    if ($value -match '^([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*"([^"\\]*)"$') {
+      $metadata[$Matches[1]] = $Matches[2]
+      continue
+    }
+    if ($value -match '^([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*([+-]?[0-9]+)$') {
+      $metadata[$Matches[1]] = [int64]$Matches[2]
+      continue
+    }
+    throw "Unsupported portable TOML metadata line: $value"
+  }
+  return $metadata
+}
+
 function Invoke-WithRetry {
   param([scriptblock]$Operation, [string]$Description)
   $lastFailure = $null
@@ -1710,10 +1749,10 @@ if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant
 if ((Test-Path -LiteralPath $stagedRoot) -or (Test-Path -LiteralPath $backupRoot) -or (Test-Path -LiteralPath $extractionRoot)) { exit 1 }
 Expand-Archive -LiteralPath $archive -DestinationPath $extractionRoot
 $candidateRoot = Join-Path $extractionRoot $expectedTopLevel
-$marker = Join-Path $candidateRoot '.mdslens-portable.json'
+$marker = Join-Path $candidateRoot '.mdslens-portable.toml'
 $target = Join-Path $candidateRoot 'mdslens.exe'
 if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { exit 1 }
-$metadata = Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json
+$metadata = Read-PortableMetadata -Path $marker
 if ($metadata.product -ne 'com.mdslens.app' -or $metadata.platform -ne 'windows' -or $metadata.architecture -ne $expectedArchitecture -or $metadata.executable -ne 'mdslens.exe') { exit 1 }
 Move-Item -LiteralPath $candidateRoot -Destination $stagedRoot
 Remove-Item -LiteralPath $extractionRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -1769,10 +1808,10 @@ try {
   }
   $previousOwned = $false
   $rollbackCopyCreated = $false
-  $previousMarker = Join-Path $previousRoot '.mdslens-portable.json'
+  $previousMarker = Join-Path $previousRoot '.mdslens-portable.toml'
   if (Test-Path -LiteralPath $previousMarker -PathType Leaf) {
     try {
-      $previousMetadata = Get-Content -LiteralPath $previousMarker -Raw | ConvertFrom-Json
+      $previousMetadata = Read-PortableMetadata -Path $previousMarker
       $previousOwned = $previousMetadata.product -eq 'com.mdslens.app' -and $previousMetadata.platform -eq 'windows'
     } catch {}
   }
@@ -1932,7 +1971,7 @@ Future<void> scheduleLinuxPortableRollbackCleanup({
   if (currentRoot == null) return;
 
   final currentMarker = File(
-    '$currentRoot${Platform.pathSeparator}.mdslens-portable.json',
+    '$currentRoot${Platform.pathSeparator}.mdslens-portable.toml',
   );
   final previous = Directory('$currentRoot.mdslens-previous');
   if (await FileSystemEntity.type(
@@ -1944,7 +1983,7 @@ Future<void> scheduleLinuxPortableRollbackCleanup({
   }
   if (!await _validLinuxPortableMarker(currentMarker)) return;
   final previousMarker = File(
-    '${previous.path}${Platform.pathSeparator}.mdslens-portable.json',
+    '${previous.path}${Platform.pathSeparator}.mdslens-portable.toml',
   );
   if (!await _validLinuxPortableMarker(previousMarker)) return;
 
@@ -2028,7 +2067,7 @@ Future<void> scheduleWindowsPortableRollbackCleanup({
   if (currentRoot == null) return;
 
   final currentMarker = File(
-    '$currentRoot${Platform.pathSeparator}.mdslens-portable.json',
+    '$currentRoot${Platform.pathSeparator}.mdslens-portable.toml',
   );
   final previous = Directory('$currentRoot.mdslens-previous');
   final commit = File('$currentRoot.mdslens-update-committed');
@@ -2042,7 +2081,7 @@ Future<void> scheduleWindowsPortableRollbackCleanup({
     return;
   }
   final previousMarker = File(
-    '${previous.path}${Platform.pathSeparator}.mdslens-portable.json',
+    '${previous.path}${Platform.pathSeparator}.mdslens-portable.toml',
   );
   if (!await _validWindowsPortableMarker(previousMarker)) return;
 
@@ -2547,7 +2586,7 @@ Future<UpdateInstallResult> prepareWindowsPortableUpdate(
       extracted.path,
     ]);
     final marker = File(
-      '${candidate.path}${Platform.pathSeparator}.mdslens-portable.json',
+      '${candidate.path}${Platform.pathSeparator}.mdslens-portable.toml',
     );
     final executable = File(
       '${candidate.path}${Platform.pathSeparator}mdslens.exe',
@@ -2843,9 +2882,8 @@ Future<bool> _validWindowsPortableMarker(
   String? architecture,
 }) async {
   try {
-    final metadata = jsonDecode(await marker.readAsString());
-    return metadata is Map &&
-        metadata['schema_version'] == 1 &&
+    final metadata = decodeTomlDocument(await marker.readAsString());
+    return metadata['schema_version'] == 1 &&
         metadata['product'] == 'com.mdslens.app' &&
         metadata['platform'] == 'windows' &&
         metadata['executable'] == 'mdslens.exe' &&
@@ -2982,13 +3020,12 @@ String? windowsPortableRootFromExecutable(String executablePath) {
   if (executablePath.trim().isEmpty) return null;
   final directory = File(executablePath).parent;
   final marker = File(
-    '${directory.path}${Platform.pathSeparator}.mdslens-portable.json',
+    '${directory.path}${Platform.pathSeparator}.mdslens-portable.toml',
   );
   try {
     if (!marker.existsSync()) return null;
-    final metadata = jsonDecode(marker.readAsStringSync());
-    if (metadata is Map &&
-        metadata['schema_version'] == 1 &&
+    final metadata = decodeTomlDocument(marker.readAsStringSync());
+    if (metadata['schema_version'] == 1 &&
         metadata['product'] == 'com.mdslens.app' &&
         metadata['platform'] == 'windows' &&
         metadata['executable'] == 'mdslens.exe' &&
@@ -3012,13 +3049,12 @@ String? linuxPortableRootFromExecutable(String executablePath) {
   Directory directory = File(executablePath).parent;
   for (var depth = 0; depth < 6; depth++) {
     final marker = File(
-      '${directory.path}${Platform.pathSeparator}.mdslens-portable.json',
+      '${directory.path}${Platform.pathSeparator}.mdslens-portable.toml',
     );
     try {
       if (marker.existsSync()) {
-        final metadata = jsonDecode(marker.readAsStringSync());
-        if (metadata is Map &&
-            metadata['product'] == 'com.mdslens.app' &&
+        final metadata = decodeTomlDocument(marker.readAsStringSync());
+        if (metadata['product'] == 'com.mdslens.app' &&
             metadata['schema_version'] == 1 &&
             File(
               '${directory.path}${Platform.pathSeparator}mdslens',
@@ -3065,7 +3101,7 @@ Future<UpdateInstallResult?> prepareLinuxPortableUpdate(
     return null;
   }
   final marker = File(
-    '${currentRoot.path}${Platform.pathSeparator}.mdslens-portable.json',
+    '${currentRoot.path}${Platform.pathSeparator}.mdslens-portable.toml',
   );
   if (!await _validLinuxPortableMarker(marker)) return null;
   final tar = _firstExistingExecutable(const ['/bin/tar', '/usr/bin/tar']);
@@ -3151,7 +3187,7 @@ Future<UpdateInstallResult?> prepareLinuxPortableUpdate(
         ).exists() ||
         !await _validLinuxPortableMarker(
           File(
-            '${candidate.path}${Platform.pathSeparator}.mdslens-portable.json',
+            '${candidate.path}${Platform.pathSeparator}.mdslens-portable.toml',
           ),
           architecture: update.asset.architecture,
         )) {
@@ -3278,9 +3314,8 @@ Future<bool> _validLinuxPortableMarker(
   String? architecture,
 }) async {
   try {
-    final metadata = jsonDecode(await marker.readAsString());
-    return metadata is Map &&
-        metadata['schema_version'] == 1 &&
+    final metadata = decodeTomlDocument(await marker.readAsString());
+    return metadata['schema_version'] == 1 &&
         metadata['product'] == 'com.mdslens.app' &&
         metadata['executable'] == 'mdslens' &&
         (architecture == null || metadata['architecture'] == architecture);

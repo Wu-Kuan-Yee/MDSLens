@@ -25,6 +25,8 @@ import time
 from pathlib import Path
 from typing import NoReturn
 
+from scripts.flat_toml import write_flat_toml
+
 
 ROOT = Path(__file__).resolve().parent
 DIST = ROOT / "build" / "dist"
@@ -932,20 +934,16 @@ def stage_windows_portable(
     bundle: Path, portable: Path, version: str, arch: str
 ) -> None:
     replace_tree(bundle, portable)
-    (portable / ".mdslens-portable.json").write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "product": "com.mdslens.app",
-                "platform": "windows",
-                "version": version,
-                "architecture": arch,
-                "executable": "mdslens.exe",
-            },
-            indent=2,
-            sort_keys=True,
-        ) + "\n",
-        encoding="utf-8",
+    write_flat_toml(
+        portable / ".mdslens-portable.toml",
+        {
+            "schema_version": 1,
+            "product": "com.mdslens.app",
+            "platform": "windows",
+            "version": version,
+            "architecture": arch,
+            "executable": "mdslens.exe",
+        },
     )
 
 
@@ -1164,20 +1162,15 @@ def stage_linux_portable(
     bundle: Path, portable: Path, version: str, architecture: str
 ) -> None:
     replace_tree(bundle, portable)
-    (portable / ".mdslens-portable.json").write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "product": "com.mdslens.app",
-                "version": version,
-                "architecture": architecture,
-                "executable": "mdslens",
-            },
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
+    write_flat_toml(
+        portable / ".mdslens-portable.toml",
+        {
+            "schema_version": 1,
+            "product": "com.mdslens.app",
+            "version": version,
+            "architecture": architecture,
+            "executable": "mdslens",
+        },
     )
     executable = portable / "mdslens"
     if not is_elf(executable):
