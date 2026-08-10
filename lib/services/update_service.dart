@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'toml_codec.dart';
+
 const mdsLensRepositoryUrl = 'https://github.com/Wu-Kuan-Yee/MDSLens';
 const mdsLensSourceUrl = 'https://github.com/Wu-Kuan-Yee/MDSLens';
 const mdsLensMaintainerUrl = 'https://github.com/Wu-Kuan-Yee';
@@ -163,7 +165,7 @@ Future<UpdateManifest> fetchUpdateManifest(
   ReleaseUpdate release, {
   http.Client? client,
 }) async {
-  final location = release.assetNamed('update-manifest.json');
+  final location = release.assetNamed('update-manifest.toml');
   if (location == null) {
     throw const FormatException('This release has no update manifest');
   }
@@ -172,7 +174,7 @@ Future<UpdateManifest> fetchUpdateManifest(
   try {
     final response = await activeClient.get(
       Uri.parse(location.url),
-      headers: const {'Accept': 'application/json'},
+      headers: const {'Accept': 'text/plain'},
     ).timeout(const Duration(seconds: 15));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(
@@ -192,8 +194,8 @@ UpdateManifest parseUpdateManifest(
   String source, {
   required ReleaseUpdate release,
 }) {
-  final decoded = jsonDecode(source);
-  if (decoded is! Map || _integer(decoded['schema_version']) != 1) {
+  final decoded = decodeTomlDocument(source);
+  if (_integer(decoded['schema_version']) != 1) {
     throw const FormatException('Unsupported update manifest');
   }
   final version = decoded['version']?.toString().trim() ?? '';

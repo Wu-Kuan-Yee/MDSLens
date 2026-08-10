@@ -11,7 +11,7 @@ source-file version edit is required before releasing.
 
 Every tagged release also contains:
 
-- `update-manifest.json`, which maps supported update packages to platform,
+- `update-manifest.toml`, which maps supported update packages to platform,
   architecture, format, byte size, SHA-256 digest, and installation strategy;
 - `SHA256SUMS`, covering all uploaded files, including the update manifest.
 

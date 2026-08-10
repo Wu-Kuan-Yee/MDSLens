@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -83,6 +84,17 @@ class UpdateManifestTests(unittest.TestCase):
                     Path(temporary),
                     "v1.0.0",
                 )
+
+    def test_serialized_manifest_is_valid_toml(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "mdslens-windows-x64.zip").write_bytes(b"portable")
+            manifest = generate_update_manifest.generate_manifest(root, "v1.2.3")
+
+        decoded = tomllib.loads(
+            generate_update_manifest.serialize_manifest(manifest)
+        )
+        self.assertEqual(decoded, manifest)
 
 
 if __name__ == "__main__":

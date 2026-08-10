@@ -30,7 +30,7 @@ Future<_UpdateChoice?> _showUpdateChoiceDialog(
 }) {
   final supportsDirectUpdate =
       (directUpdateSupportOverride ?? directUpdateSupported) &&
-          result.assetNamed('update-manifest.json') != null;
+          result.assetNamed('update-manifest.toml') != null;
   return showDialog<_UpdateChoice>(
     context: context,
     builder: (context) => KeyboardSafeDialog(

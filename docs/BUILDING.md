@@ -266,7 +266,7 @@ explicitly override it for a controlled packaging run.
 
 The tagged release workflow runs `scripts/generate_update_manifest.py` after
 all native artifacts have been collected. It publishes
-`update-manifest.json` and `SHA256SUMS` beside the packages. Do not hand-edit
+`update-manifest.toml` and `SHA256SUMS` beside the packages. Do not hand-edit
 the manifest: its names, sizes, and hashes must describe the exact uploaded
 files.
 

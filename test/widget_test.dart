@@ -8195,8 +8195,8 @@ void main() {
                 updateAvailable: true,
                 assets: [
                   ReleaseAssetLocation(
-                    name: 'update-manifest.json',
-                    url: 'https://example.invalid/update-manifest.json',
+                    name: 'update-manifest.toml',
+                    url: 'https://example.invalid/update-manifest.toml',
                     size: 1,
                   ),
                 ],
@@ -9902,9 +9902,9 @@ void main() {
     final finishInstallation = Completer<void>();
     final finishHandoff = Completer<void>();
     const manifest = ReleaseAssetLocation(
-      name: 'update-manifest.json',
+      name: 'update-manifest.toml',
       url:
-          'https://github.com/Wu-Kuan-Yee/MDSLens/releases/download/v1.0.0/update-manifest.json',
+          'https://github.com/Wu-Kuan-Yee/MDSLens/releases/download/v1.0.0/update-manifest.toml',
       size: 1,
     );
     await tester.pumpWidget(
@@ -9991,9 +9991,9 @@ void main() {
   ) async {
     var cancellationObserved = false;
     const manifest = ReleaseAssetLocation(
-      name: 'update-manifest.json',
+      name: 'update-manifest.toml',
       url:
-          'https://github.com/Wu-Kuan-Yee/MDSLens/releases/download/v1.0.0/update-manifest.json',
+          'https://github.com/Wu-Kuan-Yee/MDSLens/releases/download/v1.0.0/update-manifest.toml',
       size: 1,
     );
     await tester.pumpWidget(

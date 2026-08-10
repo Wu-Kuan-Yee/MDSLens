@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:mdslens/services/toml_codec.dart';
 import 'package:mdslens/services/update_service.dart';
 
 void main() {
@@ -24,12 +25,12 @@ void main() {
       releaseUrl: releaseUrl,
       updateAvailable: true,
       assets: [
-        location('update-manifest.json', 10),
+        location('update-manifest.toml', 10),
         location('mdslens-windows-x64-setup.exe', 7),
       ],
     );
     final manifest = parseUpdateManifest(
-      jsonEncode({
+      encodeTomlDocument({
         'schema_version': 1,
         'version': '1.2.3',
         'release_url': releaseUrl,
@@ -237,7 +238,7 @@ void main() {
     ]) {
       expect(
         () => parseUpdateManifest(
-          jsonEncode({
+          encodeTomlDocument({
             'schema_version': 1,
             'version': values.$1,
             'release_url': values.$2,

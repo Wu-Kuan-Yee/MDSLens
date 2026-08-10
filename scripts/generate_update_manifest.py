@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import re
 from pathlib import Path
 
@@ -135,6 +134,46 @@ def generate_manifest(artifacts: Path, version: str) -> dict[str, object]:
     }
 
 
+def toml_string(value: str) -> str:
+    """Return a basic TOML string without depending on a writer package."""
+    escaped = (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\b", "\\b")
+        .replace("\t", "\\t")
+        .replace("\n", "\\n")
+        .replace("\f", "\\f")
+        .replace("\r", "\\r")
+    )
+    return f'"{escaped}"'
+
+
+def serialize_manifest(manifest: dict[str, object]) -> str:
+    lines = [
+        f"schema_version = {manifest['schema_version']}",
+        f"version = {toml_string(str(manifest['version']))}",
+        f"tag = {toml_string(str(manifest['tag']))}",
+        f"release_url = {toml_string(str(manifest['release_url']))}",
+    ]
+    for asset in manifest["assets"]:
+        if not isinstance(asset, dict):
+            raise TypeError("manifest asset must be a table")
+        lines.extend(
+            [
+                "",
+                "[[assets]]",
+                f"name = {toml_string(str(asset['name']))}",
+                f"platform = {toml_string(str(asset['platform']))}",
+                f"architecture = {toml_string(str(asset['architecture']))}",
+                f"format = {toml_string(str(asset['format']))}",
+                f"strategy = {toml_string(str(asset['strategy']))}",
+                f"size = {asset['size']}",
+                f"sha256 = {toml_string(str(asset['sha256']))}",
+            ]
+        )
+    return "\n".join(lines) + "\n"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--artifacts", type=Path, required=True)
@@ -142,10 +181,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     manifest = generate_manifest(args.artifacts, args.version)
-    args.output.write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    args.output.write_text(serialize_manifest(manifest), encoding="utf-8")
 
 
 if __name__ == "__main__":
