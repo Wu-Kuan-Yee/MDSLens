@@ -14,6 +14,7 @@ import '../services/network_permission_service.dart';
 import '../services/rust_bridge.dart';
 import '../services/signal_stream.dart';
 import '../services/source_index.dart';
+import '../services/toml_codec.dart';
 import '../services/user_data_store.dart';
 import '../services/web_gateway_client.dart';
 import '../services/web_configuration_encoder.dart';
@@ -68,9 +69,12 @@ const _filePreferenceKeys = <String>[
   'shotHistory',
   'recentConfigurations',
   'sourceIndexMemory',
+  'lastConfiguration',
   'lastConfigJson',
   'loggedIn',
 ];
+
+const _fallbackSettingsDocumentKey = 'mdslensSettingsToml';
 
 const _loginPasswordCredential = 'mdslens.login.password';
 const _authTokenCredential = 'mdslens.login.token';
@@ -2239,13 +2243,42 @@ class AppState extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       final fileSettings = await _userDataStore.readSettings();
+      Map<String, dynamic>? fallbackSettings;
+      if (fileSettings == null) {
+        final source = prefs.getString(_fallbackSettingsDocumentKey);
+        if (source != null && source.isNotEmpty) {
+          try {
+            fallbackSettings = decodeTomlDocument(source);
+          } catch (_) {}
+        }
+      }
+      final storedSettings = fileSettings ?? fallbackSettings;
       final migrateLegacySettings =
-          fileSettings != null && fileSettings.isEmpty;
+          (storedSettings == null || storedSettings.isEmpty) &&
+              _filePreferenceKeys.any(prefs.containsKey);
       dynamic setting(String key) {
-        if (fileSettings != null && fileSettings.containsKey(key)) {
-          return fileSettings[key];
+        if (storedSettings != null && storedSettings.containsKey(key)) {
+          return storedSettings[key];
         }
         return prefs.get(key);
+      }
+
+      dynamic structuredSetting(String key) {
+        final value = setting(key);
+        if (value is Map || value is List) return value;
+        if (value is! String || value.isEmpty) return null;
+        try {
+          return decodeTomlDocument(value)['value'];
+        } catch (_) {
+          // One release of MDSLens used JSON strings inside platform
+          // preferences. Read them once so savePreferences can rewrite the
+          // complete document as TOML without losing user state.
+          try {
+            return jsonDecode(value);
+          } catch (_) {
+            return null;
+          }
+        }
       }
 
       _invalidateFetchForSettingsChange();
@@ -2332,10 +2365,10 @@ class AppState extends ChangeNotifier {
               ? (setting('iconSize') as num).toInt()
               : _iconSize)
           .clamp(18, 32);
-      final shortcutsJson = setting('keyboardShortcuts')?.toString();
-      if (shortcutsJson != null && shortcutsJson.isNotEmpty) {
+      final shortcuts = structuredSetting('keyboardShortcuts');
+      if (shortcuts is Map) {
         _keyboardShortcuts = decodeMdsShortcutBindings(
-          jsonDecode(shortcutsJson),
+          shortcuts,
         );
       }
       _limitShotHistory = setting('limitShotHistory') is bool
@@ -2346,66 +2379,56 @@ class AppState extends ChangeNotifier {
               : defaultShotHistoryLimit)
           .clamp(1, maximumShotHistoryLimit);
 
-      final bookmarksJson = setting('webBookmarks')?.toString();
-      if (bookmarksJson != null) {
-        final list = jsonDecode(bookmarksJson);
-        if (list is List) {
-          _webBookmarks.clear();
-          for (final item in list) {
-            if (item is Map) _webBookmarks.add(Map<String, String>.from(item));
-          }
+      final bookmarks = structuredSetting('webBookmarks');
+      if (bookmarks is List) {
+        _webBookmarks.clear();
+        for (final item in bookmarks) {
+          if (item is Map) _webBookmarks.add(Map<String, String>.from(item));
         }
       }
 
-      final recentConfigurationsJson =
-          setting('recentConfigurations')?.toString();
+      final recentConfigurations = structuredSetting('recentConfigurations');
       if (_supportsStableRecentConfigurationPaths &&
-          recentConfigurationsJson != null &&
-          recentConfigurationsJson.isNotEmpty) {
-        final list = jsonDecode(recentConfigurationsJson);
-        if (list is List) {
-          _recentConfigurations
-            ..clear()
-            ..addAll(
-              list
-                  .map(RecentConfiguration.fromJson)
-                  .whereType<RecentConfiguration>()
-                  .where((entry) => File(entry.path).existsSync())
-                  .take(maximumRecentConfigurations),
-            );
-        }
+          recentConfigurations is List) {
+        _recentConfigurations
+          ..clear()
+          ..addAll(
+            recentConfigurations
+                .map(RecentConfiguration.fromJson)
+                .whereType<RecentConfiguration>()
+                .where((entry) => File(entry.path).existsSync())
+                .take(maximumRecentConfigurations),
+          );
       }
 
-      final shotHistoryJson = setting('shotHistory')?.toString();
-      if (shotHistoryJson != null) {
-        final list = jsonDecode(shotHistoryJson);
-        if (list is List) {
-          _shotHistory
-            ..clear()
-            ..addAll(
-              list
-                  .map((item) => item.toString())
-                  .where((item) => item.isNotEmpty),
-            );
-          _trimShotHistory();
-        }
+      final shotHistory = structuredSetting('shotHistory');
+      if (shotHistory is List) {
+        _shotHistory
+          ..clear()
+          ..addAll(
+            shotHistory
+                .map((item) => item.toString())
+                .where((item) => item.isNotEmpty),
+          );
+        _trimShotHistory();
       }
 
-      final sourceIndexJson = setting('sourceIndexMemory')?.toString();
-      if (sourceIndexJson != null && sourceIndexJson.isNotEmpty) {
-        sourceIndexMemory.restore(jsonDecode(sourceIndexJson));
+      final sourceIndex = structuredSetting('sourceIndexMemory');
+      if (sourceIndex is Map) {
+        sourceIndexMemory.restore(sourceIndex);
       }
 
-      final lastConfig = setting('lastConfigJson')?.toString();
-      if (lastConfig != null && lastConfig.isNotEmpty) {
-        _applyConfigJsonString(lastConfig);
+      final lastConfiguration = structuredSetting('lastConfiguration') ??
+          structuredSetting('lastConfigJson');
+      if (lastConfiguration is Map) {
+        _applyConfigJsonString(jsonEncode(lastConfiguration));
       }
       // Preferences may be restored after the first frame.  Theme/font
       // changes are visual inputs of every plot, so advance the grid revision
       // once rather than relying on a data-load notification.
       _markPlotVisualChanged();
       notifyListeners();
-      if (migrateLegacySettings && _filePreferenceKeys.any(prefs.containsKey)) {
+      if (migrateLegacySettings) {
         await savePreferences();
       }
       await _removePlaintextCredentials(prefs);
@@ -2425,10 +2448,10 @@ class AppState extends ChangeNotifier {
       await _writeOrDeleteCredential(_sshPasswordCredential, _sshPass);
       await _removePlaintextCredentials(prefs);
 
-      final configJson = jsonEncode({
+      final lastConfiguration = <String, dynamic>{
         'columns': _jsonSafeValue(_columns),
         'shot': _shotText,
-      });
+      };
       final fileSettings = <String, dynamic>{
         'rememberLogin': _rememberLogin,
         'explicitlyLoggedOut': _explicitlyLoggedOut,
@@ -2453,18 +2476,15 @@ class AppState extends ChangeNotifier {
         'fontUnitSize': _fontUnitSize,
         'fontUiSize': _fontUiSize,
         'iconSize': _iconSize,
-        'keyboardShortcuts': jsonEncode(
-          encodeMdsShortcutBindings(_keyboardShortcuts),
-        ),
+        'keyboardShortcuts': encodeMdsShortcutBindings(_keyboardShortcuts),
         'limitShotHistory': _limitShotHistory,
         'shotHistoryLimit': _shotHistoryLimit,
-        'webBookmarks': jsonEncode(_webBookmarks),
-        'shotHistory': jsonEncode(_shotHistory),
-        'recentConfigurations': jsonEncode(
-          _recentConfigurations.map((entry) => entry.toJson()).toList(),
-        ),
-        'sourceIndexMemory': jsonEncode(sourceIndexMemory.toJson()),
-        'lastConfigJson': configJson,
+        'webBookmarks': _webBookmarks,
+        'shotHistory': _shotHistory,
+        'recentConfigurations':
+            _recentConfigurations.map((entry) => entry.toJson()).toList(),
+        'sourceIndexMemory': sourceIndexMemory.toJson(),
+        'lastConfiguration': lastConfiguration,
       };
       if (kIsWeb) {
         // A browser profile is not a system credential vault. Authentication
@@ -2482,6 +2502,7 @@ class AppState extends ChangeNotifier {
         fileSettings,
       );
       if (storedInPrivateDirectory) {
+        await prefs.remove(_fallbackSettingsDocumentKey);
         for (final key in _filePreferenceKeys) {
           await prefs.remove(key);
         }
@@ -2497,19 +2518,12 @@ class AppState extends ChangeNotifier {
             await prefs.remove(key);
           }
         }
-        for (final entry in fileSettings.entries) {
-          final value = entry.value;
-          if (value is bool) {
-            await prefs.setBool(entry.key, value);
-          } else if (value is int) {
-            await prefs.setInt(entry.key, value);
-          } else if (value is double) {
-            await prefs.setDouble(entry.key, value);
-          } else if (value is String) {
-            await prefs.setString(entry.key, value);
-          } else if (value is List<String>) {
-            await prefs.setStringList(entry.key, value);
-          }
+        await prefs.setString(
+          _fallbackSettingsDocumentKey,
+          encodeTomlDocument({'formatVersion': 1, ...fileSettings}),
+        );
+        for (final key in _filePreferenceKeys) {
+          await prefs.remove(key);
         }
       }
     } catch (_) {}

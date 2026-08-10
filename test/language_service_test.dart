@@ -6,20 +6,21 @@ import 'package:mdslens/i18n/language_scope.dart';
 import 'package:mdslens/i18n/language_service.dart';
 import 'package:mdslens/i18n/localized_material.dart';
 import 'package:mdslens/services/system_font_service.dart';
+import 'package:mdslens/services/toml_codec.dart';
 import 'package:mdslens/services/user_data_store.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('language documents normalize locale tags and reject invalid roots', () {
+  test('language documents normalize locale tags and reject invalid files', () {
     final language = LanguageDefinition.parse(
-      _languageJson('sr_latn_rs', 'Serbian Latin', {'Hello': 'Hello there'}),
-      source: 'test.json',
+      _languageToml('sr_latn_rs', 'Serbian Latin', {'Hello': 'Hello there'}),
+      source: 'test.toml',
     );
     expect(language.locale, 'sr-Latn-RS');
     expect(language.messages['Hello'], 'Hello there');
     expect(
-      () => LanguageDefinition.parse('[]', source: 'invalid.json'),
+      () => LanguageDefinition.parse('version = 1', source: 'invalid.toml'),
       throwsFormatException,
     );
   });
@@ -27,12 +28,12 @@ void main() {
   test('bundled Chinese catalog covers English and preserves placeholders',
       () async {
     final english = LanguageDefinition.parse(
-      await File('assets/languages/en.json').readAsString(),
-      source: 'assets/languages/en.json',
+      await File('assets/languages/en.toml').readAsString(),
+      source: 'assets/languages/en.toml',
     );
     final chinese = LanguageDefinition.parse(
-      await File('assets/languages/zh-Hans.json').readAsString(),
-      source: 'assets/languages/zh-Hans.json',
+      await File('assets/languages/zh-Hans.toml').readAsString(),
+      source: 'assets/languages/zh-Hans.toml',
     );
 
     expect(chinese.locale, 'zh-Hans');
@@ -80,8 +81,8 @@ void main() {
     final root = await Directory.systemTemp.createTemp('mdslens-language-');
     final store = UserDataStore(rootOverride: root);
     final directory = await store.languageDirectory();
-    await File('${directory!.path}/en-gb.json').writeAsString(
-      _languageJson('en-GB', 'British English', {'Color': 'Colour'}),
+    await File('${directory!.path}/en-gb.toml').writeAsString(
+      _languageToml('en-GB', 'British English', {'Color': 'Colour'}),
     );
     final service = LanguageService(userDataStore: store);
     addTearDown(() => _disposeLanguageService(service, root));
@@ -106,10 +107,10 @@ void main() {
     addTearDown(() => _disposeLanguageService(service, root));
     await service.initialize();
     final directory = await store.languageDirectory();
-    final file = File('${directory!.path}/en-gb.json');
+    final file = File('${directory!.path}/en-gb.toml');
 
     await file.writeAsString(
-      _languageJson('en-GB', 'British English', {'Color': 'Colour'}),
+      _languageToml('en-GB', 'British English', {'Color': 'Colour'}),
       flush: true,
     );
     await _waitUntil(
@@ -119,7 +120,7 @@ void main() {
     expect(service.translate('Color'), 'Colour');
 
     await file.writeAsString(
-      _languageJson('en-GB', 'British English', {'Color': 'British colour'}),
+      _languageToml('en-GB', 'British English', {'Color': 'British colour'}),
       flush: true,
     );
     await _waitUntil(() => service.translate('Color') == 'British colour');
@@ -167,8 +168,8 @@ void main() {
       root = await Directory.systemTemp.createTemp('mdslens-language-');
       final store = UserDataStore(rootOverride: root);
       final directory = await store.languageDirectory();
-      await File('${directory!.path}/en-gb.json').writeAsString(
-        _languageJson('en-GB', 'British English', {
+      await File('${directory!.path}/en-gb.toml').writeAsString(
+        _languageToml('en-GB', 'British English', {
           'Hello': 'Greetings',
           'Loaded {value1} panels': '{value1} panels ready',
         }),
@@ -196,29 +197,18 @@ void main() {
   });
 }
 
-String _languageJson(
+String _languageToml(
   String locale,
   String nativeName,
   Map<String, String> messages,
 ) =>
-    '''
-{
-  "version": 1,
-  "locale": "$locale",
-  "name": "$nativeName",
-  "nativeName": "$nativeName",
-  "messages": ${_jsonMessages(messages)}
-}
-''';
-
-String _jsonMessages(Map<String, String> messages) {
-  String escape(String value) => value
-      .replaceAll(r'\', r'\\')
-      .replaceAll('"', r'\"')
-      .replaceAll('\n', r'\n');
-  return '{${messages.entries.map((entry) => '"${escape(entry.key)}":'
-      '"${escape(entry.value)}"').join(',')}}';
-}
+    encodeTomlDocument({
+      'version': 1,
+      'locale': locale,
+      'name': nativeName,
+      'nativeName': nativeName,
+      'messages': messages,
+    });
 
 Future<void> _waitUntil(bool Function() predicate) async {
   final deadline = DateTime.now().add(const Duration(seconds: 3));

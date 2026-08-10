@@ -12,7 +12,7 @@ Future<List<StoredLanguageDocument>> loadStoredLanguageDocuments(
   final documents = <StoredLanguageDocument>[];
   await for (final entity in directory.list(followLinks: false)) {
     if (entity is! File ||
-        !entity.path.toLowerCase().endsWith('.json') ||
+        !entity.path.toLowerCase().endsWith('.toml') ||
         entity.path.split(Platform.pathSeparator).last.startsWith('.')) {
       continue;
     }
@@ -82,5 +82,5 @@ String _safeFileName(String value) {
   if (name.isEmpty || name.startsWith('.')) {
     throw const FormatException('Invalid language file name.');
   }
-  return name.toLowerCase().endsWith('.json') ? name : '$name.json';
+  return name.toLowerCase().endsWith('.toml') ? name : '$name.toml';
 }

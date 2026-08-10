@@ -1,7 +1,7 @@
 # Languages and Runtime Font Discovery
 
 MDSLens currently ships English and Simplified Chinese interfaces. Its UI text
-is resolved through runtime JSON catalogs, so adding another language does not
+is resolved through runtime TOML catalogs, so adding another language does not
 require generating or editing Dart source.
 
 ## Language files
@@ -15,24 +15,22 @@ is maintained. Native builds also scan the private runtime directory:
 ```
 
 Android, iOS, and iPadOS use the equivalent `.mdslens/languages/` directory in
-their application-support sandbox. The Language panel can import a JSON file,
+their application-support sandbox. The Language panel can import a TOML file,
 which is the portable way to add a runtime catalog on sandboxed devices. The
 Web build stores imported catalogs in browser application storage because a web
 page cannot watch an arbitrary system folder.
 
 Each file has this schema:
 
-```json
-{
-  "version": 1,
-  "locale": "en-GB",
-  "name": "British English",
-  "nativeName": "British English",
-  "messages": {
-    "Color": "Colour",
-    "Loaded {value1} panels": "{value1} panels ready"
-  }
-}
+```toml
+version = 1
+locale = "en-GB"
+name = "British English"
+nativeName = "British English"
+
+[messages]
+"Color" = "Colour"
+"Loaded {value1} panels" = "{value1} panels ready"
 ```
 
 Locale tags use BCP 47 form. MDSLens tries an exact system locale, then a

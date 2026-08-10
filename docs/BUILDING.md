@@ -312,7 +312,7 @@ On Windows, macOS, and Linux, private application state is stored below the
 user's home directory:
 
 ```text
-~/.mdslens/settings.json
+~/.mdslens/settings.toml
 ~/.mdslens/configurations/
 ~/.mdslens/cache/
 ~/.mdslens/languages/

@@ -1,5 +1,6 @@
-import 'dart:convert';
 import 'dart:ui';
+
+import '../services/toml_codec.dart';
 
 class StoredLanguageDocument {
   const StoredLanguageDocument({
@@ -32,10 +33,7 @@ class LanguageDefinition {
     String content, {
     required String source,
   }) {
-    final decoded = jsonDecode(content);
-    if (decoded is! Map) {
-      throw const FormatException('The language file root must be an object.');
-    }
+    final decoded = decodeTomlDocument(content);
     final version = decoded['version'];
     if (version != 1) {
       throw FormatException(
@@ -55,7 +53,8 @@ class LanguageDefinition {
     }
     final rawMessages = decoded['messages'];
     if (rawMessages is! Map) {
-      throw const FormatException('The language file messages are missing.');
+      throw const FormatException(
+          'The language file messages table is missing.');
     }
     final messages = <String, String>{};
     for (final entry in rawMessages.entries) {

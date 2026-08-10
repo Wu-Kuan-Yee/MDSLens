@@ -27,7 +27,7 @@ The project website is available at
   the current view, or a custom X range. Each panel is written to an
   independent file; mobile platforms package multi-panel results in one ZIP
   while preserving those separate files.
-- Responsive layouts, hot-discovered system fonts, runtime JSON language
+- Responsive layouts, hot-discovered system fonts, runtime TOML language
   catalogs, icon sizes and themes, internal web bookmarks, shot history
   management, and native system file/link integration. See
   [Languages and runtime fonts](docs/LOCALIZATION.md).
@@ -140,7 +140,7 @@ Desktop builds keep their private state under `~/.mdslens/`:
 
 ```text
 ~/.mdslens/
-├── settings.json
+├── settings.toml
 ├── configurations/
 ├── languages/
 └── cache/
@@ -156,7 +156,7 @@ manually; copy a file elsewhere first if it must be inspected independently.
 When importing a configuration, its shot is ignored by default unless the user
 chooses to apply it. Imported values are initial state: later changes in the
 interface, a new shot, or a new Rate take precedence. Passwords and session
-tokens are not written to `settings.json`; they use Apple Keychain, Android
+tokens are not written to `settings.toml`; they use Apple Keychain, Android
 Keystore-backed encryption, Windows protected credential storage, or Linux
 Secret Service. No plaintext fallback is used when a secure vault is
 unavailable.

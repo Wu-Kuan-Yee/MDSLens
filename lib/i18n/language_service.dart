@@ -1,11 +1,11 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../services/user_data_store.dart';
+import '../services/toml_codec.dart';
 import 'language_document.dart';
 import 'language_storage.dart';
 
@@ -129,7 +129,7 @@ class LanguageService extends ChangeNotifier {
         source: 'built-in fallback',
       ),
     );
-    final fingerprint = jsonEncode({
+    final fingerprint = encodeTomlDocument({
       for (final entry in next.entries)
         entry.key: {
           'name': entry.value.name,
@@ -263,7 +263,7 @@ class LanguageService extends ChangeNotifier {
           .where(
             (path) =>
                 path.startsWith('assets/languages/') &&
-                path.toLowerCase().endsWith('.json'),
+                path.toLowerCase().endsWith('.toml'),
           )
           .toList(growable: false)
         ..sort();

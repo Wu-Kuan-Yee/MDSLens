@@ -1,15 +1,16 @@
 import 'dart:collection';
-import 'dart:convert';
 import 'dart:io';
+
+import 'package:mdslens/services/toml_codec.dart';
 
 /// Updates the source-keyed English runtime language catalog.
 ///
 /// MDSLens deliberately uses the visible English source text as the stable
-/// message key. This keeps runtime-added JSON language files possible on every
+/// message key. This keeps runtime-added TOML language files possible on every
 /// platform and avoids a generated Dart localization class for each locale.
 void main(List<String> arguments) {
   final checkOnly = arguments.contains('--check');
-  final catalogFile = File('assets/languages/en.json');
+  final catalogFile = File('assets/languages/en.toml');
   if (!catalogFile.existsSync()) {
     stderr.writeln('Run this tool from the MDSLens repository root.');
     exitCode = 2;
@@ -34,17 +35,17 @@ void main(List<String> arguments) {
     }
   }
 
-  final output = '${const JsonEncoder.withIndent('  ').convert({
-        'version': 1,
-        'locale': 'en',
-        'name': 'English',
-        'nativeName': 'English',
-        'messages': messages,
-      })}\n';
+  final output = encodeTomlDocument({
+    'version': 1,
+    'locale': 'en',
+    'name': 'English',
+    'nativeName': 'English',
+    'messages': messages,
+  });
   if (checkOnly) {
     if (catalogFile.readAsStringSync() != output) {
       stderr.writeln(
-        'assets/languages/en.json is stale. '
+        'assets/languages/en.toml is stale. '
         'Run: dart run tool/update_english_catalog.dart',
       );
       exitCode = 1;

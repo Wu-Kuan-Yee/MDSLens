@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'toml_codec.dart';
+
 /// Private persistence owned by this application.
 ///
 /// Desktop builds use ~/.mdslens and never read the legacy ~/.mdsscope
@@ -46,12 +48,17 @@ class UserDataStore {
     if (root == null) return null;
     try {
       await _prepareDirectories(root);
-      final file = File(_join(root.path, 'settings.json'));
-      if (!await file.exists()) return <String, dynamic>{};
-      final decoded = jsonDecode(await file.readAsString());
-      return decoded is Map
-          ? Map<String, dynamic>.from(decoded)
-          : <String, dynamic>{};
+      final file = File(_join(root.path, 'settings.toml'));
+      if (await file.exists()) {
+        return decodeTomlDocument(await file.readAsString());
+      }
+      final legacy = File(_join(root.path, 'settings.json'));
+      if (!await legacy.exists()) return <String, dynamic>{};
+      final decoded = jsonDecode(await legacy.readAsString());
+      if (decoded is! Map) return <String, dynamic>{};
+      final migrated = _migrateLegacyJsonSettings(decoded);
+      await writeSettings(migrated);
+      return migrated;
     } catch (_) {
       return <String, dynamic>{};
     }
@@ -89,10 +96,10 @@ class UserDataStore {
       }
       try {
         await _prepareDirectories(root);
-        final file = File(_join(root.path, 'settings.json'));
+        final file = File(_join(root.path, 'settings.toml'));
         final temporary = File('${file.path}.tmp');
         await temporary.writeAsString(
-          const JsonEncoder.withIndent('  ').convert(settings),
+          encodeTomlDocument({'formatVersion': 1, ...settings}),
           flush: true,
         );
         if (await file.exists()) await file.delete();
@@ -118,4 +125,32 @@ class UserDataStore {
         ? '$parent$child'
         : '$parent$separator$child';
   }
+}
+
+Map<String, dynamic> _migrateLegacyJsonSettings(Map<dynamic, dynamic> source) {
+  final migrated = <String, dynamic>{
+    for (final entry in source.entries) entry.key.toString(): entry.value,
+  };
+  for (final key in const [
+    'keyboardShortcuts',
+    'webBookmarks',
+    'shotHistory',
+    'recentConfigurations',
+    'sourceIndexMemory',
+  ]) {
+    final value = migrated[key];
+    if (value is! String || value.isEmpty) continue;
+    try {
+      migrated[key] = jsonDecode(value);
+    } catch (_) {}
+  }
+  final lastConfiguration = migrated.remove('lastConfigJson');
+  if (lastConfiguration is String && lastConfiguration.isNotEmpty) {
+    try {
+      migrated['lastConfiguration'] = jsonDecode(lastConfiguration);
+    } catch (_) {}
+  } else if (lastConfiguration is Map) {
+    migrated['lastConfiguration'] = lastConfiguration;
+  }
+  return migrated;
 }

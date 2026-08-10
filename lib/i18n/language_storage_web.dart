@@ -1,9 +1,8 @@
 import 'dart:async';
-import 'dart:convert';
-
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/user_data_store.dart';
+import '../services/toml_codec.dart';
 import 'language_document.dart';
 
 const _storageKey = 'mdslens.runtimeLanguageFiles';
@@ -16,7 +15,7 @@ Future<List<StoredLanguageDocument>> loadStoredLanguageDocuments(
   final raw = preferences.getString(_storageKey);
   if (raw == null || raw.isEmpty) return const [];
   try {
-    final decoded = jsonDecode(raw);
+    final decoded = decodeTomlDocument(raw)['documents'];
     if (decoded is! Map) return const [];
     final documents = <StoredLanguageDocument>[];
     for (final entry in decoded.entries) {
@@ -48,7 +47,10 @@ Future<void> installStoredLanguageDocument(
       document.name: document.content,
   };
   current[_safeFileName(fileName)] = content;
-  await preferences.setString(_storageKey, jsonEncode(current));
+  await preferences.setString(
+    _storageKey,
+    encodeTomlDocument({'documents': current}),
+  );
   _changes.add(null);
 }
 
@@ -62,7 +64,10 @@ Future<void> removeStoredLanguageDocument(
       document.name: document.content,
   };
   if (current.remove(_safeFileName(fileName)) == null) return;
-  await preferences.setString(_storageKey, jsonEncode(current));
+  await preferences.setString(
+    _storageKey,
+    encodeTomlDocument({'documents': current}),
+  );
   _changes.add(null);
 }
 
@@ -74,5 +79,5 @@ String _safeFileName(String value) {
   if (name.isEmpty || name.startsWith('.')) {
     throw const FormatException('Invalid language file name.');
   }
-  return name.toLowerCase().endsWith('.json') ? name : '$name.json';
+  return name.toLowerCase().endsWith('.toml') ? name : '$name.toml';
 }

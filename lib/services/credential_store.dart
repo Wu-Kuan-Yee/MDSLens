@@ -1,6 +1,6 @@
 import 'credential_store_platform.dart';
 
-/// Sensitive values that must never be placed in settings.json or exported
+/// Sensitive values that must never be placed in settings.toml or exported
 /// configuration files.
 abstract interface class CredentialStore {
   Future<String?> read(String key);
@@ -25,7 +25,7 @@ class PlatformCredentialStore implements CredentialStore {
 
 class MemoryCredentialStore implements CredentialStore {
   MemoryCredentialStore([Map<String, String>? initialValues])
-    : values = {...?initialValues};
+      : values = {...?initialValues};
 
   final Map<String, String> values;
 

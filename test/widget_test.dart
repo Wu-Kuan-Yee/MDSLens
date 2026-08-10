@@ -23,6 +23,7 @@ import 'package:mdslens/services/platform_file_dialog.dart';
 import 'package:mdslens/services/runtime_build_info.dart';
 import 'package:mdslens/services/simple_zip.dart';
 import 'package:mdslens/services/source_index.dart';
+import 'package:mdslens/services/toml_codec.dart';
 import 'package:mdslens/services/update_installer.dart';
 import 'package:mdslens/services/update_service.dart';
 import 'package:mdslens/services/user_data_store.dart';
@@ -3477,19 +3478,20 @@ void main() {
     expect(second.columns.map((column) => column.length), [1, 2]);
     expect(second.columns[0][0]['title'], 'Saved panel');
     expect(second.columns[0][0]['xmin'], isNull);
-    final settingsFile = File('${temporary.path}/.mdslens/settings.json');
+    final settingsFile = File('${temporary.path}/.mdslens/settings.toml');
     expect(await settingsFile.exists(), isTrue);
+    final settings = decodeTomlDocument(await settingsFile.readAsString());
     expect(
-      jsonDecode(await settingsFile.readAsString())['fontFamily'],
+      settings['fontFamily'],
       'Courier New',
     );
-    expect(jsonDecode(await settingsFile.readAsString())['iconSize'], 30);
+    expect(settings['iconSize'], 30);
     expect(
-      jsonDecode(await settingsFile.readAsString())['autoCheckUpdates'],
+      settings['autoCheckUpdates'],
       isFalse,
     );
     expect(
-      jsonDecode(await settingsFile.readAsString())['languagePreference'],
+      settings['languagePreference'],
       'en',
     );
     final legacy = await SharedPreferences.getInstance();
@@ -3539,12 +3541,12 @@ void main() {
       expect(oldPreferences.containsKey('authToken'), isFalse);
       expect(oldPreferences.containsKey('sshPass'), isFalse);
 
-      final settingsFile = File('${temporary.path}/.mdslens/settings.json');
+      final settingsFile = File('${temporary.path}/.mdslens/settings.toml');
       final settingsText = await settingsFile.readAsString();
       expect(settingsText, isNot(contains('login-secret')));
       expect(settingsText, isNot(contains('session-secret')));
       expect(settingsText, isNot(contains('ssh-secret')));
-      expect(jsonDecode(settingsText)['themeMode'], 2);
+      expect(decodeTomlDocument(settingsText)['themeMode'], 2);
 
       final second = AppState(
         userDataStore: store,
@@ -3558,6 +3560,43 @@ void main() {
       expect(second.loggedIn, isTrue);
     },
   );
+
+  test('Legacy JSON settings migrate once to TOML without deleting backup',
+      () async {
+    final temporary = await Directory.systemTemp.createTemp(
+      'mdslens-json-migration-test-',
+    );
+    addTearDown(() => temporary.delete(recursive: true));
+    final root = Directory('${temporary.path}/.mdslens');
+    await root.create(recursive: true);
+    final legacy = File('${root.path}/settings.json');
+    await legacy.writeAsString(jsonEncode({
+      'themeMode': 2,
+      'shotHistory': jsonEncode(['163701', '163700']),
+      'lastConfigJson': jsonEncode({
+        'shot': '163701',
+        'columns': [
+          [
+            {'title': 'Migrated panel'},
+          ],
+        ],
+      }),
+    }));
+
+    final store = UserDataStore(rootOverride: root);
+    final settings = await store.readSettings();
+    expect(settings?['themeMode'], 2);
+    expect(settings?['shotHistory'], ['163701', '163700']);
+    expect(settings?['lastConfiguration'], isA<Map>());
+    expect(await legacy.exists(), isTrue);
+
+    final tomlFile = File('${root.path}/settings.toml');
+    expect(await tomlFile.exists(), isTrue);
+    final migrated = decodeTomlDocument(await tomlFile.readAsString());
+    expect(migrated['themeMode'], 2);
+    expect(migrated['shotHistory'], ['163701', '163700']);
+    expect(migrated['lastConfiguration'], isA<Map>());
+  });
 
   test('Shot history retention is bounded, optional, and persisted', () async {
     final temporary = await Directory.systemTemp.createTemp(

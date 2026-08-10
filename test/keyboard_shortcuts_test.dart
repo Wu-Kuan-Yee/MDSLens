@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mdslens/services/keyboard_shortcuts.dart';
+import 'package:mdslens/services/toml_codec.dart';
 
 void main() {
   test('platform defaults expose scoped shortcut sequences', () {
@@ -80,7 +81,7 @@ void main() {
     }
   });
 
-  test('shortcut settings survive JSON encoding and decoding', () {
+  test('shortcut settings survive TOML encoding and decoding', () {
     final defaults = defaultMdsShortcutBindings();
     final customized = Map<MdsShortcutCommand, MdsShortcutBinding>.of(defaults)
       ..[MdsShortcutCommand.pointMode] = MdsShortcutBinding(
@@ -97,9 +98,12 @@ void main() {
       )
       ..[MdsShortcutCommand.latestShot] = const MdsShortcutBinding();
 
-    final decoded = decodeMdsShortcutBindings(
-      encodeMdsShortcutBindings(customized),
+    final document = decodeTomlDocument(
+      encodeTomlDocument({
+        'shortcuts': encodeMdsShortcutBindings(customized),
+      }),
     );
+    final decoded = decodeMdsShortcutBindings(document['shortcuts']);
 
     expect(
       decoded[MdsShortcutCommand.pointMode]!.primary,

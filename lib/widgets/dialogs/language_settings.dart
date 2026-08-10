@@ -52,7 +52,7 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: const ['json'],
+        allowedExtensions: const ['toml'],
         allowMultiple: false,
         withData: true,
       );
