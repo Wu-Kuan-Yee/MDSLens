@@ -103,4 +103,44 @@ void main() {
       'dropdown-vim-dropdown-option-39',
     );
   });
+
+  testWidgets('long dropdown keeps its scrollbar inside a narrow viewport', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 640);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: PolishedDropdown<int>(
+              id: 'narrow-dropdown',
+              value: 0,
+              minimumMenuWidth: 280,
+              menuMaxHeight: 360,
+              showScrollbar: true,
+              options: [
+                for (var index = 0; index < 40; index++)
+                  PolishedDropdownOption(
+                    value: index,
+                    label: 'Locale $index',
+                  ),
+              ],
+              onChanged: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('narrow-dropdown-anchor')));
+    await tester.pumpAndSettle();
+
+    final scrollbarRect = tester.getRect(
+      find.byType(Scrollbar),
+    );
+    expect(scrollbarRect.left, greaterThanOrEqualTo(0));
+    expect(scrollbarRect.right, lessThanOrEqualTo(320));
+  });
 }

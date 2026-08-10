@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:mdslens/i18n/localized_material.dart';
 import 'package:flutter/services.dart';
@@ -280,7 +281,19 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
       (option) => option.value == widget.value,
       orElse: () => widget.options.first,
     );
-    final menuWidth = widget.minimumMenuWidth.clamp(120, 360).toDouble();
+    // MenuAnchor positions the overlay near the trigger, but on narrow
+    // screens its maximum width must still fit inside the viewport. Otherwise
+    // the right edge (especially the scrollbar thumb) is clipped by the
+    // overlay's hard viewport boundary.
+    final viewportWidth = MediaQuery.sizeOf(context).width;
+    final maximumMenuWidth = math.max(
+      96.0,
+      math.min(360.0, viewportWidth - 24),
+    );
+    final menuWidth = math.min(
+      math.max(120.0, widget.minimumMenuWidth),
+      maximumMenuWidth,
+    );
     final menuItems = <Widget>[
       if (widget.menuAction != null) ...[
         _withMenuVimNavigation(
@@ -336,7 +349,9 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
           EdgeInsets.symmetric(horizontal: 6, vertical: 7),
         ),
         minimumSize: WidgetStatePropertyAll(Size(menuWidth, 0)),
-        maximumSize: WidgetStatePropertyAll(Size(360, widget.menuMaxHeight)),
+        maximumSize: WidgetStatePropertyAll(
+          Size(maximumMenuWidth, widget.menuMaxHeight),
+        ),
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
@@ -449,6 +464,9 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
         interactive: true,
         thumbVisibility: const WidgetStatePropertyAll(true),
         trackVisibility: const WidgetStatePropertyAll(true),
+        thickness: const WidgetStatePropertyAll(7),
+        crossAxisMargin: 4,
+        mainAxisMargin: 4,
       ),
       child: menuAnchor,
     );
