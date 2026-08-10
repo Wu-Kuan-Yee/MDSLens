@@ -3561,7 +3561,7 @@ void main() {
     },
   );
 
-  test('Legacy JSON settings migrate once to TOML without deleting backup',
+  test('Legacy JSON settings migrate to TOML before the old file is removed',
       () async {
     final temporary = await Directory.systemTemp.createTemp(
       'mdslens-json-migration-test-',
@@ -3588,14 +3588,13 @@ void main() {
     expect(settings?['themeMode'], 2);
     expect(settings?['shotHistory'], ['163701', '163700']);
     expect(settings?['lastConfiguration'], isA<Map>());
-    expect(await legacy.exists(), isTrue);
-
     final tomlFile = File('${root.path}/settings.toml');
     expect(await tomlFile.exists(), isTrue);
     final migrated = decodeTomlDocument(await tomlFile.readAsString());
     expect(migrated['themeMode'], 2);
     expect(migrated['shotHistory'], ['163701', '163700']);
     expect(migrated['lastConfiguration'], isA<Map>());
+    expect(await legacy.exists(), isFalse);
   });
 
   test('Shot history retention is bounded, optional, and persisted', () async {

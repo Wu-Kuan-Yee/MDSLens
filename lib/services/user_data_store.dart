@@ -50,14 +50,22 @@ class UserDataStore {
       await _prepareDirectories(root);
       final file = File(_join(root.path, 'settings.toml'));
       if (await file.exists()) {
-        return decodeTomlDocument(await file.readAsString());
+        final decoded = decodeTomlDocument(await file.readAsString());
+        await _removeMigratedLegacySettings(root);
+        return decoded;
       }
       final legacy = File(_join(root.path, 'settings.json'));
       if (!await legacy.exists()) return <String, dynamic>{};
       final decoded = jsonDecode(await legacy.readAsString());
       if (decoded is! Map) return <String, dynamic>{};
       final migrated = _migrateLegacyJsonSettings(decoded);
-      await writeSettings(migrated);
+      if (await writeSettings(migrated)) {
+        // Delete only after the replacement document can be parsed again.
+        // A failed or partial migration always leaves the legacy file intact.
+        final replacement = File(_join(root.path, 'settings.toml'));
+        decodeTomlDocument(await replacement.readAsString());
+        await _removeMigratedLegacySettings(root);
+      }
       return migrated;
     } catch (_) {
       return <String, dynamic>{};
@@ -117,6 +125,11 @@ class UserDataStore {
     await Directory(_join(root.path, 'configurations')).create(recursive: true);
     await Directory(_join(root.path, 'cache')).create(recursive: true);
     await Directory(_join(root.path, 'languages')).create(recursive: true);
+  }
+
+  Future<void> _removeMigratedLegacySettings(Directory root) async {
+    final legacy = File(_join(root.path, 'settings.json'));
+    if (await legacy.exists()) await legacy.delete();
   }
 
   static String _join(String parent, String child) {

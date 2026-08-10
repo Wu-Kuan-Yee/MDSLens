@@ -2268,16 +2268,22 @@ class AppState extends ChangeNotifier {
         if (value is Map || value is List) return value;
         if (value is! String || value.isEmpty) return null;
         try {
-          return decodeTomlDocument(value)['value'];
+          final decoded = decodeTomlDocument(value);
+          // A legacy JSON array such as `["163702"]` is also syntactically
+          // valid TOML, where it means a quoted table header.  Only accept the
+          // one-release TOML wrapper when it actually contains the explicit
+          // `value` key; otherwise continue to the legacy JSON decoder below.
+          if (decoded.containsKey('value')) return decoded['value'];
         } catch (_) {
-          // One release of MDSLens used JSON strings inside platform
-          // preferences. Read them once so savePreferences can rewrite the
-          // complete document as TOML without losing user state.
-          try {
-            return jsonDecode(value);
-          } catch (_) {
-            return null;
-          }
+          // Fall through to the legacy JSON decoder.
+        }
+        // One release of MDSLens used JSON strings inside platform
+        // preferences. Read them once so savePreferences can rewrite the
+        // complete document as TOML without losing user state.
+        try {
+          return jsonDecode(value);
+        } catch (_) {
+          return null;
         }
       }
 
