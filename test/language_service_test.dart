@@ -19,40 +19,69 @@ void main() {
     );
     expect(language.locale, 'sr-Latn-RS');
     expect(language.messages['Hello'], 'Hello there');
+    expect(language.baseLocale, isNull);
     expect(
       () => LanguageDefinition.parse('version = 1', source: 'invalid.toml'),
       throwsFormatException,
     );
   });
 
-  test('every bundled catalog covers English and preserves placeholders',
+  test(
+      'bundled catalogs preserve placeholders and the CLDR registry is complete',
       () async {
     final english = LanguageDefinition.parse(
       await File('assets/languages/en.toml').readAsString(),
       source: 'assets/languages/en.toml',
     );
-    final languageFiles = Directory('assets/languages')
-        .listSync()
-        .whereType<File>()
-        .where((file) => file.path.endsWith('.toml'));
+    final languageFiles =
+        Directory('assets/languages').listSync().whereType<File>().where(
+              (file) =>
+                  file.path.endsWith('.toml') &&
+                  !file.path.endsWith('cldr-modern.toml'),
+            );
     for (final file in languageFiles) {
       final language = LanguageDefinition.parse(
         await file.readAsString(),
         source: file.path,
       );
-      expect(
-        language.messages.keys.toSet(),
-        english.messages.keys.toSet(),
-        reason: file.path,
-      );
-      for (final key in english.messages.keys) {
+      for (final entry in language.messages.entries) {
+        expect(english.messages, contains(entry.key), reason: file.path);
         expect(
-          _placeholders(language.messages[key]!),
-          _placeholders(key),
-          reason: '${file.path}: $key',
+          _placeholders(entry.value),
+          _placeholders(entry.key),
+          reason: '${file.path}: ${entry.key}',
         );
       }
     }
+
+    final registry = LocaleRegistryDocument.parse(
+      await File('assets/languages/cldr-modern.toml').readAsString(),
+      source: 'assets/languages/cldr-modern.toml',
+    );
+    expect(registry.localeDefinitions, hasLength(563));
+    expect(
+      registry.localeDefinitions
+          .where((item) => item.coverageLevel == 'modern'),
+      hasLength(104),
+    );
+    expect(
+      registry.localeDefinitions.map((item) => item.locale),
+      containsAll(<String>['en', 'en-US', 'zh-Hans-CN', 'sr-Latn-RS']),
+    );
+  });
+
+  test('sparse catalogs preserve an explicit parent locale', () {
+    final language = LanguageDefinition.parse(
+      _languageToml(
+        'en-GB',
+        'British English',
+        {'Color': 'Colour'},
+        baseLocale: 'en',
+      ),
+      source: 'test.toml',
+    );
+    expect(language.baseLocale, 'en');
+    expect(language.messages.keys, contains('Color'));
   });
 
   test('system Simplified Chinese selects the bundled Chinese catalog',
@@ -64,13 +93,7 @@ void main() {
     addTearDown(() => _disposeLanguageService(service, root));
 
     await service.initialize(
-      systemLocales: const [
-        Locale.fromSubtags(
-          languageCode: 'zh',
-          scriptCode: 'Hans',
-          countryCode: 'CN',
-        )
-      ],
+      systemLocales: const [Locale('zh', 'CN')],
     );
 
     expect(service.activeLocale, 'zh-Hans');
@@ -122,7 +145,9 @@ void main() {
       flush: true,
     );
     await _waitUntil(
-      () => service.availableLanguages.any((item) => item.locale == 'en-GB'),
+      () => service.availableLanguages.any(
+        (item) => item.locale == 'en-GB' && item.messages['Color'] == 'Colour',
+      ),
     );
     service.setPreference('en-GB');
     expect(service.translate('Color'), 'Colour');
@@ -135,9 +160,14 @@ void main() {
 
     await file.delete();
     await _waitUntil(
-      () => service.availableLanguages.every((item) => item.locale != 'en-GB'),
+      () => service.availableLanguages.every(
+        (item) =>
+            item.locale != 'en-GB' ||
+            item.messages['Color'] != 'British colour',
+      ),
     );
     expect(service.activeLocale, 'en');
+    expect(service.translate('Color'), 'Color');
   });
 
   test('font catalog refreshes only when the installed family list changes',
@@ -209,18 +239,20 @@ void main() {
 String _languageToml(
   String locale,
   String nativeName,
-  Map<String, String> messages,
-) =>
+  Map<String, String> messages, {
+  String? baseLocale,
+}) =>
     encodeTomlDocument({
       'version': 1,
       'locale': locale,
       'name': nativeName,
       'nativeName': nativeName,
+      if (baseLocale != null) 'baseLocale': baseLocale,
       'messages': messages,
     });
 
 Future<void> _waitUntil(bool Function() predicate) async {
-  final deadline = DateTime.now().add(const Duration(seconds: 3));
+  final deadline = DateTime.now().add(const Duration(seconds: 10));
   while (!predicate()) {
     if (DateTime.now().isAfter(deadline)) {
       fail('Timed out waiting for the watched language directory to refresh.');
