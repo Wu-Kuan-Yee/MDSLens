@@ -180,4 +180,54 @@ void main() {
     expect(tester.getSize(labelFinder).height, greaterThan(24));
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('matched dropdown never expands wider than its anchor', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 640);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 210,
+              child: PolishedDropdown<int>(
+                id: 'matched-dropdown',
+                value: 0,
+                minimumMenuWidth: 420,
+                menuMaxHeight: 240,
+                menuLabelMaxLines: null,
+                matchAnchorWidth: true,
+                showScrollbar: true,
+                options: const [
+                  PolishedDropdownOption(value: 0, label: 'System'),
+                  PolishedDropdownOption(
+                    value: 1,
+                    label: 'A long native language name — A long English name',
+                  ),
+                ],
+                onChanged: (_) {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('matched-dropdown-anchor')));
+    await tester.pumpAndSettle();
+
+    final anchorWidth = tester
+        .getSize(find.byKey(const ValueKey('matched-dropdown-anchor')))
+        .width;
+    final scrollableContentWidth = tester
+        .getSize(find.byKey(const ValueKey('matched-dropdown-scrollbar')))
+        .width;
+    // The menu adds six logical pixels of padding on each side.
+    expect(scrollableContentWidth + 12, lessThanOrEqualTo(anchorWidth + 0.01));
+    expect(tester.takeException(), isNull);
+  });
 }

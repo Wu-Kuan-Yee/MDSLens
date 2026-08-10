@@ -46,6 +46,7 @@ class PolishedDropdown<T> extends StatefulWidget {
     this.minimumMenuWidth = 172,
     this.menuMaxHeight = 280,
     this.menuLabelMaxLines = 1,
+    this.matchAnchorWidth = false,
     this.showScrollbar = false,
     this.iconOnly = false,
     this.tooltip,
@@ -68,6 +69,12 @@ class PolishedDropdown<T> extends StatefulWidget {
   /// The menu item then grows vertically and remains reachable through the
   /// menu's scroll view.
   final int? menuLabelMaxLines;
+
+  /// Makes the expanded menu exactly as wide as its closed control.
+  ///
+  /// This is useful for full-width form fields: the menu remains aligned with
+  /// the field at every responsive width while long labels wrap vertically.
+  final bool matchAnchorWidth;
 
   /// Shows an always-visible, draggable scrollbar inside long option lists.
   ///
@@ -287,6 +294,20 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.matchAnchorWidth) return _buildDropdown(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (!constraints.hasBoundedWidth) return _buildDropdown(context);
+        final anchorWidth = constraints.maxWidth;
+        return SizedBox(
+          width: anchorWidth,
+          child: _buildDropdown(context, anchorWidth: anchorWidth),
+        );
+      },
+    );
+  }
+
+  Widget _buildDropdown(BuildContext context, {double? anchorWidth}) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final selected = widget.options.firstWhere(
@@ -298,15 +319,21 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
     // the right edge (especially the scrollbar thumb) is clipped by the
     // overlay's hard viewport boundary.
     final viewportWidth = MediaQuery.sizeOf(context).width;
-    final maximumMenuWidth = math.max(
-      96.0,
+    final viewportMenuWidth = math.max(
+      0.0,
       math.min(480.0, viewportWidth - 24),
     );
-    final menuWidth = math.min(
-      math.max(120.0, widget.minimumMenuWidth),
-      maximumMenuWidth,
-    );
-    final menuContentWidth = math.max(84.0, menuWidth - 12);
+    final menuWidth = anchorWidth == null
+        ? math.min(
+            math.max(120.0, widget.minimumMenuWidth),
+            math.max(96.0, viewportMenuWidth),
+          )
+        : math.min(anchorWidth, viewportMenuWidth);
+    final maximumMenuWidth =
+        anchorWidth == null ? math.max(96.0, viewportMenuWidth) : menuWidth;
+    final menuContentWidth = anchorWidth == null
+        ? math.max(84.0, menuWidth - 12)
+        : math.max(0.0, menuWidth - 12);
     final menuItems = <Widget>[
       if (widget.menuAction != null) ...[
         _withMenuVimNavigation(
@@ -375,6 +402,7 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
       // long history/options list. The anchor itself remains animated; keep
       // the overlay stable so every item can be focused and scrolled to.
       animated: false,
+      crossAxisUnconstrained: anchorWidth == null,
       clipBehavior: Clip.antiAlias,
       consumeOutsideTap: false,
       onOpen: () {
