@@ -54,6 +54,33 @@ deleting it updates an open Language panel and the running interface without a
 restart. Bundled application assets are read-only and change only when a new
 application build is installed.
 
+## UI coverage contract
+
+All application pages, dialogs, menus, tooltips, input labels, button labels,
+status messages, errors, accessibility labels, and selectable text import
+`package:mdslens/i18n/localized_material.dart`. Its `Text`, `Tooltip`, and
+`SelectableText` wrappers translate source-keyed strings at build time,
+including rich text spans. Strings assembled outside a widget must use
+`context.tr(...)` explicitly; parameterized messages use named placeholders
+such as `{value1}` rather than interpolating before translation. Runtime data
+(signal names, URLs, paths, shot numbers, and server-provided diagnostics) is
+not translated, but any surrounding label or status template is.
+
+The English catalog is generated from the Dart UI sources and every bundled
+catalog is required to have the same keys and placeholders. Run both checks
+before committing a UI change:
+
+```sh
+dart tool/update_english_catalog.dart --check
+flutter test test/language_service_test.dart
+```
+
+The language test parses every TOML file in `assets/languages/`, verifies exact
+key parity with English, checks placeholder parity, and exercises ordinary
+`Text`, `SelectableText`, interpolation, system-locale selection, and live
+catalog add/edit/remove. This keeps new UI strings from silently bypassing
+translation or leaving a bundled language incomplete.
+
 ## Font discovery
 
 The Customize Fonts panel queries the host rather than presenting a hard-coded

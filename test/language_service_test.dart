@@ -25,25 +25,33 @@ void main() {
     );
   });
 
-  test('bundled Chinese catalog covers English and preserves placeholders',
+  test('every bundled catalog covers English and preserves placeholders',
       () async {
     final english = LanguageDefinition.parse(
       await File('assets/languages/en.toml').readAsString(),
       source: 'assets/languages/en.toml',
     );
-    final chinese = LanguageDefinition.parse(
-      await File('assets/languages/zh-Hans.toml').readAsString(),
-      source: 'assets/languages/zh-Hans.toml',
-    );
-
-    expect(chinese.locale, 'zh-Hans');
-    expect(chinese.messages.keys.toSet(), english.messages.keys.toSet());
-    for (final key in english.messages.keys) {
-      expect(
-        _placeholders(chinese.messages[key]!),
-        _placeholders(key),
-        reason: key,
+    final languageFiles = Directory('assets/languages')
+        .listSync()
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.toml'));
+    for (final file in languageFiles) {
+      final language = LanguageDefinition.parse(
+        await file.readAsString(),
+        source: file.path,
       );
+      expect(
+        language.messages.keys.toSet(),
+        english.messages.keys.toSet(),
+        reason: file.path,
+      );
+      for (final key in english.messages.keys) {
+        expect(
+          _placeholders(language.messages[key]!),
+          _placeholders(key),
+          reason: '${file.path}: $key',
+        );
+      }
     }
   });
 
@@ -186,13 +194,14 @@ void main() {
           home: Column(
             children: [
               Text('Hello'),
+              SelectableText('Hello'),
               Text('Loaded 3 panels'),
             ],
           ),
         ),
       ),
     );
-    expect(find.text('Greetings'), findsOneWidget);
+    expect(find.text('Greetings'), findsNWidgets(2));
     expect(find.text('3 panels ready'), findsOneWidget);
   });
 }
