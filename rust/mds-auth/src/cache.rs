@@ -6,7 +6,7 @@
 //! Ported from the XOR stream cipher in `src/core/api_auth.cpp`.
 //! Uses SHA-256 key derivation with machine-specific entropy + random salt.
 
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use mds_core::types::CachedAuth;
 use ring::rand::{SecureRandom, SystemRandom};
 use serde::{Deserialize, Serialize};
@@ -59,12 +59,16 @@ fn hostname_cmd() -> String {
 
 fn home_dir() -> String {
     #[cfg(target_os = "windows")]
-    { std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\Users\\Default".into()) }
+    {
+        std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\Users\\Default".into())
+    }
     #[cfg(not(target_os = "windows"))]
-    { std::env::var("HOME").unwrap_or_else(|_| "/tmp".into()) }
+    {
+        std::env::var("HOME").unwrap_or_else(|_| "/tmp".into())
+    }
 }
 
-/// Auth cache file format (JSON wrapper).
+/// Auth cache file format (TOML wrapper).
 #[derive(Debug, Serialize, Deserialize)]
 struct CacheFile {
     version: u32,
@@ -105,11 +109,7 @@ struct SshPayload {
 /// Derive a machine-specific encryption key using SHA-256.
 /// Matches the C++ `localAuthKey()` derivation.
 fn local_auth_key() -> Vec<u8> {
-    let entropy = format!(
-        "{}|{}|MDSLens EAST auth cache",
-        machine_id(),
-        home_dir(),
-    );
+    let entropy = format!("{}|{}|MDSLens EAST auth cache", machine_id(), home_dir(),);
     let mut hasher = Sha256::new();
     hasher.update(entropy.as_bytes());
     hasher.finalize().to_vec()
@@ -141,7 +141,11 @@ fn crypt_auth_payload(data: &[u8], salt: &[u8], key: &[u8]) -> Vec<u8> {
 /// Load cached authentication from disk.
 pub fn load_cached_auth(cache_path: &str) -> Option<CachedAuth> {
     let content = std::fs::read_to_string(cache_path).ok()?;
-    let cache_file: CacheFile = serde_json::from_str(&content).ok()?;
+    let cache_file: CacheFile = toml::from_str(&content)
+        .ok()
+        // Compatibility reader for encrypted caches created before the TOML
+        // migration. New writes never use JSON.
+        .or_else(|| serde_json::from_str(&content).ok())?;
 
     if cache_file.version != 1 {
         return None;
@@ -152,7 +156,10 @@ pub fn load_cached_auth(cache_path: &str) -> Option<CachedAuth> {
     let key = local_auth_key();
     let decrypted = crypt_auth_payload(&encrypted, &salt, &key);
 
-    let payload: AuthPayload = serde_json::from_slice(&decrypted).ok()?;
+    let decrypted = String::from_utf8(decrypted).ok()?;
+    let payload: AuthPayload = toml::from_str(&decrypted)
+        .ok()
+        .or_else(|| serde_json::from_str(&decrypted).ok())?;
 
     Some(CachedAuth {
         user_name: payload.user_name,
@@ -165,7 +172,11 @@ pub fn load_cached_auth(cache_path: &str) -> Option<CachedAuth> {
                 _ => mds_core::types::SshMode::Disabled,
             },
             host: payload.ssh.host,
-            port: if payload.ssh.port == 0 { 22 } else { payload.ssh.port },
+            port: if payload.ssh.port == 0 {
+                22
+            } else {
+                payload.ssh.port
+            },
             user: payload.ssh.user,
             password: payload.ssh.password,
             identity_file: payload.ssh.identity_file,
@@ -193,14 +204,14 @@ pub fn save_cached_auth(cache_path: &str, auth: &CachedAuth) -> Result<(), Strin
         },
     };
 
-    let payload_json = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+    let payload_toml = toml::to_string(&payload).map_err(|e| e.to_string())?;
 
     let rng = SystemRandom::new();
     let mut salt = vec![0u8; 16];
     rng.fill(&mut salt).map_err(|e| e.to_string())?;
 
     let key = local_auth_key();
-    let encrypted = crypt_auth_payload(&payload_json, &salt, &key);
+    let encrypted = crypt_auth_payload(payload_toml.as_bytes(), &salt, &key);
 
     let cache_file = CacheFile {
         version: 1,
@@ -208,7 +219,7 @@ pub fn save_cached_auth(cache_path: &str, auth: &CachedAuth) -> Result<(), Strin
         payload: BASE64.encode(&encrypted),
     };
 
-    let content = serde_json::to_string_pretty(&cache_file).map_err(|e| e.to_string())?;
+    let content = toml::to_string_pretty(&cache_file).map_err(|e| e.to_string())?;
     std::fs::write(cache_path, &content).map_err(|e| e.to_string())?;
 
     // Set file permissions to owner-only (0600)
@@ -229,9 +240,7 @@ pub fn token_expires_soon(token: &str) -> bool {
     }
 
     // Decode JWT payload (second segment)
-    let payload_b64 = parts[1]
-        .replace('-', "+")
-        .replace('_', "/");
+    let payload_b64 = parts[1].replace('-', "+").replace('_', "/");
 
     let payload_json = BASE64.decode(payload_b64.as_bytes()).ok();
     let Some(payload_json) = payload_json else {
@@ -321,7 +330,7 @@ mod tests {
 
         // Verify file exists and has correct structure
         let content = std::fs::read_to_string(&tmp).unwrap();
-        let file: CacheFile = serde_json::from_str(&content).unwrap();
+        let file: CacheFile = toml::from_str(&content).unwrap();
         assert_eq!(file.version, 1);
         assert!(!file.salt.is_empty());
         assert!(!file.payload.is_empty());
@@ -338,8 +347,35 @@ mod tests {
     }
 
     #[test]
+    fn test_loads_legacy_json_cache_without_writing_json() {
+        let tmp = std::env::temp_dir().join("mdslens_test_legacy_auth.cache");
+        let payload = AuthPayload {
+            user_name: "legacy-user".into(),
+            password: "legacy-password".into(),
+            token: "legacy-token".into(),
+            ssh: SshPayload::default(),
+        };
+        let salt = b"0123456789abcdef";
+        let legacy_payload = serde_json::to_vec(&payload).unwrap();
+        let encrypted = crypt_auth_payload(&legacy_payload, salt, &local_auth_key());
+        let legacy_file = CacheFile {
+            version: 1,
+            salt: BASE64.encode(salt),
+            payload: BASE64.encode(encrypted),
+        };
+        std::fs::write(&tmp, serde_json::to_string(&legacy_file).unwrap()).unwrap();
+
+        let loaded = load_cached_auth(tmp.to_str().unwrap()).unwrap();
+        assert_eq!(loaded.user_name, "legacy-user");
+        assert_eq!(loaded.password, "legacy-password");
+        assert_eq!(loaded.token, "legacy-token");
+
+        std::fs::remove_file(&tmp).ok();
+    }
+
+    #[test]
     fn test_load_nonexistent() {
-        assert!(load_cached_auth("/tmp/mdslens_nonexistent_cache.json").is_none());
+        assert!(load_cached_auth("/tmp/mdslens_nonexistent_cache.toml").is_none());
     }
 
     #[test]
