@@ -85,6 +85,31 @@ class BuildAppTests(unittest.TestCase):
             {"usr/lib/mdslens/mdslens", "usr/bin/mdslens"},
         )
 
+    def test_deb_verification_requires_both_gtk_runtime_generations(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            package = Path(temporary) / "mdslens-linux-x64.deb"
+            package.touch()
+            listing = "\n".join(
+                [
+                    "./usr/lib/mdslens/mdslens",
+                    "./usr/bin/mdslens",
+                    "./usr/share/applications/com.mdslens.app.desktop",
+                    "./usr/share/icons/hicolor/512x512/apps/com.mdslens.app.png",
+                    "./usr/share/mime/packages/com.mdslens.configuration.xml",
+                ]
+            )
+            with mock.patch.object(
+                verify_linux_packages,
+                "output",
+                side_effect=[
+                    "mdslens\n",
+                    "amd64\n",
+                    "libc6, libgtk-3-0t64 | libgtk-3-0, libsecret-1-0\n",
+                    listing,
+                ],
+            ):
+                verify_linux_packages.verify_deb(package, "x64")
+
     def test_linux_portable_archive_has_a_single_named_root(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -144,7 +169,7 @@ class BuildAppTests(unittest.TestCase):
                     metadata = destination / "meta/snap.yaml"
                     metadata.parent.mkdir(parents=True)
                     metadata.write_text(
-                        "name: mdslens\narchitectures: [amd64]\n"
+                        "name: mdslens\narchitectures:\n  - amd64\n"
                         "apps:\n  mdslens:\n"
                         "    command: lib/mdslens/mdslens\n",
                         encoding="utf-8",

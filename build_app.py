@@ -1296,9 +1296,11 @@ def package_linux_snap(
                 version: '{version}'
                 summary: MDSplus signal waveform viewer
                 description: View and compare signal waveforms from MDSplus experiments.
+                # This is the metadata consumed by snapd inside the packed
+                # snap, not snapcraft.yaml's build-plan syntax.  snapd expects
+                # a plain list of runnable architectures here.
                 architectures:
-                  - build-on: [{snap_arch}]
-                    run-on: [{snap_arch}]
+                  - {snap_arch}
                 grade: stable
                 confinement: classic
                 apps:
@@ -1359,7 +1361,12 @@ def package_linux(formats: set[str], no_build: bool, arch: str, version: str) ->
                     "\n".join([
                         "Package: mdslens", f"Version: {version}", f"Architecture: {deb_arch}",
                         "Maintainer: MDSLens Contributors",
-                        "Depends: libc6, libegl1, libgles2, libgtk-3-0, "
+                        # Debian/Ubuntu renamed the GTK 3 runtime during the
+                        # time64 transition.  Keep one DEB usable on both
+                        # generations instead of making Ubuntu 24.04+ reject
+                        # it before installation.
+                        "Depends: libc6, libegl1, libgles2, "
+                        "libgtk-3-0t64 | libgtk-3-0, "
                         "libsecret-1-0, libstdc++6",
                         "Section: science", "Priority: optional",
                         "Description: MDSplus signal waveform viewer", "",

@@ -86,6 +86,12 @@ def verify_deb(package: Path, architecture: str) -> None:
         f"{package.name} has unexpected DEB metadata: "
         f"package={package_name!r}, architecture={package_architecture!r}",
     )
+    dependencies = output("dpkg-deb", "--field", str(package), "Depends")
+    require(
+        "libgtk-3-0t64 | libgtk-3-0" in dependencies,
+        f"{package.name} does not support both GTK 3 dependency generations: "
+        f"{dependencies!r}",
+    )
     listing = output("dpkg-deb", "--contents", str(package))
     for expected in (
         "./usr/lib/mdslens/mdslens",
@@ -120,12 +126,17 @@ def verify_rpm(package: Path, architecture: str) -> None:
     )
 
 
-def verify_arch(package: Path) -> None:
+def verify_arch(package: Path, architecture: str) -> None:
     require(package.is_file(), f"Missing Arch package: {package}")
     paths = normalized_paths(output("tar", "-tf", str(package)))
     require_paths(paths, package)
     metadata = output("tar", "-xOf", str(package), "./.PKGINFO")
     require("pkgname = mdslens" in metadata, f"{package.name} has no MDSLens PKGINFO")
+    expected_arch = {"x64": "x86_64", "arm64": "aarch64"}[architecture]
+    require(
+        f"arch = {expected_arch}" in metadata,
+        f"{package.name} has the wrong Arch package architecture",
+    )
 
 
 def verify_appimage(image: Path) -> None:
@@ -211,7 +222,29 @@ def verify_snap(package: Path, architecture: str) -> None:
         metadata = metadata_path.read_text(encoding="utf-8")
     expected_arch = {"x64": "amd64", "arm64": "arm64"}[architecture]
     require("name: mdslens" in metadata, f"{package.name} has no MDSLens Snap metadata")
-    require(expected_arch in metadata, f"{package.name} has wrong Snap architecture")
+    architecture_match = re.search(
+        r"(?ms)^architectures:\s*(?:\[\s*([^\]]+)\s*\]|\n(?P<items>(?:\s+-\s+[^\n]+\n?)+))",
+        metadata,
+    )
+    require(
+        architecture_match is not None,
+        f"{package.name} has no runnable Snap architecture list",
+    )
+    architecture_text = (
+        architecture_match.group(1)
+        if architecture_match.group(1) is not None
+        else architecture_match.group("items")
+    )
+    declared_architectures = {
+        value.strip().strip("'\"")
+        for value in re.findall(r"[A-Za-z0-9_-]+", architecture_text or "")
+        if value != "-"
+    }
+    require(
+        declared_architectures == {expected_arch},
+        f"{package.name} declares Snap architectures "
+        f"{sorted(declared_architectures)}, expected {[expected_arch]}",
+    )
     require(
         "command: lib/mdslens/mdslens" in metadata,
         f"{package.name} does not launch its packaged MDSLens executable",
@@ -295,7 +328,7 @@ def main() -> None:
     for package in args.rpm:
         verify_rpm(package, args.architecture)
     for package in args.arch_package:
-        verify_arch(package)
+        verify_arch(package, args.architecture)
     for image in args.appimage:
         verify_appimage(image)
     for bundle in args.flatpak:
