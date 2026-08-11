@@ -34,12 +34,51 @@ class LanguageSettingsDialog extends StatefulWidget {
 class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
   late String _preference;
   bool _refreshing = false;
+  bool _languageListEntered = false;
+  late final FocusNode _languageListEntryFocusNode;
+  late final FocusScopeNode _languageListScopeNode;
   final Set<String> _selectedLanguageSources = <String>{};
 
   @override
   void initState() {
     super.initState();
     _preference = widget.app.languagePreference;
+    _languageListEntryFocusNode = FocusNode(
+      debugLabel: 'language-list-page',
+    );
+    _languageListScopeNode = FocusScopeNode(
+      debugLabel: 'language-list-page-scope',
+    );
+  }
+
+  @override
+  void dispose() {
+    _languageListEntryFocusNode.dispose();
+    _languageListScopeNode.dispose();
+    super.dispose();
+  }
+
+  void _enterLanguageList() {
+    if (_languageListEntered || !mounted) return;
+    setState(() => _languageListEntered = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_languageListEntered) return;
+      final candidates = _languageListScopeNode.traversalDescendants
+          .where((node) => node.canRequestFocus && !node.skipTraversal)
+          .toList();
+      if (candidates.isNotEmpty) {
+        _languageListScopeNode.requestFocus(candidates.first);
+      }
+    });
+  }
+
+  void _leaveLanguageList() {
+    if (!_languageListEntered || !mounted) return;
+    setState(() => _languageListEntered = false);
+    scheduleVimPageParentFocus(
+      'language-settings',
+      preferredFocus: _languageListEntryFocusNode,
+    );
   }
 
   Future<void> _refresh() async {
@@ -137,6 +176,9 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
         languages.map((language) => language.displayName).take(5).join(', ');
     final suffix = languages.length > 5 ? ', …' : '';
     final count = languages.length;
+    final parentPageId = _languageListEntered
+        ? 'language-settings/languages'
+        : 'language-settings';
     final title = count == 1
         ? context.tr('Remove language file?')
         : context.tr('Remove selected language files?');
@@ -155,7 +197,7 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
         final colors = Theme.of(dialogContext).colorScheme;
         return KeyboardSafeDialog(
           pageId: 'language-settings-removal-confirm',
-          parentPageId: 'language-settings',
+          parentPageId: parentPageId,
           maxWidth: 480,
           title: Row(
             children: [
@@ -205,7 +247,7 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
       // language list can then remove the focused row, so schedule one more
       // parent-page pass after the list has settled and let it choose the
       // nearest remaining language-settings control.
-      scheduleVimPageParentFocus('language-settings');
+      scheduleVimPageParentFocus(parentPageId);
     }
   }
 
@@ -333,12 +375,55 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
               Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      context.tr(
-                        '{count} language file(s) detected',
-                        {'count': languages.length},
+                    child: VimLanguageListEntry(
+                      onEnter: _enterLanguageList,
+                      child: VimActivatable(
+                        onActivate: _enterLanguageList,
+                        child: Focus(
+                          key: const ValueKey('language-list-page'),
+                          focusNode: _languageListEntryFocusNode,
+                          canRequestFocus: !_languageListEntered,
+                          skipTraversal: _languageListEntered,
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(10),
+                              onTap: _enterLanguageList,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 7,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.view_list_rounded,
+                                      size: 20,
+                                      color: colors.primary,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        context.tr(
+                                          '{count} language file(s) detected',
+                                          {'count': languages.length},
+                                        ),
+                                        style: TextStyle(
+                                          color: colors.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ),
+                                    Icon(
+                                      Icons.chevron_right_rounded,
+                                      color: colors.onSurfaceVariant,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                      style: TextStyle(color: colors.onSurfaceVariant),
                     ),
                   ),
                   IconButton(
@@ -361,33 +446,87 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
                   ),
                 ],
               ),
-              for (final language in languages)
-                CheckboxListTile(
-                  key: ValueKey('language-select-${language.source}'),
-                  value: _selectedLanguageSources.contains(language.source),
-                  controlAffinity: ListTileControlAffinity.leading,
-                  secondary: IconButton(
-                    key: ValueKey('language-remove-${language.source}'),
-                    tooltip: context.tr('Remove language file'),
-                    onPressed: () => unawaited(
-                      _confirmLanguageRemoval({language.source}),
+              FocusScope(
+                node: _languageListScopeNode,
+                canRequestFocus: _languageListEntered,
+                skipTraversal: !_languageListEntered,
+                child: VimLanguageListPage(
+                  onExit: _leaveLanguageList,
+                  child: VimPageScope(
+                    pageId: 'language-settings/languages',
+                    parentPageId: 'language-settings',
+                    transient: true,
+                    child: ExcludeFocus(
+                      excluding: !_languageListEntered,
+                      child: Column(
+                        children: [
+                          if (languages.isEmpty)
+                            VimLanguageListItem(
+                              row: 0,
+                              child: Focus(
+                                key: const ValueKey('language-list-empty'),
+                                canRequestFocus: _languageListEntered,
+                                child: ListTile(
+                                  leading: const Icon(Icons.language_rounded),
+                                  title: Text(
+                                    context.tr('No language files detected'),
+                                  ),
+                                ),
+                              ),
+                            )
+                          else
+                            for (var index = 0;
+                                index < languages.length;
+                                index++)
+                              VimLanguageListItem(
+                                row: index,
+                                child: CheckboxListTile(
+                                  key: ValueKey(
+                                    'language-select-${languages[index].source}',
+                                  ),
+                                  value: _selectedLanguageSources.contains(
+                                    languages[index].source,
+                                  ),
+                                  controlAffinity:
+                                      ListTileControlAffinity.leading,
+                                  secondary: IconButton(
+                                    key: ValueKey(
+                                      'language-remove-${languages[index].source}',
+                                    ),
+                                    tooltip: context.tr(
+                                      'Remove language file',
+                                    ),
+                                    onPressed: () => unawaited(
+                                      _confirmLanguageRemoval({
+                                        languages[index].source,
+                                      }),
+                                    ),
+                                    icon: const Icon(
+                                      Icons.delete_outline_rounded,
+                                    ),
+                                  ),
+                                  title: Text(languages[index].displayName),
+                                  subtitle: Text(
+                                    languages[index].source,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  onChanged: (checked) => setState(() {
+                                    final source = languages[index].source;
+                                    if (checked == true) {
+                                      _selectedLanguageSources.add(source);
+                                    } else {
+                                      _selectedLanguageSources.remove(source);
+                                    }
+                                  }),
+                                ),
+                              ),
+                        ],
+                      ),
                     ),
-                    icon: const Icon(Icons.delete_outline_rounded),
                   ),
-                  title: Text(language.displayName),
-                  subtitle: Text(
-                    language.source,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  onChanged: (checked) => setState(() {
-                    if (checked == true) {
-                      _selectedLanguageSources.add(language.source);
-                    } else {
-                      _selectedLanguageSources.remove(language.source);
-                    }
-                  }),
                 ),
+              ),
             ],
           ),
           actions: [

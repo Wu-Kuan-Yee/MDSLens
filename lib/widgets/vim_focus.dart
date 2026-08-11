@@ -1295,6 +1295,67 @@ class VimKeyboardModeControl extends InheritedWidget {
       row != oldWidget.row || column != oldWidget.column;
 }
 
+/// The language settings dialog treats its detected language files as a
+/// nested one-column document. The count/header is the character on the
+/// parent page; entering it exposes the file rows as the child page.
+class VimLanguageListEntry extends InheritedWidget {
+  const VimLanguageListEntry({
+    super.key,
+    required super.child,
+    required this.onEnter,
+  });
+
+  final VoidCallback onEnter;
+
+  static VimLanguageListEntry? maybeOf(BuildContext context) =>
+      context.findAncestorWidgetOfExactType<VimLanguageListEntry>();
+
+  @override
+  bool updateShouldNotify(VimLanguageListEntry oldWidget) =>
+      !identical(onEnter, oldWidget.onEnter);
+}
+
+/// Semantic row marker for a detected language file. A row may expose more
+/// than one native focus target (the checkbox and its remove button), but
+/// Vim J/K navigation keeps those targets in the same logical row.
+class VimLanguageListItem extends InheritedWidget {
+  const VimLanguageListItem({
+    super.key,
+    required super.child,
+    required this.row,
+  });
+
+  final int row;
+
+  static VimLanguageListItem? maybeOf(BuildContext context) =>
+      context.findAncestorWidgetOfExactType<VimLanguageListItem>();
+
+  @override
+  bool updateShouldNotify(VimLanguageListItem oldWidget) =>
+      row != oldWidget.row;
+}
+
+/// Child-page callback for the detected-language list. It is intentionally
+/// separate from route-backed dialog navigation: the list is rendered in the
+/// existing Language Settings route, so Escape must select the parent header
+/// rather than pop the whole dialog.
+class VimLanguageListPage extends InheritedWidget {
+  const VimLanguageListPage({
+    super.key,
+    required super.child,
+    required this.onExit,
+  });
+
+  final VoidCallback onExit;
+
+  static VimLanguageListPage? maybeOf(BuildContext context) =>
+      context.findAncestorWidgetOfExactType<VimLanguageListPage>();
+
+  @override
+  bool updateShouldNotify(VimLanguageListPage oldWidget) =>
+      !identical(onExit, oldWidget.onExit);
+}
+
 /// Marker used by Layout Setup. Columns and panels are real focusable cells,
 /// but the marker keeps their source coordinates independent of the current
 /// responsive/scrolling geometry.
@@ -2635,6 +2696,121 @@ bool handleVimKeyboardModeNavigationKey(
   return true;
 }
 
+/// Navigate the detected language files as an isolated Vim child page.
+///
+/// The list is deliberately not treated as a continuation of the dialog's
+/// action rows: entering the count/header selects the first file, J/K move
+/// between language rows, H/L move between the row's checkbox and remove
+/// action, and Escape returns to the header without closing the dialog.
+bool handleVimLanguageListNavigationKey(
+  BuildContext context,
+  KeyEvent event,
+) {
+  if (!VimModeScope.enabled(context) ||
+      (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
+    return false;
+  }
+  final keyboard = HardwareKeyboard.instance;
+  if (keyboard.isControlPressed ||
+      keyboard.isAltPressed ||
+      keyboard.isMetaPressed ||
+      keyboard.isShiftPressed) {
+    return false;
+  }
+
+  final current = FocusManager.instance.primaryFocus;
+  final currentContext = current?.context;
+  final entry = currentContext == null
+      ? null
+      : VimLanguageListEntry.maybeOf(currentContext);
+  if (entry != null) {
+    final enters = event.logicalKey == LogicalKeyboardKey.keyI ||
+        event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter ||
+        event.logicalKey == LogicalKeyboardKey.space;
+    if (!enters) return false;
+    if (!_claimVimActivation(context, event)) return true;
+    entry.onEnter();
+    return true;
+  }
+
+  final page =
+      currentContext == null ? null : VimPageScope.maybeOf(currentContext);
+  if (page?.pageId != 'language-settings/languages') return false;
+  final listPage = VimLanguageListPage.maybeOf(currentContext!);
+  if (listPage == null) return false;
+
+  if (event.logicalKey == LogicalKeyboardKey.escape) {
+    if (!_claimVimHierarchyEscape(context, event)) return true;
+    listPage.onExit();
+    return true;
+  }
+
+  final direction = _vimDirectionForKey(event.logicalKey);
+  if (direction == null) return false;
+  final scope = _vimFocusScope(context);
+  if (scope == null || current == null) return true;
+  final targets = _vimFocusTargets(scope).where((target) {
+    final targetContext = target.node.context;
+    return targetContext != null &&
+        VimPageScope.maybeOf(targetContext)?.pageId ==
+            'language-settings/languages' &&
+        VimLanguageListItem.maybeOf(targetContext) != null;
+  }).toList();
+  if (targets.isEmpty) return true;
+
+  final rows = <int, List<_VimFocusTarget>>{};
+  for (final target in targets) {
+    final marker = VimLanguageListItem.maybeOf(target.node.context!);
+    if (marker == null) continue;
+    rows.putIfAbsent(marker.row, () => []).add(target);
+  }
+  final rowNumbers = rows.keys.toList()..sort();
+  if (rowNumbers.isEmpty) return true;
+  for (final row in rows.values) {
+    row.sort((a, b) => a.rect.center.dx.compareTo(b.rect.center.dx));
+  }
+
+  final currentRect = _vimNodeRect(current);
+  _VimFocusTarget? currentTarget;
+  for (final row in rows.values) {
+    for (final target in row) {
+      if (target.node == current ||
+          (currentRect != null && _sameVimRect(target.rect, currentRect))) {
+        currentTarget = target;
+        break;
+      }
+    }
+    if (currentTarget != null) break;
+  }
+  if (currentTarget == null) return true;
+  final currentRow =
+      VimLanguageListItem.maybeOf(currentTarget.node.context!)!.row;
+  final currentItems = rows[currentRow]!;
+  final currentColumn = currentItems.indexOf(currentTarget).clamp(
+        0,
+        currentItems.length - 1,
+      );
+
+  _VimFocusTarget target;
+  final horizontal = direction == TraversalDirection.left ||
+      direction == TraversalDirection.right;
+  if (horizontal) {
+    final step = direction == TraversalDirection.left ? -1 : 1;
+    final nextColumn =
+        (currentColumn + step).clamp(0, currentItems.length - 1).toInt();
+    target = currentItems[nextColumn];
+  } else {
+    final index = rowNumbers.indexOf(currentRow);
+    final step = direction == TraversalDirection.up ? -1 : 1;
+    final nextRow = rowNumbers[(index + step).clamp(0, rowNumbers.length - 1)];
+    final nextItems = rows[nextRow]!;
+    target = nextItems[currentColumn.clamp(0, nextItems.length - 1).toInt()];
+  }
+  _requestVimFocus(target);
+  return true;
+}
+
 List<_VimFocusTarget> _panelExportControlTargets(_VimFocusPage page) {
   final unique = <String, _VimFocusTarget>{};
   for (final target in page.targets) {
@@ -3701,6 +3877,9 @@ KeyEventResult handleVimDialogKey(
   final inputResult = handleVimInputModeKey(navigationContext, event);
   if (inputResult == KeyEventResult.handled) return inputResult;
   if (handleVimUndoRedoKey(navigationContext, event)) {
+    return KeyEventResult.handled;
+  }
+  if (handleVimLanguageListNavigationKey(navigationContext, event)) {
     return KeyEventResult.handled;
   }
   if ((event.logicalKey == LogicalKeyboardKey.keyI ||

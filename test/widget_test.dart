@@ -8093,6 +8093,118 @@ void main() {
     );
   });
 
+  testWidgets('Vim language files are an isolated child page', (tester) async {
+    late Directory root;
+    late AppState app;
+    await tester.runAsync(() async {
+      root = await Directory.systemTemp.createTemp('mdslens-language-vim-');
+      app = AppState(userDataStore: UserDataStore(rootOverride: root));
+      await app.preferencesReady;
+    });
+    addTearDown(() async {
+      app.dispose();
+      await root.delete(recursive: true);
+    });
+    app.setVimMode(true);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.translate_rounded));
+    await tester.pumpAndSettle();
+
+    final languages = app.languages.availableLanguages;
+    expect(languages.length, greaterThan(2));
+    final first = find.byKey(
+      ValueKey('language-select-${languages.first.source}'),
+    );
+    final last = find.byKey(
+      ValueKey('language-select-${languages.last.source}'),
+    );
+    final entryFocus = FocusManager.instance.rootScope.descendants.firstWhere(
+      (node) => node.debugLabel == 'language-list-page',
+    );
+    entryFocus.requestFocus();
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<VimPageScope>()
+          ?.pageId,
+      'language-settings',
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<VimPageScope>()
+          ?.pageId,
+      'language-settings/languages',
+    );
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<VimLanguageListItem>(),
+      isNotNull,
+    );
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<VimLanguageListItem>()
+          ?.row,
+      languages.length - 1,
+    );
+    expect(tester.widget<CheckboxListTile>(last).value, isFalse);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<VimLanguageListItem>()
+          ?.row,
+      0,
+    );
+    expect(first, findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<VimLanguageListItem>()
+          ?.row,
+      1,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<VimLanguageListItem>()
+          ?.row,
+      0,
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<VimPageScope>()
+          ?.pageId,
+      'language-settings',
+    );
+    expect(
+        FocusManager.instance.primaryFocus?.debugLabel, 'language-list-page');
+  });
+
   testWidgets(
       'unavailable automatic language stays disabled and explains in current language',
       (tester) async {
