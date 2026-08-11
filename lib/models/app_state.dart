@@ -941,7 +941,7 @@ class AppState extends ChangeNotifier {
     if (_limitShotHistory == enabled) return;
     _limitShotHistory = enabled;
     _trimShotHistory();
-    savePreferences();
+    if (!UserDataStore.disableFileStorageForTests) savePreferences();
     notifyListeners();
   }
 
@@ -950,7 +950,7 @@ class AppState extends ChangeNotifier {
     if (_shotHistoryLimit == normalized) return;
     _shotHistoryLimit = normalized;
     _trimShotHistory();
-    savePreferences();
+    if (!UserDataStore.disableFileStorageForTests) savePreferences();
     notifyListeners();
   }
 
@@ -1033,7 +1033,10 @@ class AppState extends ChangeNotifier {
             webscpConfigEncoder ?? _encodeWebscpConfiguration,
         _sshTestWorker = sshTestWorker ?? _testSshInBackground,
         _userDataStore = userDataStore ?? UserDataStore(),
-        _credentialStore = credentialStore ?? PlatformCredentialStore() {
+        _credentialStore = credentialStore ??
+            (UserDataStore.disableFileStorageForTests
+                ? MemoryCredentialStore()
+                : PlatformCredentialStore()) {
     languages =
         languageService ?? LanguageService(userDataStore: _userDataStore);
     languages.addListener(_handleLanguageChanged);

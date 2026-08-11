@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 
+import 'language_asset_loader.dart';
 import '../services/user_data_store.dart';
 import '../services/toml_codec.dart';
 import 'language_document.dart';
@@ -62,10 +62,10 @@ class LanguageService extends ChangeNotifier {
     if (systemLocales != null && systemLocales.isNotEmpty) {
       _systemLocales = List.unmodifiable(systemLocales);
     }
-    await initializeStoredLanguageDocuments(
-      _userDataStore,
-      await (_initialLanguageLoad ??= _readInitialLanguages()),
-    );
+    final initialDocuments = UserDataStore.disableFileStorageForTests
+        ? await _readInitialLanguages(preferFileSystem: true)
+        : await (_initialLanguageLoad ??= _readInitialLanguages());
+    await initializeStoredLanguageDocuments(_userDataStore, initialDocuments);
     await refresh();
     if (_initialized) return;
     _initialized = true;
@@ -107,7 +107,16 @@ class LanguageService extends ChangeNotifier {
 
   Future<void> _performRefresh() async {
     final next = <String, LanguageDefinition>{};
-    for (final document in await loadStoredLanguageDocuments(_userDataStore)) {
+    var storedDocuments = await loadStoredLanguageDocuments(_userDataStore);
+    // Widget tests intentionally disable the file-backed store.  Keep the
+    // same bundled catalogs available in that in-memory environment so tests
+    // exercise real localization (and focus ordering) instead of silently
+    // falling back to untranslated English labels.  Production still reads
+    // only ~/.mdslens/languages through the normal storage backend.
+    if (UserDataStore.disableFileStorageForTests && storedDocuments.isEmpty) {
+      storedDocuments = await _readInitialLanguages(preferFileSystem: true);
+    }
+    for (final document in storedDocuments) {
       try {
         final language = LanguageDefinition.parse(
           document.content,
@@ -321,7 +330,9 @@ class LanguageService extends ChangeNotifier {
     return null;
   }
 
-  static Future<List<StoredLanguageDocument>> _readInitialLanguages() async {
+  static Future<List<StoredLanguageDocument>> _readInitialLanguages({
+    bool preferFileSystem = false,
+  }) async {
     const paths = <String>[
       'assets/languages/be.toml',
       'assets/languages/ca.toml',
@@ -359,7 +370,10 @@ class LanguageService extends ChangeNotifier {
     final documents = <StoredLanguageDocument>[];
     for (final path in paths) {
       try {
-        final content = await rootBundle.loadString(path);
+        final content = await loadLanguageAsset(
+          path,
+          preferFileSystem: preferFileSystem,
+        );
         LanguageDefinition.parse(content, source: path);
         documents.add(
           StoredLanguageDocument(

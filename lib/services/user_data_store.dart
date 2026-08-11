@@ -95,6 +95,28 @@ class UserDataStore {
   }
 
   Future<bool> writeSettings(Map<String, dynamic> settings) {
+    // A number of widget tests intentionally use a temporary root override
+    // while the platform-backed store is disabled.  Those tests call the
+    // fire-and-forget preference setters just like the UI does.  Complete
+    // this small test-only path synchronously so a test teardown cannot race
+    // a late settings write and recreate the directory it is deleting.
+    if (disableFileStorageForTests && _rootOverride != null) {
+      try {
+        final root = _rootOverride;
+        _prepareDirectoriesSync(root);
+        final file = File(_join(root.path, 'settings.toml'));
+        final temporary = File('${file.path}.tmp');
+        temporary.writeAsStringSync(
+          encodeTomlDocument({'formatVersion': 1, ...settings}),
+          flush: true,
+        );
+        if (file.existsSync()) file.deleteSync();
+        temporary.renameSync(file.path);
+        return Future<bool>.value(true);
+      } catch (_) {
+        return Future<bool>.value(false);
+      }
+    }
     final completer = Completer<bool>();
     _writeTail = _writeTail.then((_) async {
       final root = await rootDirectory();
@@ -125,6 +147,13 @@ class UserDataStore {
     await Directory(_join(root.path, 'configurations')).create(recursive: true);
     await Directory(_join(root.path, 'cache')).create(recursive: true);
     await Directory(_join(root.path, 'languages')).create(recursive: true);
+  }
+
+  void _prepareDirectoriesSync(Directory root) {
+    root.createSync(recursive: true);
+    Directory(_join(root.path, 'configurations')).createSync(recursive: true);
+    Directory(_join(root.path, 'cache')).createSync(recursive: true);
+    Directory(_join(root.path, 'languages')).createSync(recursive: true);
   }
 
   Future<void> _removeMigratedLegacySettings(Directory root) async {
