@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import subprocess
 import tarfile
@@ -106,6 +107,17 @@ def verify_rpm(package: Path, architecture: str) -> None:
     )
     paths = {path.lstrip("/") for path in output("rpm", "-qlp", str(package)).splitlines()}
     require_paths(paths, package)
+    requirements = output("rpm", "-qp", "--requires", str(package)).splitlines()
+    private_dso_requirements = [
+        requirement
+        for requirement in requirements
+        if re.fullmatch(r"lib[^/]+\.so\(\)\([^)]*\)", requirement)
+    ]
+    require(
+        not private_dso_requirements,
+        f"{package.name} exposes bundled unversioned DSO requirements: "
+        + ", ".join(private_dso_requirements),
+    )
 
 
 def verify_arch(package: Path) -> None:
