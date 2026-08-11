@@ -16,6 +16,10 @@ use std::time::Duration;
 
 const MDS_PORT: u16 = 8000;
 const PROBE_TIMEOUT_MS: u64 = 450;
+// A cold VPN/overlay peer can need a few seconds before its SSH path becomes
+// reachable.  Keep the retry budget bounded and retry only transport-level
+// failures; authentication and configuration errors should return promptly.
+const SSH_CONNECT_TIMEOUTS_SECS: [u64; 2] = [6, 6];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TunnelState { Unconfigured, Ready, Connecting, Connected, Error }
@@ -87,14 +91,25 @@ impl SshTunnelManager {
 
     #[cfg(feature = "libssh2")]
     fn test_connection_impl(&self, settings: &SshSettings) -> Result<(), String> {
-        let addr = resolve_host(&settings.host, settings.port)?;
-        let tcp = TcpStream::connect_timeout(&addr, Duration::from_secs(8))
-            .map_err(|e| format!("TCP connect: {}", e))?;
-        let mut session = ssh2::Session::new().map_err(|e| format!("ssh2: {}", e))?;
-        session.set_tcp_stream(tcp);
-        session.handshake().map_err(|e| format!("handshake: {}", e))?;
-        authenticate(&session, settings)?;
-        Ok(())
+        let mut last_error = String::new();
+        for timeout_secs in SSH_CONNECT_TIMEOUTS_SECS {
+            match connect_ssh_session(settings, timeout_secs)
+                .and_then(|session| authenticate(&session, settings).map(|_| ()))
+            {
+                Ok(()) => return Ok(()),
+                Err(error) => {
+                    last_error = error;
+                    if !is_transient_ssh_error(&last_error) {
+                        break;
+                    }
+                }
+            }
+        }
+        Err(if last_error.is_empty() {
+            "SSH connection failed".into()
+        } else {
+            last_error
+        })
     }
 
     #[cfg(not(feature = "libssh2"))]
@@ -127,12 +142,43 @@ impl SshTunnelManager {
 
     #[cfg(feature = "libssh2")]
     fn create_tunnel_impl(&mut self, endpoint: &str, _host: &str, _remote_port: u16, local_port: u16, local_addr: &str) -> Result<(), String> {
-        let addr = resolve_host(&self.settings.host, self.settings.port)?;
-        let tcp = TcpStream::connect_timeout(&addr, Duration::from_secs(8))
-            .map_err(|e| format!("TCP connect: {}", e))?;
-        let mut session = ssh2::Session::new().map_err(|e| format!("ssh2: {}", e))?;
-        session.set_tcp_stream(tcp);
-        session.handshake().map_err(|e| format!("handshake: {}", e))?;
+        let mut last_error = String::new();
+        for timeout_secs in SSH_CONNECT_TIMEOUTS_SECS {
+            match self.create_tunnel_attempt(
+                endpoint,
+                _host,
+                _remote_port,
+                local_port,
+                local_addr,
+                timeout_secs,
+            ) {
+                Ok(()) => return Ok(()),
+                Err(error) => {
+                    last_error = error;
+                    if !is_transient_ssh_error(&last_error) {
+                        break;
+                    }
+                }
+            }
+        }
+        Err(if last_error.is_empty() {
+            "SSH tunnel setup failed".into()
+        } else {
+            last_error
+        })
+    }
+
+    #[cfg(feature = "libssh2")]
+    fn create_tunnel_attempt(
+        &mut self,
+        endpoint: &str,
+        remote_host: &str,
+        remote_port: u16,
+        local_port: u16,
+        local_addr: &str,
+        timeout_secs: u64,
+    ) -> Result<(), String> {
+        let session = connect_ssh_session(&self.settings, timeout_secs)?;
         authenticate(&session, &self.settings)?;
 
         let listener = TcpListener::bind(local_addr)
@@ -141,8 +187,8 @@ impl SshTunnelManager {
 
         let cancel = Arc::new(AtomicBool::new(false));
         let active = Arc::new(AtomicBool::new(true));
-        let rh = _host.to_string();
-        let rp = _remote_port;
+        let rh = remote_host.to_string();
+        let rp = remote_port;
         let cc = cancel.clone();
         let relay_active = active.clone();
 
@@ -235,6 +281,48 @@ impl Drop for SshTunnelManager {
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────
+
+#[cfg(feature = "libssh2")]
+fn connect_ssh_session(
+    settings: &SshSettings,
+    timeout_secs: u64,
+) -> Result<ssh2::Session, String> {
+    let addr = resolve_host(&settings.host, settings.port)?;
+    let timeout = Duration::from_secs(timeout_secs);
+    let tcp = TcpStream::connect_timeout(&addr, timeout)
+        .map_err(|e| format!("TCP connect: {}", e))?;
+    tcp.set_read_timeout(Some(timeout))
+        .map_err(|e| format!("TCP read timeout: {}", e))?;
+    tcp.set_write_timeout(Some(timeout))
+        .map_err(|e| format!("TCP write timeout: {}", e))?;
+    let mut session = ssh2::Session::new().map_err(|e| format!("ssh2: {}", e))?;
+    session.set_tcp_stream(tcp);
+    session.set_timeout(timeout.as_millis().min(u32::MAX as u128) as u32);
+    session
+        .handshake()
+        .map_err(|e| format!("handshake: {}", e))?;
+    Ok(session)
+}
+
+fn is_transient_ssh_error(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    [
+        "connection timed out",
+        "operation timed out",
+        "timed out",
+        "connection refused",
+        "connection reset",
+        "connection closed",
+        "no route to host",
+        "network is unreachable",
+        "temporary failure in name resolution",
+        "name or service not known",
+        "kex_exchange_identification",
+        "banner exchange",
+    ]
+    .iter()
+    .any(|marker| lower.contains(marker))
+}
 
 #[cfg(feature = "libssh2")]
 fn authenticate(session: &ssh2::Session, settings: &SshSettings) -> Result<AuthMethod, String> {
@@ -632,5 +720,20 @@ mod tests {
             .expect_err("missing identity file must be rejected");
         assert!(error.contains("not found or is inaccessible"));
         assert!(error.contains("definitely-missing-mdslens-key"));
+    }
+
+    #[test]
+    fn transient_ssh_failures_are_retryable_but_auth_failures_are_not() {
+        for error in [
+            "TCP connect: connection timed out",
+            "handshake: connection reset by peer",
+            "SSH connection closed",
+            "DNS resolve host — temporary failure in name resolution",
+        ] {
+            assert!(is_transient_ssh_error(error), "{error}");
+        }
+        assert!(!is_transient_ssh_error("public-key authentication failed"));
+        assert!(!is_transient_ssh_error("no valid authentication method found"));
+        assert_eq!(SSH_CONNECT_TIMEOUTS_SECS, [6, 6]);
     }
 }
