@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:mdslens/i18n/localized_material.dart';
 
 import '../../i18n/language_document.dart';
@@ -386,6 +387,36 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
                               VimModeScope.enabled(context),
                           canRequestFocus: !_languageListEntered,
                           skipTraversal: _languageListEntered,
+                          descendantsAreFocusable: false,
+                          descendantsAreTraversable: false,
+                          onKeyEvent: (node, event) {
+                            if (!VimModeScope.enabled(
+                                    node.context ?? context) ||
+                                (event is! KeyDownEvent &&
+                                    event is! KeyRepeatEvent)) {
+                              return KeyEventResult.ignored;
+                            }
+                            final keyboard = HardwareKeyboard.instance;
+                            if (keyboard.isShiftPressed ||
+                                keyboard.isControlPressed ||
+                                keyboard.isAltPressed ||
+                                keyboard.isMetaPressed) {
+                              return KeyEventResult.ignored;
+                            }
+                            final enters = event.logicalKey ==
+                                    LogicalKeyboardKey.keyI ||
+                                event.logicalKey == LogicalKeyboardKey.enter ||
+                                event.logicalKey ==
+                                    LogicalKeyboardKey.numpadEnter ||
+                                event.logicalKey == LogicalKeyboardKey.space;
+                            if (!enters) return KeyEventResult.ignored;
+                            if (!claimVimActivation(
+                                node.context ?? context, event)) {
+                              return KeyEventResult.handled;
+                            }
+                            _enterLanguageList();
+                            return KeyEventResult.handled;
+                          },
                           child: Material(
                             color: Colors.transparent,
                             child: InkWell(
