@@ -8118,7 +8118,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.translate_rounded));
     await tester.pumpAndSettle();
-
     final languages = app.languages.availableLanguages;
     expect(languages.length, greaterThan(2));
     final first = find.byKey(
@@ -8127,11 +8126,9 @@ void main() {
     final last = find.byKey(
       ValueKey('language-select-${languages.last.source}'),
     );
-    final entryFocus = FocusManager.instance.rootScope.descendants.firstWhere(
-      (node) => node.debugLabel == 'language-list-page',
-    );
-    entryFocus.requestFocus();
     await tester.pump();
+    expect(
+        FocusManager.instance.primaryFocus?.debugLabel, 'language-list-page');
     expect(
       FocusManager.instance.primaryFocus?.context
           ?.findAncestorWidgetOfExactType<VimPageScope>()

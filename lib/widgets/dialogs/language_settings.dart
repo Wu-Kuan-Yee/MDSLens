@@ -382,6 +382,8 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
                         child: Focus(
                           key: const ValueKey('language-list-page'),
                           focusNode: _languageListEntryFocusNode,
+                          autofocus: !_languageListEntered &&
+                              VimModeScope.enabled(context),
                           canRequestFocus: !_languageListEntered,
                           skipTraversal: _languageListEntered,
                           child: Material(
