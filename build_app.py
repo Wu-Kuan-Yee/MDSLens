@@ -1046,6 +1046,8 @@ def is_linux_system_runtime(name: str) -> bool:
         r"ld-\d+(?:\.\d+)+\.so|"
         r"(?:libc|libdl|libm|libpthread|libresolv|librt|libutil|libanl|"
         r"libnss_[A-Za-z0-9_-]+)(?:\.so(?:\..*)?|-\d+(?:\.\d+)+\.so)|"
+        r"(?:libselinux|libmount|libblkid|libuuid|libz|liblzma|libbz2|"
+        r"libexpat|libpcre2-8)\.so(?:\..*)?|"
         r"(?:libstdc\+\+\.so(?:\..*)?|"
         r"libgcc_s(?:-\d[\d.-]*)?\.so(?:\..*)?)|"
         r"(?:libgtk-3|libgdk-3|libpangocairo-1\.0|libpango-1\.0|"
