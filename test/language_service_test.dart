@@ -258,6 +258,26 @@ void main() {
     expect(service.translate('Color'), 'Color');
   });
 
+  test('removeAll deletes multiple language files in one refresh', () async {
+    final root = await Directory.systemTemp.createTemp('mdslens-language-');
+    final store = UserDataStore(rootOverride: root);
+    final service = LanguageService(userDataStore: store);
+    addTearDown(() => _disposeLanguageService(service, root));
+    await service.initialize();
+    final sources = service.availableLanguages
+        .take(2)
+        .map((language) => language.source)
+        .toList(growable: false);
+    await service.removeAll(sources);
+    expect(
+      service.availableLanguages
+          .map((language) => language.source)
+          .toSet()
+          .intersection(sources.toSet()),
+      isEmpty,
+    );
+  });
+
   test(
       'runtime languages exactly follow the external directory after one-time initialization',
       () async {

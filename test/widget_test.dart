@@ -7946,6 +7946,95 @@ void main() {
     expect(find.text('简体中文 — Chinese (Simplified)'), findsWidgets);
   });
 
+  testWidgets('language removal supports selection and confirmation', (
+    tester,
+  ) async {
+    late Directory root;
+    late AppState app;
+    await tester.runAsync(() async {
+      root = await Directory.systemTemp.createTemp('mdslens-language-ui-');
+      app = AppState(userDataStore: UserDataStore(rootOverride: root));
+      await app.preferencesReady;
+    });
+    addTearDown(() async {
+      app.dispose();
+      await root.delete(recursive: true);
+    });
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+      ),
+    );
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.translate_rounded));
+    await tester.pumpAndSettle();
+
+    final allLanguages = app.languages.availableLanguages;
+    expect(allLanguages.length, greaterThan(2));
+    final firstSource = allLanguages.first.source;
+    final secondSource = allLanguages[1].source;
+    final selectAll = find.byKey(const ValueKey('language-select-all'));
+    await tester.tap(selectAll);
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('language-delete-selected')),
+      findsOneWidget,
+    );
+    expect(find.text('Delete (${allLanguages.length})'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('language-delete-selected')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('language-removal-confirm')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('language-removal-confirm-cancel')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('language-select-all')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('language-removal-confirm')),
+      findsNothing,
+    );
+
+    await tester.tap(find.byKey(ValueKey('language-remove-$firstSource')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('language-removal-confirm')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('language-removal-confirm-cancel')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(selectAll);
+    await tester.pump();
+    final firstLanguage = find.byKey(ValueKey('language-select-$firstSource'));
+    final secondLanguage =
+        find.byKey(ValueKey('language-select-$secondSource'));
+    await tester.ensureVisible(firstLanguage);
+    await tester.tap(firstLanguage);
+    await tester.ensureVisible(secondLanguage);
+    await tester.tap(secondLanguage);
+    await tester.pump();
+    expect(find.text('Delete (2)'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('language-delete-selected')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('language-removal-confirm')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('language-removal-confirm')),
+      findsNothing,
+    );
+    expect(
+        find.byKey(const ValueKey('language-delete-selected')), findsOneWidget);
+  });
+
   testWidgets(
       'unavailable automatic language stays disabled and explains in current language',
       (tester) async {
@@ -7958,6 +8047,9 @@ void main() {
       app.setLanguagePreference('ja');
       app.updateSystemLocales(const [Locale('ar', 'EG')]);
       app.setLanguagePreference(systemLanguagePreference);
+      // setLanguagePreference intentionally saves asynchronously.  Flush the
+      // queued write before the test-owned directory is removed in teardown.
+      await app.savePreferences();
     });
     addTearDown(() async {
       app.dispose();

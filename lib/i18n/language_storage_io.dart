@@ -121,12 +121,22 @@ Future<void> removeStoredLanguageDocument(
   UserDataStore userDataStore,
   String fileName,
 ) async {
+  await removeStoredLanguageDocuments(userDataStore, [fileName]);
+}
+
+Future<void> removeStoredLanguageDocuments(
+  UserDataStore userDataStore,
+  Iterable<String> fileNames,
+) async {
   final directory = await userDataStore.languageDirectory();
   if (directory == null) return;
-  final target = File(
-    '${directory.path}${Platform.pathSeparator}${_safeFileName(fileName)}',
-  );
-  if (await target.exists()) await target.delete();
+  final names = fileNames.map(_safeFileName).toSet();
+  for (final name in names) {
+    final target = File(
+      '${directory.path}${Platform.pathSeparator}$name',
+    );
+    if (await target.exists()) await target.delete();
+  }
 }
 
 String _safeFileName(String value) {

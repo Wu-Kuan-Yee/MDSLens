@@ -24,3 +24,8 @@ Future<void> removeStoredLanguageDocument(
   UserDataStore _,
   String __,
 ) async {}
+
+Future<void> removeStoredLanguageDocuments(
+  UserDataStore _,
+  Iterable<String> __,
+) async {}

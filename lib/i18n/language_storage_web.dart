@@ -95,15 +95,26 @@ Future<void> installStoredLanguageDocument(
 }
 
 Future<void> removeStoredLanguageDocument(
-  UserDataStore _,
+  UserDataStore userDataStore,
   String fileName,
+) async {
+  await removeStoredLanguageDocuments(userDataStore, [fileName]);
+}
+
+Future<void> removeStoredLanguageDocuments(
+  UserDataStore _,
+  Iterable<String> fileNames,
 ) async {
   final preferences = await SharedPreferences.getInstance();
   final current = <String, String>{
     for (final document in await loadStoredLanguageDocuments(UserDataStore()))
       document.name: document.content,
   };
-  if (current.remove(_safeFileName(fileName)) == null) return;
+  var changed = false;
+  for (final fileName in fileNames) {
+    changed = current.remove(_safeFileName(fileName)) != null || changed;
+  }
+  if (!changed) return;
   await preferences.setString(
     _storageKey,
     encodeTomlDocument({'documents': current}),

@@ -33,3 +33,9 @@ Future<void> removeStoredLanguageDocument(
   String fileName,
 ) =>
     backend.removeStoredLanguageDocument(userDataStore, fileName);
+
+Future<void> removeStoredLanguageDocuments(
+  UserDataStore userDataStore,
+  Iterable<String> fileNames,
+) =>
+    backend.removeStoredLanguageDocuments(userDataStore, fileNames);

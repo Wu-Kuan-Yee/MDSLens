@@ -220,7 +220,13 @@ class LanguageService extends ChangeNotifier {
   }
 
   Future<void> remove(String fileName) async {
-    await removeStoredLanguageDocument(_userDataStore, fileName);
+    await removeAll([fileName]);
+  }
+
+  Future<void> removeAll(Iterable<String> fileNames) async {
+    final names = fileNames.toSet();
+    if (names.isEmpty) return;
+    await removeStoredLanguageDocuments(_userDataStore, names);
     await refresh();
   }
 
