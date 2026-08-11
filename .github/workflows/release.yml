@@ -716,5 +716,53 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || gh release create "${GITHUB_REF_NAME}" --generate-notes
-          find artifacts -maxdepth 1 -type f -print0 | xargs -0 gh release upload "${GITHUB_REF_NAME}" --clobber
+          set -euo pipefail
+          release="${GITHUB_REF_NAME}"
+
+          # GitHub may return from `release create` before the new release is
+          # visible to the upload endpoint.  Waiting for a successful read
+          # avoids the intermittent `release not found` failure that used to
+          # leave a tag release created with zero assets.
+          if ! gh release view "$release" >/dev/null 2>&1; then
+            if ! gh release create "$release" --generate-notes; then
+              # A concurrent retry may have created it between the view and
+              # create calls.  Continue only when the release is readable.
+              gh release view "$release" >/dev/null 2>&1
+            fi
+          fi
+          release_visible=false
+          for attempt in {1..24}; do
+            if gh release view "$release" >/dev/null 2>&1; then
+              release_visible=true
+              break
+            fi
+            sleep $((attempt * 2))
+          done
+          if [[ "$release_visible" != true ]]; then
+            echo "::error::Release $release was not visible after creation." >&2
+            exit 1
+          fi
+
+          mapfile -d '' -t assets < <(
+            find artifacts -maxdepth 1 -type f -print0 | sort -z
+          )
+          if ((${#assets[@]} == 0)); then
+            echo "::error::No release assets were produced." >&2
+            exit 1
+          fi
+          for asset in "${assets[@]}"; do
+            uploaded=false
+            for attempt in {1..6}; do
+              if gh release upload "$release" "$asset" --clobber; then
+                uploaded=true
+                break
+              fi
+              if ((attempt < 6)); then
+                sleep $((attempt * 5))
+              fi
+            done
+            if [[ "$uploaded" != true ]]; then
+              echo "::error::Could not upload release asset: $asset" >&2
+              exit 1
+            fi
+          done
