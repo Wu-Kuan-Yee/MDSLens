@@ -21,13 +21,21 @@ to add a runtime catalog on sandboxed devices. The Web build stores imported
 catalogs in browser application storage because a web page cannot watch an
 arbitrary system folder.
 
-On a new, empty language store, MDSLens copies the real English and Simplified
-Chinese starter TOML files into that store once and records that initialization
-with a hidden marker. From then on, only files actually present in the external
-store are loaded. Deleting either starter file removes that language from the
-open list immediately and does not recreate it on the next launch. If the
-store already contains a TOML catalog when this version first runs, MDSLens
-does not add any starter files.
+On a new, empty language store, MDSLens copies these 32 real starter TOML files
+into that store once and records that initialization with a hidden marker:
+
+```text
+be ca cs da de el en eo es fi fr hu id it ja ka ko nl no pl pt pt-BR ro ru
+sr sv th tr uk vi zh-Hans zh-Hant
+```
+
+The files are the only source for the runtime language list. From then on, only
+files actually present in the external store are loaded. Deleting a starter
+file removes that language from the open list immediately and does not recreate
+it on the next launch. A store initialized by the earlier two-catalog V1
+implementation receives only the newly introduced starter files during the V2
+migration; its existing files, including deliberate deletions of `en.toml` or
+`zh-Hans.toml`, are preserved. Existing custom catalogs are never overwritten.
 
 Only non-hidden `.toml` files that successfully parse as language catalogs are
 shown. Adding, editing, renaming, or deleting such files updates an open
@@ -90,9 +98,12 @@ dart run tool/update_english_catalog.dart
 dart run tool/update_english_catalog.dart --check
 ```
 
-`assets/languages/en.toml` and `assets/languages/zh-Hans.toml` are first-run
-copy templates, not a second runtime catalog source. Application updates never
-merge them into or overwrite an initialized external language store.
+The 32 files under `assets/languages/` are first-run copy templates, not a
+second runtime catalog source. Application updates never merge them into or
+overwrite an initialized external language store. If `System (automatic)` is
+selected and no installed catalog matches the operating-system language, the
+preference is changed to the installed English catalog rather than leaving a
+non-existent system language selected.
 
 ## UI coverage contract
 

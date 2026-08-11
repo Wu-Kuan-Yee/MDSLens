@@ -148,10 +148,14 @@ Desktop builds keep their private state under `~/.mdslens/`:
 
 The language list is derived only from valid TOML files currently present in
 `languages/` and updates while MDSLens is running. On a new empty store, the
-English and Simplified Chinese starter files are copied there once; deleting
-them later removes those languages and they are not silently restored. CLDR
-registry metadata and other missing locales never appear as selectable
-placeholders.
+32 starter catalogs (`be`, `ca`, `cs`, `da`, `de`, `el`, `en`, `eo`, `es`, `fi`,
+`fr`, `hu`, `id`, `it`, `ja`, `ka`, `ko`, `nl`, `no`, `pl`, `pt`, `pt-BR`, `ro`,
+`ru`, `sr`, `sv`, `th`, `tr`, `uk`, `vi`, `zh-Hans`, and `zh-Hant`) are copied
+there once. Deleting a catalog removes that language and it is not silently
+restored; an existing V1 store receives only the newly added catalogs and
+keeps its existing files. CLDR registry metadata and other missing locales
+never appear as selectable placeholders. With `System (automatic)`, an
+unavailable system language automatically selects and persists English.
 
 Open and Save dialogs default to `configurations/`, but users may select any
 accessible location. Android, iOS, and iPadOS use the same `.mdslens` layout
