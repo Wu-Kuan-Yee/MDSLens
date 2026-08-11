@@ -9,6 +9,41 @@ import 'package:mdslens/services/system_font_service.dart';
 import 'package:mdslens/services/toml_codec.dart';
 import 'package:mdslens/services/user_data_store.dart';
 
+const _starterLocales = <String>{
+  'be',
+  'ca',
+  'cs',
+  'da',
+  'de',
+  'el',
+  'en',
+  'eo',
+  'es',
+  'fi',
+  'fr',
+  'hu',
+  'id',
+  'it',
+  'ja',
+  'ka',
+  'ko',
+  'nl',
+  'no',
+  'pl',
+  'pt',
+  'pt-BR',
+  'ro',
+  'ru',
+  'sr',
+  'sv',
+  'th',
+  'tr',
+  'uk',
+  'vi',
+  'zh-Hans',
+  'zh-Hant',
+};
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -27,7 +62,7 @@ void main() {
   });
 
   test(
-      'initial catalog templates preserve placeholders and the tooling CLDR registry is complete',
+      'all starter catalogs are complete and the tooling CLDR registry is valid',
       () async {
     final english = LanguageDefinition.parse(
       await File('assets/languages/en.toml').readAsString(),
@@ -39,20 +74,28 @@ void main() {
                   file.path.endsWith('.toml') &&
                   !file.path.endsWith('cldr-modern.toml'),
             );
+    final actualLocales = <String>{};
     for (final file in languageFiles) {
       final language = LanguageDefinition.parse(
         await file.readAsString(),
         source: file.path,
       );
+      actualLocales.add(language.locale);
+      expect(
+        language.messages.keys.toSet(),
+        english.messages.keys.toSet(),
+        reason: file.path,
+      );
       for (final entry in language.messages.entries) {
         expect(english.messages, contains(entry.key), reason: file.path);
         expect(
           _placeholders(entry.value),
-          _placeholders(entry.key),
+          _placeholders(english.messages[entry.key]!),
           reason: '${file.path}: ${entry.key}',
         );
       }
     }
+    expect(actualLocales, _starterLocales);
 
     final registry = LocaleRegistryDocument.parse(
       await File('assets/languages/cldr-modern.toml').readAsString(),
@@ -123,8 +166,10 @@ void main() {
     expect(service.translate('Color'), 'Colour');
 
     service.updateSystemLocales(const [Locale('en', 'US')]);
-    expect(service.activeLocale, 'en-GB');
-    expect(service.translate('Color'), 'Colour');
+    // The installed base English catalog is the correct automatic fallback
+    // for an English regional locale without its own catalog.
+    expect(service.activeLocale, 'en');
+    expect(service.translate('Color'), 'Color');
 
     service.setPreference('en-GB');
     service.updateSystemLocales(const [Locale('en', 'US')]);
@@ -139,7 +184,7 @@ void main() {
     );
     addTearDown(() => _disposeLanguageService(service, root));
 
-    await service.initialize(systemLocales: const [Locale('fr', 'FR')]);
+    await service.initialize(systemLocales: const [Locale('ar', 'EG')]);
 
     expect(service.preference, systemLanguagePreference);
     expect(service.systemLocaleMatch, isNull);
@@ -159,6 +204,8 @@ void main() {
     await File('${directory.path}/zh-Hans.toml').writeAsString(
       await File('assets/languages/zh-Hans.toml').readAsString(),
     );
+    await File('${directory.path}/.external-language-store-v2')
+        .writeAsString('version = 2\n');
     final service = LanguageService(
       userDataStore: store,
     );
@@ -228,18 +275,24 @@ void main() {
 
     await service.initialize();
     final directory = await store.languageDirectory();
+    final languageDirectory = directory!;
     expect(
       service.availableLanguages.map((item) => item.locale).toSet(),
-      {'en', 'zh-Hans'},
+      _starterLocales,
     );
-    expect(await File('${directory!.path}/en.toml').exists(), isTrue);
-    expect(await File('${directory.path}/zh-Hans.toml').exists(), isTrue);
+    for (final locale in _starterLocales) {
+      expect(
+        await File('${languageDirectory.path}/$locale.toml').exists(),
+        isTrue,
+        reason: locale,
+      );
+    }
     expect(
       service.availableLanguages.any((item) => item.locale == 'af'),
       isFalse,
     );
 
-    await File('${directory.path}/en.toml').delete();
+    await File('${languageDirectory.path}/en.toml').delete();
     await _waitUntil(
       () => service.availableLanguages.every((item) => item.locale != 'en'),
     );
@@ -251,9 +304,35 @@ void main() {
     await restarted.initialize();
     expect(
       restarted.availableLanguages.map((item) => item.locale).toSet(),
-      {'zh-Hans'},
+      _starterLocales.difference({'en'}),
+    );
+    expect(await File('${languageDirectory.path}/en.toml').exists(), isFalse);
+  });
+
+  test('V1 stores receive only the newly introduced starter catalogs',
+      () async {
+    final root = await Directory.systemTemp.createTemp('mdslens-language-v1-');
+    final store = UserDataStore(rootOverride: root);
+    final directory = await store.languageDirectory();
+    await File('${directory!.path}/zh-Hans.toml').writeAsString(
+      await File('assets/languages/zh-Hans.toml').readAsString(),
+    );
+    await File('${directory.path}/.external-language-store-v1')
+        .writeAsString('version = 1\n');
+    final service = LanguageService(userDataStore: store);
+    addTearDown(() => _disposeLanguageService(service, root));
+
+    await service.initialize();
+
+    expect(
+      service.availableLanguages.map((item) => item.locale).toSet(),
+      _starterLocales.difference({'en'}),
     );
     expect(await File('${directory.path}/en.toml').exists(), isFalse);
+    expect(
+      await File('${directory.path}/.external-language-store-v2').exists(),
+      isTrue,
+    );
   });
 
   test('font catalog refreshes only when the installed family list changes',

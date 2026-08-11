@@ -177,6 +177,20 @@ class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
+    final activeLanguageLocale = app.languages.activeFlutterLocale;
+    // Esperanto is a runtime catalog, but Flutter's Material localization
+    // bundle does not ship an Esperanto delegate. Keep MDSLens' own strings
+    // in the selected catalog while using English for framework chrome.
+    final frameworkLocale =
+        GlobalMaterialLocalizations.delegate.isSupported(activeLanguageLocale)
+            ? activeLanguageLocale
+            : const Locale('en');
+    final frameworkLocales = app.languages.supportedFlutterLocales
+        .where(GlobalMaterialLocalizations.delegate.isSupported)
+        .toList(growable: true);
+    if (!frameworkLocales.contains(const Locale('en'))) {
+      frameworkLocales.insert(0, const Locale('en'));
+    }
     final isDark = app.themeMode == 0
         ? false
         : app.themeMode == 1
@@ -186,8 +200,8 @@ class _MDSLensAppState extends State<MDSLensApp> with WidgetsBindingObserver {
       navigatorKey: _navigatorKey,
       title: app.tr('MDSLens'),
       debugShowCheckedModeBanner: false,
-      locale: app.languages.activeFlutterLocale,
-      supportedLocales: app.languages.supportedFlutterLocales,
+      locale: frameworkLocale,
+      supportedLocales: frameworkLocales,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,

@@ -7954,7 +7954,7 @@ void main() {
       app = AppState(userDataStore: UserDataStore(rootOverride: root));
       await app.preferencesReady;
       app.setLanguagePreference('zh-Hans');
-      app.updateSystemLocales(const [Locale('fr', 'FR')]);
+      app.updateSystemLocales(const [Locale('ar', 'EG')]);
       app.setLanguagePreference(systemLanguagePreference);
     });
     addTearDown(() async {

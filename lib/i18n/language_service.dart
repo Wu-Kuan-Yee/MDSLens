@@ -311,8 +311,38 @@ class LanguageService extends ChangeNotifier {
 
   static Future<List<StoredLanguageDocument>> _readInitialLanguages() async {
     const paths = <String>[
+      'assets/languages/be.toml',
+      'assets/languages/ca.toml',
+      'assets/languages/cs.toml',
+      'assets/languages/da.toml',
+      'assets/languages/de.toml',
+      'assets/languages/el.toml',
       'assets/languages/en.toml',
+      'assets/languages/eo.toml',
+      'assets/languages/es.toml',
+      'assets/languages/fi.toml',
+      'assets/languages/fr.toml',
+      'assets/languages/hu.toml',
+      'assets/languages/id.toml',
+      'assets/languages/it.toml',
+      'assets/languages/ja.toml',
+      'assets/languages/ka.toml',
+      'assets/languages/ko.toml',
+      'assets/languages/nl.toml',
+      'assets/languages/no.toml',
+      'assets/languages/pl.toml',
+      'assets/languages/pt.toml',
+      'assets/languages/pt-BR.toml',
+      'assets/languages/ro.toml',
+      'assets/languages/ru.toml',
+      'assets/languages/sr.toml',
+      'assets/languages/sv.toml',
+      'assets/languages/th.toml',
+      'assets/languages/tr.toml',
+      'assets/languages/uk.toml',
+      'assets/languages/vi.toml',
       'assets/languages/zh-Hans.toml',
+      'assets/languages/zh-Hant.toml',
     ];
     final documents = <StoredLanguageDocument>[];
     for (final path in paths) {

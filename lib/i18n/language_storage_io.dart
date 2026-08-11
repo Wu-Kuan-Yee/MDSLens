@@ -4,7 +4,9 @@ import 'dart:io';
 import '../services/user_data_store.dart';
 import 'language_document.dart';
 
-const _initializationMarkerName = '.external-language-store-v1';
+const _initializationMarkerV1 = '.external-language-store-v1';
+const _initializationMarkerV2 = '.external-language-store-v2';
+const _v1StarterNames = {'en.toml', 'zh-hans.toml'};
 
 Future<void> initializeStoredLanguageDocuments(
   UserDataStore userDataStore,
@@ -12,32 +14,47 @@ Future<void> initializeStoredLanguageDocuments(
 ) async {
   final directory = await userDataStore.languageDirectory();
   if (directory == null) return;
-  final marker = File(
-    '${directory.path}${Platform.pathSeparator}$_initializationMarkerName',
+  final markerV1 = File(
+    '${directory.path}${Platform.pathSeparator}$_initializationMarkerV1',
   );
-  if (await marker.exists()) return;
+  final markerV2 = File(
+    '${directory.path}${Platform.pathSeparator}$_initializationMarkerV2',
+  );
+  if (await markerV2.exists()) return;
+  final migratedFromV1 = await markerV1.exists();
 
-  var containsCatalog = false;
+  final existingNames = <String>{};
   await for (final entity in directory.list(followLinks: false)) {
     if (entity is File &&
         entity.path.toLowerCase().endsWith('.toml') &&
         !entity.path.split(Platform.pathSeparator).last.startsWith('.')) {
-      containsCatalog = true;
-      break;
-    }
-  }
-  if (!containsCatalog) {
-    for (final document in initialDocuments) {
-      await installStoredLanguageDocument(
-        userDataStore,
-        document.name,
-        document.content,
+      existingNames.add(
+        entity.path.split(Platform.pathSeparator).last.toLowerCase(),
       );
     }
   }
+  for (final document in initialDocuments) {
+    final safeName = _safeFileName(document.name);
+    final normalizedName = safeName.toLowerCase();
+    // V1 already handled English and Simplified Chinese. Skipping those two
+    // during migration preserves a user's deliberate deletion; the 30 newly
+    // introduced starter catalogs are still added once.
+    if (migratedFromV1 && _v1StarterNames.contains(normalizedName)) continue;
+    if (existingNames.contains(normalizedName)) continue;
+    await installStoredLanguageDocument(
+      userDataStore,
+      safeName,
+      document.content,
+    );
+  }
 
+  await _writeMarker(markerV2, version: 2);
+  if (!migratedFromV1) await _writeMarker(markerV1, version: 1);
+}
+
+Future<void> _writeMarker(File marker, {required int version}) async {
   final temporary = File('${marker.path}.tmp');
-  await temporary.writeAsString('version = 1\n', flush: true);
+  await temporary.writeAsString('version = $version\n', flush: true);
   if (await marker.exists()) await marker.delete();
   await temporary.rename(marker.path);
 }
