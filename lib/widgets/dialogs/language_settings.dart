@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:mdslens/i18n/localized_material.dart';
 
+import '../../i18n/language_document.dart';
 import '../../i18n/language_service.dart';
 import '../../models/app_state.dart';
 import '../polished_dropdown.dart';
@@ -54,17 +55,21 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: const ['toml'],
-        allowMultiple: false,
+        allowMultiple: true,
         withData: true,
       );
       if (result == null || result.files.isEmpty) return;
-      final file = result.files.single;
-      final bytes = file.bytes;
-      if (bytes == null) {
-        throw const FormatException(
-            'The selected language file is unreadable.');
+      final documents = <StoredLanguageDocument>[];
+      for (final file in result.files) {
+        final bytes = file.bytes ?? await file.xFile.readAsBytes();
+        documents.add(
+          StoredLanguageDocument(
+            name: file.name,
+            content: utf8.decode(bytes),
+          ),
+        );
       }
-      await widget.app.languages.install(file.name, utf8.decode(bytes));
+      await widget.app.languages.installAll(documents);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

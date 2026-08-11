@@ -107,14 +107,26 @@ Future<void> installStoredLanguageDocument(
   String fileName,
   String content,
 ) async {
+  await installStoredLanguageDocuments(
+    userDataStore,
+    [StoredLanguageDocument(name: fileName, content: content)],
+  );
+}
+
+Future<void> installStoredLanguageDocuments(
+  UserDataStore userDataStore,
+  Iterable<StoredLanguageDocument> documents,
+) async {
   final directory = await userDataStore.languageDirectory();
   if (directory == null) return;
-  final safeName = _safeFileName(fileName);
-  final target = File('${directory.path}${Platform.pathSeparator}$safeName');
-  final temporary = File('${target.path}.tmp');
-  await temporary.writeAsString(content, flush: true);
-  if (await target.exists()) await target.delete();
-  await temporary.rename(target.path);
+  for (final document in documents) {
+    final safeName = _safeFileName(document.name);
+    final target = File('${directory.path}${Platform.pathSeparator}$safeName');
+    final temporary = File('${target.path}.tmp');
+    await temporary.writeAsString(document.content, flush: true);
+    if (await target.exists()) await target.delete();
+    await temporary.rename(target.path);
+  }
 }
 
 Future<void> removeStoredLanguageDocument(

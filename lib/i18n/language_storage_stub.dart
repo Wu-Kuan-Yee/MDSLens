@@ -20,6 +20,11 @@ Future<void> installStoredLanguageDocument(
   String ___,
 ) async {}
 
+Future<void> installStoredLanguageDocuments(
+  UserDataStore _,
+  Iterable<StoredLanguageDocument> __,
+) async {}
+
 Future<void> removeStoredLanguageDocument(
   UserDataStore _,
   String __,

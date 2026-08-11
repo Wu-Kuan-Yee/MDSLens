@@ -210,12 +210,18 @@ class LanguageService extends ChangeNotifier {
   }
 
   Future<void> install(String fileName, String content) async {
-    LanguageDefinition.parse(content, source: fileName);
-    await installStoredLanguageDocument(
-      _userDataStore,
-      fileName,
-      content,
-    );
+    await installAll([
+      StoredLanguageDocument(name: fileName, content: content),
+    ]);
+  }
+
+  Future<void> installAll(Iterable<StoredLanguageDocument> documents) async {
+    final items = documents.toList(growable: false);
+    if (items.isEmpty) return;
+    for (final document in items) {
+      LanguageDefinition.parse(document.content, source: document.name);
+    }
+    await installStoredLanguageDocuments(_userDataStore, items);
     await refresh();
   }
 

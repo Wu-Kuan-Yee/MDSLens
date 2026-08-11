@@ -77,16 +77,28 @@ Future<List<StoredLanguageDocument>> loadStoredLanguageDocuments(
 Stream<void> watchStoredLanguageDocuments(UserDataStore _) => _changes.stream;
 
 Future<void> installStoredLanguageDocument(
-  UserDataStore _,
+  UserDataStore userDataStore,
   String fileName,
   String content,
+) async {
+  await installStoredLanguageDocuments(
+    userDataStore,
+    [StoredLanguageDocument(name: fileName, content: content)],
+  );
+}
+
+Future<void> installStoredLanguageDocuments(
+  UserDataStore _,
+  Iterable<StoredLanguageDocument> documents,
 ) async {
   final preferences = await SharedPreferences.getInstance();
   final current = <String, String>{
     for (final document in await loadStoredLanguageDocuments(UserDataStore()))
       document.name: document.content,
   };
-  current[_safeFileName(fileName)] = content;
+  for (final document in documents) {
+    current[_safeFileName(document.name)] = document.content;
+  }
   await preferences.setString(
     _storageKey,
     encodeTomlDocument({'documents': current}),

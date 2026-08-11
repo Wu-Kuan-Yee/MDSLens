@@ -28,6 +28,12 @@ Future<void> installStoredLanguageDocument(
 ) =>
     backend.installStoredLanguageDocument(userDataStore, fileName, content);
 
+Future<void> installStoredLanguageDocuments(
+  UserDataStore userDataStore,
+  Iterable<StoredLanguageDocument> documents,
+) =>
+    backend.installStoredLanguageDocuments(userDataStore, documents);
+
 Future<void> removeStoredLanguageDocument(
   UserDataStore userDataStore,
   String fileName,

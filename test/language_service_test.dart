@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mdslens/i18n/language_document.dart';
 import 'package:mdslens/i18n/language_scope.dart';
 import 'package:mdslens/i18n/language_service.dart';
+import 'package:mdslens/i18n/language_storage.dart';
 import 'package:mdslens/i18n/localized_material.dart';
 import 'package:mdslens/services/system_font_service.dart';
 import 'package:mdslens/services/toml_codec.dart';
@@ -276,6 +277,34 @@ void main() {
           .intersection(sources.toSet()),
       isEmpty,
     );
+  });
+
+  test('installAll validates and refreshes multiple language files together',
+      () async {
+    final root = await Directory.systemTemp.createTemp('mdslens-language-');
+    final store = UserDataStore(rootOverride: root);
+    final service = LanguageService(userDataStore: store);
+    addTearDown(() => _disposeLanguageService(service, root));
+    await service.initialize();
+
+    await service.installAll([
+      StoredLanguageDocument(
+        name: 'en-GB.toml',
+        content: _languageToml('en-GB', 'British English', {'Color': 'Colour'}),
+      ),
+      StoredLanguageDocument(
+        name: 'fr-CA.toml',
+        content:
+            _languageToml('fr-CA', 'Canadian French', {'Color': 'Couleur'}),
+      ),
+    ]);
+
+    expect(service.availableLanguages.map((item) => item.locale),
+        containsAll(<String>['en-GB', 'fr-CA']));
+    final storedNames = (await loadStoredLanguageDocuments(store))
+        .map((item) => item.name)
+        .toSet();
+    expect(storedNames, containsAll(<String>{'en-GB.toml', 'fr-CA.toml'}));
   });
 
   test(
