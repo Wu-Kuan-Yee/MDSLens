@@ -6,12 +6,13 @@
 //! Ported from `src/mds/mds_ip_client.cpp`.
 
 use crate::client::{
-    ensure_reusable_connections, reusable_connection_count, with_reusable_connection,
+    ensure_reusable_connections, reusable_connection_count, warm_reusable_tree,
+    with_reusable_connection,
 };
 use crate::fetch::{self, effective_read_mode, FetchRequest, FetchResult};
 use crate::protocol;
 use mds_core::types::{DataReadMode, LayoutConfig, LoadedSignal, PlotSpec, SignalSpec};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 
@@ -26,6 +27,16 @@ struct ResultSlot {
     result: Option<FetchResult>,
 }
 
+/// Fetches are deduplicated before they reach the network, while the aliases
+/// retain every original panel/curve location for streaming and final output.
+/// This avoids issuing the same MDS expression twice when a panel contains a
+/// repeated curve without changing the visible layout or signal count.
+struct RequestPlan {
+    original: Vec<FetchRequest>,
+    unique: Vec<FetchRequest>,
+    aliases: Vec<Vec<usize>>,
+}
+
 // ── Public API ────────────────────────────────────────────────────────────
 
 /// Fetch all non-hidden signals in a layout config.
@@ -38,11 +49,12 @@ pub fn fetch_all(
     callback: Option<&SignalCallback>,
     cancel: &Arc<AtomicBool>,
 ) -> Vec<LoadedSignal> {
-    let requests = build_requests(config, read_mode);
-    if requests.is_empty() {
+    let plan = build_request_plan(config, read_mode);
+    if plan.unique.is_empty() {
         return Vec::new();
     }
 
+    let requests = &plan.unique;
     let n = requests.len();
     let results: Arc<Mutex<Vec<ResultSlot>>> = Arc::new(Mutex::new(vec![ResultSlot::default(); n]));
     let groups = group_requests(&requests);
@@ -83,9 +95,7 @@ pub fn fetch_all(
                     }
                 }
                 if let Some(callback) = callback {
-                    // Moving the completed signal into the callback avoids a
-                    // deep clone of every Full waveform buffer.
-                    callback(fetch_result_into_loaded(&requests, fr));
+                    publish_streamed_aliases(&plan, callback, fr);
                 }
             } else if let Ok(mut slots) = results.lock() {
                 if let Some(slot) = slots.get_mut(idx) {
@@ -101,17 +111,24 @@ pub fn fetch_all(
 
     // Retry transient failures
     if !cancel.load(Ordering::Relaxed) {
-        retry_transient(&requests, &results, callback, cancel);
+        retry_transient(&plan, &results, callback, cancel);
     }
 
     // Return the current load immediately, then grow the hot pool for later
     // refreshes without delaying this result.
     let mut guard = results.lock().unwrap();
-    let output = guard
-        .iter_mut()
-        .filter_map(|slot| slot.result.take())
-        .map(|fr| fetch_result_into_loaded(&requests, fr))
-        .collect();
+    let mut output = (0..plan.original.len()).map(|_| None).collect::<Vec<_>>();
+    for (unique_index, slot) in guard.iter_mut().enumerate() {
+        let Some(fr) = slot.result.take() else {
+            continue;
+        };
+        for &original_index in &plan.aliases[unique_index] {
+            let mut aliased = fr.clone();
+            aliased.loaded_index = original_index;
+            output[original_index] = Some(fetch_result_into_loaded(&plan.original, aliased));
+        }
+    }
+    let output = output.into_iter().flatten().collect();
     drop(guard);
     grow_hot_pool(&requests, &groups);
     output
@@ -126,27 +143,74 @@ fn global_wave_limit(_requests: &[FetchRequest]) -> usize {
     MAX_GLOBAL_SOCKETS
 }
 
-/// Pre-connect to all unique servers in the layout.
+/// Warm one representative tree/shot per server in the layout.
+///
+/// A socket handshake alone is not enough to remove the cold-start cost: the
+/// first fetch on a socket still has to execute `TreeOpen`.  The original
+/// client warms one representative request per server on all 16 persistent
+/// worker lanes. Choose the most common server/tree/shot group so the warmed
+/// sockets are useful for the largest part of the next refresh.
 pub fn warm_connections(config: &LayoutConfig, cancel: &Arc<AtomicBool>) {
-    let mut servers: Vec<String> = config
-        .columns
-        .iter()
-        .flat_map(|c| c.iter())
-        .flat_map(|p| p.signal_specs.iter())
-        .filter(|s| !s.server_ip.is_empty() && !s.is_hidden())
-        .map(|s| s.server_ip.clone())
-        .collect();
-    servers.sort();
-    servers.dedup();
+    let mut group_counts = HashMap::<(String, String, String), usize>::new();
+    let mut servers = HashSet::new();
+    for column in &config.columns {
+        for plot in column {
+            for signal in &plot.signal_specs {
+                if signal.is_hidden() || signal.server_ip.trim().is_empty() {
+                    continue;
+                }
+                let server = signal.server_ip.trim().to_string();
+                servers.insert(server.clone());
+                let shot = effective_shot(plot, signal);
+                if signal.experiment.trim().is_empty() || shot.trim().is_empty() {
+                    continue;
+                }
+                *group_counts
+                    .entry((server, signal.experiment.trim().to_string(), shot))
+                    .or_default() += 1;
+            }
+        }
+    }
+    let mut targets = HashMap::<String, (String, String, usize)>::new();
+    for ((server, tree, shot), count) in group_counts {
+        let replace = targets
+            .get(&server)
+            .is_none_or(|(_, _, old_count)| count > *old_count);
+        if replace {
+            targets.insert(server, (tree, shot, count));
+        }
+    }
 
+    let warmed_servers: HashSet<String> = targets.keys().cloned().collect();
+    let mut targets: Vec<_> = targets.into_iter().collect();
+    targets.sort();
+    for (server, (tree, shot, _count)) in targets {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let mut handles = Vec::with_capacity(MAX_GLOBAL_SOCKETS);
+        for _ in 0..MAX_GLOBAL_SOCKETS {
+            let server = server.clone();
+            let tree = tree.clone();
+            let shot = shot.clone();
+            handles.push(std::thread::spawn(move || {
+                let _ = warm_reusable_tree(&server, protocol::MDS_PORT, &tree, &shot);
+            }));
+        }
+        for handle in handles {
+            let _ = handle.join();
+        }
+    }
+
+    // Signals with incomplete tree/shot information still benefit from a
+    // plain handshake.  Keep at least one hot socket for those servers.
     for server in servers {
         if cancel.load(Ordering::Relaxed) {
             break;
         }
-        // Match the 16-worker fetch pipeline so the first large layout can
-        // start on authenticated sockets instead of serializing cold setup
-        // work behind its signal reads.
-        ensure_reusable_connections(&server, protocol::MDS_PORT, MAX_GLOBAL_SOCKETS);
+        if !warmed_servers.contains(&server) {
+            ensure_reusable_connections(&server, protocol::MDS_PORT, MAX_GLOBAL_SOCKETS);
+        }
     }
 }
 
@@ -233,11 +297,12 @@ fn fetch_chunk_serial_streaming(
 // ── Internal: retry ───────────────────────────────────────────────────────
 
 fn retry_transient(
-    requests: &[FetchRequest],
+    plan: &RequestPlan,
     results: &Arc<Mutex<Vec<ResultSlot>>>,
     callback: Option<&SignalCallback>,
     cancel: &Arc<AtomicBool>,
 ) {
+    let requests = &plan.unique;
     let to_retry = retry_indices(requests, &results.lock().unwrap());
 
     if to_retry.is_empty() {
@@ -273,7 +338,7 @@ fn retry_transient(
                             }
                         }
                         if let Some(callback) = callback {
-                            callback(fetch_result_into_loaded(requests, fr));
+                            publish_streamed_aliases(plan, callback, fr);
                         }
                     } else if let Ok(mut slots) = results.lock() {
                         if let Some(slot) = slots.get_mut(idx) {
@@ -357,6 +422,88 @@ fn build_requests(config: &LayoutConfig, read_mode: DataReadMode) -> Vec<FetchRe
         }
     }
     requests
+}
+
+fn build_request_plan(config: &LayoutConfig, read_mode: DataReadMode) -> RequestPlan {
+    let original = build_requests(config, read_mode);
+    let mut unique = Vec::with_capacity(original.len());
+    let mut aliases = Vec::<Vec<usize>>::new();
+    let mut seen = HashMap::<FetchIdentity, usize>::new();
+
+    for (original_index, request) in original.iter().cloned().enumerate() {
+        let identity = FetchIdentity::from_request(&request);
+        if let Some(&unique_index) = seen.get(&identity) {
+            aliases[unique_index].push(original_index);
+            continue;
+        }
+        let unique_index = unique.len();
+        let mut request = request;
+        request.loaded_index = unique_index;
+        unique.push(request);
+        aliases.push(vec![original_index]);
+        seen.insert(identity, unique_index);
+    }
+
+    RequestPlan {
+        original,
+        unique,
+        aliases,
+    }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+struct FetchIdentity {
+    server: String,
+    tree: String,
+    shot: String,
+    y_expr: String,
+    x_expr: String,
+    mode: u8,
+    max_points: usize,
+    extraction_points: i32,
+    custom_x_range: bool,
+    xmin: u64,
+    xmax: u64,
+}
+
+impl FetchIdentity {
+    fn from_request(request: &FetchRequest) -> Self {
+        let mode = match request.read_mode {
+            DataReadMode::Thin => 0,
+            DataReadMode::Medium => 1,
+            DataReadMode::Full => 2,
+        };
+        Self {
+            server: request.sig.server_ip.trim().to_string(),
+            tree: request.sig.experiment.trim().to_string(),
+            shot: request.shot.trim().to_string(),
+            y_expr: request.sig.y_expr.trim().to_string(),
+            x_expr: request.sig.x_expr.trim().to_string(),
+            mode,
+            max_points: request.max_points,
+            extraction_points: request.plot.extraction_points,
+            custom_x_range: request.plot.custom_x_range,
+            xmin: request.plot.xmin.to_bits(),
+            xmax: request.plot.xmax.to_bits(),
+        }
+    }
+}
+
+fn publish_streamed_aliases(plan: &RequestPlan, callback: &SignalCallback, result: FetchResult) {
+    let Some(aliases) = plan.aliases.get(result.loaded_index) else {
+        return;
+    };
+    if aliases.len() == 1 {
+        let mut result = result;
+        result.loaded_index = aliases[0];
+        callback(fetch_result_into_loaded(&plan.original, result));
+        return;
+    }
+    for &original_index in aliases {
+        let mut aliased = result.clone();
+        aliased.loaded_index = original_index;
+        callback(fetch_result_into_loaded(&plan.original, aliased));
+    }
 }
 
 fn group_requests(requests: &[FetchRequest]) -> HashMap<String, Vec<usize>> {
@@ -582,6 +729,35 @@ mod tests {
             },
         ];
         assert_eq!(build_requests(&config, DataReadMode::Thin).len(), 1);
+    }
+
+    #[test]
+    fn duplicate_signal_requests_share_one_fetch_and_keep_aliases() {
+        let mut config = make_test_config();
+        let duplicate = config.columns[0][0].signal_specs[0].clone();
+        config.columns[0][0].signal_specs.push(duplicate);
+
+        let plan = build_request_plan(&config, DataReadMode::Thin);
+        assert_eq!(plan.original.len(), 2);
+        assert_eq!(plan.unique.len(), 1);
+        assert_eq!(plan.aliases, vec![vec![0, 1]]);
+        assert_eq!(plan.unique[0].loaded_index, 0);
+    }
+
+    #[test]
+    fn request_dedup_keeps_distinct_ranges_and_modes_separate() {
+        let mut config = make_test_config();
+        let mut second = config.columns[0][0].signal_specs[0].clone();
+        second.read_mode = Some(DataReadMode::Full);
+        config.columns[0][0].signal_specs.push(second);
+        config.columns[0][0].custom_x_range = true;
+        config.columns[0][0].xmin = 1.0;
+        config.columns[0][0].xmax = 2.0;
+
+        let plan = build_request_plan(&config, DataReadMode::Thin);
+        assert_eq!(plan.original.len(), 2);
+        assert_eq!(plan.unique.len(), 2);
+        assert_eq!(plan.aliases, vec![vec![0], vec![1]]);
     }
 
     #[test]

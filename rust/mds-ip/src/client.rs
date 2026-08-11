@@ -290,6 +290,60 @@ pub fn warm_reusable_connection(host: &str, port: u16) -> Result<(), String> {
     with_reusable_connection(host, port, "", "", |_| ((), true))
 }
 
+/// Open a tree/shot on a reusable connection and return that warmed connection
+/// to the process-wide pool.  Unlike `with_reusable_connection`, a failed
+/// `TreeOpen` is not immediately retried: prewarming is speculative, and a
+/// missing tree/shot must not pay for a second handshake before the real read.
+/// The fetch path still retains its existing reconnect-on-open failure logic.
+pub fn warm_reusable_tree(host: &str, port: u16, tree: &str, shot: &str) -> Result<(), String> {
+    if tree.trim().is_empty() || shot.trim().is_empty() {
+        return warm_reusable_connection(host, port);
+    }
+
+    let key = connection_key(host, port);
+    let idle_connection = {
+        let mut pool = shared_connections()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        pool.get_mut(&key).and_then(Vec::pop)
+    };
+    let mut connection = match idle_connection {
+        Some(connection) => connection,
+        None => MdsConnection::connect(host, port)?,
+    };
+
+    let result = connection.open_tree(tree, shot);
+    let reusable = result.is_ok() || !is_transport_error(result.as_ref().err());
+    if reusable {
+        let mut pool = shared_connections()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let idle = pool.entry(key).or_default();
+        if idle.len() < MAX_IDLE_CONNECTIONS_PER_SERVER {
+            idle.push(connection);
+        }
+    }
+    result
+}
+
+fn is_transport_error(error: Option<&String>) -> bool {
+    let Some(error) = error else {
+        return false;
+    };
+    let lower = error.to_ascii_lowercase();
+    [
+        "read error",
+        "write error",
+        "connection closed",
+        "connection reset",
+        "timed out",
+        "broken pipe",
+        "eof",
+    ]
+    .iter()
+    .any(|marker| lower.contains(marker))
+}
+
 /// Number of currently idle process-wide sockets for a server.
 pub fn reusable_connection_count(host: &str, port: u16) -> usize {
     let key = connection_key(host, port);

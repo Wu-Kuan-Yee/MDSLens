@@ -685,6 +685,8 @@ class AppState extends ChangeNotifier {
   final ConfigEncoder _webscpConfigEncoder;
   final SshTestWorker _sshTestWorker;
   bool _disposed = false;
+  Future<void>? _prewarmInFlight;
+  String? _completedPrewarmKey;
 
   // Config
   List<List<Map<String, dynamic>>> _columns = [];
@@ -4134,6 +4136,46 @@ class AppState extends ChangeNotifier {
     );
   }
 
+  Future<void> _ensureSignalPrewarm(String shot) {
+    final normalizedShot = shot.trim();
+    if (_disposed || normalizedShot.isEmpty || _columns.isEmpty) {
+      return Future<void>.value();
+    }
+    final configJson = _buildSignalConfigJson(normalizedShot, 0);
+    final sshSettings = _buildSshSettingsJson();
+    return _startSignalPrewarm(configJson, sshSettings);
+  }
+
+  Future<void> _startSignalPrewarm(String configJson, String sshSettings) {
+    if (_disposed || configJson.isEmpty) return Future<void>.value();
+    final key = '$_dataMode|${configJson.hashCode}|${sshSettings.hashCode}';
+    if (_completedPrewarmKey == key) return Future<void>.value();
+    final active = _prewarmInFlight;
+    if (active != null) return active;
+
+    late final Future<void> future;
+    try {
+      future = _signalPrewarmWorker(configJson, sshSettings);
+    } catch (error, stackTrace) {
+      return Future<void>.error(error, stackTrace);
+    }
+    _prewarmInFlight = future;
+    unawaited(() async {
+      try {
+        await future;
+        _completedPrewarmKey = key;
+      } catch (_) {
+        // Prewarming is speculative. The authoritative fetch below reports
+        // any actual network/tree/shot error and can reconnect normally.
+      } finally {
+        if (identical(_prewarmInFlight, future)) {
+          _prewarmInFlight = null;
+        }
+      }
+    }());
+    return future;
+  }
+
   Future<void> _executeGlobalFetch({
     required String shot,
     bool preserveConfiguredShots = false,
@@ -4157,6 +4199,10 @@ class AppState extends ChangeNotifier {
     );
     final dataMode = _dataMode.toString();
     final sshSettings = _buildSshSettingsJson();
+    // Use the exact snapshot that the authoritative request will fetch. This
+    // avoids cloning a large layout a second time on the UI isolate while the
+    // speculative worker opens reusable MDS sockets and Tree/Shot state.
+    unawaited(_startSignalPrewarm(configJson, sshSettings));
     _fetchingPlotIndex = null;
     _fetching = true;
     _activeNativeFetchId = generation;
@@ -4578,10 +4624,7 @@ class AppState extends ChangeNotifier {
     try {
       // MDSIP authentication is the dominant cold-start cost. Overlap one
       // shared-pool handshake with the independent latest-shot HTTP request.
-      final prewarm = _signalPrewarmWorker(
-        _buildSignalConfigJson(_shotText, 0),
-        sshSettings,
-      );
+      final prewarm = _ensureSignalPrewarm(_shotText);
       final data = await _latestShotWorker(apiUrl, token, sshSettings);
       try {
         await prewarm;
