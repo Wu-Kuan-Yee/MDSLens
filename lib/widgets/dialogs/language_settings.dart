@@ -9,6 +9,7 @@ import '../../i18n/language_document.dart';
 import '../../i18n/language_service.dart';
 import '../../models/app_state.dart';
 import '../polished_dropdown.dart';
+import '../vim_focus.dart';
 import 'keyboard_safe_dialog.dart';
 
 class LanguageSettingsDialog extends StatefulWidget {
@@ -98,11 +99,24 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
     unawaited(
       showDialog<void>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text(context.tr('System (automatic)')),
+        builder: (dialogContext) => KeyboardSafeDialog(
+          pageId: 'language-settings-system-unavailable',
+          parentPageId: 'language-settings',
+          maxWidth: 440,
+          title: Row(
+            children: [
+              Icon(
+                Icons.language_rounded,
+                color: Theme.of(dialogContext).colorScheme.primary,
+              ),
+              const SizedBox(width: 10),
+              Flexible(child: Text(context.tr('System (automatic)'))),
+            ],
+          ),
           content: Text(message),
           actions: [
             FilledButton(
+              key: const ValueKey('language-system-unavailable-ok'),
               onPressed: () => Navigator.pop(dialogContext),
               child: Text(context.tr('OK')),
             ),
@@ -140,6 +154,8 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
       builder: (dialogContext) {
         final colors = Theme.of(dialogContext).colorScheme;
         return KeyboardSafeDialog(
+          pageId: 'language-settings-removal-confirm',
+          parentPageId: 'language-settings',
           maxWidth: 480,
           title: Row(
             children: [
@@ -183,7 +199,14 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
       languages.map((language) => language.source),
     );
     _selectedLanguageSources.removeAll(requested);
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+      // The confirmation route schedules a restoration when it pops. The
+      // language list can then remove the focused row, so schedule one more
+      // parent-page pass after the list has settled and let it choose the
+      // nearest remaining language-settings control.
+      scheduleVimPageParentFocus('language-settings');
+    }
   }
 
   @override
@@ -209,6 +232,7 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
             ? _preference
             : systemLanguagePreference;
         return KeyboardSafeDialog(
+          pageId: 'language-settings',
           maxWidth: 520,
           title: Row(
             children: [

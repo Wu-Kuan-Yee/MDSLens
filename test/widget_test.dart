@@ -8035,6 +8035,64 @@ void main() {
         find.byKey(const ValueKey('language-delete-selected')), findsOneWidget);
   });
 
+  testWidgets('Vim language removal returns focus to language settings', (
+    tester,
+  ) async {
+    late Directory root;
+    late AppState app;
+    await tester.runAsync(() async {
+      root = await Directory.systemTemp.createTemp('mdslens-language-vim-');
+      app = AppState(userDataStore: UserDataStore(rootOverride: root));
+      await app.preferencesReady;
+    });
+    addTearDown(() async {
+      app.dispose();
+      await root.delete(recursive: true);
+    });
+    app.setVimMode(true);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.translate_rounded));
+    await tester.pumpAndSettle();
+
+    final source = app.languages.availableLanguages.first.source;
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<VimPageScope>()
+          ?.pageId,
+      'language-settings',
+    );
+    await tester.tap(find.byKey(ValueKey('language-remove-$source')));
+    await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<VimPageScope>()
+          ?.pageId,
+      'language-settings-removal-confirm',
+    );
+
+    await tester.tap(find.byKey(const ValueKey('language-removal-confirm')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('language-removal-confirm')),
+      findsNothing,
+    );
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<VimPageScope>()
+          ?.pageId,
+      'language-settings',
+    );
+  });
+
   testWidgets(
       'unavailable automatic language stays disabled and explains in current language',
       (tester) async {
@@ -8087,6 +8145,66 @@ void main() {
     );
     expect(app.languagePreference, 'ja');
     await tester.tap(find.text(app.tr('OK')));
+  });
+
+  testWidgets('Vim unavailable system language focuses its prompt',
+      (tester) async {
+    late Directory root;
+    late AppState app;
+    await tester.runAsync(() async {
+      root = await Directory.systemTemp.createTemp('mdslens-language-vim-');
+      app = AppState(userDataStore: UserDataStore(rootOverride: root));
+      await app.preferencesReady;
+      app.setLanguagePreference('ja');
+      app.updateSystemLocales(const [Locale('ar', 'EG')]);
+      app.setLanguagePreference(systemLanguagePreference);
+      await app.savePreferences();
+    });
+    addTearDown(() async {
+      app.dispose();
+      await root.delete(recursive: true);
+    });
+    app.setVimMode(true);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip(app.tr('Settings')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.translate_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('language-dropdown')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('language-option-0')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('language-system-unavailable-ok')),
+      findsOneWidget,
+    );
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<VimPageScope>()
+          ?.pageId,
+      'language-settings-system-unavailable',
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('language-system-unavailable-ok')),
+      findsNothing,
+    );
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<VimPageScope>()
+          ?.pageId,
+      'language-settings',
+    );
   });
 
   test('restoring defaults selects English when the system catalog is absent',
