@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:mdslens/i18n/localized_material.dart';
 
 import '../../i18n/language_document.dart';
@@ -56,7 +57,12 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
         type: FileType.custom,
         allowedExtensions: const ['toml'],
         allowMultiple: true,
-        withData: true,
+        // file_picker's macOS backend intentionally does not support
+        // `withData`; it returns the selected paths instead.  Keep bytes
+        // enabled for web and the other platforms, and use the existing
+        // XFile fallback below for macOS.
+        withData: kIsWeb || defaultTargetPlatform != TargetPlatform.macOS,
+        readSequential: true,
       );
       if (result == null || result.files.isEmpty) return;
       final documents = <StoredLanguageDocument>[];
