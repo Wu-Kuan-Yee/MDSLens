@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:mdslens/app.dart';
+import 'package:mdslens/i18n/language_scope.dart';
 import 'package:mdslens/i18n/language_service.dart';
 import 'package:mdslens/pages/main_page.dart';
 import 'package:mdslens/models/app_state.dart';
@@ -7945,7 +7946,8 @@ void main() {
     expect(find.text('简体中文 — Chinese (Simplified)'), findsWidgets);
   });
 
-  testWidgets('unsupported automatic language changes the selection to English',
+  testWidgets(
+      'unavailable automatic language stays disabled and explains in current language',
       (tester) async {
     late Directory root;
     late AppState app;
@@ -7953,7 +7955,7 @@ void main() {
       root = await Directory.systemTemp.createTemp('mdslens-language-ui-');
       app = AppState(userDataStore: UserDataStore(rootOverride: root));
       await app.preferencesReady;
-      app.setLanguagePreference('zh-Hans');
+      app.setLanguagePreference('ja');
       app.updateSystemLocales(const [Locale('ar', 'EG')]);
       app.setLanguagePreference(systemLanguagePreference);
     });
@@ -7962,21 +7964,55 @@ void main() {
       await root.delete(recursive: true);
     });
 
-    expect(app.languagePreference, 'en');
-    expect(app.languages.activeLocale, 'en');
+    expect(app.languagePreference, 'ja');
+    expect(app.languages.activeLocale, 'ja');
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
         value: app,
-        child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+        child: LanguageScope(
+          notifier: app.languages,
+          child: const MaterialApp(home: Scaffold(body: ToolbarWidget())),
+        ),
       ),
     );
-    await tester.tap(find.byTooltip('Settings'));
+    await tester.tap(find.byTooltip(app.tr('Settings')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Language'));
+    await tester.tap(find.byIcon(Icons.translate_rounded));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('language-dropdown')));
     await tester.pumpAndSettle();
-    expect(find.text('English'), findsWidgets);
+    final systemOption = find.byKey(const ValueKey('language-option-0'));
+    expect(systemOption, findsOneWidget);
+    await tester.tap(systemOption);
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        app.tr(
+          'No installed language file matches the current system language. Select an installed language instead.',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(app.languagePreference, 'ja');
+    await tester.tap(find.text(app.tr('OK')));
+  });
+
+  test('restoring defaults selects English when the system catalog is absent',
+      () async {
+    final root = await Directory.systemTemp.createTemp('mdslens-language-ui-');
+    final app = AppState(userDataStore: UserDataStore(rootOverride: root));
+    await app.preferencesReady;
+    addTearDown(() async {
+      app.dispose();
+      await root.delete(recursive: true);
+    });
+
+    app.setLanguagePreference('ja');
+    app.updateSystemLocales(const [Locale('ar', 'EG')]);
+    await app.restoreAllDefaults();
+
+    expect(app.languagePreference, 'en');
+    expect(app.languages.activeLocale, 'en');
   });
 
   testWidgets('Settings can restore every preference after confirmation', (

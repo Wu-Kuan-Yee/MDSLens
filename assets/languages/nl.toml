@@ -248,6 +248,7 @@ Mode = 'Modus'
 'No configured signals' = 'Geen geconfigureerde signaalnen'
 'No data' = 'Geen data'
 'No desktop export destination was selected' = 'Geen doelbestemming geselecteerd voor bureauwinst'
+'No installed language file matches the current system language. Select an installed language instead.' = 'Er is geen geïnstalleerd taalbestand dat overeenkomt met de huidige systeemtaal. Kies in plaats daarvan een geïnstalleerde taal.'
 'No loaded data' = 'Geen geladen data'
 'No local configurations have been opened yet. Use Open configuration to choose one.' = "Er zijn nog geen lokale configuraties geopend. Gebruik 'Configuratie openen' om een te kiezen."
 'No matching command' = 'Geen overeenkomende opdracht gevonden'

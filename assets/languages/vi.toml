@@ -248,6 +248,7 @@ Mode = 'Chế độ'
 'No configured signals' = 'Không có tín hiệu được cấu hình'
 'No data' = 'Không có dữ liệu'
 'No desktop export destination was selected' = 'Không chọn đích xuất bản trên desktop'
+'No installed language file matches the current system language. Select an installed language instead.' = 'Không có tệp ngôn ngữ được cài đặt nào phù hợp với ngôn ngữ hệ thống hiện tại. Vui lòng chọn một ngôn ngữ đã được cài đặt thay vào đó.'
 'No loaded data' = 'Không có dữ liệu đã tải'
 'No local configurations have been opened yet. Use Open configuration to choose one.' = "Chưa mở bất kỳ cấu hình nào. Sử dụng 'Mở cấu hình' để chọn một cái."
 'No matching command' = 'Không có lệnh phù hợp'

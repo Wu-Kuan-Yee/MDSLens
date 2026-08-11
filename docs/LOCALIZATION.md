@@ -100,10 +100,16 @@ dart run tool/update_english_catalog.dart --check
 
 The 32 files under `assets/languages/` are first-run copy templates, not a
 second runtime catalog source. Application updates never merge them into or
-overwrite an initialized external language store. If `System (automatic)` is
-selected and no installed catalog matches the operating-system language, the
-preference is changed to the installed English catalog rather than leaving a
-non-existent system language selected.
+overwrite an initialized external language store. On first initialization or
+after Restore All Settings, if `System (automatic)` has no matching installed
+catalog, the preference is changed to the installed English catalog rather than
+leaving a non-existent system language selected. In Language Settings, an
+unavailable `System (automatic)` entry is shown in a disabled grey style. It
+remains focusable so keyboard and accessibility users can activate it to see a
+localized explanation, but it cannot change the selected language. An explicit
+System choice remains a preference mode when its catalog is later removed; the
+runtime then uses the normal English fallback until a matching catalog is
+installed or another language is selected.
 
 ## UI coverage contract
 

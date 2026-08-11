@@ -248,6 +248,7 @@ Mode = 'โหมด'
 'No configured signals' = 'ไม่มีสัญญาณที่ได้รับการกำหนดค่า'
 'No data' = 'ไม่มีข้อมูล'
 'No desktop export destination was selected' = 'ไม่ได้เลือกสถานที่สำหรับการส่งออกในโต๊ะทำงาน'
+'No installed language file matches the current system language. Select an installed language instead.' = 'ไม่มีไฟล์ภาษาที่ติดตั้งตรงกับภาษาของระบบปัจจุบัน กรุณาเลือกภาษาที่ติดตั้งไว้แทน'
 'No loaded data' = 'ไม่มีข้อมูลที่โหลดอยู่'
 'No local configurations have been opened yet. Use Open configuration to choose one.' = "ยังไม่มีการเปิดตั้งค่าที่มีอยู่. ใช้ 'เปิดตั้งค่า' เพื่อเลือกหนึ่งรายการ."
 'No matching command' = 'ไม่มีคำสั่งที่ตรงกัน'

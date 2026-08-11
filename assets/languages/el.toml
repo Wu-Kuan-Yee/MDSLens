@@ -248,6 +248,7 @@ Mode = 'Λειτουργία'
 'No configured signals' = 'Χωρίς ρυθμισμένες σήμερες'
 'No data' = 'Χωρίς δεδομένα'
 'No desktop export destination was selected' = 'Χωρίς προορισμός εξαγωγής στην οθόνη επιφάνειας'
+'No installed language file matches the current system language. Select an installed language instead.' = 'Δεν υπάρχει εγκατεστημένο αρχείο γλώσσας που να ταιριάζει με την τρέχουσα συστημική γλώσσα. Επιλέξτε μια εγκατεστημένη γλώσσα αντί.'
 'No loaded data' = 'Χωρίς φορτωμένα δεδομένα'
 'No local configurations have been opened yet. Use Open configuration to choose one.' = "Χωρίς ανοιχτές κανονιστικές ρυθμίσεις. Χρησιμοποιήστε 'Άνοιγμα κανόνισης' για να επιλέξετε μια."
 'No matching command' = 'Χωρίς ταιριάζουσα προσθέσεις'

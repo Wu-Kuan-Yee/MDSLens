@@ -248,6 +248,7 @@ Mode = '모드'
 'No configured signals' = '구성된 신호가 없습니다.'
 'No data' = '데이터가 없습니다.'
 'No desktop export destination was selected' = '데스크톱 내보내기 대상이 선택되지 않았습니다.'
+'No installed language file matches the current system language. Select an installed language instead.' = '설치된 언어 파일 중 현재 시스템 언어와 일치하는 것이 없습니다. 대신 설치된 언어를 선택하십시오.'
 'No loaded data' = '로드된 데이터가 없습니다.'
 'No local configurations have been opened yet. Use Open configuration to choose one.' = "아직 로컬 구성 파일을 열지 않았습니다. '열기'를 사용하여 하나를 선택하세요."
 'No matching command' = '일치하는 명령어가 없습니다.'

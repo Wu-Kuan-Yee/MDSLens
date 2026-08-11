@@ -248,6 +248,7 @@ Mode = 'Mode'
 'No configured signals' = 'No hi ha signales configurades'
 'No data' = 'No hi ha dades'
 'No desktop export destination was selected' = "No s'ha seleccionat cap destí per a l'exportació del escritorio"
+'No installed language file matches the current system language. Select an installed language instead.' = 'Cap de fitxer de llenguatge instal·lat coincideix amb la llenguatge actual del sistema. Seleccioneu una llenguatge instal·lada en canvi.'
 'No loaded data' = 'No hi ha dades carregades'
 'No local configurations have been opened yet. Use Open configuration to choose one.' = "No s'han obert encara configuracions locals. Utilitza 'Obre configuració' per triar una."
 'No matching command' = "No s'ha trobat cap ordre coincident"

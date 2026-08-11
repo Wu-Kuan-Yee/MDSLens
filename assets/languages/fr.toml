@@ -248,6 +248,7 @@ Mode = 'Mode'
 'No configured signals' = 'Aucun signal configuré'
 'No data' = 'Aucune donnée'
 'No desktop export destination was selected' = "Aucun emplacement d'exportation sur le bureau sélectionné"
+'No installed language file matches the current system language. Select an installed language instead.' = 'Aucun fichier de langue installé ne correspond à la langue actuelle du système. Veuillez sélectionner une langue installée à la place.'
 'No loaded data' = 'Aucune donnée chargée'
 'No local configurations have been opened yet. Use Open configuration to choose one.' = "Aucune configuration locale n'a été ouverte jusqu'à présent. Utilisez Ouvrir la configuration pour choisir une."
 'No matching command' = 'Aucune commande correspondante'

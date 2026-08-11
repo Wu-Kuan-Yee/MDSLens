@@ -248,6 +248,7 @@ Mode = 'Način rada'
 'No configured signals' = 'Nema konfigurisanih signala'
 'No data' = 'Nema podataka'
 'No desktop export destination was selected' = 'Nijedan ciljni folder za izvoz nije odabran'
+'No installed language file matches the current system language. Select an installed language instead.' = 'Nema instaliranog jezičnog fajla koji odgovara trenutnom sistemsom jeziku. Izaberite umesto toga instalirani jezik.'
 'No loaded data' = 'Nema učitanih podataka'
 'No local configurations have been opened yet. Use Open configuration to choose one.' = "Još nisu otvorene nikakve lokalne konfiguracije. Koristite 'Otvori konfiguraciju' da biste odabrali jednu."
 'No matching command' = 'Nema odgovarajuće komande'

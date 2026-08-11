@@ -11,12 +11,21 @@ class PolishedDropdownOption<T> {
     required this.label,
     this.icon,
     this.fontFamily,
+    this.enabled = true,
+    this.onPressed,
   });
 
   final T value;
   final String label;
   final IconData? icon;
   final String? fontFamily;
+
+  /// Whether this option can change the dropdown value.
+  ///
+  /// A disabled option remains focusable and may provide [onPressed] for an
+  /// explanatory action, such as a language that is not installed.
+  final bool enabled;
+  final VoidCallback? onPressed;
 }
 
 class PolishedDropdownAction {
@@ -359,10 +368,7 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
           ),
         _withMenuVimNavigation(
           _menuOption(context, widget.options[index], index),
-          onActivate: () {
-            _menuController?.close();
-            widget.onChanged(widget.options[index].value);
-          },
+          onActivate: () => _activateMenuOption(widget.options[index]),
         ),
       ],
     ];
@@ -581,6 +587,19 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
     });
   }
 
+  void _activateMenuOption(PolishedDropdownOption<T> option) {
+    if (option.onPressed != null) {
+      _menuController?.close();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) option.onPressed!();
+      });
+      return;
+    }
+    if (!option.enabled) return;
+    _menuController?.close();
+    widget.onChanged(option.value);
+  }
+
   Widget _menuAction(BuildContext context, PolishedDropdownAction action) {
     final colors = Theme.of(context).colorScheme;
     final foreground =
@@ -711,21 +730,27 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
   ) {
     final colors = Theme.of(context).colorScheme;
     final isSelected = option.value == widget.value;
+    final foreground = option.enabled
+        ? colors.onSurface
+        : colors.onSurface.withValues(alpha: 0.46);
+    final secondaryForeground = option.enabled
+        ? (isSelected ? colors.primary : colors.onSurfaceVariant)
+        : colors.onSurfaceVariant.withValues(alpha: 0.42);
     return _DropdownVimFocusFrame(
       focusNode: _optionFocusNodes[index],
       child: MenuItemButton(
         key: ValueKey('${widget.id}-option-$index'),
         focusNode: _optionFocusNodes[index],
-        onPressed: () => widget.onChanged(option.value),
+        onPressed: () => _activateMenuOption(option),
         leadingIcon: option.icon == null
             ? null
             : Icon(
                 option.icon,
                 size: 19,
-                color: isSelected ? colors.primary : colors.onSurfaceVariant,
+                color: secondaryForeground,
               ),
         trailingIcon: isSelected
-            ? Icon(Icons.check_rounded, size: 19, color: colors.primary)
+            ? Icon(Icons.check_rounded, size: 19, color: secondaryForeground)
             : const SizedBox(width: 19),
         style: ButtonStyle(
           minimumSize: const WidgetStatePropertyAll(Size(0, 46)),
@@ -736,19 +761,23 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
           ),
           backgroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.hovered) ||
-                states.contains(WidgetState.focused)) {
+            if (option.enabled &&
+                (states.contains(WidgetState.hovered) ||
+                    states.contains(WidgetState.focused))) {
               return colors.primary.withValues(alpha: 0.11);
             }
             return isSelected
-                ? colors.primary.withValues(alpha: 0.08)
+                ? (option.enabled
+                    ? colors.primary.withValues(alpha: 0.08)
+                    : colors.onSurface.withValues(alpha: 0.04))
                 : Colors.transparent;
           }),
-          foregroundColor: WidgetStatePropertyAll(colors.onSurface),
+          foregroundColor: WidgetStatePropertyAll(foreground),
           textStyle: WidgetStatePropertyAll(
             Theme.of(context).textTheme.bodyMedium?.copyWith(
                   fontSize: widget.fontSize,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                  color: foreground,
                 ),
           ),
         ),
@@ -759,7 +788,10 @@ class _PolishedDropdownState<T> extends State<PolishedDropdown<T>> {
               ? TextOverflow.visible
               : TextOverflow.ellipsis,
           softWrap: true,
-          style: TextStyle(fontFamily: option.fontFamily),
+          style: TextStyle(
+            fontFamily: option.fontFamily,
+            color: foreground,
+          ),
         ),
       ),
     );

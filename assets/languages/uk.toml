@@ -248,6 +248,7 @@ Mode = 'Режим'
 'No configured signals' = 'Немає налаштованих сигналів'
 'No data' = 'Немає даних'
 'No desktop export destination was selected' = 'Не вибрано місце для експорту на desktop'
+'No installed language file matches the current system language. Select an installed language instead.' = 'Встановлений файл мови не відповідає поточній системній мові. Виберіть замість цього встановлену мову.'
 'No loaded data' = 'Дані не завантажені'
 'No local configurations have been opened yet. Use Open configuration to choose one.' = "Ще не відкрито жодних локальних конфігурацій. Використовуйте 'Відкрити конфігурацію', щоб вибрати одну."
 'No matching command' = 'Немає відповідної команди'

@@ -79,6 +79,27 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
     }
   }
 
+  void _showUnavailableSystemLanguage() {
+    final message = context.tr(
+      'No installed language file matches the current system language. Select an installed language instead.',
+    );
+    unawaited(
+      showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(context.tr('System (automatic)')),
+          content: Text(message),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(context.tr('OK')),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -87,6 +108,8 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
       builder: (context, _) {
         final languages = widget.app.languages.availableLanguages;
         final available = languages.map((item) => item.locale).toSet();
+        final systemLanguageAvailable =
+            widget.app.languages.systemLocaleMatch != null;
         final selected = _preference == systemLanguagePreference ||
                 available.contains(_preference)
             ? _preference
@@ -129,6 +152,10 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
                     value: systemLanguagePreference,
                     label: context.tr('System (automatic)'),
                     icon: Icons.devices_rounded,
+                    enabled: systemLanguageAvailable,
+                    onPressed: systemLanguageAvailable
+                        ? null
+                        : _showUnavailableSystemLanguage,
                   ),
                   for (final language in languages)
                     PolishedDropdownOption(
@@ -137,7 +164,14 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
                       icon: Icons.language_rounded,
                     ),
                 ],
-                onChanged: (value) => setState(() => _preference = value),
+                onChanged: (value) {
+                  if (value == systemLanguagePreference &&
+                      !systemLanguageAvailable) {
+                    _showUnavailableSystemLanguage();
+                    return;
+                  }
+                  setState(() => _preference = value);
+                },
               ),
               const SizedBox(height: 12),
               Row(

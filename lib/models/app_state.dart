@@ -1074,6 +1074,7 @@ class AppState extends ChangeNotifier {
 
   bool _useInstalledEnglishWhenSystemIsUnavailable() {
     if (_languagePreference != systemLanguagePreference ||
+        _languagePreferenceExplicit ||
         languages.systemLocaleMatch != null) {
       return false;
     }
@@ -1249,6 +1250,7 @@ class AppState extends ChangeNotifier {
   }
 
   String _languagePreference = systemLanguagePreference;
+  bool _languagePreferenceExplicit = false;
   bool _languagePreferencesLoaded = false;
   String get languagePreference => _languagePreference;
 
@@ -1256,8 +1258,13 @@ class AppState extends ChangeNotifier {
     final normalized = preference.trim().isEmpty
         ? systemLanguagePreference
         : preference.trim();
+    if (normalized == systemLanguagePreference &&
+        languages.systemLocaleMatch == null) {
+      return;
+    }
     if (_languagePreference == normalized) return;
     _languagePreference = normalized;
+    _languagePreferenceExplicit = true;
     languages.setPreference(normalized);
     _useInstalledEnglishWhenSystemIsUnavailable();
     savePreferences();
@@ -2368,6 +2375,10 @@ class AppState extends ChangeNotifier {
           : _autoCheckUpdates;
       _languagePreference =
           setting('languagePreference')?.toString() ?? _languagePreference;
+      _languagePreferenceExplicit =
+          setting('languagePreferenceExplicit') is bool
+              ? setting('languagePreferenceExplicit') as bool
+              : false;
       final requestedLanguagePreference = _languagePreference;
       await languages.initialize(
         preference: _languagePreference,
@@ -2501,6 +2512,7 @@ class AppState extends ChangeNotifier {
         'vimMode': _vimMode,
         'autoCheckUpdates': _autoCheckUpdates,
         'languagePreference': _languagePreference,
+        'languagePreferenceExplicit': _languagePreferenceExplicit,
         'fontFamily': _fontFamily,
         'fontLegendSize': _fontLegendSize,
         'fontAxisSize': _fontAxisSize,
@@ -3048,7 +3060,9 @@ class AppState extends ChangeNotifier {
     _vimMode = false;
     _autoCheckUpdates = true;
     _languagePreference = systemLanguagePreference;
+    _languagePreferenceExplicit = false;
     languages.setPreference(systemLanguagePreference);
+    _useInstalledEnglishWhenSystemIsUnavailable();
     _fontFamily = 'System';
     _fontLegendSize = 11;
     _fontAxisSize = 8;

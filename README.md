@@ -154,8 +154,11 @@ The language list is derived only from valid TOML files currently present in
 there once. Deleting a catalog removes that language and it is not silently
 restored; an existing V1 store receives only the newly added catalogs and
 keeps its existing files. CLDR registry metadata and other missing locales
-never appear as selectable placeholders. With `System (automatic)`, an
-unavailable system language automatically selects and persists English.
+never appear as selectable placeholders. On first launch or after Restore All
+Settings, if `System (automatic)` has no matching installed catalog, English is
+selected and persisted. In Language Settings, an unavailable System entry is
+greyed out and opens a localized explanation when activated; it cannot replace
+the current language.
 
 Open and Save dialogs default to `configurations/`, but users may select any
 accessible location. Android, iOS, and iPadOS use the same `.mdslens` layout
