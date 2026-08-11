@@ -2938,7 +2938,18 @@ Future<UpdateInstallResult?> prepareLinuxSystemPackageUpdate(
   final managerName =
       packageManager.substring(packageManager.lastIndexOf('/') + 1);
   final arguments = switch (managerName) {
-    'dnf5' || 'dnf' => [
+    // DNF 5 renamed the compatibility spelling used by DNF 4.  RHEL 10
+    // resolves `dnf` to DNF 5, so using `--nogpgcheck` here makes an
+    // otherwise valid local RPM transaction fail before it reaches the
+    // solver.  Keep the two command lines explicit so Fedora/RHEL upgrades
+    // remain compatible with the package manager actually selected.
+    'dnf5' => [
+        'install',
+        '-y',
+        '--no-gpgchecks',
+        update.path,
+      ],
+    'dnf' => [
         'install',
         '-y',
         '--nogpgcheck',

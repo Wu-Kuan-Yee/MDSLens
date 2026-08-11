@@ -1123,7 +1123,7 @@ void main() {
         '/usr/bin/dnf5',
         'install',
         '-y',
-        '--nogpgcheck',
+        '--no-gpgchecks',
         update.path,
       ]),
     );
