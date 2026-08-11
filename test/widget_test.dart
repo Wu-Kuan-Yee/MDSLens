@@ -8136,7 +8136,7 @@ void main() {
       'language-settings',
     );
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
     expect(
       FocusManager.instance.primaryFocus?.context
@@ -8148,6 +8148,24 @@ void main() {
       FocusManager.instance.primaryFocus?.context
           ?.findAncestorWidgetOfExactType<VimLanguageListItem>(),
       isNotNull,
+    );
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'language-list-item:${languages.first.source}',
+    );
+
+    // Enter and `i` must use the same child-page transition. Native desktop
+    // Enter dispatch previously disabled the parent entry without assigning a
+    // child focus, leaving the dialog with no visible Vim cursor.
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(
+        FocusManager.instance.primaryFocus?.debugLabel, 'language-list-page');
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'language-list-item:${languages.first.source}',
     );
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);

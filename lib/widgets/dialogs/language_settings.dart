@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:mdslens/i18n/localized_material.dart';
 
 import '../../i18n/language_document.dart';
@@ -38,6 +37,8 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
   bool _languageListEntered = false;
   late final FocusNode _languageListEntryFocusNode;
   late final FocusScopeNode _languageListScopeNode;
+  late final FocusNode _emptyLanguageListFocusNode;
+  final Map<String, FocusNode> _languageItemFocusNodes = <String, FocusNode>{};
   final Set<String> _selectedLanguageSources = <String>{};
 
   @override
@@ -50,26 +51,41 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
     _languageListScopeNode = FocusScopeNode(
       debugLabel: 'language-list-page-scope',
     );
+    _emptyLanguageListFocusNode = FocusNode(
+      debugLabel: 'language-list-item:empty',
+    );
   }
 
   @override
   void dispose() {
     _languageListEntryFocusNode.dispose();
     _languageListScopeNode.dispose();
+    _emptyLanguageListFocusNode.dispose();
+    for (final node in _languageItemFocusNodes.values) {
+      node.dispose();
+    }
     super.dispose();
+  }
+
+  FocusNode _languageItemFocusNode(String source) {
+    return _languageItemFocusNodes.putIfAbsent(
+      source,
+      () => FocusNode(debugLabel: 'language-list-item:$source'),
+    );
   }
 
   void _enterLanguageList() {
     if (_languageListEntered || !mounted) return;
+    final languages = widget.app.languages.availableLanguages;
+    final target = languages.isEmpty
+        ? _emptyLanguageListFocusNode
+        : _languageItemFocusNode(languages.first.source);
     setState(() => _languageListEntered = true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_languageListEntered) return;
-      final candidates = _languageListScopeNode.traversalDescendants
-          .where((node) => node.canRequestFocus && !node.skipTraversal)
-          .toList();
-      if (candidates.isNotEmpty) {
-        _languageListScopeNode.requestFocus(candidates.first);
-      }
+      if (!target.canRequestFocus) return;
+      target.requestFocus();
+      scheduleVimFocusVisualRefresh();
     });
   }
 
@@ -378,49 +394,22 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
                   Expanded(
                     child: VimLanguageListEntry(
                       onEnter: _enterLanguageList,
-                      child: VimActivatable(
-                        onActivate: _enterLanguageList,
-                        child: Focus(
-                          key: const ValueKey('language-list-page'),
-                          focusNode: _languageListEntryFocusNode,
-                          autofocus: !_languageListEntered &&
-                              VimModeScope.enabled(context),
-                          canRequestFocus: !_languageListEntered,
-                          skipTraversal: _languageListEntered,
-                          descendantsAreFocusable: false,
-                          descendantsAreTraversable: false,
-                          onKeyEvent: (node, event) {
-                            if (!VimModeScope.enabled(
-                                    node.context ?? context) ||
-                                (event is! KeyDownEvent &&
-                                    event is! KeyRepeatEvent)) {
-                              return KeyEventResult.ignored;
-                            }
-                            final keyboard = HardwareKeyboard.instance;
-                            if (keyboard.isShiftPressed ||
-                                keyboard.isControlPressed ||
-                                keyboard.isAltPressed ||
-                                keyboard.isMetaPressed) {
-                              return KeyEventResult.ignored;
-                            }
-                            final enters = event.logicalKey ==
-                                    LogicalKeyboardKey.keyI ||
-                                event.logicalKey == LogicalKeyboardKey.enter ||
-                                event.logicalKey ==
-                                    LogicalKeyboardKey.numpadEnter ||
-                                event.logicalKey == LogicalKeyboardKey.space;
-                            if (!enters) return KeyEventResult.ignored;
-                            if (!claimVimActivation(
-                                node.context ?? context, event)) {
-                              return KeyEventResult.handled;
-                            }
-                            _enterLanguageList();
-                            return KeyEventResult.handled;
-                          },
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(10),
+                      child: Focus(
+                        key: const ValueKey('language-list-page'),
+                        focusNode: _languageListEntryFocusNode,
+                        autofocus: !_languageListEntered &&
+                            VimModeScope.enabled(context),
+                        canRequestFocus: !_languageListEntered,
+                        skipTraversal: _languageListEntered,
+                        descendantsAreFocusable: false,
+                        descendantsAreTraversable: false,
+                        child: Semantics(
+                          button: true,
+                          onTap: _enterLanguageList,
+                          child: MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
                               onTap: _enterLanguageList,
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
@@ -481,38 +470,42 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
               ),
               FocusScope(
                 node: _languageListScopeNode,
-                canRequestFocus: _languageListEntered,
-                skipTraversal: !_languageListEntered,
                 child: VimLanguageListPage(
                   onExit: _leaveLanguageList,
                   child: VimPageScope(
                     pageId: 'language-settings/languages',
                     parentPageId: 'language-settings',
                     transient: true,
-                    child: ExcludeFocus(
-                      excluding: !_languageListEntered,
-                      child: Column(
-                        children: [
-                          if (languages.isEmpty)
-                            VimLanguageListItem(
-                              row: 0,
-                              child: Focus(
-                                key: const ValueKey('language-list-empty'),
-                                canRequestFocus: _languageListEntered,
-                                child: ListTile(
-                                  leading: const Icon(Icons.language_rounded),
-                                  title: Text(
-                                    context.tr('No language files detected'),
-                                  ),
+                    child: Column(
+                      children: [
+                        if (languages.isEmpty)
+                          VimLanguageListItem(
+                            row: 0,
+                            child: Focus(
+                              key: const ValueKey('language-list-empty'),
+                              focusNode: _emptyLanguageListFocusNode,
+                              skipTraversal: !_languageListEntered,
+                              descendantsAreFocusable: _languageListEntered,
+                              descendantsAreTraversable: _languageListEntered,
+                              child: ListTile(
+                                leading: const Icon(Icons.language_rounded),
+                                title: Text(
+                                  context.tr('No language files detected'),
                                 ),
                               ),
-                            )
-                          else
-                            for (var index = 0;
-                                index < languages.length;
-                                index++)
-                              VimLanguageListItem(
-                                row: index,
+                            ),
+                          )
+                        else
+                          for (var index = 0; index < languages.length; index++)
+                            VimLanguageListItem(
+                              row: index,
+                              child: Focus(
+                                focusNode: _languageItemFocusNode(
+                                  languages[index].source,
+                                ),
+                                skipTraversal: !_languageListEntered,
+                                descendantsAreFocusable: _languageListEntered,
+                                descendantsAreTraversable: _languageListEntered,
                                 child: CheckboxListTile(
                                   key: ValueKey(
                                     'language-select-${languages[index].source}',
@@ -554,8 +547,8 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
                                   }),
                                 ),
                               ),
-                        ],
-                      ),
+                            ),
+                      ],
                     ),
                   ),
                 ),
