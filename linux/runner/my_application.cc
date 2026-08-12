@@ -200,7 +200,7 @@ static FlValue* show_linux_file_dialog(MyApplication* application,
     }
   }
   gtk_widget_destroy(dialog);
-  return g_steal_pointer(&result);
+  return static_cast<FlValue*>(g_steal_pointer(&result));
 }
 
 static void file_dialog_method_call_cb(FlMethodChannel* channel,
