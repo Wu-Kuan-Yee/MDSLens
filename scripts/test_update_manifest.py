@@ -214,6 +214,26 @@ class UpdateManifestTests(unittest.TestCase):
         index = generate_latest_index.generate_index([[release], []])
         self.assertEqual(index["version"], "2.0.0")
 
+    def test_latest_index_serializes_as_toml(self) -> None:
+        releases = [
+            {
+                "tag_name": "v1.2.0",
+                "html_url": "https://github.com/Wu-Kuan-Yee/MDSLens/releases/tag/v1.2.0",
+                "draft": False,
+                "prerelease": False,
+                "assets": [
+                    {
+                        "name": "update-manifest.toml",
+                        "browser_download_url": "https://github.com/Wu-Kuan-Yee/MDSLens/releases/download/v1.2.0/update-manifest.toml",
+                        "size": 20,
+                    },
+                ],
+            },
+        ]
+        index = generate_latest_index.generate_index(releases)
+        decoded = tomllib.loads(generate_latest_index.serialize_index(index))
+        self.assertEqual(decoded, index)
+
 
 if __name__ == "__main__":
     unittest.main()

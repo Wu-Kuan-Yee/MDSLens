@@ -10,7 +10,7 @@ const mdsLensMaintainerUrl = 'https://github.com/Wu-Kuan-Yee';
 const originalMdsScopeRepositoryUrl = 'https://github.com/wwktz/MdsScope';
 const mdsLensReleasesUrl = 'https://github.com/Wu-Kuan-Yee/MDSLens/releases';
 const mdsLensLatestIndexUrl =
-    'https://wu-kuan-yee.github.io/MDSLens/latest.json';
+    'https://wu-kuan-yee.github.io/MDSLens/latest.toml';
 const mdsLensGitHubApiBaseUrl =
     'https://api.github.com/repos/Wu-Kuan-Yee/MDSLens';
 const mdsLensTagsApiUrl = '$mdsLensGitHubApiBaseUrl/tags?per_page=100';
@@ -99,10 +99,10 @@ Future<ReleaseUpdate> checkLatestMDSLensRelease(
         activeClient,
         Uri.parse(mdsLensLatestIndexUrl),
         currentVersion: currentVersion,
-        accept: 'application/json',
+        accept: 'application/toml, text/plain;q=0.9',
       );
       return _releaseUpdateFromLatestIndex(
-        jsonDecode(utf8.decode(response.bodyBytes)),
+        decodeTomlDocument(utf8.decode(response.bodyBytes)),
         currentVersion: currentVersion,
       );
     } catch (error) {

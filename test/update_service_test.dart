@@ -259,7 +259,7 @@ void main() {
       expect(request.headers['user-agent'], 'MDSLens/1.4.0');
       expect(request.headers['x-github-api-version'], '2022-11-28');
       return http.Response(
-        jsonEncode({
+        encodeTomlDocument({
           'schema_version': 1,
           'version': '1.5.0',
           'tag': 'v1.5.0',
@@ -281,6 +281,7 @@ void main() {
           ],
         }),
         200,
+        headers: const {'content-type': 'application/toml'},
       );
     });
 

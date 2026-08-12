@@ -9,7 +9,11 @@ import re
 from pathlib import Path
 from urllib.parse import urlparse
 
-from scripts.generate_update_manifest import classify_asset, normalized_version
+from scripts.generate_update_manifest import (
+    classify_asset,
+    normalized_version,
+    toml_string,
+)
 
 
 REPOSITORY = "Wu-Kuan-Yee/MDSLens"
@@ -134,6 +138,32 @@ def generate_index(releases: object, repository: str = REPOSITORY) -> dict[str, 
     }
 
 
+def serialize_index(index: dict[str, object]) -> str:
+    """Serialize the public index as TOML, matching release manifests."""
+    lines = [
+        f"schema_version = {index['schema_version']}",
+        f"version = {toml_string(str(index['version']))}",
+        f"tag = {toml_string(str(index['tag']))}",
+        f"release_url = {toml_string(str(index['release_url']))}",
+    ]
+    for asset in index["assets"]:
+        if not isinstance(asset, dict):
+            raise TypeError("latest index asset must be a table")
+        lines.extend(
+            [
+                "",
+                "[[assets]]",
+                f"name = {toml_string(str(asset['name']))}",
+                f"url = {toml_string(str(asset['url']))}",
+                f"size = {asset['size']}",
+            ]
+        )
+        for key in ("platform", "architecture", "format", "strategy", "sha256"):
+            if key in asset:
+                lines.append(f"{key} = {toml_string(str(asset[key]))}")
+    return "\n".join(lines) + "\n"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--releases-json", type=Path, required=True)
@@ -142,10 +172,7 @@ def main() -> None:
     args = parser.parse_args()
     releases = json.loads(args.releases_json.read_text(encoding="utf-8"))
     index = generate_index(releases, repository=args.repository)
-    args.output.write_text(
-        json.dumps(index, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    args.output.write_text(serialize_index(index), encoding="utf-8")
 
 
 if __name__ == "__main__":

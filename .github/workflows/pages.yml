@@ -53,8 +53,8 @@ jobs:
             > "$RUNNER_TEMP/releases.json"
           python3 scripts/generate_latest_index.py \
             --releases-json "$RUNNER_TEMP/releases.json" \
-            --output pages/latest.json
-          python3 -m json.tool pages/latest.json >/dev/null
+            --output pages/latest.toml
+          python3 -c 'import pathlib, tomllib; tomllib.loads(pathlib.Path("pages/latest.toml").read_text(encoding="utf-8"))'
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
         with:
