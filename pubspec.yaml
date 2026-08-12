@@ -28,6 +28,13 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^5.0.0
 
+# Flutter's current native-assets pipeline compiles objective_c with a
+# macOS 13 deployment target, even when this application targets Catalina
+# (10.15).  The plugin-based 2.5.1 implementation keeps path_provider's
+# public API while preserving the project's 10.15 minimum.
+dependency_overrides:
+  path_provider_foundation: 2.5.1
+
 flutter:
   uses-material-design: true
   fonts:

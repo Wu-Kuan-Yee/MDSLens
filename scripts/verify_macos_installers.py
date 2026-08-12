@@ -37,10 +37,85 @@ def command(*arguments: str) -> str:
     return result.stdout
 
 
+def _version_tuple(value: str) -> tuple[int, ...]:
+    try:
+        parts = tuple(int(part) for part in value.split("."))
+    except ValueError as error:
+        raise VerificationError(f"Invalid macOS version in Mach-O load command: {value}") from error
+    require(parts, f"Invalid empty macOS version in Mach-O load command: {value}")
+    return parts
+
+
+def _macho_architectures(path: Path) -> list[str]:
+    result = subprocess.run(
+        ("lipo", "-archs", str(path)),
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        return []
+    return result.stdout.split()
+
+
+def _macho_minimum_versions(path: Path, architecture: str) -> list[str]:
+    output = command("otool", "-arch", architecture, "-l", str(path))
+    versions: list[str] = []
+    load_command = ""
+    for line in output.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("cmd "):
+            load_command = stripped
+        elif load_command == "cmd LC_BUILD_VERSION" and stripped.startswith("minos "):
+            versions.append(stripped.split(maxsplit=1)[1])
+        elif load_command == "cmd LC_VERSION_MIN_MACOSX" and stripped.startswith("version "):
+            versions.append(stripped.split(maxsplit=1)[1])
+    return versions
+
+
+def verify_macos_runtime_compatibility(app: Path) -> None:
+    """Reject embedded Mach-O slices that cannot launch on a supported Mac.
+
+    Flutter's arm64 macOS engine requires macOS 11, while the x86_64 build is
+    intentionally kept compatible with Catalina 10.15.  Checking each slice
+    catches native assets that silently raise the minimum for the whole x64
+    bundle (the objective_c native asset did exactly that in Flutter 3.44).
+    """
+
+    maximum_by_architecture = {"x86_64": (10, 15), "arm64": (11, 0)}
+    inspected = 0
+    for path in sorted(app.rglob("*")):
+        if not path.is_file() or path.is_symlink():
+            continue
+        architectures = _macho_architectures(path)
+        if not architectures:
+            continue
+        inspected += 1
+        for architecture in architectures:
+            maximum = maximum_by_architecture.get(architecture)
+            if maximum is None:
+                continue
+            versions = _macho_minimum_versions(path, architecture)
+            require(
+                versions,
+                f"Could not determine the macOS minimum for {path.relative_to(app)} "
+                f"({architecture})",
+            )
+            for version in versions:
+                require(
+                    _version_tuple(version) <= maximum,
+                    f"{path.relative_to(app)} ({architecture}) requires macOS {version}; "
+                    f"the supported maximum is {'.'.join(map(str, maximum))}",
+                )
+    require(inspected > 0, f"No Mach-O binaries were found in {app}")
+
+
 def verify_application(app: Path) -> None:
     executable = app / "Contents/MacOS/MDSLens"
     require(app.is_dir(), f"Missing app bundle: {app}")
     require(executable.is_file(), f"Missing application executable: {executable}")
+    verify_macos_runtime_compatibility(app)
 
 
 def verify_pkg(package: Path) -> None:
