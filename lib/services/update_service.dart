@@ -138,10 +138,22 @@ class UpdateCheckException implements Exception {
 
   final List<Object> causes;
 
+  String get diagnostic {
+    final messages = causes
+        .map((cause) => cause.toString().trim())
+        .where((message) => message.isNotEmpty)
+        .toSet()
+        .join(' | ');
+    return messages.length <= 600
+        ? messages
+        : '${messages.substring(0, 597)}...';
+  }
+
   @override
   String toString() {
-    if (causes.isEmpty) return 'Update check failed';
-    return 'Update check failed: ${causes.last}';
+    final detail = diagnostic;
+    if (detail.isEmpty) return 'Update check failed';
+    return 'Update check failed: $detail';
   }
 }
 
@@ -279,7 +291,9 @@ Future<List<String>> _fetchStableTags(
   for (var page = 1; page <= 100; page++) {
     final response = await _getUpdateResponse(
       client,
-      Uri.parse('$mdsLensGitHubApiBaseUrl/tags?per_page=100&page=$page'),
+      page == 1
+          ? Uri.parse(mdsLensTagsApiUrl)
+          : Uri.parse('$mdsLensGitHubApiBaseUrl/tags?per_page=100&page=$page'),
       currentVersion: currentVersion,
       accept: 'application/vnd.github+json',
     );

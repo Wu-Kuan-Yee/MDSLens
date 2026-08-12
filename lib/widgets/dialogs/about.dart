@@ -571,8 +571,10 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
       } else if (choice == _UpdateChoice.direct) {
         await _installUpdate(result);
       }
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
+      final diagnostic =
+          error is UpdateCheckException ? error.diagnostic : error.toString();
       setState(() {
         _checkingUpdate = false;
         _updateStatus = 'Could not check for updates';
@@ -581,8 +583,9 @@ class _AboutDialogWidgetState extends State<AboutDialogWidget> {
         context: context,
         builder: (context) => KeyboardSafeDialog(
           title: const Text('Update Check Failed'),
-          content: const Text(
-            'The latest version could not be checked. You can still open the releases page.',
+          content: Text(
+            'The latest version could not be checked. You can still open the releases page.'
+            '${diagnostic.isEmpty ? '' : '\n\nDetails: $diagnostic'}',
           ),
           actions: [
             TextButton(

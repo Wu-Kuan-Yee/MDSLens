@@ -345,7 +345,7 @@ void main() {
     expect(update.updateAvailable, isTrue);
     expect(requests.map((uri) => uri.toString()), [
       mdsLensLatestIndexUrl,
-      '$mdsLensGitHubApiBaseUrl/tags?per_page=100&page=1',
+      mdsLensTagsApiUrl,
       '$mdsLensGitHubApiBaseUrl/releases/tags/v1.5.0',
     ]);
   });
