@@ -165,6 +165,31 @@ std::optional<std::wstring> MapStringValue(
   return WideFromUtf8(*value);
 }
 
+bool ShellExecuteDetachedProcess(const std::wstring& executable,
+                                 const std::wstring& arguments,
+                                 const std::wstring& working_directory,
+                                 DWORD* launch_error) {
+  SHELLEXECUTEINFOW shell = {};
+  shell.cbSize = sizeof(shell);
+  shell.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
+  shell.lpVerb = L"open";
+  shell.lpFile = executable.c_str();
+  shell.lpParameters = arguments.empty() ? nullptr : arguments.c_str();
+  shell.lpDirectory =
+      working_directory.empty() ? nullptr : working_directory.c_str();
+  shell.nShow = SW_HIDE;
+  if (!ShellExecuteExW(&shell)) {
+    if (launch_error != nullptr) {
+      *launch_error = GetLastError();
+    }
+    return false;
+  }
+  if (shell.hProcess != nullptr) {
+    CloseHandle(shell.hProcess);
+  }
+  return true;
+}
+
 bool SpawnDetachedProcess(const flutter::EncodableMap& map,
                           std::string* error_message) {
   const auto executable = MapStringValue(map, "executable");
@@ -202,9 +227,15 @@ bool SpawnDetachedProcess(const flutter::EncodableMap& map,
   }
 
   std::wstring command_line = QuoteWindowsArgument(*executable);
+  std::wstring shell_arguments;
   for (const auto& argument : arguments) {
     command_line.push_back(L' ');
-    command_line += QuoteWindowsArgument(argument);
+    const auto quoted = QuoteWindowsArgument(argument);
+    command_line += quoted;
+    if (!shell_arguments.empty()) {
+      shell_arguments.push_back(L' ');
+    }
+    shell_arguments += quoted;
   }
   std::wstring working_directory;
   if (const auto value = MapStringValue(map, "workingDirectory")) {
@@ -255,9 +286,20 @@ bool SpawnDetachedProcess(const flutter::EncodableMap& map,
     if (launch(CREATE_BREAKAWAY_FROM_JOB)) {
       return true;
     }
+    const auto breakaway_error = launch_error;
+    // Some desktop launchers put Flutter in a job that explicitly disallows
+    // breakaway. Ask the Windows shell to create the helper instead; Explorer
+    // is outside that job and therefore provides a safe, still non-elevated
+    // handoff. This is especially important on managed Windows 10/VM hosts.
+    if (ShellExecuteDetachedProcess(*executable, shell_arguments,
+                                    working_directory, &launch_error)) {
+      return true;
+    }
     *error_message =
         "CreateProcessW could not launch the update helper outside the "
         "current job (error " +
+        std::to_string(static_cast<unsigned long>(breakaway_error)) +
+        "); the Windows shell handoff also failed (error " +
         std::to_string(static_cast<unsigned long>(launch_error)) + ").";
     return false;
   }
@@ -267,8 +309,16 @@ bool SpawnDetachedProcess(const flutter::EncodableMap& map,
   if (launch(0)) {
     return true;
   }
-  *error_message = "CreateProcessW failed with error " +
-                   std::to_string(static_cast<unsigned long>(launch_error));
+  const auto process_error = launch_error;
+  if (ShellExecuteDetachedProcess(*executable, shell_arguments,
+                                  working_directory, &launch_error)) {
+    return true;
+  }
+  *error_message =
+      "CreateProcessW failed with error " +
+      std::to_string(static_cast<unsigned long>(process_error)) +
+      "; the Windows shell handoff also failed (error " +
+      std::to_string(static_cast<unsigned long>(launch_error)) + ").";
   return false;
 }
 

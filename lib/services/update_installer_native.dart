@@ -1,4 +1,5 @@
-import 'dart:convert' show base64Url;
+import 'dart:async';
+import 'dart:convert' show base64Url, utf8;
 import 'dart:io';
 import 'dart:math';
 
@@ -224,7 +225,11 @@ Future<DownloadedUpdate> downloadVerifiedUpdateAsset(
   }
   final ownedClient = client == null;
   final activeClient = client ?? http.Client();
-  controller.bind(activeClient.close);
+  void Function()? cancelFallback;
+  controller.bind(() {
+    activeClient.close();
+    cancelFallback?.call();
+  });
   final directory = downloadDirectory ?? await _defaultUpdateDirectory();
   await directory.create(recursive: true);
   final destination = File(
@@ -234,40 +239,79 @@ Future<DownloadedUpdate> downloadVerifiedUpdateAsset(
   IOSink? output;
   try {
     if (partial.existsSync()) await partial.delete();
-    final request = http.Request('GET', Uri.parse(asset.url));
-    request.headers['Accept'] = 'application/octet-stream';
-    final response =
-        await activeClient.send(request).timeout(const Duration(seconds: 30));
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        'GitHub returned HTTP ${response.statusCode} for ${asset.name}',
-      );
-    }
-    output = partial.openWrite();
-    var received = 0;
-    onProgress?.call(
-      UpdateDownloadProgress(received: received, total: asset.size),
-    );
-    await for (final chunk in response.stream.timeout(
-      const Duration(seconds: 30),
-    )) {
-      if (controller.isCancelled) throw const UpdateCancelledException();
-      received += chunk.length;
-      if (received > asset.size) {
-        throw const FormatException('Update download exceeded declared size');
+    try {
+      final request = http.Request('GET', Uri.parse(asset.url));
+      request.headers['Accept'] = 'application/octet-stream';
+      final response =
+          await activeClient.send(request).timeout(const Duration(seconds: 30));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          'GitHub returned HTTP ${response.statusCode} for ${asset.name}',
+        );
       }
-      output.add(chunk);
+      output = partial.openWrite();
+      var received = 0;
       onProgress?.call(
         UpdateDownloadProgress(received: received, total: asset.size),
       );
-    }
-    await output.flush();
-    await output.close();
-    output = null;
-    if (received != asset.size) {
-      throw FormatException(
-        'Update size mismatch: expected ${asset.size}, received $received',
-      );
+      await for (final chunk in response.stream.timeout(
+        const Duration(seconds: 30),
+      )) {
+        if (controller.isCancelled) throw const UpdateCancelledException();
+        received += chunk.length;
+        if (received > asset.size) {
+          throw const FormatException('Update download exceeded declared size');
+        }
+        output.add(chunk);
+        onProgress?.call(
+          UpdateDownloadProgress(received: received, total: asset.size),
+        );
+      }
+      await output.flush();
+      await output.close();
+      output = null;
+      if (received != asset.size) {
+        throw FormatException(
+          'Update size mismatch: expected ${asset.size}, received $received',
+        );
+      }
+    } catch (error) {
+      // Windows 10 installations are often behind a VM/NAT network where
+      // Dart's resolver chooses a broken address family or Schannel route,
+      // while the system curl client can still reach GitHub (notably with
+      // IPv4). Retry only transport failures; a size/hash mismatch must never
+      // be hidden by downloading an untrusted second copy.
+      if (!Platform.isWindows || !_isWindowsDownloadTransportFailure(error)) {
+        rethrow;
+      }
+      if (output != null) {
+        try {
+          await output.close();
+        } catch (_) {}
+        output = null;
+      }
+      try {
+        if (partial.existsSync()) await partial.delete();
+      } catch (_) {}
+      try {
+        await _downloadWithWindowsCurl(
+          asset,
+          partial: partial,
+          controller: controller,
+          onProgress: onProgress,
+          setCancel: (cancel) => cancelFallback = cancel,
+        );
+      } catch (fallbackError) {
+        if (controller.isCancelled) {
+          throw const UpdateCancelledException();
+        }
+        throw Exception(
+          'Windows HTTP download failed ($error); system curl fallback '
+          'failed ($fallbackError)',
+        );
+      } finally {
+        cancelFallback = null;
+      }
     }
     final actualDigest = await sha256.bind(partial.openRead()).first;
     if (actualDigest.toString().toLowerCase() != asset.sha256.toLowerCase()) {
@@ -296,6 +340,123 @@ Future<DownloadedUpdate> downloadVerifiedUpdateAsset(
     controller.unbind();
     if (ownedClient) activeClient.close();
   }
+}
+
+bool _isWindowsDownloadTransportFailure(Object error) {
+  return error is SocketException ||
+      error is HandshakeException ||
+      error is HttpException ||
+      error is TimeoutException ||
+      error is http.ClientException ||
+      error is ProcessException;
+}
+
+String? _windowsCurlExecutable() {
+  if (!Platform.isWindows) return null;
+  final root = (Platform.environment['SystemRoot'] ??
+          Platform.environment['WINDIR'] ??
+          '')
+      .replaceFirst(RegExp(r'[\\/]+$'), '');
+  final candidates = <String>[
+    if (root.isNotEmpty)
+      '$root${Platform.pathSeparator}System32${Platform.pathSeparator}curl.exe',
+    'curl.exe',
+  ];
+  for (final candidate in candidates) {
+    if (candidate == 'curl.exe' || File(candidate).existsSync()) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+Future<void> _downloadWithWindowsCurl(
+  UpdateManifestAsset asset, {
+  required File partial,
+  required UpdateDownloadController controller,
+  required UpdateProgressCallback? onProgress,
+  required void Function(void Function() cancel) setCancel,
+}) async {
+  final executable = _windowsCurlExecutable();
+  if (executable == null) {
+    throw const ProcessException(
+      'curl.exe',
+      <String>[],
+      'Windows system curl.exe was not found',
+    );
+  }
+  final arguments = <String>[
+    '-4',
+    '-L',
+    '--fail',
+    '--silent',
+    '--show-error',
+    '--retry',
+    '3',
+    '--retry-delay',
+    '1',
+    '--connect-timeout',
+    '30',
+    '--max-time',
+    '900',
+    '-A',
+    'MDSLens update',
+    '-H',
+    'Accept: application/octet-stream',
+    '-o',
+    partial.path,
+    asset.url,
+  ];
+  final process = await Process.start(executable, arguments);
+  setCancel(() => process.kill(ProcessSignal.sigterm));
+  final stderrFuture = process.stderr.transform(utf8.decoder).join();
+  // Drain stdout even though --silent normally leaves it empty. This keeps
+  // the fallback safe if an older curl build writes progress there.
+  final stdoutFuture = process.stdout.drain<List<int>>();
+  onProgress?.call(
+    UpdateDownloadProgress(received: 0, total: asset.size),
+  );
+  int? exitCode;
+  final exitCodeFuture = process.exitCode;
+  while (exitCode == null) {
+    await Future.any<void>([
+      exitCodeFuture.then<void>((value) {
+        exitCode = value;
+      }),
+      Future<void>.delayed(const Duration(milliseconds: 120)),
+    ]);
+    if (controller.isCancelled) {
+      process.kill(ProcessSignal.sigterm);
+      throw const UpdateCancelledException();
+    }
+    final received = partial.existsSync() ? partial.lengthSync() : 0;
+    if (received > asset.size) {
+      process.kill(ProcessSignal.sigterm);
+      throw const FormatException('Update download exceeded declared size');
+    }
+    onProgress?.call(
+      UpdateDownloadProgress(received: received, total: asset.size),
+    );
+  }
+  final diagnostic = (await stderrFuture).trim();
+  await stdoutFuture;
+  if (exitCode != 0) {
+    throw ProcessException(
+      executable,
+      arguments,
+      diagnostic.isEmpty ? 'curl.exe exited with code $exitCode' : diagnostic,
+      exitCode ?? -1,
+    );
+  }
+  final received = partial.existsSync() ? await partial.length() : 0;
+  if (received != asset.size) {
+    throw FormatException(
+      'Update size mismatch: expected ${asset.size}, received $received',
+    );
+  }
+  onProgress?.call(
+    UpdateDownloadProgress(received: received, total: asset.size),
+  );
 }
 
 Future<Directory> _defaultUpdateDirectory() async {

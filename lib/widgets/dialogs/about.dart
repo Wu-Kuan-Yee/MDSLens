@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:mdslens/i18n/localized_material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/app_state.dart';
@@ -22,6 +21,20 @@ typedef ReleaseUpdateInstaller = Future<UpdateInstallResult> Function(
 typedef ApplicationExitRequester = Future<void> Function();
 
 enum _UpdateChoice { release, direct }
+
+String _describeUpdateFailure(Object error) {
+  var detail = error.toString().trim();
+  if (detail.startsWith('Exception: ')) {
+    detail = detail.substring('Exception: '.length).trim();
+  }
+  if (detail.length > 600) {
+    detail = '${detail.substring(0, 597)}...';
+  }
+  if (detail.isEmpty) {
+    return 'The update could not be downloaded, verified, or handed to the system installer. No unverified package was opened.';
+  }
+  return 'The update was not installed. $detail';
+}
 
 Future<_UpdateChoice?> _showUpdateChoiceDialog(
   BuildContext context,
@@ -180,17 +193,7 @@ class _UpdateDownloadDialogState extends State<_UpdateDownloadDialog> {
         _running = false;
         _failed = true;
         _allowRouteExit = true;
-        final detail = switch (error) {
-          PlatformException(message: final message?)
-              when message.trim().isNotEmpty =>
-            message.trim(),
-          FormatException(message: final message) when message.isNotEmpty =>
-            message,
-          _ => '',
-        };
-        _status = detail.isEmpty
-            ? 'The update could not be downloaded, verified, or handed to the system installer. No unverified package was opened.'
-            : 'The update was not installed. $detail';
+        _status = _describeUpdateFailure(error);
       });
     }
   }
