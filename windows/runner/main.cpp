@@ -61,6 +61,23 @@ void EnsurePortableStartMenuShortcut() {
   link->Release();
 }
 
+// This API was added after Windows Vista. Resolve it at runtime so an older
+// host does not fail before the Flutter engine can report its own support
+// boundary. Taskbar grouping is optional; the application does not depend on
+// the call for correctness.
+void SetProcessAppUserModelIdIfAvailable() {
+  HMODULE shell32 = ::GetModuleHandleW(L"shell32.dll");
+  if (shell32 == nullptr) {
+    return;
+  }
+  using SetAppUserModelId = HRESULT(WINAPI*)(PCWSTR);
+  auto set_app_user_model_id = reinterpret_cast<SetAppUserModelId>(
+      ::GetProcAddress(shell32, "SetCurrentProcessExplicitAppUserModelID"));
+  if (set_app_user_model_id != nullptr) {
+    set_app_user_model_id(L"MDSLens.MDSLens");
+  }
+}
+
 }  // namespace
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
@@ -74,9 +91,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // Initialize COM, so that it is available for use in the library and/or
   // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-  ::SetCurrentProcessExplicitAppUserModelID(L"MDSLens.MDSLens");
   ::RegisterApplicationRestart(L"", RESTART_NO_PATCH | RESTART_NO_REBOOT);
   EnsurePortableStartMenuShortcut();
+  SetProcessAppUserModelIdIfAvailable();
 
   flutter::DartProject project(L"data");
 

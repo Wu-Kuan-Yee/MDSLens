@@ -19,6 +19,13 @@ With Flutter 3.44 as the baseline, the upstream Flutter deployment targets used 
 
 Sources: [Flutter supported platforms](https://docs.flutter.dev/reference/supported-platforms) and [multi-platform build host restrictions](https://docs.flutter.dev/platform-integration).
 
+The Windows packages target the Flutter-supported Windows 10 and Windows 11
+runtime. Windows 8 and earlier, including Windows Vista, are unsupported by
+the Flutter 3.44 engine and are not release targets. The runner treats the
+optional Windows 7+ taskbar AppUserModelID API as a runtime capability, so an
+older host will not fail on that one optional call; this does not make the
+Flutter engine or its plugins compatible with Vista.
+
 Upstream Flutter does not currently support Windows x86, Linux 32-bit, or iOS 32-bit deployment. The 32-bit Android target is armv7; the current official table no longer lists Android x86 32-bit. An architecture being producible by the Rust compiler does not imply the Flutter UI also supports that architecture.
 
 Flutter 3.44 no longer exposes a Windows `--target-platform` build option.

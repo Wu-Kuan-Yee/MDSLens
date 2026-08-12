@@ -179,7 +179,7 @@ The remaining system or optional installation dependencies are:
 
 | Platform | Normally required | May need to be installed manually |
 |---|---|---|
-| Windows | Supported Windows 10/11 system libraries and graphics driver | Microsoft Visual C++ v14 Redistributable if `VCRUNTIME`/`MSVCP` DLLs are reported missing |
+| Windows | Windows 10/11 system libraries and graphics driver (the Flutter 3.44 runtime target) | Microsoft Visual C++ v14 Redistributable if `VCRUNTIME`/`MSVCP` DLLs are reported missing |
 | macOS | A supported macOS release and Apple system frameworks | No runtime package; unsigned releases require a per-app Gatekeeper override or user re-signing |
 | Linux | glibc, GTK 3, GLib/GIO, libsecret, C++ runtime, X11/Wayland and EGL/OpenGL/Mesa stack | A Secret Service provider for persistent credentials; PolicyKit with a graphical agent for updating a protected AppImage in place |
 | Android | A supported Android system | Nothing for direct APK installation; Android SDK Platform Tools only for `adb` installation |
@@ -435,6 +435,14 @@ key. Uninstalling the old copy before reinstalling normally erases its local
 application data.
 
 ## Windows
+
+The release packages require Windows 10 or Windows 11. Windows 8 and earlier,
+including Windows Vista, are outside the Flutter 3.44 support boundary and are
+not supported installation targets. The launcher avoids importing one optional
+Windows 7+ taskbar API on older systems, but that compatibility fallback does
+not make the Flutter engine, plugins, graphics stack, or Rust bridge reliable
+on Vista. Use a supported Windows release rather than copying individual DLLs
+or attempting to replace system libraries.
 
 Use the installer EXE/MSI, or extract the complete portable ZIP before running
 `mdslens.exe`. Do not copy the EXE away from its DLL and `data` directories.
