@@ -51,7 +51,7 @@ jobs:
           gh api --paginate --slurp \
             "repos/${{ github.repository }}/releases?per_page=100" \
             > "$RUNNER_TEMP/releases.json"
-          python3 scripts/generate_latest_index.py \
+          python3 -m scripts.generate_latest_index \
             --releases-json "$RUNNER_TEMP/releases.json" \
             --output pages/latest.toml
           python3 -c 'import pathlib, tomllib; tomllib.loads(pathlib.Path("pages/latest.toml").read_text(encoding="utf-8"))'
