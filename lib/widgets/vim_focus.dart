@@ -761,6 +761,9 @@ class _VimFocusHostState extends State<VimFocusHost>
   FocusNode? _ringTrackedFocus;
   bool _ringTrackingScheduled = false;
   bool _ringRefreshScheduled = false;
+  bool _ringGeometryWatchScheduled = false;
+  bool _ringEnabled = false;
+  Rect? _lastBuiltRingRect;
   bool _pendingVimG = false;
 
   @override
@@ -888,6 +891,26 @@ class _VimFocusHostState extends State<VimFocusHost>
 
   void _ringScrollChanged() {
     if (mounted) setState(() {});
+  }
+
+  /// Keep the overlay synchronized with controls that relayout without
+  /// changing Flutter focus. A post-frame callback does not request frames by
+  /// itself, so this watcher is idle when the UI is idle. Whenever another
+  /// part of the application produces a frame, it compares the focused
+  /// control's final, post-layout bounds with the bounds used to build the
+  /// ring. A mismatch requests exactly one corrective overlay rebuild.
+  void _scheduleRingGeometryWatch() {
+    if (_ringGeometryWatchScheduled) return;
+    _ringGeometryWatchScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _ringGeometryWatchScheduled = false;
+      if (!mounted) return;
+      final actualRect = _ringEnabled ? _resolveFocusRingRect(context) : null;
+      if (!_sameVimFocusRect(actualRect, _lastBuiltRingRect)) {
+        _refreshVimFocusVisuals();
+      }
+      if (_ringEnabled) _scheduleRingGeometryWatch();
+    });
   }
 
   void _scheduleRingScrollTracking(FocusNode? focus) {
@@ -1090,6 +1113,12 @@ class _VimFocusHostState extends State<VimFocusHost>
             final enabled = VimModeScope.enabled(context) ||
                 (focusedContext != null &&
                     VimModeScope.enabled(focusedContext));
+            _ringEnabled = enabled;
+            if (enabled) {
+              _scheduleRingGeometryWatch();
+            } else {
+              _lastBuiltRingRect = null;
+            }
             return Stack(
               clipBehavior: Clip.hardEdge,
               children: [
@@ -1106,59 +1135,9 @@ class _VimFocusHostState extends State<VimFocusHost>
   Widget _buildFocusRing(BuildContext context) {
     final focus = FocusManager.instance.primaryFocus;
     _scheduleRingScrollTracking(focus);
-    if (focus?.skipTraversal ?? false) return const SizedBox.shrink();
-    var renderObject = focus?.context?.findRenderObject();
-    final focusContext = focus?.context;
-    final focusedPageId = focusContext == null
-        ? null
-        : VimPageScope.maybeOf(focusContext)?.pageId;
-    if (focusContext != null &&
-        (focusedPageId == 'popup-menu' ||
-            (focusedPageId?.startsWith('dropdown-menu/') ?? false) ||
-            (focusedPageId?.startsWith('autocomplete/') ?? false))) {
-      // Popup items draw their ring inside the animated route. A ring in this
-      // host would live outside PopupMenuRoute's transform and lag behind
-      // while the menu scales/translates into place.
-      return const SizedBox.shrink();
-    }
-    if (focusContext != null &&
-        VimInputModeScope.plotSelectionLevel(focusContext) ==
-            VimPlotSelectionLevel.column &&
-        focusContext.findAncestorWidgetOfExactType<VimPlotFocus>() != null) {
-      renderObject = _ancestorRenderObject<VimPlotColumnFocus>(focusContext);
-    }
-    final layoutFocus =
-        focusContext?.findAncestorWidgetOfExactType<VimLayoutFocus>();
-    final layoutBoundary =
-        layoutFocus?.visualBoundaryKey?.currentContext?.findRenderObject();
-    if (layoutBoundary is RenderBox &&
-        layoutBoundary.attached &&
-        layoutBoundary.hasSize) {
-      // Layout cards animate independently after a cut/paste. The Focus
-      // proxy can retain its pre-animation geometry for one frame; this
-      // keyed visual boundary is inside that transform and is therefore the
-      // exact visible Column/Panel the purple frame must outline.
-      renderObject = layoutBoundary;
-    }
-    final hostRenderObject = context.findRenderObject();
-    if (renderObject is! RenderBox ||
-        hostRenderObject is! RenderBox ||
-        !renderObject.hasSize ||
-        !hostRenderObject.hasSize) {
-      return const SizedBox.shrink();
-    }
-    final topLeft = renderObject.localToGlobal(
-      Offset.zero,
-      ancestor: hostRenderObject,
-    );
-    final rawRect = (topLeft & renderObject.size).inflate(3);
-    final rect = _clipVimRectToAncestorViewports(
-      focusContext,
-      hostRenderObject,
-      rawRect,
-    );
+    final rect = _resolveFocusRingRect(context);
+    _lastBuiltRingRect = rect;
     if (rect == null) return const SizedBox.shrink();
-    if (rect.width <= 0 || rect.height <= 0) return const SizedBox.shrink();
     final editing = _vimInputState.mode != VimInputMode.normal;
     return Positioned.fromRect(
       rect: rect,
@@ -1180,6 +1159,69 @@ class _VimFocusHostState extends State<VimFocusHost>
       ),
     );
   }
+
+  Rect? _resolveFocusRingRect(BuildContext context) {
+    final focus = FocusManager.instance.primaryFocus;
+    if (focus == null || focus.skipTraversal) return null;
+    final focusContext = focus.context;
+    if (focusContext == null || !focusContext.mounted) return null;
+    var renderObject = focusContext.findRenderObject();
+    final focusedPageId =
+        focusContext.findAncestorWidgetOfExactType<VimPageScope>()?.pageId;
+    if (focusedPageId == 'popup-menu' ||
+        (focusedPageId?.startsWith('dropdown-menu/') ?? false) ||
+        (focusedPageId?.startsWith('autocomplete/') ?? false)) {
+      // Popup items draw their ring inside the animated route. A ring in this
+      // host would live outside PopupMenuRoute's transform and lag behind
+      // while the menu scales/translates into place.
+      return null;
+    }
+    if (_vimInputState.plotSelectionLevel == VimPlotSelectionLevel.column &&
+        focusContext.findAncestorWidgetOfExactType<VimPlotFocus>() != null) {
+      renderObject = _ancestorRenderObject<VimPlotColumnFocus>(focusContext);
+    }
+    final layoutFocus =
+        focusContext.findAncestorWidgetOfExactType<VimLayoutFocus>();
+    final layoutBoundary =
+        layoutFocus?.visualBoundaryKey?.currentContext?.findRenderObject();
+    if (layoutBoundary is RenderBox &&
+        layoutBoundary.attached &&
+        layoutBoundary.hasSize) {
+      // Layout cards animate independently after a cut/paste. The Focus
+      // proxy can retain its pre-animation geometry for one frame; this
+      // keyed visual boundary is inside that transform and is therefore the
+      // exact visible Column/Panel the purple frame must outline.
+      renderObject = layoutBoundary;
+    }
+    final hostRenderObject = context.findRenderObject();
+    if (renderObject is! RenderBox ||
+        hostRenderObject is! RenderBox ||
+        !renderObject.hasSize ||
+        !hostRenderObject.hasSize) {
+      return null;
+    }
+    final topLeft = renderObject.localToGlobal(
+      Offset.zero,
+      ancestor: hostRenderObject,
+    );
+    final rawRect = (topLeft & renderObject.size).inflate(3);
+    final rect = _clipVimRectToAncestorViewports(
+      focusContext,
+      hostRenderObject,
+      rawRect,
+    );
+    if (rect == null || rect.width <= 0 || rect.height <= 0) return null;
+    return rect;
+  }
+}
+
+bool _sameVimFocusRect(Rect? first, Rect? second) {
+  if (first == null || second == null) return first == second;
+  const epsilon = 0.01;
+  return (first.left - second.left).abs() <= epsilon &&
+      (first.top - second.top).abs() <= epsilon &&
+      (first.right - second.right).abs() <= epsilon &&
+      (first.bottom - second.bottom).abs() <= epsilon;
 }
 
 RenderObject? _ancestorRenderObject<T extends Widget>(BuildContext context) {

@@ -1529,6 +1529,78 @@ void main() {
     expect(find.text('MDSLens Version'), findsNothing);
   });
 
+  testWidgets('Vim focus ring follows an About action that changes size', (
+    tester,
+  ) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    final updateResult = Completer<ReleaseUpdate>();
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MaterialApp(
+          builder: (context, child) => VimModeScope(
+            notifier: app,
+            child: VimFocusHost(child: child ?? const SizedBox.shrink()),
+          ),
+          home: AboutDialogWidget(
+            updateChecker: () => updateResult.future,
+            systemInfoLoader: () async => const RuntimeSystemInfo(
+              name: 'Test OS',
+              version: '1',
+              architecture: 'test64',
+            ),
+            versionLoader: () async => '0.0.1',
+            gitVersionLoader: () async => '0.0.1.r0.gtest',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Update'));
+    await tester.pumpAndSettle();
+    final updateFocus = FocusManager.instance.rootScope.descendants
+        .firstWhere((node) => node.debugLabel == 'about-update');
+    void expectRingAround(String label) {
+      final button = tester.getRect(
+        find.widgetWithText(OutlinedButton, label),
+      );
+      final ring = tester.getRect(
+        find.byKey(const ValueKey('vim-focus-ring')),
+      );
+      expect(ring.center.dx, closeTo(button.center.dx, 1));
+      expect(ring.center.dy, closeTo(button.center.dy, 1));
+      expect(ring.width, closeTo(button.width + 6, 1));
+      expect(ring.height, closeTo(button.height + 6, 1));
+    }
+
+    updateFocus.requestFocus();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('vim-focus-ring')), findsOneWidget);
+    expectRingAround('Update');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Checking...'), findsOneWidget);
+    expectRingAround('Checking...');
+
+    updateResult.complete(
+      const ReleaseUpdate(
+        latestVersion: 'v0.0.1',
+        releaseUrl: 'https://example.invalid/releases/v0.0.1',
+        updateAvailable: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(FocusManager.instance.primaryFocus, same(updateFocus));
+    expect(find.byKey(const ValueKey('vim-focus-ring')), findsOneWidget);
+    expectRingAround('Update');
+  });
+
   testWidgets('Vim Escape returns shortcut-editor focus to Keyboard Mode', (
     tester,
   ) async {
