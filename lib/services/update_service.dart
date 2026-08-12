@@ -9,8 +9,15 @@ const mdsLensSourceUrl = 'https://github.com/Wu-Kuan-Yee/MDSLens';
 const mdsLensMaintainerUrl = 'https://github.com/Wu-Kuan-Yee';
 const originalMdsScopeRepositoryUrl = 'https://github.com/wwktz/MdsScope';
 const mdsLensReleasesUrl = 'https://github.com/Wu-Kuan-Yee/MDSLens/releases';
-const mdsLensReleasesApiUrl =
-    'https://api.github.com/repos/Wu-Kuan-Yee/MDSLens/releases?per_page=100';
+const mdsLensLatestIndexUrl =
+    'https://wu-kuan-yee.github.io/MDSLens/latest.json';
+const mdsLensGitHubApiBaseUrl =
+    'https://api.github.com/repos/Wu-Kuan-Yee/MDSLens';
+const mdsLensTagsApiUrl = '$mdsLensGitHubApiBaseUrl/tags?per_page=100';
+const mdsLensReleasesApiUrl = '$mdsLensGitHubApiBaseUrl/releases?per_page=100';
+
+const _updateRequestTimeout = Duration(seconds: 30);
+const _githubApiVersion = '2022-11-28';
 
 class ReleaseUpdate {
   final String latestVersion;
@@ -85,44 +92,246 @@ Future<ReleaseUpdate> checkLatestMDSLensRelease(
 }) async {
   final ownedClient = client == null;
   final activeClient = client ?? http.Client();
+  final failures = <Object>[];
   try {
-    final response = await activeClient.get(
-      Uri.parse(mdsLensReleasesApiUrl),
-      headers: const {
-        'Accept': 'application/vnd.github+json',
-      },
-    ).timeout(const Duration(seconds: 10));
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('GitHub returned HTTP ${response.statusCode}');
+    try {
+      final response = await _getUpdateResponse(
+        activeClient,
+        Uri.parse(mdsLensLatestIndexUrl),
+        currentVersion: currentVersion,
+        accept: 'application/json',
+      );
+      return _releaseUpdateFromLatestIndex(
+        jsonDecode(utf8.decode(response.bodyBytes)),
+        currentVersion: currentVersion,
+      );
+    } catch (error) {
+      failures.add(error);
     }
-    final decoded = jsonDecode(utf8.decode(response.bodyBytes));
-    if (decoded is! List) {
-      throw const FormatException('Invalid release response');
+
+    try {
+      return await _checkLatestFromTags(
+        activeClient,
+        currentVersion: currentVersion,
+      );
+    } catch (error) {
+      failures.add(error);
     }
-    Map<dynamic, dynamic>? selected;
-    for (final candidate in decoded) {
-      if (candidate is! Map ||
-          candidate['draft'] == true ||
-          candidate['prerelease'] == true) {
-        continue;
-      }
-      final tag = candidate['tag_name']?.toString().trim() ?? '';
-      if (!_parseVersion(tag).isValid) continue;
-      final selectedTag = selected?['tag_name']?.toString().trim();
-      if (selectedTag == null || compareVersions(tag, selectedTag) > 0) {
-        selected = candidate;
-      }
+
+    try {
+      return await _checkLatestFromReleaseList(
+        activeClient,
+        currentVersion: currentVersion,
+      );
+    } catch (error) {
+      failures.add(error);
     }
-    if (selected == null) {
-      throw const FormatException('No stable release version was found');
-    }
-    return _releaseUpdateFromGitHub(
-      selected,
-      currentVersion: currentVersion,
-    );
+
+    throw UpdateCheckException(failures);
   } finally {
     if (ownedClient) activeClient.close();
   }
+}
+
+class UpdateCheckException implements Exception {
+  const UpdateCheckException(this.causes);
+
+  final List<Object> causes;
+
+  @override
+  String toString() {
+    if (causes.isEmpty) return 'Update check failed';
+    return 'Update check failed: ${causes.last}';
+  }
+}
+
+Map<String, String> _updateHeaders(
+  String currentVersion, {
+  required String accept,
+}) {
+  return {
+    'Accept': accept,
+    'User-Agent': 'MDSLens/$currentVersion',
+    'X-GitHub-Api-Version': _githubApiVersion,
+  };
+}
+
+Future<http.Response> _getUpdateResponse(
+  http.Client client,
+  Uri uri, {
+  required String currentVersion,
+  required String accept,
+}) async {
+  final response = await client
+      .get(
+        uri,
+        headers: _updateHeaders(currentVersion, accept: accept),
+      )
+      .timeout(_updateRequestTimeout);
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    throw Exception('HTTP ${response.statusCode} from ${uri.host}');
+  }
+  return response;
+}
+
+ReleaseUpdate _releaseUpdateFromLatestIndex(
+  Object decoded, {
+  required String currentVersion,
+}) {
+  if (decoded is! Map) {
+    throw const FormatException('Invalid latest update index');
+  }
+  final version = decoded['version']?.toString().trim() ?? '';
+  final tag = decoded['tag']?.toString().trim() ?? '';
+  if (!_parseVersion(version).isValid || !_parseVersion(tag).isValid) {
+    throw const FormatException('Latest update index has an invalid version');
+  }
+  if (compareVersions(version, tag) != 0) {
+    throw const FormatException(
+        'Latest update index version does not match tag');
+  }
+  final releaseUrl = decoded['release_url']?.toString().trim() ?? '';
+  if (!_isTrustedRepositoryUrl(releaseUrl)) {
+    throw const FormatException('Latest update index has an untrusted URL');
+  }
+  final rawAssets = decoded['assets'];
+  if (rawAssets is! List) {
+    throw const FormatException('Latest update index has no asset list');
+  }
+  final assets = <ReleaseAssetLocation>[];
+  final names = <String>{};
+  for (final rawAsset in rawAssets) {
+    if (rawAsset is! Map) continue;
+    final name = rawAsset['name']?.toString().trim() ?? '';
+    final url = rawAsset['url']?.toString().trim() ?? '';
+    final size = _integer(rawAsset['size']);
+    if (name.isEmpty || !names.add(name) || !_isTrustedGitHubDownload(url)) {
+      continue;
+    }
+    if (size == null || size <= 0) continue;
+    assets.add(ReleaseAssetLocation(name: name, url: url, size: size));
+  }
+  if (assets.every((asset) => asset.name != 'update-manifest.toml')) {
+    throw const FormatException('Latest update index has no update manifest');
+  }
+  return ReleaseUpdate(
+    latestVersion: tag,
+    releaseUrl: releaseUrl,
+    updateAvailable: compareVersions(tag, currentVersion) > 0,
+    assets: List.unmodifiable(assets),
+  );
+}
+
+Future<ReleaseUpdate> _checkLatestFromTags(
+  http.Client client, {
+  required String currentVersion,
+}) async {
+  final tags = await _fetchStableTags(
+    client,
+    currentVersion: currentVersion,
+  );
+  if (tags.isEmpty) {
+    throw const FormatException('No stable release tag was found');
+  }
+  tags.sort((left, right) => compareVersions(right, left));
+  final highestTag = tags.first;
+  if (compareVersions(highestTag, currentVersion) <= 0) {
+    return ReleaseUpdate(
+      latestVersion: highestTag,
+      releaseUrl: '$mdsLensReleasesUrl/tag/$highestTag',
+      updateAvailable: false,
+    );
+  }
+  for (final tag in tags) {
+    if (compareVersions(tag, currentVersion) <= 0) break;
+    try {
+      final response = await _getUpdateResponse(
+        client,
+        Uri.parse(
+          '$mdsLensGitHubApiBaseUrl/releases/tags/${Uri.encodeComponent(tag)}',
+        ),
+        currentVersion: currentVersion,
+        accept: 'application/vnd.github+json',
+      );
+      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+      if (decoded is! Map ||
+          decoded['draft'] == true ||
+          decoded['prerelease'] == true) {
+        continue;
+      }
+      return _releaseUpdateFromGitHub(
+        decoded,
+        currentVersion: currentVersion,
+      );
+    } catch (error) {
+      if (error.toString().contains('HTTP 404')) continue;
+      rethrow;
+    }
+  }
+  throw const FormatException('No stable release details were found');
+}
+
+Future<List<String>> _fetchStableTags(
+  http.Client client, {
+  required String currentVersion,
+}) async {
+  final tags = <String>{};
+  for (var page = 1; page <= 100; page++) {
+    final response = await _getUpdateResponse(
+      client,
+      Uri.parse('$mdsLensGitHubApiBaseUrl/tags?per_page=100&page=$page'),
+      currentVersion: currentVersion,
+      accept: 'application/vnd.github+json',
+    );
+    final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+    if (decoded is! List) {
+      throw const FormatException('Invalid GitHub tag response');
+    }
+    for (final candidate in decoded) {
+      if (candidate is! Map) continue;
+      final tag = candidate['name']?.toString().trim() ?? '';
+      if (_parseVersion(tag).isValid) tags.add(tag);
+    }
+    if (decoded.length < 100) break;
+  }
+  return tags.toList();
+}
+
+Future<ReleaseUpdate> _checkLatestFromReleaseList(
+  http.Client client, {
+  required String currentVersion,
+}) async {
+  final response = await _getUpdateResponse(
+    client,
+    Uri.parse(mdsLensReleasesApiUrl),
+    currentVersion: currentVersion,
+    accept: 'application/vnd.github+json',
+  );
+  final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+  if (decoded is! List) {
+    throw const FormatException('Invalid release response');
+  }
+  Map<dynamic, dynamic>? selected;
+  for (final candidate in decoded) {
+    if (candidate is! Map ||
+        candidate['draft'] == true ||
+        candidate['prerelease'] == true) {
+      continue;
+    }
+    final tag = candidate['tag_name']?.toString().trim() ?? '';
+    if (!_parseVersion(tag).isValid) continue;
+    final selectedTag = selected?['tag_name']?.toString().trim();
+    if (selectedTag == null || compareVersions(tag, selectedTag) > 0) {
+      selected = candidate;
+    }
+  }
+  if (selected == null) {
+    throw const FormatException('No stable release version was found');
+  }
+  return _releaseUpdateFromGitHub(
+    selected,
+    currentVersion: currentVersion,
+  );
 }
 
 ReleaseUpdate _releaseUpdateFromGitHub(
@@ -172,10 +381,15 @@ Future<UpdateManifest> fetchUpdateManifest(
   final ownedClient = client == null;
   final activeClient = client ?? http.Client();
   try {
-    final response = await activeClient.get(
-      Uri.parse(location.url),
-      headers: const {'Accept': 'text/plain'},
-    ).timeout(const Duration(seconds: 15));
+    final response = await activeClient
+        .get(
+          Uri.parse(location.url),
+          headers: _updateHeaders(
+            release.latestVersion,
+            accept: 'text/plain',
+          ),
+        )
+        .timeout(_updateRequestTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(
         'GitHub returned HTTP ${response.statusCode} for the update manifest',

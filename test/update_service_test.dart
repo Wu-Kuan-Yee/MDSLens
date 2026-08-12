@@ -251,40 +251,37 @@ void main() {
     }
   });
 
-  test('automatic checks choose the highest stable semantic release', () async {
-    final response = jsonEncode([
-      {
-        'tag_name': 'v1.5.0',
-        'html_url':
-            'https://github.com/Wu-Kuan-Yee/MDSLens/releases/tag/v1.5.0',
-        'draft': false,
-        'prerelease': false,
-        'assets': const [],
-      },
-      {
-        'tag_name': 'v1.4.9',
-        'html_url':
-            'https://github.com/Wu-Kuan-Yee/MDSLens/releases/tag/v1.4.9',
-        'draft': false,
-        'prerelease': false,
-        'assets': const [],
-      },
-      {
-        'tag_name': 'v2.0.0-beta',
-        'draft': false,
-        'prerelease': true,
-        'assets': const [],
-      },
-      {
-        'tag_name': 'v1.6.0',
-        'draft': true,
-        'prerelease': false,
-        'assets': const [],
-      },
-    ]);
+  test('automatic checks use the lightweight release index first', () async {
+    final requests = <http.BaseRequest>[];
     final client = MockClient((request) async {
-      expect(request.url.toString(), mdsLensReleasesApiUrl);
-      return http.Response(response, 200);
+      requests.add(request);
+      expect(request.url.toString(), mdsLensLatestIndexUrl);
+      expect(request.headers['user-agent'], 'MDSLens/1.4.0');
+      expect(request.headers['x-github-api-version'], '2022-11-28');
+      return http.Response(
+        jsonEncode({
+          'schema_version': 1,
+          'version': '1.5.0',
+          'tag': 'v1.5.0',
+          'release_url':
+              'https://github.com/Wu-Kuan-Yee/MDSLens/releases/tag/v1.5.0',
+          'assets': [
+            {
+              'name': 'update-manifest.toml',
+              'url':
+                  'https://github.com/Wu-Kuan-Yee/MDSLens/releases/download/v1.5.0/update-manifest.toml',
+              'size': 10,
+            },
+            {
+              'name': 'mdslens-windows-x64.zip',
+              'url':
+                  'https://github.com/Wu-Kuan-Yee/MDSLens/releases/download/v1.5.0/mdslens-windows-x64.zip',
+              'size': 20,
+            },
+          ],
+        }),
+        200,
+      );
     });
 
     final update = await checkLatestMDSLensRelease(
@@ -294,5 +291,62 @@ void main() {
 
     expect(update.latestVersion, 'v1.5.0');
     expect(update.updateAvailable, isTrue);
+    expect(update.assets, hasLength(2));
+    expect(requests, hasLength(1));
+  });
+
+  test('automatic checks fall back to tags and one release lookup', () async {
+    final requests = <Uri>[];
+    final client = MockClient((request) async {
+      requests.add(request.url);
+      if (request.url.toString() == mdsLensLatestIndexUrl) {
+        return http.Response('temporarily unavailable', 503);
+      }
+      if (request.url.path == '/repos/Wu-Kuan-Yee/MDSLens/tags') {
+        return http.Response(
+          jsonEncode([
+            {'name': 'v1.5.0'},
+            {'name': 'v1.4.9'},
+            {'name': 'v2.0.0-beta'},
+          ]),
+          200,
+        );
+      }
+      expect(
+        request.url.toString(),
+        '$mdsLensGitHubApiBaseUrl/releases/tags/v1.5.0',
+      );
+      return http.Response(
+        jsonEncode({
+          'tag_name': 'v1.5.0',
+          'html_url':
+              'https://github.com/Wu-Kuan-Yee/MDSLens/releases/tag/v1.5.0',
+          'draft': false,
+          'prerelease': false,
+          'assets': [
+            {
+              'name': 'update-manifest.toml',
+              'browser_download_url':
+                  'https://github.com/Wu-Kuan-Yee/MDSLens/releases/download/v1.5.0/update-manifest.toml',
+              'size': 10,
+            },
+          ],
+        }),
+        200,
+      );
+    });
+
+    final update = await checkLatestMDSLensRelease(
+      '1.4.0',
+      client: client,
+    );
+
+    expect(update.latestVersion, 'v1.5.0');
+    expect(update.updateAvailable, isTrue);
+    expect(requests.map((uri) => uri.toString()), [
+      mdsLensLatestIndexUrl,
+      '$mdsLensGitHubApiBaseUrl/tags?per_page=100&page=1',
+      '$mdsLensGitHubApiBaseUrl/releases/tags/v1.5.0',
+    ]);
   });
 }
