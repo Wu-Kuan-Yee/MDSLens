@@ -161,10 +161,10 @@ sudo pacman -S base-devel clang cmake ninja pkgconf gtk3 libsecret \
   patchelf perl nasm
 ```
 
-These commands install build dependencies, not the separate runtime dialog
-helper used by `file_picker`. Install one of `zenity`, `kdialog`, or `qarma`
-when Open/Save/Export must work on the build or target machine; see
-[INSTALLING.md](INSTALLING.md#linux).
+These commands install build dependencies. The Linux runner now ships its own
+GTK file chooser for Open/Save/Export, identity-file Browse, directory export,
+and language import, so `zenity`, `kdialog`, and `qarma` are not runtime
+requirements for those workflows; see [INSTALLING.md](INSTALLING.md#linux).
 
 Additional formats need their native tools: `rpm` needs `rpmbuild`,
 `pkg.tar.zst` needs `zstd`, `pkg.tar.xz` needs `xz`, AppImage needs
@@ -189,8 +189,9 @@ kernel and graphics drivers deliberately remain provided by the target system.
 Keeping the entire desktop stack together prevents an older bundled GTK from
 crashing against newer GNOME settings schemas and prevents older X11/EGL
 libraries from being mixed with newer Mesa drivers. Install the normal GTK 3,
-libsecret and graphics-runtime packages for the distribution. The file dialog
-helper (`zenity`, `kdialog`, or `qarma`) is also intentionally system-provided.
+libsecret and graphics-runtime packages for the distribution. File dialogs are
+implemented by the runner's GTK integration and do not invoke an external
+`zenity`-style helper.
 Release
 automation tests the same archive on newer Debian/Ubuntu, Fedora and Enterprise
 Linux environments. This gives one application bundle per CPU architecture; it

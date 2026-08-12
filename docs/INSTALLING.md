@@ -181,7 +181,7 @@ The remaining system or optional installation dependencies are:
 |---|---|---|
 | Windows | Supported Windows 10/11 system libraries and graphics driver | Microsoft Visual C++ v14 Redistributable if `VCRUNTIME`/`MSVCP` DLLs are reported missing |
 | macOS | A supported macOS release and Apple system frameworks | No runtime package; unsigned releases require a per-app Gatekeeper override or user re-signing |
-| Linux | glibc, GTK 3, GLib/GIO, libsecret, C++ runtime, X11/Wayland and EGL/OpenGL/Mesa stack | One of `zenity`, `kdialog`, or `qarma` for Open/Save/Export dialogs; a Secret Service provider for persistent credentials; PolicyKit with a graphical agent for updating a protected AppImage in place |
+| Linux | glibc, GTK 3, GLib/GIO, libsecret, C++ runtime, X11/Wayland and EGL/OpenGL/Mesa stack | A Secret Service provider for persistent credentials; PolicyKit with a graphical agent for updating a protected AppImage in place |
 | Android | A supported Android system | Nothing for direct APK installation; Android SDK Platform Tools only for `adb` installation |
 | iOS/iPadOS | A supported iOS/iPadOS system and valid application signature | Xcode for self-signing; Apple Configurator is optional for installing an already signed IPA |
 | Web / PWA | A current browser with WebAssembly; JavaScript fallback is included | Nothing on the user's device; the deployment administrator runs the gateway |
@@ -489,11 +489,12 @@ The application itself requires:
 - `libsecret`;
 - X11 or Wayland plus a functioning EGL/OpenGL/Mesa or vendor graphics stack.
 
-Open configuration, Save configuration, Export Data, and identity-file Browse
-use the Linux implementation of `file_picker`. It searches `PATH`, in order,
-for `qarma`, `kdialog`, and `zenity`. At least one must be installed; `zenity`
-is the recommended desktop-neutral default. If none is present, these actions
-fail with `Couldn't find the executable zenity in the path`.
+Open configuration, Save configuration, Export Data, identity-file Browse,
+directory export, and language import use the runner's built-in GTK file
+chooser. They do not search `PATH` for `zenity`, `kdialog`, or `qarma`, so a
+fresh RHEL/Fedora installation will not fail with
+`Couldn't find the executable zenity in the path`. GTK itself, a real graphical
+session, and the system graphics stack are still required.
 
 Persistent passwords and tokens additionally need a running Secret Service
 provider, commonly GNOME Keyring, KWallet with Secret Service support, or
@@ -506,30 +507,27 @@ Typical runtime installations are:
 # Debian and Ubuntu releases that provide libgtk-3-0
 sudo apt-get update
 sudo apt-get install libgtk-3-0 libsecret-1-0 libegl1 libgl1 \
-  gsettings-desktop-schemas zenity gnome-keyring
+  gsettings-desktop-schemas gnome-keyring
 
 # Ubuntu releases that provide the time64 GTK package instead
 sudo apt-get install libgtk-3-0t64 libsecret-1-0 libegl1 libgl1 \
-  gsettings-desktop-schemas zenity gnome-keyring
+  gsettings-desktop-schemas gnome-keyring
 
 # Fedora
 sudo dnf install gtk3 libsecret libglvnd-egl mesa-dri-drivers \
-  gsettings-desktop-schemas zenity gnome-keyring
+  gsettings-desktop-schemas gnome-keyring
 
 # CentOS Stream 10 / Enterprise Linux 10, including ARM64
 sudo dnf install gtk3 libsecret libepoxy libglvnd-egl \
-  gsettings-desktop-schemas zenity gnome-keyring
+  gsettings-desktop-schemas gnome-keyring
 
 # Arch Linux
-sudo pacman -S gtk3 libsecret libglvnd mesa zenity gnome-keyring
+sudo pacman -S gtk3 libsecret libglvnd mesa gnome-keyring
 ```
 
-Package names can change between distribution releases. A KDE user may install
-`kdialog` instead of `zenity`; installing all three dialog tools is unnecessary.
-CentOS Stream supplies additional desktop applications such as `zenity`
-through AppStream, so that repository must be enabled. A headless server also
-needs a real graphical session; installing `zenity` alone does not create a
-display server.
+Package names can change between distribution releases. A headless server
+needs a real graphical session; installing GTK libraries alone does not create
+a display server.
 
 For a portable archive:
 
@@ -549,6 +547,22 @@ For AppImage:
 chmod +x mdslens-linux-x64.AppImage
 ./mdslens-linux-x64.AppImage
 ```
+
+The standard AppImage runtime normally mounts the embedded filesystem with
+FUSE. FUSE is a kernel/device integration and cannot be made self-contained by
+copying another `.so` into the AppImage. If the host does not provide FUSE,
+use the runtime's user-space extraction mode:
+
+```sh
+APPIMAGE_EXTRACT_AND_RUN=1 ./mdslens-linux-x64.AppImage
+# Equivalent form supported by current AppImage runtimes:
+./mdslens-linux-x64.AppImage --appimage-extract-and-run
+```
+
+That mode extracts to a temporary directory and runs the same bundled files;
+it does not require a FUSE mount. For a permanently extracted green install,
+use the ZIP/7z/TAR archive instead. Neither form can remove the host GTK,
+glibc, graphics-driver, kernel, or display-server requirements described above.
 
 For Flatpak or Snap sideloading:
 
