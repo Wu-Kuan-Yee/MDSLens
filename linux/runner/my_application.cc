@@ -71,6 +71,165 @@ static void system_fonts_method_call_cb(
   fl_method_call_respond(method_call, response, nullptr);
 }
 
+static const gchar* file_dialog_string_arg(FlValue* args,
+                                            const gchar* key) {
+  if (args == nullptr || fl_value_get_type(args) != FL_VALUE_TYPE_MAP) {
+    return nullptr;
+  }
+  FlValue* value = fl_value_lookup_string(args, key);
+  return value != nullptr && fl_value_get_type(value) == FL_VALUE_TYPE_STRING
+             ? fl_value_get_string(value)
+             : nullptr;
+}
+
+static gboolean file_dialog_bool_arg(FlValue* args,
+                                     const gchar* key,
+                                     gboolean fallback) {
+  if (args == nullptr || fl_value_get_type(args) != FL_VALUE_TYPE_MAP) {
+    return fallback;
+  }
+  FlValue* value = fl_value_lookup_string(args, key);
+  return value != nullptr && fl_value_get_type(value) == FL_VALUE_TYPE_BOOL
+             ? fl_value_get_bool(value)
+             : fallback;
+}
+
+static void add_file_dialog_filters(GtkFileChooser* chooser, FlValue* args) {
+  if (args == nullptr || fl_value_get_type(args) != FL_VALUE_TYPE_MAP) {
+    return;
+  }
+  FlValue* extensions = fl_value_lookup_string(args, "extensions");
+  if (extensions == nullptr ||
+      fl_value_get_type(extensions) != FL_VALUE_TYPE_LIST) {
+    return;
+  }
+  GtkFileFilter* filter = gtk_file_filter_new();
+  gtk_file_filter_set_name(filter, "Supported files");
+  gboolean has_pattern = FALSE;
+  for (size_t index = 0; index < fl_value_get_length(extensions); ++index) {
+    FlValue* extension = fl_value_get_list_value(extensions, index);
+    if (extension == nullptr ||
+        fl_value_get_type(extension) != FL_VALUE_TYPE_STRING) {
+      continue;
+    }
+    const gchar* value = fl_value_get_string(extension);
+    if (value == nullptr || *value == '\0') continue;
+    g_autofree gchar* pattern =
+        g_strdup_printf("*.%s", value[0] == '.' ? value + 1 : value);
+    gtk_file_filter_add_pattern(filter, pattern);
+    has_pattern = TRUE;
+  }
+  if (has_pattern) {
+    gtk_file_chooser_add_filter(chooser, filter);
+  } else {
+    g_object_unref(filter);
+  }
+}
+
+static void file_dialog_set_initial_directory(GtkFileChooser* chooser,
+                                              FlValue* args) {
+  const gchar* directory = file_dialog_string_arg(args, "initialDirectory");
+  if (directory != nullptr && *directory != '\0') {
+    gtk_file_chooser_set_current_folder(chooser, directory);
+  }
+}
+
+static FlValue* show_linux_file_dialog(MyApplication* application,
+                                       FlValue* args,
+                                       GtkFileChooserAction action) {
+  GtkWindow* parent = gtk_application_get_active_window(
+      GTK_APPLICATION(application));
+  const gchar* default_title = action == GTK_FILE_CHOOSER_ACTION_SAVE
+                                    ? "Save file"
+                                    : action == GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER
+                                        ? "Choose folder"
+                                        : "Open file";
+  const gchar* accept_label = action == GTK_FILE_CHOOSER_ACTION_SAVE
+                                  ? "_Save"
+                                  : action == GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER
+                                      ? "_Choose"
+                                      : "_Open";
+  const gchar* title = file_dialog_string_arg(args, "title");
+  GtkWidget* dialog = gtk_file_chooser_dialog_new(
+      title == nullptr || *title == '\0' ? default_title : title, parent,
+      action, "_Cancel", GTK_RESPONSE_CANCEL, accept_label, GTK_RESPONSE_ACCEPT,
+      nullptr);
+  gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
+  if (parent != nullptr) {
+    gtk_window_set_transient_for(GTK_WINDOW(dialog), parent);
+  }
+  if (action == GTK_FILE_CHOOSER_ACTION_OPEN) {
+    gtk_file_chooser_set_select_multiple(
+        GTK_FILE_CHOOSER(dialog), file_dialog_bool_arg(args, "allowMultiple", FALSE));
+    add_file_dialog_filters(GTK_FILE_CHOOSER(dialog), args);
+  } else if (action == GTK_FILE_CHOOSER_ACTION_SAVE) {
+    const gchar* file_name = file_dialog_string_arg(args, "fileName");
+    if (file_name != nullptr && *file_name != '\0') {
+      gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), file_name);
+    }
+    add_file_dialog_filters(GTK_FILE_CHOOSER(dialog), args);
+  }
+  file_dialog_set_initial_directory(GTK_FILE_CHOOSER(dialog), args);
+
+  g_autoptr(FlValue) result = fl_value_new_null();
+  if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
+    GtkFileChooser* chooser = GTK_FILE_CHOOSER(dialog);
+    if (action == GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER) {
+      g_autofree gchar* folder = gtk_file_chooser_get_filename(chooser);
+      if (folder != nullptr) {
+        g_clear_pointer(&result, fl_value_unref);
+        result = fl_value_new_string(folder);
+      }
+    } else if (gtk_file_chooser_get_select_multiple(chooser)) {
+      g_autoptr(FlValue) paths = fl_value_new_list();
+      GSList* filenames = gtk_file_chooser_get_filenames(chooser);
+      for (GSList* item = filenames; item != nullptr; item = item->next) {
+        fl_value_append_take(
+            paths, fl_value_new_string(static_cast<gchar*>(item->data)));
+        g_free(item->data);
+      }
+      g_slist_free(filenames);
+      g_clear_pointer(&result, fl_value_unref);
+      result = fl_value_ref(paths);
+    } else {
+      g_autofree gchar* filename = gtk_file_chooser_get_filename(chooser);
+      if (filename != nullptr) {
+        g_clear_pointer(&result, fl_value_unref);
+        result = fl_value_new_string(filename);
+      }
+    }
+  }
+  gtk_widget_destroy(dialog);
+  return g_steal_pointer(&result);
+}
+
+static void file_dialog_method_call_cb(FlMethodChannel* channel,
+                                       FlMethodCall* method_call,
+                                       gpointer user_data) {
+  const gchar* method = fl_method_call_get_name(method_call);
+  FlValue* args = fl_method_call_get_args(method_call);
+  g_autoptr(FlValue) result = nullptr;
+  if (g_strcmp0(method, "pickFiles") == 0) {
+    result = show_linux_file_dialog(
+        MY_APPLICATION(user_data), args, GTK_FILE_CHOOSER_ACTION_OPEN);
+  } else if (g_strcmp0(method, "saveFile") == 0) {
+    result = show_linux_file_dialog(
+        MY_APPLICATION(user_data), args, GTK_FILE_CHOOSER_ACTION_SAVE);
+  } else if (g_strcmp0(method, "pickDirectory") == 0) {
+    result = show_linux_file_dialog(
+        MY_APPLICATION(user_data), args, GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER);
+  } else {
+    g_autoptr(FlMethodResponse) response =
+        FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
+    fl_method_call_respond(method_call, response, nullptr);
+    return;
+  }
+
+  g_autoptr(FlMethodResponse) response = FL_METHOD_RESPONSE(
+      fl_method_success_response_new(result));
+  fl_method_call_respond(method_call, response, nullptr);
+}
+
 static void set_window_icon(GtkWindow* window) {
   // Desktop packages expose the icon by application ID. The bundled PNG is a
   // fallback for portable archives and desktop environments that do not use
@@ -149,6 +308,11 @@ static gboolean initialize_flutter_view(gpointer data) {
                             FL_METHOD_CODEC(codec));
   fl_method_channel_set_method_call_handler(
       system_fonts_channel, system_fonts_method_call_cb, bootstrap->application,
+      nullptr);
+  g_autoptr(FlMethodChannel) file_dialog_channel = fl_method_channel_new(
+      messenger, "mdslens/file_dialog", FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(
+      file_dialog_channel, file_dialog_method_call_cb, bootstrap->application,
       nullptr);
   GdkRGBA background_color;
   gdk_rgba_parse(&background_color, "#000000");

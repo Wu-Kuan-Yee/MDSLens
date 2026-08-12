@@ -311,6 +311,21 @@ Future<ConfigOpenSelection?> _pickConfigurationFile({
   final mobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
   final privateDirectory =
       mobile ? null : await UserDataStore().configurationDirectory();
+  if (!kIsWeb && Platform.isLinux) {
+    final paths = await pickFilePathsWithFallback(
+      dialogTitle: dialogTitle,
+      allowedExtensions: const ['toml', 'webscp'],
+      initialDirectory: privateDirectory?.path,
+    );
+    if (paths == null || paths.isEmpty) return null;
+    final path = paths.first;
+    final name = File(path).uri.pathSegments.last;
+    final lowerName = name.toLowerCase();
+    if (!lowerName.endsWith('.toml') && !lowerName.endsWith('.webscp')) {
+      throw FormatException(invalidSelectionMessage);
+    }
+    return ConfigOpenSelection(name: name, path: path);
+  }
   final result = await FilePicker.platform.pickFiles(
     dialogTitle: dialogTitle,
     // iOS/iPadOS document providers do not consistently map the non-standard

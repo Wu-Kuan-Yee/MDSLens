@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'package:mdslens/i18n/localized_material.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
 import '../../models/app_state.dart';
 import '../../services/identity_file_access.dart';
+import '../../services/platform_file_dialog.dart';
 import '../polished_dropdown.dart';
 import 'keyboard_safe_dialog.dart';
 import '../vim_focus.dart';
@@ -284,9 +284,11 @@ class SshDialog extends StatelessWidget {
                       const SizedBox(width: 4),
                       OutlinedButton(
                         onPressed: () async {
-                          final r = await FilePicker.platform.pickFiles();
-                          if (r != null && r.files.single.path != null) {
-                            final path = r.files.single.path!;
+                          final paths = await pickFilePathsWithFallback(
+                            dialogTitle: ctx.tr('Choose identity file'),
+                          );
+                          if (paths != null && paths.isNotEmpty) {
+                            final path = paths.first;
                             keyCtrl.text = await IdentityFileAccess.authorize(
                               path,
                               promptIfNeeded: false,

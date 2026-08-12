@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -8,6 +9,7 @@ import 'package:mdslens/i18n/localized_material.dart';
 import '../../i18n/language_document.dart';
 import '../../i18n/language_service.dart';
 import '../../models/app_state.dart';
+import '../../services/platform_file_dialog.dart';
 import '../polished_dropdown.dart';
 import '../vim_focus.dart';
 import 'keyboard_safe_dialog.dart';
@@ -110,6 +112,26 @@ class _LanguageSettingsDialogState extends State<LanguageSettingsDialog> {
 
   Future<void> _importLanguage() async {
     try {
+      if (!kIsWeb && Platform.isLinux) {
+        final paths = await pickFilePathsWithFallback(
+          dialogTitle: context.tr('Import language files'),
+          allowedExtensions: const ['toml'],
+          allowMultiple: true,
+        );
+        if (paths == null || paths.isEmpty) return;
+        final documents = <StoredLanguageDocument>[];
+        for (final path in paths) {
+          final bytes = await File(path).readAsBytes();
+          documents.add(
+            StoredLanguageDocument(
+              name: File(path).uri.pathSegments.last,
+              content: utf8.decode(bytes),
+            ),
+          );
+        }
+        await widget.app.languages.installAll(documents);
+        return;
+      }
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: const ['toml'],

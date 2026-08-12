@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:mdslens/i18n/localized_material.dart';
 
@@ -842,9 +841,8 @@ Future<void> exportMultiplePanels(
     }
 
     final directory = await (directoryDialog ??
-        () => FilePicker.platform.getDirectoryPath(
+        () => pickDirectoryPathWithFallback(
               dialogTitle: app.tr('Export each panel to this folder'),
-              lockParentWindow: true,
             ))();
     if (directory == null || directory.trim().isEmpty) {
       app.setStatus('Export cancelled');
@@ -888,15 +886,10 @@ Future<_DesktopPanelExportDestination?> _chooseDesktopPanelExportDestination(
     final choices = panelExportChoices(app);
     final matching = choices.where((choice) => choice.index == selectedIndex);
     final choice = matching.isEmpty ? null : matching.first;
-    final path = await FilePicker.platform.saveFile(
+    final path = await saveFilePathWithFallback(
       dialogTitle: app.tr('Export panel data'),
       fileName: _anticipatedPanelFileName(choice, request.format),
-      type: FileType.custom,
       allowedExtensions: [request.format.extension],
-      // Native desktop save panels return a destination before any bytes are
-      // available. The actual write happens after Isolate serialization.
-      bytes: null,
-      lockParentWindow: true,
     );
     if (path == null || path.trim().isEmpty) return null;
     return _DesktopPanelExportDestination.file(
@@ -905,9 +898,8 @@ Future<_DesktopPanelExportDestination?> _chooseDesktopPanelExportDestination(
   }
 
   final directory = await (directoryDialog ??
-      () => FilePicker.platform.getDirectoryPath(
+      () => pickDirectoryPathWithFallback(
             dialogTitle: app.tr('Export each panel to this folder'),
-            lockParentWindow: true,
           ))();
   if (directory == null || directory.trim().isEmpty) return null;
   return _DesktopPanelExportDestination.directory(directory);
