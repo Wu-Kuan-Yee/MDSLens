@@ -29,6 +29,26 @@ from scripts.flat_toml import read_flat_toml, write_flat_toml  # noqa: E402
 
 
 class BuildAppTests(unittest.TestCase):
+    def test_macos_runtime_settings_disable_experimental_merged_threads(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            app = Path(temporary) / "MDSLens.app"
+            contents = app / "Contents"
+            contents.mkdir(parents=True)
+            info_path = contents / "Info.plist"
+
+            with info_path.open("wb") as stream:
+                plistlib.dump({"FLTEnableMergedPlatformUIThread": False}, stream)
+            verify_macos_installers.verify_flutter_runtime_settings(app)
+
+            for invalid in ({}, {"FLTEnableMergedPlatformUIThread": True}):
+                with info_path.open("wb") as stream:
+                    plistlib.dump(invalid, stream)
+                with self.assertRaisesRegex(
+                    verify_macos_installers.VerificationError,
+                    "experimental merged macOS UI/platform thread",
+                ):
+                    verify_macos_installers.verify_flutter_runtime_settings(app)
+
     def test_windows_portable_stage_contains_update_channel_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

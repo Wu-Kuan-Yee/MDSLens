@@ -111,10 +111,28 @@ def verify_macos_runtime_compatibility(app: Path) -> None:
     require(inspected > 0, f"No Mach-O binaries were found in {app}")
 
 
+def verify_flutter_runtime_settings(app: Path) -> None:
+    """Keep the packaged Flutter engine on Catalina's stable thread model."""
+
+    info_path = app / "Contents/Info.plist"
+    require(info_path.is_file(), f"Missing application Info.plist: {info_path}")
+    try:
+        with info_path.open("rb") as stream:
+            info = plistlib.load(stream)
+    except (OSError, plistlib.InvalidFileException) as error:
+        raise VerificationError(f"Could not read {info_path}: {error}") from error
+    require(
+        info.get("FLTEnableMergedPlatformUIThread") is False,
+        "MDSLens.app must explicitly disable Flutter's experimental merged "
+        "macOS UI/platform thread for Catalina compatibility",
+    )
+
+
 def verify_application(app: Path) -> None:
     executable = app / "Contents/MacOS/MDSLens"
     require(app.is_dir(), f"Missing app bundle: {app}")
     require(executable.is_file(), f"Missing application executable: {executable}")
+    verify_flutter_runtime_settings(app)
     verify_macos_runtime_compatibility(app)
 
 
