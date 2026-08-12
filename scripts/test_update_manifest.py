@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 from scripts import generate_update_manifest
+from scripts import generate_latest_index
 
 
 class UpdateManifestTests(unittest.TestCase):
@@ -126,6 +127,92 @@ class UpdateManifestTests(unittest.TestCase):
                 tomllib.loads(toml_output.read_text(encoding="utf-8")),
                 json.loads(legacy_output.read_text(encoding="utf-8")),
             )
+
+    def test_latest_index_selects_highest_stable_release_and_downloads(self) -> None:
+        releases = [
+            {
+                "tag_name": "v1.2.0",
+                "html_url": (
+                    "https://github.com/Wu-Kuan-Yee/MDSLens/releases/tag/v1.2.0"
+                ),
+                "draft": False,
+                "prerelease": False,
+                "assets": [
+                    {
+                        "name": "update-manifest.toml",
+                        "browser_download_url": (
+                            "https://github.com/Wu-Kuan-Yee/MDSLens/releases/"
+                            "download/v1.2.0/update-manifest.toml"
+                        ),
+                        "size": 20,
+                    },
+                    {
+                        "name": "mdslens-windows-x64.zip",
+                        "browser_download_url": (
+                            "https://github.com/Wu-Kuan-Yee/MDSLens/releases/"
+                            "download/v1.2.0/mdslens-windows-x64.zip"
+                        ),
+                        "size": 123,
+                        "digest": "sha256:" + "a" * 64,
+                    },
+                    {
+                        "name": "notes.txt",
+                        "browser_download_url": (
+                            "https://github.com/Wu-Kuan-Yee/MDSLens/releases/"
+                            "download/v1.2.0/notes.txt"
+                        ),
+                        "size": 2,
+                    },
+                ],
+            },
+            {
+                "tag_name": "v9.0.0-beta",
+                "html_url": "https://github.com/Wu-Kuan-Yee/MDSLens/releases/tag/v9.0.0-beta",
+                "draft": False,
+                "prerelease": True,
+                "assets": [],
+            },
+            {
+                "tag_name": "v1.1.9",
+                "html_url": "https://github.com/Wu-Kuan-Yee/MDSLens/releases/tag/v1.1.9",
+                "draft": False,
+                "prerelease": False,
+                "assets": [],
+            },
+        ]
+
+        index = generate_latest_index.generate_index(releases)
+
+        self.assertEqual(index["version"], "1.2.0")
+        self.assertEqual(index["tag"], "v1.2.0")
+        self.assertEqual(
+            [asset["name"] for asset in index["assets"]],
+            ["update-manifest.toml", "mdslens-windows-x64.zip"],
+        )
+        self.assertEqual(
+            index["assets"][1]["sha256"],
+            "a" * 64,
+        )
+
+    def test_latest_index_accepts_paginated_slurp_payload(self) -> None:
+        release = {
+            "tag_name": "v2.0.0",
+            "html_url": "https://github.com/Wu-Kuan-Yee/MDSLens/releases/tag/v2.0.0",
+            "draft": False,
+            "prerelease": False,
+            "assets": [
+                {
+                    "name": "update-manifest.toml",
+                    "browser_download_url": (
+                        "https://github.com/Wu-Kuan-Yee/MDSLens/releases/"
+                        "download/v2.0.0/update-manifest.toml"
+                    ),
+                    "size": 1,
+                }
+            ],
+        }
+        index = generate_latest_index.generate_index([[release], []])
+        self.assertEqual(index["version"], "2.0.0")
 
 
 if __name__ == "__main__":

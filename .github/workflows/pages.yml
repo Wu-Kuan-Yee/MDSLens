@@ -5,8 +5,13 @@ on:
     branches: [main]
     paths:
       - "product-site/**"
+      - "scripts/generate_latest_index.py"
+      - "scripts/generate_update_manifest.py"
       - "scripts/verify_product_site.py"
       - ".github/workflows/pages.yml"
+  workflow_run:
+    workflows: ["Release packages"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -22,17 +27,34 @@ jobs:
   deploy:
     name: Deploy GitHub Pages
     runs-on: ubuntu-24.04
+    if: >-
+      github.event_name == 'push' ||
+      github.event.workflow_run.conclusion == 'success'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - name: Verify product site
         run: python3 scripts/verify_product_site.py
       - name: Prepare static site
         run: |
           cp -a product-site pages
           touch pages/.nojekyll
+      - name: Generate lightweight update index
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          gh api --paginate --slurp \
+            "repos/${{ github.repository }}/releases?per_page=100" \
+            > "$RUNNER_TEMP/releases.json"
+          python3 scripts/generate_latest_index.py \
+            --releases-json "$RUNNER_TEMP/releases.json" \
+            --output pages/latest.json
+          python3 -m json.tool pages/latest.json >/dev/null
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
         with:
