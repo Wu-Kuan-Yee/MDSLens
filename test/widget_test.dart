@@ -7775,6 +7775,23 @@ void main() {
         find.byKey(const ValueKey('autocomplete-signal-menu')), findsNothing);
     expect(find.byKey(const ValueKey('vim-focus-ring')), findsOneWidget);
     // A typed value can also be committed without entering the hint page.
+    expect(
+      handleVimInputModeKey(
+        tester.element(signalFinder),
+        const KeyDownEvent(
+          physicalKey: PhysicalKeyboardKey.numpadEnter,
+          logicalKey: LogicalKeyboardKey.numpadEnter,
+          timeStamp: Duration.zero,
+        ),
+      ),
+      KeyEventResult.handled,
+    );
+    for (var press = 0; press < 3; press++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus, same(signalField.focusNode));
+      expect(find.byKey(const ValueKey('vim-focus-ring')), findsOneWidget);
+    }
     await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
     await tester.pump();
     await tester.enterText(signalFinder, 'vim_test_signal');

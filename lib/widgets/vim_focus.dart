@@ -1742,6 +1742,15 @@ KeyEventResult handleVimInputModeKey(
     return KeyEventResult.ignored;
   }
 
+  if (input.mode == VimInputMode.normal &&
+      (key == LogicalKeyboardKey.enter ||
+          key == LogicalKeyboardKey.numpadEnter)) {
+    // After committing, further Enter presses must remain in Normal mode.
+    // Passing them to EditableText's native submit action can unfocus the
+    // field (or submit its form), losing the Vim cursor on desktop embedders.
+    return KeyEventResult.handled;
+  }
+
   if (key == LogicalKeyboardKey.escape) {
     input.markTextEscapeRelease();
     input.setMode(VimInputMode.normal);
@@ -1939,10 +1948,8 @@ bool handleVimPageEntryKey(BuildContext context, KeyEvent event) {
   final current = FocusManager.instance.primaryFocus;
   if (current == null) return false;
   if (current is FocusScopeNode) return false;
-  // Text fields own Enter for submission/commit.  In Insert mode the modal
-  // handler already consumes it; in Normal mode letting the native field see
-  // it avoids a second global handler invoking ActivateIntent and submitting
-  // the shot twice.
+  // The modal input handler owns Enter in both Insert and Normal mode.
+  // Never invoke a native activation/submit action a second time here.
   if (key != LogicalKeyboardKey.keyI && _isEditableNode(current)) {
     return false;
   }
