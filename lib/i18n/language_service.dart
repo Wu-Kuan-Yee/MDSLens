@@ -27,6 +27,7 @@ class LanguageService extends ChangeNotifier {
   Future<void>? _refreshing;
   bool _refreshRequested = false;
   bool _initialized = false;
+  bool _disposed = false;
 
   // These are installation templates only. They are copied into the external
   // language store once and are never merged directly into the runtime list.
@@ -56,6 +57,7 @@ class LanguageService extends ChangeNotifier {
     String preference = systemLanguagePreference,
     List<Locale>? systemLocales,
   }) async {
+    if (_disposed) return;
     _preference = preference.trim().isEmpty
         ? systemLanguagePreference
         : preference.trim();
@@ -65,9 +67,11 @@ class LanguageService extends ChangeNotifier {
     final initialDocuments = UserDataStore.disableFileStorageForTests
         ? await _readInitialLanguages(preferFileSystem: true)
         : await (_initialLanguageLoad ??= _readInitialLanguages());
+    if (_disposed) return;
     await initializeStoredLanguageDocuments(_userDataStore, initialDocuments);
+    if (_disposed) return;
     await refresh();
-    if (_initialized) return;
+    if (_disposed || _initialized) return;
     _initialized = true;
     // Widget tests intentionally disable the file-backed user-data store.
     // Do not leave an asynchronously starting Directory.watch subscription
@@ -78,6 +82,7 @@ class LanguageService extends ChangeNotifier {
     _storageSubscription = watchStoredLanguageDocuments(
       _userDataStore,
     ).listen((_) {
+      if (_disposed) return;
       _reloadDebounce?.cancel();
       _reloadDebounce = Timer(
         const Duration(milliseconds: 120),
@@ -87,6 +92,7 @@ class LanguageService extends ChangeNotifier {
   }
 
   Future<void> refresh() {
+    if (_disposed) return Future<void>.value();
     _refreshRequested = true;
     final pending = _refreshing;
     if (pending != null) return pending;
@@ -102,12 +108,13 @@ class LanguageService extends ChangeNotifier {
     do {
       _refreshRequested = false;
       await _performRefresh();
-    } while (_refreshRequested);
+    } while (!_disposed && _refreshRequested);
   }
 
   Future<void> _performRefresh() async {
     final next = <String, LanguageDefinition>{};
     var storedDocuments = await loadStoredLanguageDocuments(_userDataStore);
+    if (_disposed) return;
     // Widget tests intentionally disable the file-backed store.  Keep the
     // same bundled catalogs available in that in-memory environment so tests
     // exercise real localization (and focus ordering) instead of silently
@@ -115,6 +122,7 @@ class LanguageService extends ChangeNotifier {
     // only ~/.mdslens/languages through the normal storage backend.
     if (UserDataStore.disableFileStorageForTests && storedDocuments.isEmpty) {
       storedDocuments = await _readInitialLanguages(preferFileSystem: true);
+      if (_disposed) return;
     }
     for (final document in storedDocuments) {
       try {
@@ -415,6 +423,8 @@ class LanguageService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    _refreshRequested = false;
     _reloadDebounce?.cancel();
     _storageSubscription?.cancel();
     super.dispose();

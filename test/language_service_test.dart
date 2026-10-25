@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -45,8 +46,53 @@ const _starterLocales = <String>{
   'zh-Hant',
 };
 
+class _PendingLanguageStore extends UserDataStore {
+  final directory = Completer<Directory?>();
+  int reads = 0;
+
+  @override
+  Future<Directory?> languageDirectory() {
+    reads++;
+    return directory.future;
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('disposing during initialization never starts storage or a watcher',
+      () async {
+    final store = _PendingLanguageStore();
+    final service = LanguageService(userDataStore: store);
+    final initialization = service.initialize();
+    service.dispose();
+    await initialization;
+    expect(store.reads, 0);
+    expect(service.availableLanguages, isEmpty);
+  });
+
+  test('disposing during a refresh discards pending and queued results',
+      () async {
+    final root = await Directory.systemTemp.createTemp('mdslens-refresh-');
+    addTearDown(() => root.delete(recursive: true));
+    await File('${root.path}/en.toml').writeAsString(
+      _languageToml('en', 'English', {'Color': 'Color'}),
+    );
+    final store = _PendingLanguageStore();
+    final service = LanguageService(userDataStore: store);
+    var notifications = 0;
+    service.addListener(() => notifications++);
+    final pending = service.refresh();
+    final queued = service.refresh();
+    expect(store.reads, 1);
+    service.dispose();
+    store.directory.complete(root);
+    await Future.wait([pending, queued]);
+    await service.refresh();
+    expect(notifications, 0);
+    expect(service.availableLanguages, isEmpty);
+    expect(store.reads, 1);
+  });
 
   test('language documents normalize locale tags and reject invalid files', () {
     final language = LanguageDefinition.parse(
