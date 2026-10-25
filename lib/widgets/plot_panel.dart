@@ -3689,10 +3689,10 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
     super.didChangeDependencies();
     final insertMode =
         VimModeScope.enabled(context) && VimInputModeScope.isInsert(context);
-    if (insertMode && !_wasInsertMode && _node.hasFocus) {
+    if (insertMode != _wasInsertMode && _node.hasFocus) {
       // Entering Vim Insert mode is a semantic edit transition, even if the
-      // text has not changed yet.  Materialize the completion list now so
-      // Tab always has a concrete child page to enter.
+      // text has not changed yet. Materialize the list on entry and dismiss
+      // it when Enter commits the editor back to Normal mode.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _node.hasFocus) _update();
       });
@@ -3830,6 +3830,7 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
   }
 
   void _selectHint(String hint) {
+    final vim = VimModeScope.enabled(context);
     widget.controller.value = TextEditingValue(
       text: hint,
       selection: TextSelection.collapsed(offset: hint.length),
@@ -3837,10 +3838,26 @@ class _AutocompleteFieldState extends State<_AutocompleteField> {
     _hints = const [];
     _removeOverlay();
     widget.onChanged?.call();
-    widget.onSelected?.call(hint);
+    if (vim) {
+      // The selected suggestion is about to lose its overlay FocusNode.
+      // Return to its owning field rather than leaving the dialog unfocused
+      // or advancing into a different completion page.
+      VimInputModeScope.maybeOf(context)?.commitTextEdit(_node);
+      VimInputModeScope.setMode(context, VimInputMode.normal);
+      _node.requestFocus();
+      SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+    } else {
+      widget.onSelected?.call(hint);
+    }
   }
 
   void _update() {
+    if (VimModeScope.enabled(context) &&
+        VimInputModeScope.mode(context) == VimInputMode.normal) {
+      _hints = const [];
+      _removeOverlay();
+      return;
+    }
     final v = widget.controller.text.toLowerCase();
     final matchingHints = v.isEmpty
         ? widget.options

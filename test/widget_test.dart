@@ -51,6 +51,22 @@ Finder tooltipStartingWith(String prefix) => find.byWidgetPredicate(
           widget is Tooltip && (widget.message?.startsWith(prefix) ?? false),
     );
 
+class _VimCompletionTestBundle extends CachingAssetBundle {
+  @override
+  Future<ByteData> load(String key) => rootBundle.load(key);
+
+  @override
+  Future<String> loadString(String key, {bool cache = true}) {
+    if (key == 'assets/source_index/trees.txt') {
+      return Future.value('pcs_east');
+    }
+    if (key == 'assets/source_index/signals/pcs_east.txt') {
+      return Future.value('vim_test_signal_one\nvim_test_signal_two');
+    }
+    return rootBundle.loadString(key, cache: cache);
+  }
+}
+
 void main() {
   setUp(() {
     UserDataStore.disableFileStorageForTests = true;
@@ -7636,7 +7652,10 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
         value: app,
-        child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+        child: DefaultAssetBundle(
+          bundle: _VimCompletionTestBundle(),
+          child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -7677,8 +7696,8 @@ void main() {
       VimInputMode.insert,
     );
     treeField.controller!.value = const TextEditingValue(
-      text: '',
-      selection: TextSelection.collapsed(offset: 0),
+      text: 'pcs',
+      selection: TextSelection.collapsed(offset: 3),
     );
     // Tree names are published immediately, then the complete bundled index
     // refines the same overlay in the background. The fallback still forms a
@@ -7710,6 +7729,83 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
     expect(treeField.controller!.text, isNotEmpty);
+    expect(FocusManager.instance.primaryFocus, same(treeField.focusNode));
+    expect(find.byKey(const ValueKey('autocomplete-tree-menu')), findsNothing);
+    expect(find.byKey(const ValueKey('vim-focus-ring')), findsOneWidget);
+
+    final signalFinder = find.descendant(
+      of: find.byKey(const ValueKey('data-signal-0')),
+      matching: find.byType(TextField),
+    );
+    final signalField = tester.widget<TextField>(signalFinder);
+    signalField.focusNode!.requestFocus();
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus, same(signalField.focusNode));
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pump();
+    expect(VimInputModeScope.mode(tester.element(signalFinder)),
+        VimInputMode.insert);
+    await tester.enterText(signalFinder, 'vim_test_signal');
+    final signalMenu = find.byKey(const ValueKey('autocomplete-signal-menu'));
+    for (var attempt = 0;
+        attempt < 100 && signalMenu.evaluate().isEmpty;
+        attempt++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
+    expect(
+      signalMenu,
+      findsOneWidget,
+      reason: 'Tree=${treeField.controller!.text}; '
+          'mode=${VimInputModeScope.mode(tester.element(signalFinder))}; '
+          'focus=${FocusManager.instance.primaryFocus}',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel,
+        'autocomplete-signal-option-0');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(signalField.focusNode));
+    expect(VimInputModeScope.mode(tester.element(signalFinder)),
+        VimInputMode.normal);
+    expect(
+        find.byKey(const ValueKey('autocomplete-signal-menu')), findsNothing);
+    expect(find.byKey(const ValueKey('vim-focus-ring')), findsOneWidget);
+    // A typed value can also be committed without entering the hint page.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pump();
+    await tester.enterText(signalFinder, 'vim_test_signal');
+    await tester.pump();
+    expect(
+        find.byKey(const ValueKey('autocomplete-signal-menu')), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(signalField.focusNode));
+    expect(VimInputModeScope.mode(tester.element(signalFinder)),
+        VimInputMode.normal);
+    expect(
+        find.byKey(const ValueKey('autocomplete-signal-menu')), findsNothing);
+    final selectedSignal = signalField.controller!.text;
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
+    await tester.pump();
+    expect(
+        FocusManager.instance.primaryFocus, isNot(same(signalField.focusNode)));
+    expect(signalField.controller!.text, selectedSignal);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(const ValueKey('data-source-dialog-surface')), findsNothing);
+    expect((app.columns.first.first['signal_specs'] as List).first['y_expr'],
+        selectedSignal);
   });
 
   testWidgets('Vim Add Curve keeps focus on the Data Source action', (
