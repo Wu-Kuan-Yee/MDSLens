@@ -26,6 +26,15 @@ recent configurations are available with `o` and Shift+O, and save with `s`.
 Tab/Shift+Tab and Enter/Space continue to operate focused controls and dialog
 buttons normally.
 
+In Layout Setup, `h`/`l` select a Column and `i` enters its Panel list.
+Use `j`/`k` to choose a Panel and `i` again to open its editor choices.
+Choose Panel Setup or Data Source Setup with `j`/`k` and Enter. Closing an
+editor restores focus to the original Panel; Escape from that Panel returns
+to its Column. Enter on a Column or Panel toggles its selection for deletion.
+Use `x` to cut the selected Column or Panel and `p`/`P` to paste it after/before
+another item. On the outer Layout Setup page, `G` reaches the action row,
+where `h`/`l` select Reset, Delete, Cancel, or Apply.
+
 ## Shortcut sequences
 
 A command can have a primary and an alternative shortcut. Each shortcut may be

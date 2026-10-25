@@ -1409,6 +1409,7 @@ class VimLayoutFocus extends InheritedWidget {
     this.row = -1,
     required this.isColumn,
     this.onActivate,
+    this.onEdit,
     this.onCut,
     this.onPaste,
     this.visualBoundaryKey,
@@ -1418,6 +1419,7 @@ class VimLayoutFocus extends InheritedWidget {
   final int row;
   final bool isColumn;
   final VoidCallback? onActivate;
+  final VoidCallback? onEdit;
   final bool Function()? onCut;
   final bool Function(bool before)? onPaste;
   final GlobalKey? visualBoundaryKey;
@@ -2404,7 +2406,7 @@ bool handleVimPlotMotionKey(BuildContext context, KeyEvent event) {
   return false;
 }
 
-/// Enter a Layout Setup Column page at its first direct Panel character.
+/// Enter a Layout Setup Column's first Panel, or a Panel's editor page.
 ///
 /// The outer Column focus node also owns drag handles and each Panel's Edit
 /// button.  Flutter traversal therefore cannot express the nested-page model
@@ -2430,6 +2432,11 @@ bool enterVimLayoutColumnPage(BuildContext context, KeyEvent event) {
     page ?? _VimFocusPage(const []),
     FocusManager.instance.primaryFocus,
   );
+  if (current?.layout?.isColumn == false && current?.layout?.onEdit != null) {
+    if (!_claimVimActivation(context, event)) return true;
+    current!.layout!.onEdit!();
+    return true;
+  }
   if (current?.layout?.isColumn != true) {
     // The focused Column can observe the same physical key after its first
     // observer has already moved focus into a Panel. Consume that duplicate

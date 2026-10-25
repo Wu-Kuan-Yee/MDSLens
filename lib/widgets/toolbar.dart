@@ -2745,6 +2745,13 @@ class ToolbarWidget extends StatelessWidget {
                                                                                   () {},
                                                                                 );
                                                                               }
+                                                                              if (ctx.mounted && VimModeScope.enabled(ctx)) {
+                                                                                scheduleVimLayoutFocus(
+                                                                                  column: cell.sourceColumn,
+                                                                                  row: cell.sourceRow,
+                                                                                  isColumn: false,
+                                                                                );
+                                                                              }
                                                                             },
                                                                             onCut: () =>
                                                                                 cutLayoutItem(
@@ -3285,6 +3292,7 @@ class ToolbarWidget extends StatelessWidget {
         row: sourceRow,
         isColumn: false,
         onActivate: onSelect,
+        onEdit: onEdit,
         onCut: onCut,
         onPaste: onPaste,
         visualBoundaryKey: visualBoundaryKey,
@@ -3476,10 +3484,13 @@ class ToolbarWidget extends StatelessWidget {
     Map<String, dynamic> panel,
     int panelNumber,
   ) async {
-    final action = await showModalBottomSheet<String>(
+    final action = await showDialog<String>(
       context: context,
-      builder: (context) => SafeArea(
-        child: Column(
+      builder: (context) => KeyboardSafeDialog(
+        pageId: 'layout-panel-editor/$panelNumber',
+        parentPageId: 'layout',
+        title: Text('Edit panel $panelNumber'),
+        content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
@@ -3496,6 +3507,12 @@ class ToolbarWidget extends StatelessWidget {
             ),
           ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
       ),
     );
     if (action == null || !context.mounted) return false;

@@ -1466,6 +1466,70 @@ void main() {
     expect(focusedLayout()?.column, 1);
   });
 
+  testWidgets('Vim Layout Panel editors save and restore their parent focus',
+      (tester) async {
+    final app = AppState();
+    await app.preferencesReady;
+    addTearDown(app.dispose);
+    app.setVimMode(true);
+    app.applyLayoutList([2, 1]);
+    await tester.pumpWidget(ChangeNotifierProvider.value(
+      value: app,
+      child: MDSLensApp(automaticUpdateChecker: (_) async {}),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Layout Setup'));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    final panelFocus = FocusManager.instance.primaryFocus;
+    expect(panelFocus?.debugLabel, 'layout-panel-0-1');
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('layout-panel-setup-2')), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    final titleField = find.byWidgetPredicate((widget) =>
+        widget is TextField && widget.decoration?.labelText == 'Title');
+    expect(titleField, findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pump();
+    await tester.enterText(titleField, 'Keyboard edited panel');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Title: Keyboard edited panel'), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus, same(panelFocus));
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('data-source-dialog-surface')),
+        findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(panelFocus));
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'layout-column-0');
+  });
+
   testWidgets('Vim About panel exposes links and actions', (tester) async {
     final app = AppState();
     await app.preferencesReady;
@@ -2186,7 +2250,11 @@ void main() {
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'layout-reset');
 
     final mainContext = tester.element(find.byType(MainPage));
-    await tester.tap(find.byKey(const ValueKey('layout-preview-column-0')));
+    // The middle of a Column can contain a Panel; start on the Column's
+    // semantic cell explicitly before entering it with i.
+    FocusManager.instance.rootScope.descendants
+        .firstWhere((node) => node.debugLabel == 'layout-column-0')
+        .requestFocus();
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
